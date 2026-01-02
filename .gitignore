@@ -1,0 +1,23 @@
+# Operating System files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor & IDE directories
+.vscode/
+.idea/
+.aiexclude
+*.sublime-project
+*.swp
+
+# Backup and Temporary files
+*.bak
+*.old
+*.tmp
+*.log
+
+# Compressed files (if you zip builds locally)
+*.zip
+*.rar
+
+install_libs.py
