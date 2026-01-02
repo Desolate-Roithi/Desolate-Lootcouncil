@@ -1,0 +1,12 @@
+## Interface: 120001
+## Title: Desolate Lootcouncil
+## Author: Roithi
+## Version: 0.1-Alpha
+## SavedVariables: DesolateLootDB
+
+embeds.xml
+Core.lua
+Modules\Debug.lua
+Modules\Loot.lua
+Modules\UI.lua
+Modules\Distribution.lua
