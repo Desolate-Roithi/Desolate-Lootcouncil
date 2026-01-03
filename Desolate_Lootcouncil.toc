@@ -8,5 +8,10 @@ embeds.xml
 Core.lua
 Modules\Debug.lua
 Modules\Loot.lua
-Modules\UI.lua
+Modules\UI\Core.lua
+Modules\UI\Loot.lua
+Modules\UI\Voting.lua
+Modules\UI\Monitor.lua
+Modules\UI\Utility.lua
 Modules\Distribution.lua
+Modules\Trade.lua

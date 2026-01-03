@@ -1,5 +1,17 @@
 DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "AceConsole-3.0", "AceEvent-3.0",
     "AceComm-3.0", "AceTimer-3.0")
+_G.DesolateLootcouncil = DesolateLootcouncil
+
+---@type UI
+local UI
+---@type Debug
+local Debug
+---@type Loot
+local Loot
+---@type Distribution
+local Distribution
+---@type Trade
+local Trade
 
 local defaults = {
     profile = {
@@ -51,16 +63,40 @@ function DesolateLootcouncil:OnInitialize()
     self.db = LibStub("AceDB-3.0"):New("DesolateLootDB", defaults, true)
     LibStub("AceConfig-3.0"):RegisterOptionsTable("DesolateLootcouncil", options)
     self.LibAddonConfig = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("DesolateLootcouncil", "Desolate Lootcouncil")
+
+    self:RegisterChatCommand("dlc", "ChatCommand")
+
     self:Printf("Addon Initialized")
+    self:Print("Loot Master is currently: " .. self:DetermineLootMaster())
 end
 
-function DesolateLootcouncil:GetActiveLM()
-    local configured = self.db.profile.configuredLM
-    if configured and configured ~= "" and (UnitInParty(configured) or UnitInRaid(configured)) then
-        return configured
+function DesolateLootcouncil:DetermineLootMaster()
+    -- Scenario A: Solo
+    if not IsInGroup() then
+        return UnitName("player")
     end
 
-    -- Fallback: Group Leader
+    -- Scenario B: Group Leader
+    if UnitIsGroupLeader("player") then
+        local candidate = self.db.profile.configuredLM
+        local finalLM = UnitName("player") -- Default to Leader (Self)
+
+        -- Validation: Check if candidate is actually in the group
+        if candidate and candidate ~= "" then
+            if UnitInParty(candidate) or UnitInRaid(candidate) or candidate == UnitName("player") then
+                finalLM = candidate
+            end
+        end
+
+        return finalLM
+    end
+
+    -- Scenario C: Regular Member
+    if self.activeLootMaster then
+        return self.activeLootMaster
+    end
+
+    -- Fallback: If sync missing, default to current Group Leader
     if IsInRaid() then
         for i = 1, GetNumGroupMembers() do
             local name, rank = GetRaidRosterInfo(i)
@@ -69,7 +105,7 @@ function DesolateLootcouncil:GetActiveLM()
             end
         end
     elseif IsInGroup() then
-        if UnitIsGroupLeader("player") then return UnitName("player") end
+        -- Check party members
         for i = 1, GetNumSubgroupMembers() do
             local unit = "party" .. i
             if UnitIsGroupLeader(unit) then
@@ -78,27 +114,29 @@ function DesolateLootcouncil:GetActiveLM()
         end
     end
 
-    return UnitName("player") -- Fallback if not in group or solo
+    return "Unknown"
 end
 
 DesolateLootcouncil.activeLootMaster = nil
 
 function DesolateLootcouncil:AmILootMaster()
-    local target = self.activeLootMaster or self.db.profile.lootMaster
-    if not target or target == "" then target = UnitName("player") end
-    return UnitName("player") == target
+    -- 1. Get the authoritative name
+    local masterName = self:DetermineLootMaster()
+
+    -- 2. Compare with self
+    return UnitName("player") == masterName
 end
 
 -- Sync Loot Master to the raid (If I am the leader)
 function DesolateLootcouncil:SyncLM()
     if IsInGroup() and UnitIsGroupLeader("player") then
-        local targetLM = self.db.profile.configuredLM
-        if not targetLM or targetLM == "" then targetLM = UnitName("player") end
+        local finalLM = self:DetermineLootMaster()
 
         -- Broadcast via Distribution Module
-        local Dist = self:GetModule("Distribution")
+        ---@type Distribution
+        local Dist = self:GetModule("Distribution") --[[@as Distribution]]
         if Dist and Dist.SendSyncLM then
-            Dist:SendSyncLM(targetLM)
+            Dist:SendSyncLM(finalLM)
         end
     end
 end
@@ -108,15 +146,19 @@ function DesolateLootcouncil:UpdateLootMasterStatus(event)
         self:Print("Event Triggered: " .. tostring(event))
     end
 
-    -- Trigger Sync if leader
-    self:SyncLM()
+    -- 1. Recalculate LM (This covers all scenarios: Solo, Leader, Member)
+    local lm = self:DetermineLootMaster()
 
-    local lm = self.activeLootMaster or self.db.profile.configuredLM or UnitName("player")
+    -- 2. If Leader, Force Sync (This ensures the network knows the decision)
+    if IsInGroup() and UnitIsGroupLeader("player") then
+        self:SyncLM()
+    end
+
+    -- 3. Update Local State
     self.currentLootMaster = lm
-    self:Print("Loot Master is currently: " .. tostring(lm))
-
-    -- Update AMILM status for local checks (optimization)
     self.amILM = (lm == UnitName("player"))
+
+    self:Print("Loot Master is currently: " .. tostring(lm))
 
     -- Also trigger a version check when things update
     self:ScheduleTimer("SendVersionCheck", 2) -- Slight delay/throttle
@@ -152,7 +194,123 @@ function DesolateLootcouncil:OnCommReceived(prefix, message, distribution, sende
     elseif message == "PONG" then
         self.activeAddonUsers[sender] = true
         -- Debug
-        -- self:Printf("User %s is using the addon.", sender)
+        if self.db.profile.verboseMode then
+            self:Print("Version Check: " .. sender .. " has the addon.")
+        end
+    end
+end
+
+function DesolateLootcouncil:ChatCommand(input)
+    -- Default to Config if empty
+    if not input or input:trim() == "" then
+        LibStub("AceConfigDialog-3.0"):Open("DesolateLootcouncil")
+        return
+    end
+    local args = { strsplit(" ", input) }
+    local cmd = string.lower(args[1])
+    -- 1. CONFIG
+    if cmd == "config" or cmd == "options" then
+        LibStub("AceConfigDialog-3.0"):Open("DesolateLootcouncil")
+        -- 2. TEST (Generates items - LM Only)
+    elseif cmd == "test" then
+        if self:AmILootMaster() then
+            ---@type Loot
+            local Loot = self:GetModule("Loot") --[[@as Loot]]
+            if Loot and Loot.AddTestItems then
+                Loot:AddTestItems()
+            else
+                self:Print("Error: AddTestItems function not found in Loot module.")
+            end
+        else
+            self:Print("Error: You are not the Loot Master.")
+        end
+        -- 3. LOOT (The 'Inbox' for new drops - LM Only)
+    elseif cmd == "loot" then
+        if self:AmILootMaster() then
+            ---@type UI
+            local UI = self:GetModule("UI") --[[@as UI]]
+            if UI and UI.ShowLootWindow then
+                -- Explicitly pass the initial loot table
+                UI:ShowLootWindow(self.db.profile.session.loot)
+            else
+                self:Print("Error: ShowLootWindow function not found in UI module.")
+            end
+        else
+            self:Print("Error: You are not the Loot Master.")
+        end
+        -- 4. MONITOR / MASTER (The 'Work in Progress' Voting Window - LM Only)
+    elseif cmd == "monitor" or cmd == "master" then
+        if self:AmILootMaster() then
+            ---@type UI
+            local UI = self:GetModule("UI") --[[@as UI]]
+            if UI and UI.ShowMonitorWindow then
+                UI:ShowMonitorWindow()
+            else
+                self:Print("Error: Monitor window function not found in UI module.")
+            end
+        else
+            self:Print("Error: You are not the Loot Master.")
+        end
+        -- 5. HISTORY (Public)
+    elseif cmd == "history" then
+        ---@type UI
+        local UI = self:GetModule("UI") --[[@as UI]]
+        if UI and UI.ShowHistoryWindow then
+            UI:ShowHistoryWindow()
+        else
+            self:Print("Error: ShowHistoryWindow function not found.")
+        end
+        -- 6. TRADE (Pending Trades - LM Only)
+        -- 6. TRADE (Pending Trades - LM Only)
+    elseif cmd == "trade" then
+        if self:AmILootMaster() then
+            ---@type UI
+            local UI = self:GetModule("UI") --[[@as UI]]
+            if UI and UI.ShowTradeListWindow then
+                UI:ShowTradeListWindow()
+            else
+                self:Print("Error: ShowTradeListWindow function not found.")
+            end
+        else
+            self:Print("Error: You are not the Loot Master.")
+        end
+
+        -- 7. DEBUG / DEV TOOLS
+    elseif cmd == "status" then
+        ---@type Debug
+        local Debug = self:GetModule("Debug") --[[@as Debug]]
+        if Debug and Debug.ShowStatus then Debug:ShowStatus() end
+    elseif cmd == "verbose" then
+        ---@type Debug
+        local Debug = self:GetModule("Debug") --[[@as Debug]]
+        if Debug and Debug.ToggleVerbose then Debug:ToggleVerbose() end
+    elseif cmd == "sim" then
+        local arg = args[2]
+        if arg then
+            ---@type Debug
+            local Debug = self:GetModule("Debug") --[[@as Debug]]
+            if Debug and Debug.SimulateComm then Debug:SimulateComm(arg) end
+        else
+            self:Print("Usage: /dlc sim [playername] or [start]")
+        end
+    elseif cmd == "add" then
+        local arg = args[2]
+        if arg then
+            ---@type Loot
+            local Loot = self:GetModule("Loot") --[[@as Loot]]
+            if Loot and Loot.AddManualItem then Loot:AddManualItem(arg) end
+        else
+            self:Print("Usage: /dlc add [ItemLink]")
+        end
+    else
+        self:Print("Available Commands:")
+        self:Print(" /dlc config - Open settings")
+        self:Print(" /dlc test - Generate test items (LM Only)")
+        self:Print(" /dlc loot - Open Loot Drop Window (LM Only)")
+        self:Print(" /dlc monitor - Open Master Looter Interface (LM Only)")
+        self:Print(" /dlc trade - Open Pending Trades (LM Only)")
+        self:Print(" /dlc history - Open Award History (Public)")
+        self:Print(" /dlc status - Show Debug Status (Public)")
     end
 end
 
