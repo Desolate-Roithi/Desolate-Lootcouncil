@@ -1,6 +1,6 @@
 # Desolate Lootcouncil
 
-**Desolate Lootcouncil** is a World of Warcraft (Retail) addon designed to reintroduce a streamlined, fair, and automated "Master Loot" system. [cite_start]It layers a robust addon-controlled distribution system on top of WoW's default "Group Loot," centralizing control under a designated Loot Master to reduce confusion and automate the bidding process[cite: 3, 4, 5].
+**Desolate Lootcouncil** is a World of Warcraft (Retail) addon designed to reintroduce a streamlined, fair, and automated "Master Loot" system. It layers a robust addon-controlled distribution system on top of WoW's default "Group Loot," centralizing control under a designated Loot Master to reduce confusion and automate the bidding process.
 
 📄 **[View Full Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)**
 
@@ -8,34 +8,34 @@
 
 ### ✅ Currently Implemented
 * **Robust Loot Master (LM) Detection:**
-    * [cite_start]Smart hierarchy: *Configured Name* > *Presence Check* > *Fallback to Group Leader*[cite: 26, 30, 38].
-    * [cite_start]Prevents "ghost" assignments if the designated LM is offline or not in the group[cite: 31, 33].
+    * Smart hierarchy: *Configured Name* > *Presence Check* > *Fallback to Group Leader*.
+    * Prevents "ghost" assignments if the designated LM is offline or not in the group.
 * **Unified UI Module (Refactored):**
     * Clean code separation for `Loot`, `Voting`, `Monitor`, and `Utility` windows.
 * **Loot Management (LM Only):**
-    * [cite_start]**Loot Drop Window:** Review dropped items, categorize them (Tier, Weapons, Collectables), and start bidding sessions[cite: 74, 91, 111].
-    * [cite_start]**Session Monitor:** Live tracking of items currently up for vote[cite: 310].
-    * [cite_start]**Distribution:** Supports **Bid**, **Roll**, **Transmog**, and **Pass** voting options[cite: 235, 236, 237, 238].
+    * **Loot Drop Window:** Review dropped items, categorize them (Tier, Weapons, Collectables), and start bidding sessions.
+    * **Session Monitor:** Live tracking of items currently up for vote.
+    * **Distribution:** Supports **Bid**, **Roll**, **Transmog**, and **Pass** voting options.
 * **Voting System:**
     * **Multi-Timer Support:** Overlapping sessions run simultaneously with individual item countdowns.
     * **Live Feedback:** UI updates in real-time as votes come in.
 * **Post-Distribution Tools:**
-    * [cite_start]**Smart Trade Tracker:** Remembers who won what and helps initiate trades[cite: 266, 269].
+    * **Smart Trade Tracker:** Remembers who won what and helps initiate trades.
     * **Session History:** A persistent log of awarded items for the current session.
 * **Developer Tools:**
     * Debug mode (`/dlc verbose`), simulated loot sessions, and connection status checks.
 
 ### 🚧 Planned / In Progress
 * **Advanced Roster Management:**
-    * [cite_start]Main/Alt character mapping[cite: 115, 126].
-    * [cite_start]Priority Decay system for raid absences[cite: 130, 161].
-    * [cite_start]Manual priority sorting for "Bid" winners[cite: 121, 250].
+    * Main/Alt character mapping.
+    * Priority Decay system for raid absences.
+    * Manual priority sorting for "Bid" winners.
 * **Automated Native Interaction:**
-    * [cite_start]Auto-Need/Greed for the LM on the native WoW loot frame[cite: 58].
-    * [cite_start]Auto-Pass for standard raiders to declutter their screen[cite: 56].
+    * Auto-Need/Greed for the LM on the native WoW loot frame.
+    * Auto-Pass for standard raiders to declutter their screen.
 * **Session Persistence:**
-    * [cite_start]Robust handling of disconnects/reloads during active bidding[cite: 278].
-    * [cite_start]Logic to detect "Session End" via zoning or logout[cite: 180, 194].
+    * Robust handling of disconnects/reloads during active bidding.
+    * Logic to detect "Session End" via zoning or logout.
 
 ## 🛠️ Installation
 
