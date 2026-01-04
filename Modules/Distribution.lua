@@ -57,7 +57,7 @@ function Dist:StartSession(lootTable)
     -- wipe(session.bidding)
 
     -- Copy clean list to persistent storage
-    local duration = DesolateLootcouncil.db.profile.sessionDuration or 300
+    local duration = self.sessionDuration or DesolateLootcouncil.db.profile.sessionDuration or 60
     for _, item in ipairs(cleanList) do
         item.expiry = GetTime() + duration -- Per-item expiry
         table.insert(session.bidding, item)
@@ -69,9 +69,9 @@ function Dist:StartSession(lootTable)
     Loot:ClearLootBacklog()
     if UI.lootFrame then UI.lootFrame:Hide() end
 
-    -- 3. Prepare Payload from BIDDING storage
+    -- 3. Prepare Payload (ONLY NEW ITEMS)
     local payloadData = {}
-    for _, item in ipairs(session.bidding) do
+    for _, item in ipairs(cleanList) do
         table.insert(payloadData, {
             link = item.link,
             texture = item.texture,
@@ -108,7 +108,94 @@ function Dist:StartSession(lootTable)
     -- Open Monitor Window for LM
     UI:ShowMonitorWindow()
     -- Trigger Refresh if Voting Window is open (for overlapping sessions)
-    UI:ShowVotingWindow(nil, true)
+    UI:ShowVotingWindow(session.bidding)
+end
+
+function Dist:SendStopSession()
+    -- 1. Broadcast "STOP_SESSION"
+    local payload = { command = "STOP_SESSION" }
+    local serialized = self:Serialize(payload)
+
+    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    if not channel then
+        -- Fallback for testing
+        self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
+    else
+        self:SendCommMessage("DLC_Loot", serialized, channel)
+    end
+
+    -- 2. Local Cleanup (LM Side)
+    self.sessionVotes = {}
+    self.closedItems = {}
+    -- Clear the Bidding storage so Monitor empties
+    wipe(DesolateLootcouncil.db.profile.session.bidding)
+
+    -- 3. Close Monitor
+    ---@type UI
+    local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
+    if UI.monitorFrame then UI.monitorFrame:Hide() end
+    DesolateLootcouncil:Print("[DLC] Session Stopped. Broadcast sent.")
+end
+
+function Dist:SendCloseItem(itemGUID)
+    -- 1. Broadcast to Raid
+    local payload = { command = "CLOSE_ITEM", data = { guid = itemGUID } }
+    local serialized = self:Serialize(payload)
+    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    if not channel then
+        -- Fallback
+        self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
+    else
+        self:SendCommMessage("DLC_Loot", serialized, channel)
+    end
+
+    -- 2. Local Instant Update (Fix "Everyone Voted" lag)
+    self.closedItems = self.closedItems or {}
+    self.closedItems[itemGUID] = true
+
+    ---@type UI
+    local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
+    if UI and UI.ShowVotingWindow then
+        UI:ShowVotingWindow(nil, true)
+    end
+
+    DesolateLootcouncil:Print("[DLC] Voting closed for item: " .. string.sub(itemGUID, -8))
+end
+
+function Dist:SendRemoveItem(guid)
+    local payload = { command = "REMOVE_ITEM", data = { guid = guid } }
+    local serialized = self:Serialize(payload)
+    -- Broadcast to raid/party
+    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    if not channel then
+        -- Fallback
+        self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
+    else
+        self:SendCommMessage("DLC_Loot", serialized, channel)
+    end
+end
+
+function Dist:RemoveSessionItem(guid)
+    -- 1. Tell clients to REMOVE the item (not just close)
+    self:SendRemoveItem(guid)
+
+    -- 2. Remove from local Bidding storage (Monitor List)
+    local session = DesolateLootcouncil.db.profile.session
+    if session and session.bidding then
+        for i, item in ipairs(session.bidding) do
+            if (item.sourceGUID or item.link) == guid then
+                table.remove(session.bidding, i)
+                break
+            end
+        end
+    end
+
+    -- 3. Refresh Monitor
+    ---@type UI
+    local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
+    if UI.ShowMonitorWindow then UI:ShowMonitorWindow() end
+
+    DesolateLootcouncil:Print("[DLC] Removed item from session.")
 end
 
 function Dist:OnCommReceived(prefix, message, distribution, sender)
@@ -123,21 +210,55 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
     ---@cast payload DistributionPayload
 
     if payload.command == "START_SESSION" then
-        local items = payload.data
-        local count = items and #items or 0
+        local newItems = payload.data
+        local count = newItems and #newItems or 0
         local duration = payload.duration or 300
+        local localExpiry = GetTime() + duration
 
-        -- Store State
-        self.sessionExpiry = GetTime() + duration
-        self.closedItems = {} -- Reset closed items
+        -- Initialize accumulator
+        self.clientLootList = self.clientLootList or {}
 
-        DesolateLootcouncil:Print("[DLC] Received Loot Session from " .. sender .. " with " .. count .. " items.")
-        DesolateLootcouncil:Print("[DLC] Voting Session Started! Window Opened (Expires in " ..
-            math.floor(duration / 60) .. "m).")
+        if newItems then
+            for _, item in ipairs(newItems) do
+                item.expiry = localExpiry
+                table.insert(self.clientLootList, item)
+            end
+        end
+
+        DesolateLootcouncil:Print("[DLC] Added " .. count .. " items to the session.")
 
         ---@type UI
         local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
-        UI:ShowVotingWindow(items)
+        UI:ShowVotingWindow(self.clientLootList)
+    elseif payload.command == "STOP_SESSION" then
+        -- Clear Client Data
+        self.clientLootList = {}
+        self.sessionVotes = {}
+
+        -- Close/Reset UI
+        ---@type UI
+        local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
+        if UI.votingFrame then
+            UI.votingFrame:Hide()
+        end
+        DesolateLootcouncil:Print("[DLC] The Loot Session was ended by the Master.")
+    elseif payload.command == "REMOVE_ITEM" then
+        local guid = payload.data and payload.data.guid
+        if guid and self.clientLootList then
+            -- Find and remove the item from the local list
+            for i, item in ipairs(self.clientLootList) do
+                if (item.sourceGUID or item.link) == guid then
+                    table.remove(self.clientLootList, i)
+                    break
+                end
+            end
+            -- Refresh UI
+            ---@type UI
+            local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
+            if UI.ShowVotingWindow then
+                UI:ShowVotingWindow(self.clientLootList, true)
+            end
+        end
     elseif payload.command == "CLOSE_ITEM" then
         local guid = payload.data and payload.data.guid
         if guid then
@@ -179,8 +300,20 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
                     for _ in pairs(self.sessionVotes[data.guid]) do voteCount = voteCount + 1 end
 
                     local totalMembers = GetNumGroupMembers()
-                    if totalMembers == 0 then totalMembers = 1 end -- Self test
+                    if totalMembers == 0 then totalMembers = 1 end -- Self
 
+                    -- [DEBUG] If testing solo, add simulated users to the required count
+                    if GetNumGroupMembers() <= 1 and DesolateLootcouncil.activeAddonUsers then
+                        local myName = UnitName("player")
+                        for name in pairs(DesolateLootcouncil.activeAddonUsers) do
+                            -- Add anyone in the sim list who isn't me
+                            if name ~= myName then
+                                totalMembers = totalMembers + 1
+                            end
+                        end
+                    end
+
+                    -- Only close if everyone (Real + Sim) has voted
                     if voteCount >= totalMembers then
                         self:SendCloseItem(data.guid)
                     end
@@ -213,24 +346,6 @@ function Dist:SendSyncLM(targetLM)
     if channel then
         self:SendCommMessage("DLC_Loot", serialized, channel)
     end
-end
-
-function Dist:SendCloseItem(itemGUID)
-    local payload = {
-        command = "CLOSE_ITEM",
-        data = { guid = itemGUID }
-    }
-    local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
-
-    -- Fallback for self-test
-    if not channel then
-        channel = "WHISPER"
-        self:SendCommMessage("DLC_Loot", serialized, channel, UnitName("player"))
-    else
-        self:SendCommMessage("DLC_Loot", serialized, channel)
-    end
-    DesolateLootcouncil:Print("[DLC] Closed voting for item " .. string.sub(itemGUID, -8))
 end
 
 function Dist:SendVote(itemGUID, voteType)

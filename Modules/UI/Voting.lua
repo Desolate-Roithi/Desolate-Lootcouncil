@@ -2,14 +2,23 @@
 local UI = DesolateLootcouncil:GetModule("UI")
 local AceGUI = LibStub("AceGUI-3.0")
 
+local function FormatTime(seconds)
+    if not seconds or seconds < 0 then seconds = 0 end
+    local m = math.floor(seconds / 60)
+    local s = seconds % 60
+    return string.format("%d:%02d", m, s)
+end
+
 function UI:CreateVotingFrame()
     ---@type AceGUIFrame
     local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
     frame:SetTitle("Loot Vote")
     frame:SetLayout("Flow")
+    frame:EnableResize(false)
     frame:SetWidth(800) -- Updated to 800
     frame:SetHeight(400)
     frame:SetCallback("OnClose", function(widget)
+        if self.votingTicker then self.votingTicker:Cancel() end
         widget:Hide()
     end)
     self.votingFrame = frame
@@ -42,24 +51,39 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
     self.votingFrame:ReleaseChildren()
     self.rowTimers = {} -- Reset timers list
 
-    -- Timer Logic: Single ticker updates all rows
+    -- Ticker Logic: Single ticker updates all rows
     if self.votingTicker then self.votingTicker:Cancel() end
-
-    local function FormatTime(seconds)
-        if seconds < 0 then seconds = 0 end
-        local m = math.floor(seconds / 60)
-        local s = seconds % 60
-        return string.format("%d:%02d", m, s)
-    end
-
-    self.votingTicker = C_Timer.NewTicker(1, function()
+    self.votingTicker = C_Timer.NewTicker(0.5, function()
+        -- 1. Safety Checks
+        local Dist = DesolateLootcouncil:GetModule("Distribution")
+        if not Dist then return end
+        local closedItems = Dist.closedItems or {}
         local now = GetTime()
+        if not self.rowTimers then return end
+
+        -- 2. Update Loop
         for _, tData in ipairs(self.rowTimers) do
-            local remaining = (tData.expiry or 0) - now
-            if remaining <= 0 then
-                tData.label:SetText("|cffff0000Closed|r")
-            else
-                tData.label:SetText(FormatTime(math.floor(remaining)))
+            -- Check if widget is still valid
+            if tData.label and tData.label.frame and tData.label.SetText then
+                local remaining = (tData.expiry or 0) - now
+                local isServerClosed = closedItems[tData.guid]
+
+                -- Logic: Stop if Time <= 0 OR Manually Closed by LM
+                if (remaining <= 0 or isServerClosed) then
+                    -- Only trigger "Done" state once to prevent loop spam
+                    if not tData.isDone then
+                        tData.isDone = true
+                        tData.label:SetText("|cffff0000Closed|r")
+                        -- Force Rebuild to hide buttons (replace with 'Voting Closed' button)
+                        self:ShowVotingWindow(nil, true)
+                    else
+                        tData.label:SetText("|cffff0000Closed|r")
+                    end
+                else
+                    -- Running
+                    tData.isDone = false
+                    tData.label:SetText(FormatTime(math.floor(remaining)))
+                end
             end
         end
     end)
@@ -87,11 +111,11 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
             group:SetLayout("Flow")
             group:SetFullWidth(true)
 
-            -- Col 1: Item Icon/Link (0.4)
+            -- Col 1: Item Icon/Link (0.35)
             ---@type AceGUIInteractiveLabel
             local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
             itemLabel:SetText(link)
-            itemLabel:SetRelativeWidth(0.40)
+            itemLabel:SetRelativeWidth(0.35)
             itemLabel:SetCallback("OnEnter", function(widget)
                 GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
                 GameTooltip:SetHyperlink(link)
@@ -100,15 +124,25 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
             itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
             group:AddChild(itemLabel)
 
-            -- Col 2: Timer (0.2)
+            -- Col 2: Timer (0.15)
             ---@type AceGUILabel
             local labelTimer = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            labelTimer:SetText("...") -- Will be updated by ticker
-            labelTimer:SetRelativeWidth(0.20)
+
+            -- [FIX] Determine text immediately
+            local Dist = DesolateLootcouncil:GetModule("Distribution")
+            local isClosedInit = Dist and Dist.closedItems and Dist.closedItems[guid]
+            local remainingInit = (data.expiry or 0) - GetTime()
+            if isClosedInit or remainingInit <= 0 then
+                labelTimer:SetText("|cffff0000Closed|r")
+            else
+                labelTimer:SetText(FormatTime(remainingInit))
+            end
+
+            labelTimer:SetRelativeWidth(0.15)
             group:AddChild(labelTimer)
 
             -- Add to timers list for ticker
-            table.insert(self.rowTimers, { label = labelTimer, expiry = data.expiry })
+            table.insert(self.rowTimers, { label = labelTimer, expiry = data.expiry, guid = guid })
 
             -- Col 3: Actions (0.4)
             local currentVote = self.myVotes[guid]
@@ -121,7 +155,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
             if isClosed or isExpired then
                 -- STATE C: Item Closed/Expired
                 -- Label: "You voted: [Color]Vote[r]" (0.25)
-                local votedText = "No Vote"
+                local votedText = "You voted: |cffaaaaaaAuto Pass|r"
                 if currentVote then
                     local vText = VOTE_TEXT[currentVote] or "?"
                     local vColor = VOTE_COLOR[currentVote] or "|cffffffff"
@@ -148,7 +182,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
 
                     local res = AceGUI:Create("Label")
                     res:SetText("Voted: " .. vColor .. vText .. "|r")
-                    res:SetRelativeWidth(0.20)
+                    res:SetRelativeWidth(0.25)
                     group:AddChild(res)
 
                     local change = AceGUI:Create("Button")
@@ -167,7 +201,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
                         if Dist and Dist.SendVote then Dist:SendVote(guid, value) end
                         self:ShowVotingWindow(nil, true)
                     end
-                    local w = 0.10
+                    local w = 0.11
                     local btnBid = AceGUI:Create("Button")
                     btnBid:SetText("Bid")
                     btnBid:SetRelativeWidth(w)

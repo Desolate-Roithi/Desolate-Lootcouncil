@@ -158,7 +158,7 @@ function UI:ShowTradeListWindow()
                 ---@type AceGUIInteractiveLabel
                 local linkLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
                 linkLabel:SetText(item.link)
-                linkLabel:SetRelativeWidth(0.50)
+                linkLabel:SetRelativeWidth(0.45)
                 linkLabel:SetCallback("OnEnter", function(widget)
                     GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
                     GameTooltip:SetHyperlink(item.link)
@@ -172,36 +172,50 @@ function UI:ShowTradeListWindow()
                 local class = item.winnerClass
                 local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
                 winnerLabel:SetText("|c" .. classColor .. item.winner .. "|r")
-                winnerLabel:SetRelativeWidth(0.25)
+                winnerLabel:SetRelativeWidth(0.20)
 
                 -- Trade Button
                 ---@type AceGUIButton
                 local btnTrade = AceGUI:Create("Button") --[[@as AceGUIButton]]
                 btnTrade:SetText("Trade")
-                btnTrade:SetRelativeWidth(0.20)
+                btnTrade:SetRelativeWidth(0.15)
                 btnTrade:SetCallback("OnClick", function()
                     local unitID = GetUnitIDForName(item.winner)
-
-                    -- Scenario A: Found in group
+                    -- 1. Try to find UnitID (Raid/Party)
                     if unitID and CheckInteractDistance(unitID, 2) then
                         InitiateTrade(unitID)
                         return
                     end
-
-                    -- Scenario B: Fallback
-                    TargetUnit(item.winner)
-                    if UnitName("target") == item.winner and CheckInteractDistance("target", 2) then
-                        InitiateTrade("target")
-                        DesolateLootcouncil:Print("[DLC] Trading via target (UnitID not found).")
-                    else
-                        DesolateLootcouncil:Print("[DLC] " .. item.winner .. " is out of range or offline.")
+                    -- 2. Check if player already targets them manually
+                    if UnitName("target") == item.winner then
+                        if CheckInteractDistance("target", 2) then
+                            InitiateTrade("target")
+                        else
+                            DesolateLootcouncil:Print("[DLC] " .. item.winner .. " is out of trade range.")
+                        end
+                        return
                     end
+                    -- 3. Failure: Ask user to target manually
+                    DesolateLootcouncil:Print("[DLC] Could not auto-target " ..
+                        item.winner .. ". Please target them manually and click Trade again.")
+                end)
+
+                -- Remove Button
+                ---@type AceGUIButton
+                local btnRemove = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                btnRemove:SetText("X")
+                btnRemove:SetRelativeWidth(0.10)
+                btnRemove:SetCallback("OnClick", function()
+                    item.traded = true
+                    DesolateLootcouncil:Print("[DLC] Marked " .. item.link .. " as traded.")
+                    self:ShowTradeListWindow()
                 end)
 
                 row:AddChild(icon)
                 row:AddChild(linkLabel)
                 row:AddChild(winnerLabel)
                 row:AddChild(btnTrade)
+                row:AddChild(btnRemove)
                 scroll:AddChild(row)
             end
         end

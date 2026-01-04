@@ -55,9 +55,9 @@ function UI:ShowMonitorWindow()
     self.monitorFrame:AddChild(scroll)
 
     if items then
-        for i, data in ipairs(items) do
-            local link = data.link
-            local guid = data.sourceGUID or link
+        for i, item in ipairs(items) do -- Changed 'data' to 'item' per request
+            local link = item.link
+            local guid = item.sourceGUID or link
 
             -- Row
             ---@type AceGUISimpleGroup
@@ -65,11 +65,11 @@ function UI:ShowMonitorWindow()
             group:SetLayout("Flow")
             group:SetFullWidth(true)
 
-            -- 1. Item Link (0.5)
+            -- 1. Item Link (0.45)
             ---@type AceGUIInteractiveLabel
             local labelLink = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
             labelLink:SetText(link)
-            labelLink:SetRelativeWidth(0.50)
+            labelLink:SetRelativeWidth(0.45)
             labelLink:SetCallback("OnEnter", function(widget)
                 GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
                 GameTooltip:SetHyperlink(link)
@@ -84,18 +84,32 @@ function UI:ShowMonitorWindow()
             labelCounts:SetRelativeWidth(0.30)
             labelCounts:SetColor(1, 1, 1) -- White
 
-            -- 3. Award Button (0.2)
+            -- 3. Award Button (0.15)
             ---@type AceGUIButton
             local btnAward = AceGUI:Create("Button") --[[@as AceGUIButton]]
             btnAward:SetText("Award")
-            btnAward:SetRelativeWidth(0.20)
+            btnAward:SetRelativeWidth(0.15)
             btnAward:SetCallback("OnClick", function()
-                self:ShowAwardWindow(data)
+                self:ShowAwardWindow(item) -- Using 'item' explicitly
+            end)
+
+            -- 4. Remove Button (0.10)
+            ---@type AceGUIButton
+            local btnRemove = AceGUI:Create("Button") --[[@as AceGUIButton]]
+            btnRemove:SetText("X")
+            btnRemove:SetRelativeWidth(0.10)
+            btnRemove:SetCallback("OnClick", function()
+                ---@type Distribution
+                local Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
+                if Dist and Dist.RemoveSessionItem then
+                    Dist:RemoveSessionItem(guid)
+                end
             end)
 
             group:AddChild(labelLink)
             group:AddChild(labelCounts)
             group:AddChild(btnAward)
+            group:AddChild(btnRemove)
             scroll:AddChild(group)
         end
     end
@@ -125,11 +139,10 @@ function UI:ShowMonitorWindow()
         btn:SetPoint("BOTTOM", parent, "BOTTOM", 0, 15) -- FIXED ANCHOR
         btn:SetFrameLevel(parent:GetFrameLevel() + 10)  -- FORCE ON TOP
         btn:SetScript("OnClick", function()
-            ---@type Loot
-            local Loot = DesolateLootcouncil:GetModule("Loot") --[[@as Loot]]
-            if Loot.EndSession then
-                Loot:EndSession()
-                self:CloseMasterLootWindow() -- Visual Close
+            ---@type Distribution
+            local Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
+            if Dist and Dist.SendStopSession then
+                Dist:SendStopSession()
             end
         end);
         (self.monitorFrame --[[@as any]]).btnEnd = btn
@@ -148,6 +161,12 @@ function UI:ShowMonitorWindow()
 end
 
 function UI:ShowAwardWindow(itemData)
+    -- Handle case where function is called to CLOSE the window (itemData is nil)
+    if not itemData then
+        if self.awardFrame then self.awardFrame:Hide() end
+        return
+    end
+
     if not self.awardFrame then
         ---@type AceGUIFrame
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]

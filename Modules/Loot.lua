@@ -299,20 +299,19 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             itemID = itemData.itemID,
             winner = winnerName,
             winnerClass = winnerClass, -- Store for reliable coloring
-            voteType = voteType,
+            voteType = displayVote,
             timestamp = GetServerTime(),
             traded = isSelf -- Auto-trade if self
         })
 
-        -- Tell all raiders to grey out this item
+        -- Tell all raiders to remove this item
         ---@type Distribution
         local Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
-        if Dist and Dist.SendCloseItem then
-            Dist:SendCloseItem(itemData.sourceGUID)
+        if Dist and Dist.SendRemoveItem then
+            Dist:SendRemoveItem(itemGUID)
         end
     end
 
-    -- Remove from Bidding
     -- Remove from Bidding
     if removeIndex then
         table.remove(session.bidding, removeIndex)
@@ -324,6 +323,16 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             Dist.sessionVotes[itemGUID] = nil
         end
     end
+
+    -- 5. Refresh UI
+    ---@type UI
+    local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
+    if UI.ShowMonitorWindow then UI:ShowMonitorWindow() end
+    if UI.ShowAwardWindow then UI:ShowAwardWindow(nil) end -- Close award window? or refresh
+    -- Close award window actually, since item is gone
+    if UI.awardFrame then UI.awardFrame:Hide() end
+
+    self:Print("[DLC] Item awarded successfully.")
 
     -- Clear Votes function call (if needed globally)
     -- But since we just removed one item, maybe we don't clear ALL votes?
