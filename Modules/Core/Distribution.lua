@@ -57,7 +57,7 @@ function Dist:StartSession(lootTable)
     -- wipe(session.bidding)
 
     -- Copy clean list to persistent storage
-    local duration = self.sessionDuration or DesolateLootcouncil.db.profile.sessionDuration or 60
+    local duration = DesolateLootcouncil.db.profile.sessionDuration or 60
     for _, item in ipairs(cleanList) do
         item.expiry = GetTime() + duration -- Per-item expiry
         table.insert(session.bidding, item)

@@ -134,34 +134,35 @@ function UI:ShowLootWindow(lootTable)
     if not self.btnStart then
         local parent = (self.lootFrame --[[@as any]]).frame
 
-        self.btnStart = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-        self.btnStart:SetText("Start Bidding")
+        ---@type Button
+        local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        btn:SetText("Start Bidding")
 
         -- Keep the FrameLevel fix
-        self.btnStart:SetFrameLevel(parent:GetFrameLevel() + 10)
+        btn:SetFrameLevel(parent:GetFrameLevel() + 10)
 
         -- FIX 1: Alignment (Move UP to match Close button)
-        -- Changing Y-offset from 12 to 16 usually hits the center line of the footer.
-        self.btnStart:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 15, 16)
+        btn:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 15, 16)
 
-        -- FIX 2: Width (Stop stretching it)
-        -- Instead of anchoring 'Right', we set a fixed width.
-        -- This prevents it from looking "too long" or hitting the Close button.
-        self.btnStart:SetWidth(200)
-        self.btnStart:SetHeight(24) -- Standard WoW button height
+        -- FIX 2: Width
+        btn:SetWidth(200)
+        btn:SetHeight(24)
+
+        self.btnStart = btn
     end
 
-    self.btnStart:SetScript("OnClick", function()
+    local startBtn = self.btnStart --[[@as Button]]
+    startBtn:SetScript("OnClick", function()
         ---@type Distribution
         local Dist = DesolateLootcouncil:GetModule('Distribution') --[[@as Distribution]]
         Dist:StartSession(lootTable)
         self.lootFrame:Hide()
-        self.btnStart:Hide()
+        startBtn:Hide()
     end)
 
     -- Ensure visibility
-    self.btnStart:SetFrameLevel((self.lootFrame --[[@as any]]).frame:GetFrameLevel() + 10)
-    self.btnStart:Show()
+    startBtn:SetFrameLevel((self.lootFrame --[[@as any]]).frame:GetFrameLevel() + 10)
+    startBtn:Show()
 
     -- 5. Update Resize Logic
     local function LayoutScroll()

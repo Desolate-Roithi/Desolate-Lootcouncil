@@ -2,6 +2,7 @@
 local UI = DesolateLootcouncil:GetModule("UI")
 local AceGUI = LibStub("AceGUI-3.0")
 
+
 local function FormatTime(seconds)
     if not seconds or seconds < 0 then seconds = 0 end
     local m = math.floor(seconds / 60)
@@ -10,6 +11,7 @@ local function FormatTime(seconds)
 end
 
 function UI:CreateVotingFrame()
+    ---@type AceGUIWidget
     local frame = AceGUI:Create("Frame")
     frame:SetTitle("Loot Vote")
     frame:SetLayout("Flow")
@@ -76,6 +78,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
     -- 1. Ticker (Visual Only)
     self.votingTicker = C_Timer.NewTicker(0.5, function()
         local now = GetTime()
+        ---@type Distribution
         local Dist = DesolateLootcouncil:GetModule("Distribution")
         local closedItems = (Dist and Dist.closedItems) or {}
         for guid, info in pairs(self.timerLabels) do
@@ -93,6 +96,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
     end)
 
     -- 2. Build Layout
+    ---@type AceGUIWidget
     local scroll = AceGUI:Create("ScrollFrame")
     scroll:SetLayout("List")
     scroll:SetFullWidth(true)
@@ -101,6 +105,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
 
     local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "T-Mog", [4] = "Pass" }
     local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cffeda55f", [4] = "|cffaaaaaa" }
+    ---@type Distribution
     local Dist = DesolateLootcouncil:GetModule("Distribution")
     local closedItems = (Dist and Dist.closedItems) or {}
     local now = GetTime()
@@ -122,12 +127,14 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
         end
 
         -- Row
+        ---@type AceGUIWidget
         local group = AceGUI:Create("SimpleGroup")
         group:SetLayout("Flow")
         group:SetFullWidth(true)
         scroll:AddChild(group)
 
         -- Link
+        ---@type AceGUIWidget
         local itemLabel = AceGUI:Create("InteractiveLabel")
         itemLabel:SetText(data.link)
         itemLabel:SetRelativeWidth(0.35)
@@ -140,6 +147,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
         group:AddChild(itemLabel)
 
         -- Timer Label
+        ---@type AceGUIWidget
         local timerLbl = AceGUI:Create("Label")
         timerLbl:SetText("...")
         timerLbl:SetRelativeWidth(0.15)
@@ -147,6 +155,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
         self.timerLabels[guid] = { label = timerLbl, expiry = data.expiry }
 
         -- Actions
+        ---@type AceGUIWidget
         local actionGroup = AceGUI:Create("SimpleGroup")
         actionGroup:SetLayout("Flow")
         actionGroup:SetRelativeWidth(0.50)
@@ -162,11 +171,13 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
                 votedText = "You voted: " .. vColor .. vText .. "|r"
             end
 
+            ---@type AceGUIWidget
             local res = AceGUI:Create("Label")
             res:SetText(votedText)
             res:SetWidth(200)
             actionGroup:AddChild(res)
 
+            ---@type AceGUIWidget
             local btn = AceGUI:Create("Button")
             btn:SetText("Closed")
             btn:SetWidth(100)
@@ -177,11 +188,13 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
             local vText = VOTE_TEXT[currentVote] or "?"
             local vColor = VOTE_COLOR[currentVote] or "|cffffffff"
 
+            ---@type AceGUIWidget
             local res = AceGUI:Create("Label")
             res:SetText("Voted: " .. vColor .. vText .. "|r")
             res:SetWidth(200)
             actionGroup:AddChild(res)
 
+            ---@type AceGUIWidget
             local change = AceGUI:Create("Button")
             change:SetText("Change")
             change:SetWidth(100)
@@ -200,24 +213,28 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
             end
 
             local w = 75
+            ---@type AceGUIWidget
             local b1 = AceGUI:Create("Button")
             b1:SetText("Bid")
             b1:SetWidth(w)
             b1:SetCallback("OnClick", function() CastVote(1) end)
             actionGroup:AddChild(b1)
 
+            ---@type AceGUIWidget
             local b2 = AceGUI:Create("Button")
             b2:SetText("Roll")
             b2:SetWidth(w)
             b2:SetCallback("OnClick", function() CastVote(2) end)
             actionGroup:AddChild(b2)
 
+            ---@type AceGUIWidget
             local b3 = AceGUI:Create("Button")
             b3:SetText("T-Mog")
             b3:SetWidth(w)
             b3:SetCallback("OnClick", function() CastVote(3) end)
             actionGroup:AddChild(b3)
 
+            ---@type AceGUIWidget
             local b4 = AceGUI:Create("Button")
             b4:SetText("Pass")
             b4:SetWidth(w)

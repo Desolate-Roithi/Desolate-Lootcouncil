@@ -45,6 +45,7 @@ function Debug:SimulateComm(arg)
 end
 
 function Debug:SimulateVoting()
+    ---@type Distribution
     local Dist = DesolateLootcouncil:GetModule("Distribution")
     if not Dist then return end
     local session = DesolateLootcouncil.db.profile.session.bidding

@@ -2,8 +2,11 @@
 local UI = DesolateLootcouncil:GetModule("UI")
 local AceGUI = LibStub("AceGUI-3.0")
 
+
+
 function UI:ShowMonitorWindow()
     if not self.monitorFrame then
+        ---@type AceGUIWidget
         local frame = AceGUI:Create("Frame")
         frame:SetTitle("Session Monitor")
         frame:SetLayout("Flow")
@@ -18,6 +21,7 @@ function UI:ShowMonitorWindow()
 
     -- Helper: Vote Counts
     local function GetVoteCounts(guid)
+        ---@type Distribution
         local Dist = DesolateLootcouncil:GetModule("Distribution")
         local votes = Dist and Dist.sessionVotes and Dist.sessionVotes[guid]
         local bids, rolls, tm, pass = 0, 0, 0, 0
@@ -40,6 +44,7 @@ function UI:ShowMonitorWindow()
 
     local session = DesolateLootcouncil.db.profile.session
     local items = session.bidding
+    ---@type AceGUIWidget
     local scroll = AceGUI:Create("ScrollFrame")
     scroll:SetLayout("List")
     scroll:SetFullWidth(true)
@@ -51,6 +56,7 @@ function UI:ShowMonitorWindow()
             local link = item.link
             local guid = item.sourceGUID or link
             -- Row Group
+            ---@type AceGUIWidget
             local group = AceGUI:Create("SimpleGroup")
             group:SetLayout("Flow")
             group:SetFullWidth(true)
@@ -59,6 +65,7 @@ function UI:ShowMonitorWindow()
             scroll:AddChild(group)
 
             -- 1. Link
+            ---@type AceGUIWidget
             local labelLink = AceGUI:Create("InteractiveLabel")
             labelLink:SetText(link)
             labelLink:SetRelativeWidth(0.40)
@@ -71,12 +78,14 @@ function UI:ShowMonitorWindow()
             group:AddChild(labelLink)
 
             -- 2. Counts
+            ---@type AceGUIWidget
             local labelCounts = AceGUI:Create("Label")
             labelCounts:SetText(GetVoteCounts(guid))
             labelCounts:SetRelativeWidth(0.35)
             group:AddChild(labelCounts)
 
             -- 3. Award Button
+            ---@type AceGUIWidget
             local btnAward = AceGUI:Create("Button")
             btnAward:SetText("Award")
             btnAward:SetRelativeWidth(0.15)
@@ -86,12 +95,14 @@ function UI:ShowMonitorWindow()
             group:AddChild(btnAward)
 
             -- 4. Remove Button
+            ---@type AceGUIWidget
             local btnRemove = AceGUI:Create("Button")
             btnRemove:SetText("X")
             btnRemove:SetRelativeWidth(0.10)
             btnRemove:SetCallback("OnClick", function()
                 -- CRITICAL FIX: Safety Delay to prevent crash
                 C_Timer.After(0.05, function()
+                    ---@type Distribution
                     local Dist = DesolateLootcouncil:GetModule("Distribution")
                     if Dist and Dist.RemoveSessionItem then
                         Dist:RemoveSessionItem(guid)
@@ -103,7 +114,7 @@ function UI:ShowMonitorWindow()
     end
 
     -- Footer Buttons (Trades / Stop)
-    local parent = self.monitorFrame.frame
+    local parent = (self.monitorFrame --[[@as table]]).frame
     if not self.monitorFrame.btnTrades then
         local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
         btn:SetText("Pending Trades")
@@ -124,6 +135,7 @@ function UI:ShowMonitorWindow()
         btn:SetPoint("BOTTOM", parent, "BOTTOM", 0, 15)
         btn:SetFrameLevel(parent:GetFrameLevel() + 10)
         btn:SetScript("OnClick", function()
+            ---@type Distribution
             local Dist = DesolateLootcouncil:GetModule("Distribution")
             if Dist and Dist.SendStopSession then Dist:SendStopSession() end
         end)
@@ -132,7 +144,7 @@ function UI:ShowMonitorWindow()
     self.monitorFrame.btnEnd:Show()
 
     local function LayoutMonitor()
-        local h = self.monitorFrame.frame:GetHeight()
+        local h = (self.monitorFrame --[[@as table]]).frame:GetHeight()
         if scroll then scroll:SetHeight(h - 80) end
         self.monitorFrame:DoLayout()
     end
@@ -147,6 +159,7 @@ function UI:ShowAwardWindow(itemData)
     end
 
     if not self.awardFrame then
+        ---@type AceGUIWidget
         local frame = AceGUI:Create("Frame")
         frame:SetTitle("Award Item")
         frame:SetLayout("Flow")
@@ -158,6 +171,7 @@ function UI:ShowAwardWindow(itemData)
     self.awardFrame:Show()
     self.awardFrame:ReleaseChildren()
 
+    ---@type AceGUIWidget
     local header = AceGUI:Create("Label")
     header:SetText(itemData.link)
     header:SetFullWidth(true)
@@ -165,9 +179,11 @@ function UI:ShowAwardWindow(itemData)
     header:SetFontObject(GameFontNormalLarge)
     self.awardFrame:AddChild(header)
 
+    ---@type Distribution
     local Dist = DesolateLootcouncil:GetModule("Distribution")
     local votes = Dist and Dist.sessionVotes and Dist.sessionVotes[itemData.sourceGUID]
 
+    ---@type AceGUIWidget
     local scroll = AceGUI:Create("ScrollFrame")
     scroll:SetLayout("List")
     scroll:SetFullWidth(true)
@@ -188,12 +204,14 @@ function UI:ShowAwardWindow(itemData)
     local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "TM", [4] = "Pass" }
 
     if #voteList == 0 then
+        ---@type AceGUIWidget
         local lbl = AceGUI:Create("Label")
         lbl:SetText("No votes cast yet.")
         lbl:SetFullWidth(true)
         scroll:AddChild(lbl)
     else
         for _, v in ipairs(voteList) do
+            ---@type AceGUIWidget
             local row = AceGUI:Create("SimpleGroup")
             row:SetLayout("Flow")
             row:SetFullWidth(true)
@@ -201,11 +219,13 @@ function UI:ShowAwardWindow(itemData)
             -- CRITICAL: Attach FIRST
             scroll:AddChild(row)
 
+            ---@type AceGUIWidget
             local lblName = AceGUI:Create("Label")
             lblName:SetText(v.name)
             lblName:SetRelativeWidth(0.40)
             row:AddChild(lblName)
 
+            ---@type AceGUIWidget
             local lblResp = AceGUI:Create("Label")
             local color = VOTE_COLOR[v.type] or ""
             local txt = VOTE_TEXT[v.type] or "?"
@@ -213,11 +233,13 @@ function UI:ShowAwardWindow(itemData)
             lblResp:SetRelativeWidth(0.30)
             row:AddChild(lblResp)
 
+            ---@type AceGUIWidget
             local btnGive = AceGUI:Create("Button")
             btnGive:SetText("Give")
             btnGive:SetRelativeWidth(0.30)
             btnGive:SetCallback("OnClick", function()
                 self.awardFrame:Hide()
+                ---@type Loot
                 local Loot = DesolateLootcouncil:GetModule("Loot")
                 if Loot and Loot.AwardItem then
                     local voteDesc = VOTE_TEXT[v.type] or "Unknown"

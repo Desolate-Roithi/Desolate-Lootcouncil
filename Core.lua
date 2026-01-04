@@ -48,8 +48,8 @@ function DesolateLootcouncil:OnInitialize()
         handler = self,
         type = "group",
         args = {
-            general = self:GetModule("GeneralSettings"):GetGeneralOptions(),
-            roster = self:GetModule("Roster"):GetOptions(),
+            general = (self:GetModule("GeneralSettings") --[[@as GeneralSettings]]):GetGeneralOptions(),
+            roster = (self:GetModule("Roster") --[[@as Roster]]):GetOptions(),
         },
     }
 
