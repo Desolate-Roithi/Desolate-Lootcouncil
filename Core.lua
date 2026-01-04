@@ -30,37 +30,29 @@ local defaults = {
     }
 }
 
-local options = {
-    name = "Desolate Lootcouncil",
-    handler = DesolateLootcouncil,
-    type = "group",
-    args = {
-        lootMaster = {
-            type = "input",
-            name = "Loot Master Name",
-            desc = "The Name-Realm of the loot master",
-            get = function(info) return DesolateLootcouncil.db.profile.configuredLM end,
-            set = function(info, val)
-                DesolateLootcouncil.db.profile.configuredLM = val
-                DesolateLootcouncil:UpdateLootMasterStatus()
-            end,
-        },
-        minQuality = {
-            type = "select",
-            name = "Minimum Loot Quality",
-            desc = "Items below this quality will be ignored (unless they are Tier/Weapons/Collectables)",
-            values = { [0] = "Poor", [1] = "Common", [2] = "Uncommon", [3] = "Rare", [4] = "Epic" },
-            get = function(info) return DesolateLootcouncil.db.profile.minLootQuality end,
-            set = function(info, val) DesolateLootcouncil.db.profile.minLootQuality = val end,
-        },
-    },
-}
+
+
+
+
+
 
 local COMM_PREFIX = "DLC_Ver"
 DesolateLootcouncil.activeAddonUsers = {}
 
 function DesolateLootcouncil:OnInitialize()
     self.db = LibStub("AceDB-3.0"):New("DesolateLootDB", defaults, true)
+
+    -- Define Options HERE (Safe, because all modules are now loaded)
+    local options = {
+        name = "Desolate Lootcouncil",
+        handler = self,
+        type = "group",
+        args = {
+            general = self:GetModule("GeneralSettings"):GetGeneralOptions(),
+            roster = self:GetModule("Roster"):GetOptions(),
+        },
+    }
+
     LibStub("AceConfig-3.0"):RegisterOptionsTable("DesolateLootcouncil", options)
     self.LibAddonConfig = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("DesolateLootcouncil", "Desolate Lootcouncil")
 
@@ -68,6 +60,8 @@ function DesolateLootcouncil:OnInitialize()
 
     self:Printf("Addon Initialized")
     self:Print("Loot Master is currently: " .. self:DetermineLootMaster())
+    -- Initial LM Check
+    self:ScheduleTimer("UpdateLootMasterStatus", 2)
 end
 
 function DesolateLootcouncil:DetermineLootMaster()

@@ -33,7 +33,8 @@ function UI:ShowHistoryWindow()
     self.historyFrame:AddChild(scroll)
 
     if awarded then
-        for _, item in ipairs(awarded) do
+        for i = #awarded, 1, -1 do
+            local item = awarded[i]
             ---@type AceGUISimpleGroup
             local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
             row:SetLayout("Flow")
@@ -75,16 +76,6 @@ function UI:ShowHistoryWindow()
             scroll:AddChild(row)
         end
     end
-
-    -- Auto-scroll to bottom (hacky but effective for AceGUI)
-    -- We schedule it for next frame to ensure layout is done
-    C_Timer.After(0.1, function()
-        local status = (scroll --[[@as any]]).localstatus
-        if status then
-            status.scrollvalue = 10000 -- Force to bottom
-            scroll:SetScroll(10000)    -- Trigger update
-        end
-    end)
 end
 
 function UI:RefreshTradeWindow()

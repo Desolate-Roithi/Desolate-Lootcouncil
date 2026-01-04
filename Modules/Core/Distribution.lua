@@ -253,9 +253,13 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
                 end
             end
             -- Refresh UI
+            -- Refresh UI
             ---@type UI
-            local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
-            if UI.ShowVotingWindow then
+            local UI = DesolateLootcouncil:GetModule("UI")
+            if UI.RemoveVotingItem then
+                UI:RemoveVotingItem(guid)
+            elseif UI.ShowVotingWindow then
+                -- Fallback
                 UI:ShowVotingWindow(self.clientLootList, true)
             end
         end

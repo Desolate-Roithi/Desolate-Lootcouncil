@@ -8,9 +8,14 @@ function Loot:OnInitialize()
 end
 
 function Loot:OnEnable()
+    -- Safety Check: Ensure Core has initialized the DB
+    if not DesolateLootcouncil.db or not DesolateLootcouncil.db.profile then
+        self:Print("Error: Database not ready. Loot module disabled.")
+        return
+    end
     -- Link local references to the persistent DB tables
-    self.sessionLoot = DLC.db.profile.session.loot
-    self.lootedMobs = DLC.db.profile.session.lootedMobs
+    self.sessionLoot = DesolateLootcouncil.db.profile.session.loot
+    self.lootedMobs = DesolateLootcouncil.db.profile.session.lootedMobs
 
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
     self:RegisterEvent("LOOT_CLOSED", "OnLootClosed")
@@ -18,7 +23,7 @@ function Loot:OnEnable()
     self:Print("[DLC] Loot Module Loaded (Session Persistent)")
 
     -- Check if we have data to restore
-    if #self.sessionLoot > 0 then
+    if self.sessionLoot and #self.sessionLoot > 0 then
         -- Only restore if it was previously open or just always offer it?
         -- For now, let's just print that we have data.
         -- If the user wants it to auto-open, we can implement that,
@@ -28,8 +33,10 @@ function Loot:OnEnable()
         -- We wait a moment for UI to be ready?
         self:ScheduleTimer(function()
             ---@type UI
-            local UI = DLC:GetModule("UI") --[[@as UI]]
-            UI:ShowLootWindow(self.sessionLoot)
+            local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
+            if UI and UI.ShowLootWindow then
+                UI:ShowLootWindow(self.sessionLoot)
+            end
         end, 1)
     end
 end

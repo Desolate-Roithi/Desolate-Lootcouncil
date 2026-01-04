@@ -23,6 +23,12 @@ function UI:ShowLootWindow(lootTable)
         return
     end
 
+    -- NEW: Auto-close if empty
+    if not lootTable or #lootTable == 0 then
+        if self.lootFrame then self.lootFrame:Hide() end
+        return
+    end
+
     if not self.lootFrame then
         self:CreateLootFrame()
     end
@@ -69,6 +75,7 @@ function UI:ShowLootWindow(lootTable)
             local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
             group:SetLayout("Flow")
             group:SetFullWidth(true)
+            scroll:AddChild(group) -- [FIX] Attach first, populate second
 
             -- Item Link (Interactive Logic)
             ---@type AceGUIInteractiveLabel
@@ -120,7 +127,6 @@ function UI:ShowLootWindow(lootTable)
             group:AddChild(itemLabel)
             group:AddChild(catDropdown)
             group:AddChild(removeBtn)
-            scroll:AddChild(group)
         end
     end
 
