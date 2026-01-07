@@ -1,6 +1,18 @@
----@class Roster : AceModule
+---@class Roster : AceModule, AceConsole-3.0
 ---@field rosterUI table
-local Roster = DesolateLootcouncil:NewModule("Roster")
+---@field OnEnable function
+---@field AddMain fun(self: Roster, name: string)
+---@field AddAlt fun(self: Roster, altName: string, mainName: string)
+---@field DeleteMain fun(self: Roster, name: string)
+---@field DeleteAlt fun(self: Roster, name: string)
+---@class (partial) DLC_Ref_RosterSettings
+---@field db table
+---@field NewModule fun(self: DLC_Ref_RosterSettings, name: string, ...): any
+---@field Print fun(self: DLC_Ref_RosterSettings, msg: string)
+
+---@type DLC_Ref_RosterSettings
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_RosterSettings]]
+local Roster = DesolateLootcouncil:NewModule("Roster", "AceConsole-3.0") --[[@as Roster]]
 
 -- Temp storage for UI inputs
 Roster.rosterUI = { newMain = "", newAlt = "", selectedMain = nil, deleteMainSelect = nil, deleteAltSelect = nil }
@@ -12,18 +24,22 @@ end
 
 -- Helper: Generate the status list text
 local function GetRosterListText()
-    local db = DesolateLootcouncil.db.profile.playerRoster
+    local db = DesolateLootcouncil.db.profile
     local text = ""
 
     -- Gather mains and their alts
     local data = {} -- [mainName] = {alts = {}}
-    for main in pairs(db.mains) do
-        data[main] = { alts = {} }
+    if db and db.MainRoster then
+        for main in pairs(db.MainRoster) do
+            data[main] = { alts = {} }
+        end
     end
 
-    for alt, main in pairs(db.alts) do
-        if data[main] then
-            table.insert(data[main].alts, alt)
+    if db and db.playerRoster and db.playerRoster.alts then
+        for alt, main in pairs(db.playerRoster.alts) do
+            if data[main] then
+                table.insert(data[main].alts, alt)
+            end
         end
     end
 
@@ -48,7 +64,7 @@ end
 local function GetMainsDropdown()
     local list = {}
     if DesolateLootcouncil.db then
-        for name in pairs(DesolateLootcouncil.db.profile.playerRoster.mains) do
+        for name in pairs(DesolateLootcouncil.db.profile.MainRoster) do
             list[name] = name
         end
     end
@@ -67,9 +83,13 @@ end
 
 function Roster:AddMain(name)
     if not name or name == "" then return end
-    local roster = DesolateLootcouncil.db.profile.playerRoster
-    roster.mains[name] = true -- Store main
-    roster.alts[name] = nil   -- Ensure not an alt
+    local db = DesolateLootcouncil.db
+    if not db then return end
+    local devDB = db.profile
+    if not devDB then return end
+
+    devDB.MainRoster[name] = { addedAt = time() } -- Store main with timestamp
+    devDB.playerRoster.alts[name] = nil           -- Ensure not an alt
     DesolateLootcouncil:Print("Added Main: " .. name)
 end
 
@@ -81,7 +101,9 @@ function Roster:AddAlt(altName, mainName)
         return
     end
 
-    local roster = DesolateLootcouncil.db.profile.playerRoster
+    local profile = DesolateLootcouncil.db.profile
+    local roster = profile.playerRoster
+
     -- 1. Check if the 'new alt' was previously a Main with their own alts
     -- We need to re-parent those alts to the NEW main.
     for existingAlt, existingMain in pairs(roster.alts) do
@@ -93,8 +115,8 @@ function Roster:AddAlt(altName, mainName)
     -- 2. Perform the standard assignment
     roster.alts[altName] = mainName
     -- 3. Remove from Mains list if present
-    if roster.mains[altName] then
-        roster.mains[altName] = nil
+    if profile.MainRoster[altName] then
+        profile.MainRoster[altName] = nil
         DesolateLootcouncil:Print("Converted Main to Alt: " .. altName)
     end
 
@@ -104,14 +126,20 @@ end
 
 function Roster:DeleteMain(name)
     if not name then return end
-    local roster = DesolateLootcouncil.db.profile.playerRoster
-    if roster.mains[name] then
-        roster.mains[name] = nil
+    local db = DesolateLootcouncil.db
+    if not db then return end
+    local profile = db.profile
+    if not profile then return end
+
+    if profile.MainRoster and profile.MainRoster[name] then
+        profile.MainRoster[name] = nil
         -- Unlink alts
-        for alt, main in pairs(roster.alts) do
-            if main == name then
-                roster.alts[alt] = nil
-                DesolateLootcouncil:Print("Unlinked Alt: " .. alt)
+        if profile.playerRoster and profile.playerRoster.alts then
+            for alt, main in pairs(profile.playerRoster.alts) do
+                if main == name then
+                    profile.playerRoster.alts[alt] = nil
+                    DesolateLootcouncil:Print("Unlinked Alt: " .. alt)
+                end
             end
         end
         DesolateLootcouncil:Print("Deleted Main: " .. name)

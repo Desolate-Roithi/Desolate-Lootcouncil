@@ -7,35 +7,35 @@
 ## 🚀 Key Features
 
 ### ✅ Currently Implemented
-* **Robust Loot Master (LM) Detection:**
-    * Smart hierarchy: *Configured Name* > *Presence Check* > *Fallback to Group Leader*.
-    * Prevents "ghost" assignments if the designated LM is offline or not in the group.
-* **Unified UI Module (Refactored):**
-    * Clean code separation for `Loot`, `Voting`, `Monitor`, and `Utility` windows.
-* **Loot Management (LM Only):**
-    * **Loot Drop Window:** Review dropped items, categorize them (Tier, Weapons, Collectables), and start bidding sessions.
-    * **Session Monitor:** Live tracking of items currently up for vote.
-    * **Distribution:** Supports **Bid**, **Roll**, **Transmog**, and **Pass** voting options.
-* **Voting System:**
-    * **Multi-Timer Support:** Overlapping sessions run simultaneously with individual item countdowns.
-    * **Live Feedback:** UI updates in real-time as votes come in.
-* **Post-Distribution Tools:**
-    * **Smart Trade Tracker:** Remembers who won what and helps initiate trades.
-    * **Session History:** A persistent log of awarded items for the current session.
-* **Developer Tools:**
-    * Debug mode (`/dlc verbose`), simulated loot sessions, and connection status checks.
+
+**Core Systems**
+* **Robust Loot Master (LM) Detection:** Smart hierarchy (*Configured Name* > *Presence Check* > *Fallback to Group Leader*) prevents "ghost" assignments if the designated LM is offline.
+* **Smart Alt-Linking:** The addon automatically recognizes Alts and links them to their Main Character. All priority checks and penalties are applied to the Main, ensuring fairness across an account.
+
+**Loot Management (LM Only)**
+* **Loot Drop Window:** Review dropped items, auto-categorize them (Tier, Weapons, Collectables), and start bidding sessions.
+* **Session Monitor:** A unified dashboard to watch live votes come in.
+* **Intelligent Awarding:**
+    * **Bids:** Sorted by **Priority Rank** (1 is highest). Alts display their Main's rank automatically.
+    * **Rolls/Transmog:** Sorted by **Server-Side Roll** (1-100). The LM generates the roll to prevent client-side cheating.
+    * **Penalty System:** Awarding a "Bid" item automatically moves the winner (or their Main) to the bottom of the Priority List.
+
+**Voting & Distribution**
+* **Flexible Voting:** Supports **Bid** (Priority), **Roll** (Random), **Transmog** (Random), and **Pass**.
+* **Multi-Timer Support:** Handle multiple items simultaneously with individual countdowns.
+* **Smart Trade Tracker:** The addon remembers who won what. When you open a trade window with a winner, it automatically stages the correct item.
+
+**Configuration & Tools**
+* **Priority Lists:** fully customizable Drag-and-Drop lists for Tier, Weapons, etc.
+* **Session History:** A persistent log of every awarded item and priority change.
+* **Developer Tools:** Debug mode, simulated voting sessions, and database dumps for troubleshooting.
 
 ### 🚧 Planned / In Progress
-* **Advanced Roster Management:**
-    * Main/Alt character mapping.
-    * Priority Decay system for raid absences.
-    * Manual priority sorting for "Bid" winners.
+* **Priority Decay:** Automated decay system for raid absences.
 * **Automated Native Interaction:**
     * Auto-Need/Greed for the LM on the native WoW loot frame.
-    * Auto-Pass for standard raiders to declutter their screen.
-* **Session Persistence:**
-    * Robust handling of disconnects/reloads during active bidding.
-    * Logic to detect "Session End" via zoning or logout.
+    * Auto-Pass for standard raiders.
+* **Session Persistence:** Robust handling of disconnects/reloads during active bidding.
 
 ## 🛠️ Installation
 
@@ -50,10 +50,11 @@ The addon uses **`/dlc`** as its primary command.
 
 | Command | Description |
 | :--- | :--- |
-| `/dlc config` | Open the configuration settings. |
-| `/dlc history` | **(Public)** Open the Session History window to see awarded loot. |
+| `/dlc config` | Open the configuration settings (Roster, Priority Lists). |
+| `/dlc monitor` | **(LM)** Open the Master Monitor (Live voting & awards). |
+| `/dlc loot` | **(LM)** Open the Loot Drop window (Inbox for new items). |
+| `/dlc trade` | **(LM)** Open the Pending Trades window. |
+| `/dlc history` | **(Public)** Open the Session History log. |
 | `/dlc status` | **(Public)** Show debug status (Current LM, version check). |
-| `/dlc loot` | **(LM Only)** Open the Loot Drop window (Inbox for new items). |
-| `/dlc monitor` | **(LM Only)** Open the Master Looter interface (Live voting & awards). |
-| `/dlc trade` | **(LM Only)** Open the Pending Trades window. |
-| `/dlc test` | **(LM Only)** Generate test items to simulate a loot drop. |
+| `/dlc test` | **(LM)** Generate test items to simulate a loot drop. |
+| `/dlc dump` | **(Debug)** Print raw database keys for roster troubleshooting. |

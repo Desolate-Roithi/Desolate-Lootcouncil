@@ -1,5 +1,6 @@
 ---@type UI
-local UI = DesolateLootcouncil:GetModule("UI")
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
 local AceGUI = LibStub("AceGUI-3.0")
 
 

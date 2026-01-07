@@ -28,6 +28,14 @@
 ---@field RemoveVotingItem fun(self: UI, guid: string)
 ---@field OnEnable fun(self: UI)
 
+---@class (partial) DLC_Ref_UI
+---@field db table
+---@field NewModule fun(self: DLC_Ref_UI, name: string, ...): any
+---@field GetModule fun(self: DLC_Ref_UI, name: string): any
+---@field activeLootMaster string
+
+---@type DLC_Ref_UI
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UI]]
 ---@type UI
 local UI = DesolateLootcouncil:NewModule("UI", "AceConsole-3.0")
 local AceGUI = LibStub("AceGUI-3.0")

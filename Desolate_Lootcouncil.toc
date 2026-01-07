@@ -10,15 +10,19 @@ embeds.xml
 # 1. Load Core First (Initializes DB)
 Core.lua
 
-# 2. Load Settings (Configs)
-Modules/Settings/General.lua
-Modules/Settings/Roster.lua
-
-# 3. Load Core Modules (Logic)
+# 2. Load Core Modules (Logic)
 Modules/Core/Debug.lua
 Modules/Core/Loot.lua
 Modules/Core/Distribution.lua
 Modules/Core/Trade.lua
+Modules/Core/Priority.lua
+Modules/Core/ItemManager.lua
+
+# 3. Load Settings (Configs)
+Modules/Settings/General.lua
+Modules/Settings/Roster.lua
+Modules/Settings/Priority.lua
+Modules/Settings/ItemManager.lua
 
 # 4. Load UI (Visuals)
 Modules/UI/Core.lua

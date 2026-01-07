@@ -2,7 +2,22 @@
 ---@field ToggleVerbose fun(self: Debug)
 ---@field ShowStatus fun(self: Debug)
 ---@field SimulateComm fun(self: Debug, name: string)
-local Debug = DesolateLootcouncil:NewModule("Debug", "AceConsole-3.0")
+---@field OnEnable function
+---@field SimulateVoting function
+---@field DumpKeys fun(self: Debug)
+
+
+---@class (partial) DLC_Ref_Debug
+---@field db table
+---@field activeAddonUsers table
+---@field DetermineLootMaster fun(self: DLC_Ref_Debug): string
+---@field NewModule fun(self: DLC_Ref_Debug, name: string, ...): any
+---@field GetModule fun(self: DLC_Ref_Debug, name: string): any
+
+---@type DLC_Ref_Debug
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+---@type Debug
+local Debug = DesolateLootcouncil:NewModule("Debug", "AceConsole-3.0") --[[@as Debug]]
 
 local function Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[DLC-Debug]|r " .. tostring(msg))
@@ -76,4 +91,20 @@ function Debug:SimulateVoting()
         end
     end
     self:Print("Simulated random votes for " .. votedCount .. " users.")
+end
+
+function Debug:DumpKeys()
+    local db = DesolateLootcouncil.db.profile
+    if not db.playerRoster or not db.playerRoster.alts then
+        self:Print("No Alts database found.")
+        return
+    end
+
+    self:Print("[DLC] --- DUMPING ALT ROSTER ---")
+    local count = 0
+    for k, v in pairs(db.playerRoster.alts) do
+        self:Print("[DLC] Alt: [" .. tostring(k) .. "] -> Main: [" .. tostring(v) .. "]")
+        count = count + 1
+    end
+    self:Print("[DLC] --- END DUMP (" .. count .. " entries) ---")
 end

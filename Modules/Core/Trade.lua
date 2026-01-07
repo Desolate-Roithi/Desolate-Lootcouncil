@@ -1,5 +1,20 @@
 ---@class Trade : AceModule, AceEvent-3.0, AceConsole-3.0
-local Trade = DesolateLootcouncil:NewModule("Trade", "AceEvent-3.0", "AceConsole-3.0")
+---@field currentTrade table
+---@field OnTradeShow fun(self: Trade)
+---@field AttemptTrade fun(self: Trade, award: table)
+---@field OnEnable function
+---@field CHAT_MSG_SYSTEM fun(self: Trade, event: string, msg: string)
+---@field TRADE_CLOSED fun(self: Trade)
+---@field ClearPending fun(self: Trade)
+---@class (partial) DLC_Ref_Trade
+---@field db table
+---@field NewModule fun(self: DLC_Ref_Trade, name: string, ...): any
+---@field Print fun(self: DLC_Ref_Trade, msg: string)
+---@field GetModule fun(self: DLC_Ref_Trade, name: string): any
+
+---@type DLC_Ref_Trade
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Trade]]
+local Trade = DesolateLootcouncil:NewModule("Trade", "AceEvent-3.0", "AceConsole-3.0") --[[@as Trade]]
 local DLC = DesolateLootcouncil
 
 function Trade:OnEnable()

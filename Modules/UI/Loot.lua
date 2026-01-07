@@ -1,5 +1,22 @@
+---@class UI
+---@field sessionVotes table
+
+
+---@class (partial) DLC_Ref_UILoot
+---@field db table
+---@field NewModule fun(self: DLC_Ref_UILoot, name: string, ...): any
+---@field GetModule fun(self: DLC_Ref_UILoot, name: string): any
+---@field AmILootMaster fun(self: DLC_Ref_UILoot): boolean
+---@field GetPriorityListNames fun(self: DLC_Ref_UILoot): table
+---@field GetItemCategory fun(self: DLC_Ref_UILoot, item: any): string
+---@field SetItemCategory fun(self: DLC_Ref_UILoot, itemID: number, listIndex: number)
+---@field Print fun(self: DLC_Ref_UILoot, msg: string)
+---@field UnassignItem fun(self: DLC_Ref_UILoot, itemID: number)
+
+---@type DLC_Ref_UILoot
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UILoot]]
 ---@type UI
-local UI = DesolateLootcouncil:GetModule("UI")
+local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
 local AceGUI = LibStub("AceGUI-3.0")
 
 function UI:CreateLootFrame()
@@ -80,7 +97,21 @@ function UI:ShowLootWindow(lootTable)
             -- Item Link (Interactive Logic)
             ---@type AceGUIInteractiveLabel
             local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-            itemLabel:SetText(link)
+
+            -- FIX TRUNCATION: Use GetItemInfo to ensure we have a full link/name
+            local DisplayName = link
+
+            -- FIX CRASH: Ensure itemID exists
+            if not data.itemID and data.link then
+                data.itemID = tonumber(data.link:match("item:(%d+)"))
+            end
+
+            if data.itemID then
+                local itemName, itemLink = C_Item.GetItemInfo(data.itemID)
+                if itemLink then DisplayName = itemLink end
+            end
+
+            itemLabel:SetText(DisplayName)
             itemLabel:SetRelativeWidth(0.55) -- User requested 0.55
             itemLabel:SetCallback("OnClick", function()
                 local widget = itemLabel --[[@as {frame: table}]]
@@ -100,17 +131,53 @@ function UI:ShowLootWindow(lootTable)
             ---@type AceGUIDropdown
             local catDropdown = AceGUI:Create("Dropdown") --[[@as AceGUIDropdown]]
             catDropdown:SetRelativeWidth(0.30) -- User requested 0.30 (reduced)
-            catDropdown:SetList({
-                ["Tier"] = "Tier",
-                ["Weapons"] = "Weapons",
-                ["Collectables"] = "Collectables",
-                ["Rest"] = "Rest",
-                ["Junk/Pass"] = "Junk/Pass"
-            })
-            catDropdown:SetValue(data.category)
+
+            -- Dynamic Categories
+            local catList = {}
+            local prioNames = DesolateLootcouncil:GetPriorityListNames()
+            local listIndexMap = {} -- Map Name -> Index for SetItemCategory
+
+            -- Re-fetch names *and* map them to indices cause SetItemCategory needs Index?
+            -- Actually SetItemCategory(item, listIndex).
+            -- But our dropdown returns values. Values are names in current implementation?
+            -- let's check earlier code: `catList[pName] = pName`.
+            -- `SetItemCategory` takes `targetListIndex`.
+            -- I need to map Name -> Index.
+
+            local db = DesolateLootcouncil.db.profile
+            if db.PriorityLists then
+                for i, list in ipairs(db.PriorityLists) do
+                    catList[list.name] = list.name
+                    listIndexMap[list.name] = i
+                end
+            end
+
+            -- Add Standard Options
+            catList["Junk/Pass"] = "Junk/Pass"
+
+            catDropdown:SetList(catList)
+
+            -- INITIAL VALUE: Check Saved Persistence First
+            local savedCat = DesolateLootcouncil:GetItemCategory(data.itemID)
+            if savedCat == "Junk/Pass" then
+                -- If nothing saved, fall back to Session category
+                savedCat = data.category or "Junk/Pass"
+            end
+            catDropdown:SetValue(savedCat)
+
             catDropdown:SetCallback("OnValueChanged", function(_, _, value)
                 data.category = value
-                DesolateLootcouncil:Print("[DLC] Category updated to: " .. value)
+
+                -- PERSIST CHANGE TO BACKEND
+                local idx = listIndexMap[value]
+                if idx then
+                    DesolateLootcouncil:SetItemCategory(data.itemID, idx)
+                    DesolateLootcouncil:Print("[DLC] Category updated to: " .. value)
+                elseif value == "Junk/Pass" then
+                    -- Unassign from backend, but KEEP in session (as requested)
+                    DesolateLootcouncil:UnassignItem(data.itemID)
+                    -- No UI refresh needed as we just changed the backend state
+                end
             end)
 
             -- Remove Button

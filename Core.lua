@@ -1,3 +1,47 @@
+---@class DesolateLootcouncil : AceAddon, AceConsole-3.0, AceEvent-3.0, AceComm-3.0, AceTimer-3.0
+---@field ShowPriorityOverrideWindow fun(self: DesolateLootcouncil, listName: string)
+---@field GetItemCategory fun(self: DesolateLootcouncil, item: any): string
+---@field LogPriorityChange fun(self: DesolateLootcouncil, msg: string)
+---@field UpdateLootMasterStatus fun(self: DesolateLootcouncil)
+---@field db { profile: table, RegisterCallback: function }
+---@field activeLootMaster string|nil
+---@field currentLootMaster string|nil
+---@field currentSessionLoot table|nil
+---@field amILM boolean
+---@field AddItemToList fun(self: DesolateLootcouncil, item: string, listIndex: number)
+---@field RemoveItemFromList fun(self: DesolateLootcouncil, listIndex: number, itemID: number)
+---@field GetPriorityListNames fun(self: DesolateLootcouncil): table
+---@field AddPriorityList fun(self: DesolateLootcouncil, name: string)
+---@field RemovePriorityList fun(self: DesolateLootcouncil, index: number)
+---@field RenamePriorityList fun(self: DesolateLootcouncil, index: number, newName: string)
+---@field MovePlayerToBottom fun(self: DesolateLootcouncil, listName: string, playerName: string)
+---@field LogHistory fun(self: DesolateLootcouncil, itemData: table, winner: string, response: string)
+---@field ShuffleLists fun(self: DesolateLootcouncil)
+---@field SyncMissingPlayers fun(self: DesolateLootcouncil)
+---@field ShowHistoryWindow fun(self: DesolateLootcouncil)
+---@field ShowPriorityOverrideWindow fun(self: DesolateLootcouncil)
+---@field GetItemIDFromLink fun(self: DesolateLootcouncil, link: string): number|nil
+---@field GetItemCategory fun(self: DesolateLootcouncil, itemID: number|string): string
+---@field SetItemCategory fun(self: DesolateLootcouncil, itemID: number|string, targetListIndex: number)
+---@field AddItemToList fun(self: DesolateLootcouncil, link: string, listIndex: number)
+---@field RemoveItemFromList fun(self: DesolateLootcouncil, itemID: number|string, listIndex: number)
+---@field UnassignItem fun(self: DesolateLootcouncil, itemID: number|string)
+---@field AmILootMaster fun(self: DesolateLootcouncil): boolean
+---@field DetermineLootMaster fun(self: DesolateLootcouncil): string|nil
+---@field Print fun(self: DesolateLootcouncil, ...: any)
+---@field NewModule fun(self: DesolateLootcouncil, name: string, ...: any): any
+---@field GetModule fun(self: DesolateLootcouncil, name: string): any
+---@field activeAddonUsers table
+---@field historyFrame AceGUIFrame|nil
+---@field priorityOverrideFrame AceGUIFrame|nil
+---@field priorityOverrideContent AceGUIFrame|nil
+---@field GetPriorityListNames fun(self: DesolateLootcouncil): table
+---@field AddPriorityList fun(self: DesolateLootcouncil, name: string)
+---@field RemovePriorityList fun(self: DesolateLootcouncil, name: string)
+---@field RenamePriorityList fun(self: DesolateLootcouncil, oldName: string, newName: string)
+---@field GetItemCategory fun(self: DesolateLootcouncil, itemID: number|string): string
+---@field SetItemCategory fun(self: DesolateLootcouncil, itemID: number|string, listIndex: number)
+---@field LogHistory fun(self: DesolateLootcouncil, entry: table)
 DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "AceConsole-3.0", "AceEvent-3.0",
     "AceComm-3.0", "AceTimer-3.0")
 _G.DesolateLootcouncil = DesolateLootcouncil
@@ -16,8 +60,14 @@ local Trade
 local defaults = {
     profile = {
         configuredLM = "", -- Name-Realm of the loot master
-        lootLists = { tier = {}, weapons = {}, rest = {}, collectables = {} },
-        playerRoster = { mains = {}, alts = {}, decay = {} },
+        PriorityLists = {
+            { name = "Tier",         players = {} },
+            { name = "Weapons",      players = {} },
+            { name = "Rest",         players = {} },
+            { name = "Collectables", players = {} }
+        },
+        MainRoster = {},
+        playerRoster = { alts = {}, decay = {} }, -- mains moved to MainRoster
         verboseMode = false,
         session = {
             loot = {},
@@ -43,17 +93,23 @@ function DesolateLootcouncil:OnInitialize()
     self.db = LibStub("AceDB-3.0"):New("DesolateLootDB", defaults, true)
 
     -- Define Options HERE (Safe, because all modules are now loaded)
-    local options = {
-        name = "Desolate Lootcouncil",
-        handler = self,
-        type = "group",
-        args = {
-            general = (self:GetModule("GeneralSettings") --[[@as GeneralSettings]]):GetGeneralOptions(),
-            roster = (self:GetModule("Roster") --[[@as Roster]]):GetOptions(),
-        },
-    }
+    -- Define Options HERE (Safe, because all modules are now loaded)
+    -- Options are registered as a FUNCTION to support dynamic content (args)
+    local function GetOptions()
+        return {
+            name = "Desolate Lootcouncil",
+            handler = self,
+            type = "group",
+            args = {
+                general = (self:GetModule("GeneralSettings") --[[@as GeneralSettings]]):GetGeneralOptions(),
+                roster = (self:GetModule("Roster") --[[@as Roster]]):GetOptions(),
+                priority = (self:GetModule("PrioritySettings") --[[@as PrioritySettings]]):GetOptions(),
+                items = (self:GetModule("ItemSettings") --[[@as ItemSettings]]):GetItemOptions(),
+            },
+        }
+    end
 
-    LibStub("AceConfig-3.0"):RegisterOptionsTable("DesolateLootcouncil", options)
+    LibStub("AceConfig-3.0"):RegisterOptionsTable("DesolateLootcouncil", GetOptions)
     self.LibAddonConfig = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("DesolateLootcouncil", "Desolate Lootcouncil")
 
     self:RegisterChatCommand("dlc", "ChatCommand")
@@ -67,12 +123,16 @@ end
 function DesolateLootcouncil:DetermineLootMaster()
     -- Scenario A: Solo
     if not IsInGroup() then
-        return UnitName("player")
+        return (UnitName("player"))
     end
+
+    local db = self.db
+    if not db then return "Unknown" end
+    local profile = db.profile
 
     -- Scenario B: Group Leader
     if UnitIsGroupLeader("player") then
-        local candidate = self.db.profile.configuredLM
+        local candidate = profile and profile.configuredLM
         local finalLM = UnitName("player") -- Default to Leader (Self)
 
         -- Validation: Check if candidate is actually in the group
@@ -103,7 +163,7 @@ function DesolateLootcouncil:DetermineLootMaster()
         for i = 1, GetNumSubgroupMembers() do
             local unit = "party" .. i
             if UnitIsGroupLeader(unit) then
-                return UnitName(unit)
+                return (UnitName(unit))
             end
         end
     end
@@ -287,6 +347,10 @@ function DesolateLootcouncil:ChatCommand(input)
         else
             self:Print("Usage: /dlc sim [playername] or [start]")
         end
+    elseif cmd == "dump" then
+        ---@type Debug
+        local Debug = self:GetModule("Debug")
+        if Debug and Debug.DumpKeys then Debug:DumpKeys() end
     elseif cmd == "add" then
         local arg = args[2]
         if arg then

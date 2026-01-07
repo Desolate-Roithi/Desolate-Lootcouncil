@@ -1,7 +1,8 @@
 ---@class GeneralSettings : AceModule
-local General = DesolateLootcouncil:NewModule("GeneralSettings")
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+local GeneralSettings = DesolateLootcouncil:NewModule("GeneralSettings") --[[@as GeneralSettings]]
 
-function General:GetGeneralOptions()
+function GeneralSettings:GetGeneralOptions()
     return {
         name = "General",
         type = "group",

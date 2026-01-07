@@ -1,12 +1,36 @@
----@type UI
-local UI = DesolateLootcouncil:GetModule("UI")
+---@class (partial) DLC_Ref_Monitor
+---@field db table
+---@field GetModule fun(self: DLC_Ref_Monitor, name: string): any
+---@field Print fun(self: DLC_Ref_Monitor, msg: string)
+
+---@type DLC_Ref_Monitor
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Monitor]]
+local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
 local AceGUI = LibStub("AceGUI-3.0")
 
+-- [NEW] Helper: Resolve Alt to Main (Exact + Realm-Smart)
+local function GetLinkedMain(name)
+    local db = DesolateLootcouncil.db.profile
+    if not db.playerRoster or not db.playerRoster.alts then return nil end
+    local alts = db.playerRoster.alts
 
+    -- 1. Exact Match (The Happy Path)
+    if alts[name] then
+        return alts[name]
+    end
+
+    -- 2. Realm Fallback (If name has no realm, try appending current)
+    if not string.find(name, "-") then
+        local myRealm = GetRealmName()
+        local tryName = name .. "-" .. myRealm
+        if alts[tryName] then return alts[tryName] end
+    end
+
+    return nil
+end
 
 function UI:ShowMonitorWindow()
     if not self.monitorFrame then
-        ---@type AceGUIWidget
         local frame = AceGUI:Create("Frame")
         frame:SetTitle("Session Monitor")
         frame:SetLayout("Flow")
@@ -21,30 +45,30 @@ function UI:ShowMonitorWindow()
 
     -- Helper: Vote Counts
     local function GetVoteCounts(guid)
-        ---@type Distribution
         local Dist = DesolateLootcouncil:GetModule("Distribution")
         local votes = Dist and Dist.sessionVotes and Dist.sessionVotes[guid]
         local bids, rolls, tm, pass = 0, 0, 0, 0
         if votes then
-            for _, voteType in pairs(votes) do
-                if voteType == 1 then
+            for _, voteData in pairs(votes) do
+                local vType = type(voteData) == "table" and voteData.type or voteData
+                if vType == 1 then
                     bids = bids + 1
-                elseif voteType == 2 then
+                elseif vType == 2 then
                     rolls = rolls + 1
-                elseif voteType == 3 then
+                elseif vType == 3 then
                     tm = tm + 1
-                elseif voteType == 4 then
+                elseif vType == 4 then
                     pass = pass + 1
                 end
             end
         end
-        return string.format("|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r", bids,
-            rolls, tm, pass)
+        return string.format("|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r",
+            bids, rolls, tm, pass)
     end
 
     local session = DesolateLootcouncil.db.profile.session
     local items = session.bidding
-    ---@type AceGUIWidget
+
     local scroll = AceGUI:Create("ScrollFrame")
     scroll:SetLayout("List")
     scroll:SetFullWidth(true)
@@ -55,17 +79,13 @@ function UI:ShowMonitorWindow()
         for i, item in ipairs(items) do
             local link = item.link
             local guid = item.sourceGUID or link
-            -- Row Group
-            ---@type AceGUIWidget
+
             local group = AceGUI:Create("SimpleGroup")
             group:SetLayout("Flow")
             group:SetFullWidth(true)
-
-            -- CRITICAL FIX: Attach to ScrollFrame FIRST
             scroll:AddChild(group)
 
-            -- 1. Link
-            ---@type AceGUIWidget
+            -- Link
             local labelLink = AceGUI:Create("InteractiveLabel")
             labelLink:SetText(link)
             labelLink:SetRelativeWidth(0.40)
@@ -77,15 +97,13 @@ function UI:ShowMonitorWindow()
             labelLink:SetCallback("OnLeave", function() GameTooltip:Hide() end)
             group:AddChild(labelLink)
 
-            -- 2. Counts
-            ---@type AceGUIWidget
+            -- Counts
             local labelCounts = AceGUI:Create("Label")
             labelCounts:SetText(GetVoteCounts(guid))
             labelCounts:SetRelativeWidth(0.35)
             group:AddChild(labelCounts)
 
-            -- 3. Award Button
-            ---@type AceGUIWidget
+            -- Award Button
             local btnAward = AceGUI:Create("Button")
             btnAward:SetText("Award")
             btnAward:SetRelativeWidth(0.15)
@@ -94,15 +112,12 @@ function UI:ShowMonitorWindow()
             end)
             group:AddChild(btnAward)
 
-            -- 4. Remove Button
-            ---@type AceGUIWidget
+            -- Remove Button
             local btnRemove = AceGUI:Create("Button")
             btnRemove:SetText("X")
             btnRemove:SetRelativeWidth(0.10)
             btnRemove:SetCallback("OnClick", function()
-                -- CRITICAL FIX: Safety Delay to prevent crash
                 C_Timer.After(0.05, function()
-                    ---@type Distribution
                     local Dist = DesolateLootcouncil:GetModule("Distribution")
                     if Dist and Dist.RemoveSessionItem then
                         Dist:RemoveSessionItem(guid)
@@ -113,7 +128,7 @@ function UI:ShowMonitorWindow()
         end
     end
 
-    -- Footer Buttons (Trades / Stop)
+    -- Footer
     local parent = (self.monitorFrame --[[@as table]]).frame
     if not self.monitorFrame.btnTrades then
         local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
@@ -135,7 +150,6 @@ function UI:ShowMonitorWindow()
         btn:SetPoint("BOTTOM", parent, "BOTTOM", 0, 15)
         btn:SetFrameLevel(parent:GetFrameLevel() + 10)
         btn:SetScript("OnClick", function()
-            ---@type Distribution
             local Dist = DesolateLootcouncil:GetModule("Distribution")
             if Dist and Dist.SendStopSession then Dist:SendStopSession() end
         end)
@@ -159,11 +173,10 @@ function UI:ShowAwardWindow(itemData)
     end
 
     if not self.awardFrame then
-        ---@type AceGUIWidget
         local frame = AceGUI:Create("Frame")
         frame:SetTitle("Award Item")
         frame:SetLayout("Flow")
-        frame:SetWidth(450)
+        frame:SetWidth(500)
         frame:SetHeight(500)
         frame:SetCallback("OnClose", function(widget) widget:Hide() end)
         self.awardFrame = frame
@@ -171,32 +184,63 @@ function UI:ShowAwardWindow(itemData)
     self.awardFrame:Show()
     self.awardFrame:ReleaseChildren()
 
-    ---@type AceGUIWidget
+    local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
     local header = AceGUI:Create("Label")
-    header:SetText(itemData.link)
+    header:SetText(itemData.link .. "|cffaaaaaa" .. catText .. "|r")
     header:SetFullWidth(true)
     header:SetJustifyH("CENTER")
     header:SetFontObject(GameFontNormalLarge)
     self.awardFrame:AddChild(header)
 
-    ---@type Distribution
     local Dist = DesolateLootcouncil:GetModule("Distribution")
     local votes = Dist and Dist.sessionVotes and Dist.sessionVotes[itemData.sourceGUID]
 
-    ---@type AceGUIWidget
     local scroll = AceGUI:Create("ScrollFrame")
     scroll:SetLayout("List")
     scroll:SetFullWidth(true)
     self.awardFrame:AddChild(scroll)
 
+    -- [CHANGED] Smart Rank Lookup with Alt Logic
+    local function GetPlayerRank(playerName, category)
+        local db = DesolateLootcouncil.db.profile
+        if not db.PriorityLists then return 999 end
+
+        -- Resolve Alt -> Main
+        local searchName = playerName
+        local linkedMain = GetLinkedMain(playerName)
+        if linkedMain then
+            searchName = linkedMain
+        end
+
+        for _, list in ipairs(db.PriorityLists) do
+            if list.name == category then
+                for rank, pName in ipairs(list.players) do
+                    if pName == searchName then return rank end
+                end
+            end
+        end
+        return 999
+    end
+
     local voteList = {}
     if votes then
-        for voter, voteType in pairs(votes) do
-            table.insert(voteList, { name = voter, type = voteType })
+        for voter, voteData in pairs(votes) do
+            local vType = type(voteData) == "table" and voteData.type or voteData
+            local vRoll = (type(voteData) == "table" and voteData.roll) or 0
+
+            if vType ~= 4 then
+                local rank = GetPlayerRank(voter, itemData.category)
+                table.insert(voteList, { name = voter, type = vType, roll = vRoll, rank = rank })
+            end
         end
+
         table.sort(voteList, function(a, b)
-            if a.type == b.type then return a.name < b.name end
-            return a.type < b.type
+            if a.type ~= b.type then return a.type < b.type end
+            if a.type == 1 then
+                if a.rank ~= b.rank then return a.rank < b.rank end
+                return a.roll > b.roll
+            end
+            return a.roll > b.roll
         end)
     end
 
@@ -204,42 +248,47 @@ function UI:ShowAwardWindow(itemData)
     local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "TM", [4] = "Pass" }
 
     if #voteList == 0 then
-        ---@type AceGUIWidget
         local lbl = AceGUI:Create("Label")
-        lbl:SetText("No votes cast yet.")
+        lbl:SetText("No active votes.")
         lbl:SetFullWidth(true)
         scroll:AddChild(lbl)
     else
         for _, v in ipairs(voteList) do
-            ---@type AceGUIWidget
             local row = AceGUI:Create("SimpleGroup")
             row:SetLayout("Flow")
             row:SetFullWidth(true)
-
-            -- CRITICAL: Attach FIRST
             scroll:AddChild(row)
 
-            ---@type AceGUIWidget
             local lblName = AceGUI:Create("Label")
             lblName:SetText(v.name)
-            lblName:SetRelativeWidth(0.40)
+            lblName:SetRelativeWidth(0.30)
             row:AddChild(lblName)
 
-            ---@type AceGUIWidget
+            local rankText = ""
+            if v.type == 1 then
+                rankText = (v.rank == 999) and "|cff9d9d9dUnranked|r" or ("#" .. v.rank)
+                if v.rank <= 5 then rankText = "|cffffd700" .. rankText .. "|r" end
+            else
+                rankText = "Roll: " .. v.roll
+            end
+
+            local lblRank = AceGUI:Create("Label")
+            lblRank:SetText(rankText)
+            lblRank:SetRelativeWidth(0.20)
+            row:AddChild(lblRank)
+
             local lblResp = AceGUI:Create("Label")
             local color = VOTE_COLOR[v.type] or ""
             local txt = VOTE_TEXT[v.type] or "?"
             lblResp:SetText(color .. txt .. "|r")
-            lblResp:SetRelativeWidth(0.30)
+            lblResp:SetRelativeWidth(0.25)
             row:AddChild(lblResp)
 
-            ---@type AceGUIWidget
             local btnGive = AceGUI:Create("Button")
             btnGive:SetText("Give")
-            btnGive:SetRelativeWidth(0.30)
+            btnGive:SetRelativeWidth(0.25)
             btnGive:SetCallback("OnClick", function()
                 self.awardFrame:Hide()
-                ---@type Loot
                 local Loot = DesolateLootcouncil:GetModule("Loot")
                 if Loot and Loot.AwardItem then
                     local voteDesc = VOTE_TEXT[v.type] or "Unknown"

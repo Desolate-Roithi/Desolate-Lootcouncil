@@ -1,5 +1,30 @@
----@class Distribution : AceModule, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0
-local Dist = DesolateLootcouncil:NewModule("Distribution", "AceEvent-3.0", "AceComm-3.0", "AceSerializer-3.0")
+---@class Distribution : AceModule, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0, AceConsole-3.0
+---@field clientLootList table
+---@field StartSession fun(self: Distribution, lootTable: table)
+---@field SendStopSession fun(self: Distribution)
+---@field SendCloseItem fun(self: Distribution, itemGUID: string)
+---@field SendRemoveItem fun(self: Distribution, guid: string)
+---@field RemoveSessionItem fun(self: Distribution, guid: string)
+---@field OnCommReceived fun(self: Distribution, prefix: string, message: string, distribution: string, sender: string)
+---@field SendSyncLM fun(self: Distribution, targetLM: string)
+---@field SendVote fun(self: Distribution, itemGUID: string, voteType: any)
+---@field ClearVotes fun(self: Distribution)
+---@field OnEnable fun(self: Distribution)
+---@class (partial) DLC_Ref_Distribution
+---@field db table
+---@field NewModule fun(self: DLC_Ref_Distribution, name: string, ...): any
+---@field AmILootMaster fun(self: DLC_Ref_Distribution): boolean
+---@field Print fun(self: DLC_Ref_Distribution, msg: string)
+---@field GetModule fun(self: DLC_Ref_Distribution, name: string): any
+---@field DetermineLootMaster fun(self: DLC_Ref_Distribution): string
+---@field activeAddonUsers table
+---@field activeLootMaster string
+---@field amILM boolean
+
+---@type DLC_Ref_Distribution
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Distribution]]
+local Dist = DesolateLootcouncil:NewModule("Distribution", "AceEvent-3.0", "AceComm-3.0", "AceSerializer-3.0",
+    "AceConsole-3.0") --[[@as Distribution]]
 
 ---@class DistributionPayload
 ---@field command string
@@ -76,7 +101,8 @@ function Dist:StartSession(lootTable)
             link = item.link,
             texture = item.texture,
             itemID = item.itemID,
-            sourceGUID = item.sourceGUID
+            sourceGUID = item.sourceGUID,
+            category = item.category -- Required for dynamic button generation
         })
     end
 
@@ -292,10 +318,17 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
                     sender .. " for item " .. string.sub(data.guid, -8))
             else
                 -- CASE: New Vote
-                self.sessionVotes[data.guid][sender] = data.vote
+                local serverRoll = math.random(1, 100)
+                DesolateLootcouncil:Print("[DLC-Debug] Generated Roll: " .. serverRoll .. " for " .. sender)
+                self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll }
 
-                local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "Transmog", [4] = "Pass" }
-                local voteName = VOTE_TEXT[data.vote] or ("Unknown(" .. tostring(data.vote) .. ")")
+                -- Support both legacy integer and new string votes
+                local voteName = tostring(data.vote)
+                if type(data.vote) == "number" then
+                    local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "Transmog", [4] = "Pass" }
+                    voteName = VOTE_TEXT[data.vote] or voteName
+                end
+
                 DesolateLootcouncil:Print("[DLC] Received Vote: " .. voteName .. " from " .. sender)
 
                 -- Auto-Close Check

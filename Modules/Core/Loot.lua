@@ -1,5 +1,20 @@
----@class Loot : AceModule, AceEvent-3.0, AceTimer-3.0
-local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0")
+---@class Loot : AceModule, AceEvent-3.0, AceTimer-3.0, AceConsole-3.0
+---@field sessionLoot table
+---@field lootedMobs table
+---@field OnLootOpened fun(self: Loot)
+---@field OnLootClosed fun(self: Loot)
+---@field OnInitialize function
+---@field OnEnable function
+---@field ClearLootBacklog fun(self: Loot)
+---@field AddManualItem fun(self: Loot, rawLink: string)
+---@field AddTestItems fun(self: Loot)
+---@field CategorizeItem fun(self: Loot, itemLink: string): string
+---@field AwardItem fun(self: Loot, itemGUID: string, winner: string, response: string)
+---@field EndSession fun(self: Loot)
+---@field MarkAsTraded fun(self: Loot, itemGUID: string, winner: string)
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+---@type Loot
+local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0", "AceConsole-3.0")
 local DLC = DesolateLootcouncil
 
 
@@ -139,31 +154,69 @@ end
 function Loot:AddManualItem(rawLink)
     -- 1. Sanitize: Ensure we have a valid link string
     if not rawLink then return end
-    -- 2. Use Instant API (Synchronous - No server wait)
-    -- properties: itemID, type, subtype, equipLoc, icon, classID, subclassID
-    local itemID, _, _, _, icon, classID, subClassID = C_Item.GetItemInfoInstant(rawLink)
-    if itemID then
-        -- 3. Categorize
-        local category = self:CategorizeItem(rawLink)
 
-        -- 4. Add to Database
+    -- 2. Robust ID Extraction
+    -- Try Instant API first
+    local itemID = C_Item.GetItemInfoInstant(rawLink)
+
+    -- Fallback: Regex (Item String)
+    if not itemID then
+        itemID = string.match(rawLink, "item:(%d+)")
+    end
+
+    -- Fallback: Plain Number
+    if not itemID then
+        itemID = tonumber(rawLink)
+    end
+
+    -- Final conversion
+    itemID = tonumber(itemID)
+
+    if itemID then
+        -- 3. Categorize (Use new Safe Backend)
+        local category = DesolateLootcouncil:GetItemCategory(itemID)
+
+        -- Override with default "Rest" if backend returns nothing?
+        -- Actually GetItemCategory returns "Junk/Pass".
+        -- If we want to default to "Rest" for epics etc, we can check CategorizeItem?
+        -- But GetItemCategory checks the *Saved Variables*.
+        if category == "Junk/Pass" then
+            category = self:CategorizeItem(rawLink) -- Use algorithmic fallback
+        end
+
+        -- 4. Get Display Info (Async Safe)
+        local name, link, quality, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
+
+        -- Fallback if not cached
+        if not link then
+            link = "Item " .. itemID
+            -- Trigger a silent load?
+            local _ = C_Item.GetItemInfo(itemID)
+        end
+        if not icon then
+            icon = C_Item.GetItemIconByID(itemID) -- Try icon by ID
+        end
+
+        -- 5. Add to Database
         local session = DesolateLootcouncil.db.profile.session
         table.insert(session.loot, {
-            link = rawLink,
+            link = link,
             itemID = itemID,
             category = category,
-            sourceGUID = "Manual-Add", -- Unique marker
+            sourceGUID = "Manual-" .. itemID .. "-" .. math.random(100), -- Unique marker
             stackIndex = 1,
-            texture = icon,            -- Use the icon ID directly
+            texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
             isManual = true
         })
-        -- 5. Refresh UI
-        self:Print("Manually added: " .. rawLink)
+        -- 6. Refresh UI
+        self:Print("Manually added: " .. link)
         ---@type UI
         local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
-        UI:ShowLootWindow(session.loot)
+        if UI and UI.ShowLootWindow then
+            UI:ShowLootWindow(session.loot)
+        end
     else
-        self:Print("Error: Could not parse item link. Try linking it from your bags.")
+        self:Print("Error: Could not identify item ID from input: " .. tostring(rawLink))
     end
 end
 
@@ -190,6 +243,7 @@ function Loot:AddTestItems()
         if link then
             table.insert(DesolateLootcouncil.db.profile.session.loot, {
                 link = link,
+                itemID = tonumber(data.id:match("item:(%d+)")), -- Extract ID
                 texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
                 sourceGUID = "Test-" .. math.random(10000, 99999),
                 owner = UnitName("player"),
@@ -199,6 +253,7 @@ function Loot:AddTestItems()
             -- Fallback if item info isn't cached yet
             table.insert(DesolateLootcouncil.db.profile.session.loot, {
                 link = "[Loading: " .. data.id .. "]",
+                itemID = tonumber(data.id:match("item:(%d+)")), -- Extract ID for safety
                 texture = "Interface\\Icons\\INV_Misc_QuestionMark",
                 sourceGUID = "Test-" .. math.random(10000, 99999),
                 owner = UnitName("player"),
@@ -296,6 +351,11 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     -- 3. Distribution Stub
     self:Print("[DLC] Master Looter would now give item to " .. winnerName)
     -- Future: GiveMasterLoot(slot, index)
+
+    -- 3.1 Apply Penalty if Bid
+    if voteType == "Bid" or voteType == "1" then
+        DesolateLootcouncil:MovePlayerToBottom(itemData.category, winnerName)
+    end
 
     -- 4. Store History & Cleanup
     if session.awarded then

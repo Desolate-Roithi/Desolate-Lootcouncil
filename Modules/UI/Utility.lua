@@ -1,5 +1,13 @@
 ---@type UI
-local UI = DesolateLootcouncil:GetModule("UI")
+---@class (partial) DLC_Ref_UIUtility
+---@field db table
+---@field GetModule fun(self: DLC_Ref_UIUtility, name: string): any
+---@field Print fun(self: DLC_Ref_UIUtility, msg: string)
+
+---@type DLC_Ref_UIUtility
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UIUtility]]
+---@type UI
+local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
 local AceGUI = LibStub("AceGUI-3.0")
 
 function UI:ShowHistoryWindow()
