@@ -151,7 +151,7 @@ function UI:ShowHistoryWindow()
                 local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
 
                 text:SetText((item.link or "???") .. " -> |c" .. classColor .. (item.winner or "Unknown") .. "|r")
-                text:SetRelativeWidth(0.60)
+                text:SetRelativeWidth(0.50)
                 text:SetCallback("OnEnter", function(widget)
                     if item.link then
                         GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
@@ -165,12 +165,27 @@ function UI:ShowHistoryWindow()
                 ---@type AceGUILabel
                 local info = AceGUI:Create("Label") --[[@as AceGUILabel]]
                 info:SetText("(" .. (item.voteType or "?") .. ")")
-                info:SetRelativeWidth(0.30)
+                info:SetRelativeWidth(0.20)
                 info:SetColor(0.7, 0.7, 0.7)
+
+                -- Re-award Button
+                ---@type AceGUIButton
+                local btnReaward = AceGUI:Create("Button")
+                btnReaward:SetText("Re-award")
+                btnReaward:SetRelativeWidth(0.20)
+                btnReaward:SetCallback("OnClick", function()
+                    ---@type Loot
+                    local Loot = DesolateLootcouncil:GetModule("Loot")
+                    if Loot and Loot.ReawardItem then
+                        -- Need exact index logic, assuming 'i' matches 'awardIndex'
+                        Loot:ReawardItem(i)
+                    end
+                end)
 
                 row:AddChild(icon)
                 row:AddChild(text)
                 row:AddChild(info)
+                row:AddChild(btnReaward)
                 scroll:AddChild(row)
             end
         end

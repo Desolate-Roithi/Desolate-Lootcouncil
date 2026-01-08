@@ -12,9 +12,11 @@
 ---@field LogPriorityChange fun(self: DLC_Ref_Priority, msg: string)
 ---@field ShuffleLists fun(self: DLC_Ref_Priority)
 ---@field SyncMissingPlayers fun(self: DLC_Ref_Priority)
----@field MovePlayerToBottom fun(self: DLC_Ref_Priority, listName: string, playerName: string)
+---@field MovePlayerToBottom fun(self: DLC_Ref_Priority, listName: string, playerName: string): number|nil
 ---@field ShowHistoryWindow fun(self: DLC_Ref_Priority)
 ---@field ShowPriorityOverrideWindow fun(self: DLC_Ref_Priority, listName: string)
+---@field RestorePlayerPosition fun(self: DLC_Ref_Priority, listName: string, playerName: string, index: number)
+---@field GetReversionIndex fun(self: DLC_Ref_Priority, listName: string, origIndex: number, timestamp: number): number
 ---@field historyFrame AceGUIWidget
 ---@field priorityOverrideFrame AceGUIWidget
 ---@field priorityOverrideContent AceGUIWidget
@@ -69,6 +71,7 @@ function Priority:OnEnable()
 
     -- History Log Initialization
     if not db.History then db.History = {} end
+    if not db.PriorityLog then db.PriorityLog = {} end
 
     -- DATA MIGRATION: Old names to New names + Timestamps
     if db.playerRoster and db.playerRoster.mains then
@@ -298,7 +301,104 @@ function DesolateLootcouncil:MovePlayerToBottom(listName, playerName)
         local msg = string.format("[DLC] Priority Update: %s moved to bottom of %s (Item Awarded).", targetName, listName)
         self:Print(msg)
         self:LogPriorityChange(string.format("Awarded item to %s (%s). Priority Reset.", targetName, listName))
+
+        -- Structured Logging
+        if not db.PriorityLog then db.PriorityLog = {} end
+        table.insert(db.PriorityLog, {
+            time = time(),
+            type = "TO_BOTTOM",
+            list = listName,
+            player = targetName,
+            from = foundIndex,
+            to = #players
+        })
+
+        return foundIndex
     end
+    return nil
+end
+
+function DesolateLootcouncil:RestorePlayerPosition(listName, playerName, index)
+    if not DesolateLootcouncil.db then return end
+    local db = DesolateLootcouncil.db.profile
+
+    local targetList = nil
+    for _, list in ipairs(db.PriorityLists) do
+        if list.name == listName then
+            targetList = list; break
+        end
+    end
+    if not targetList then return end
+
+    local players = targetList.players
+    -- Find current
+    local currentIdx = nil
+    for i, p in ipairs(players) do
+        if p == playerName then
+            currentIdx = i; break
+        end
+    end
+
+    if currentIdx then
+        -- 1. Conditional Logic: Skip if already at correct position
+        if currentIdx == index then
+            self:Print(string.format("[DLC] %s is already at the correct position (%d).", playerName, index))
+            return
+        end
+
+        -- 2. Capture Indices for logging
+        local savedIndex = index
+        local currentIndex = currentIdx
+
+        table.remove(players, currentIndex)
+
+        -- 3. Clamp index (Safety)
+        if savedIndex < 1 then savedIndex = 1 end
+        if savedIndex > #players + 1 then savedIndex = #players + 1 end
+
+        table.insert(players, savedIndex, playerName)
+
+        -- 4. Generate & Output Log Message
+        self:Print(string.format("[DLC] Reverting %s to position %d from position %d in %s.",
+            playerName, savedIndex, currentIndex, listName))
+
+        -- 5. Structured Logging
+        table.insert(db.PriorityLog, {
+            time = time(),
+            type = "RESTORE",
+            list = listName,
+            player = playerName,
+            from = currentIndex,
+            to = savedIndex
+        })
+        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+    end
+end
+
+function DesolateLootcouncil:GetReversionIndex(listName, origIndex, timestamp)
+    local db = DesolateLootcouncil.db.profile
+    if not db.PriorityLog then return origIndex end
+
+    local simulated = origIndex
+
+    -- Iterate all events AFTER the timestamp
+    -- PriorityLog is append-only, so just iterate
+    for _, log in ipairs(db.PriorityLog) do
+        if log.list == listName and log.time > timestamp then
+            -- Someone moved FROM log.from TO log.to
+            local f = log.from
+            local t = log.to
+
+            -- If someone Above me moves Down below me -> I go Up
+            if f < simulated and t >= simulated then
+                simulated = simulated - 1
+                -- If someone Below me moves Up above me -> I go Down (Rare/Manual)
+            elseif f > simulated and t <= simulated then
+                simulated = simulated + 1
+            end
+        end
+    end
+    return simulated
 end
 
 function DesolateLootcouncil:ShowHistoryWindow()

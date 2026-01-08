@@ -13,6 +13,7 @@
 ---@field AddTestItems fun(self: Loot)
 ---@field CategorizeItem fun(self: Loot, itemLink: string): string
 ---@field AwardItem fun(self: Loot, itemGUID: string, winner: string, response: string)
+---@field ReawardItem fun(self: Loot, awardIndex: number)
 ---@field EndSession fun(self: Loot)
 ---@field MarkAsTraded fun(self: Loot, itemGUID: string, winner: string)
 ---@type DesolateLootcouncil
@@ -363,9 +364,10 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     -- 3. Distribution Stub
     self:Print("[DLC] Master Looter would now give item to " .. winnerName)
 
-    -- 3.1 Apply Penalty if Bid
+    -- 3.1 Apply Penalty if Bid & Capture Original Index
+    local origIndex = nil
     if voteType == "Bid" or voteType == "1" then
-        DesolateLootcouncil:MovePlayerToBottom(itemData.category, winnerName)
+        origIndex = DesolateLootcouncil:MovePlayerToBottom(itemData.category, winnerName)
     end
 
     -- 4. Store History & Cleanup
@@ -378,7 +380,11 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             winner = winnerName,
             winnerClass = winnerClass,
             voteType = displayVote,
+            voteType = displayVote,
             timestamp = GetServerTime(),
+            originalIndex = origIndex,                                                        -- Captured from MovePlayerToBottom
+            fullItemData = itemData,                                                          -- Store full item snapshot for re-awarding
+            votesSnapshot = Dist and Dist.sessionVotes and Dist.sessionVotes[itemGUID] or {}, -- Store votes
             traded = isSelf
         })
 
@@ -408,6 +414,61 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if UI.awardFrame then UI.awardFrame:Hide() end
 
     self:Print("[DLC] Item awarded successfully.")
+end
+
+function Loot:ReawardItem(awardIndex)
+    local session = DesolateLootcouncil.db.profile.session
+    if not session or not session.awarded or not session.awarded[awardIndex] then return end
+
+    local award = session.awarded[awardIndex]
+    local itemData = award.fullItemData
+    local itemGUID = itemData.sourceGUID
+
+    -- 1. Restore to Bidding List
+    session.bidding = session.bidding or {}
+    table.insert(session.bidding, itemData)
+
+    -- 2. Restore Votes
+    ---@type Distribution
+    local Dist = DesolateLootcouncil:GetModule("Distribution")
+    if Dist then
+        Dist.sessionVotes = Dist.sessionVotes or {}
+        local snapshot = award.votesSnapshot or {}
+
+        -- Diagnostic Logging
+        local voteCount = 0
+        for _ in pairs(snapshot) do voteCount = voteCount + 1 end
+        self:Print(string.format("[DLC] Restoring %d votes for item %s", voteCount, itemData.link or "???"))
+
+        Dist.sessionVotes[itemGUID] = snapshot
+
+        -- Force Persistence immediately so reload doesn't wipe it again
+        if Dist.SaveSessionState then
+            Dist:SaveSessionState()
+        end
+    end
+
+    -- 3. Revert Priority Position (if applicable)
+    if award.originalIndex and award.voteType == "Bid" then
+        -- Methods are attached to the Addon object (Global API pattern in Priority.lua)
+        if DesolateLootcouncil.GetReversionIndex and DesolateLootcouncil.RestorePlayerPosition then
+            -- Calculate drift based on subsequent events
+            local currentTarget = DesolateLootcouncil:GetReversionIndex(itemData.category, award.originalIndex,
+                award.timestamp or 0)
+            DesolateLootcouncil:RestorePlayerPosition(itemData.category, award.winner, currentTarget)
+        end
+    end
+
+    -- 4. Remove from History
+    table.remove(session.awarded, awardIndex)
+
+    -- 5. Refresh UI
+    ---@type UI
+    local UI = DesolateLootcouncil:GetModule("UI")
+    if UI.ShowMonitorWindow then UI:ShowMonitorWindow() end
+    if UI.ShowHistoryWindow then UI:ShowHistoryWindow() end -- Refresh history list
+
+    self:Print("[DLC] RE-AWARDING: " .. (itemData.link or "Item") .. ". Monitor restored.")
 end
 
 function Loot:EndSession()
