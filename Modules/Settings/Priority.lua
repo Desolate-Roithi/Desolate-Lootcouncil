@@ -9,6 +9,7 @@
 ---@field ShuffleLists fun(self: DLC_Ref_PrioritySettings)
 ---@field SyncMissingPlayers fun(self: DLC_Ref_PrioritySettings)
 ---@field ShowHistoryWindow fun(self: DLC_Ref_PrioritySettings)
+---@field Print fun(self: DLC_Ref_PrioritySettings, msg: string)
 
 ---@type DLC_Ref_PrioritySettings
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_PrioritySettings]]
@@ -22,7 +23,7 @@ local PrioritySettings = DesolateLootcouncil:NewModule("PrioritySettings") --[[@
 ---@field toggles table
 ---@field OnEnable function
 ---@field newListInput string
----@field priorityListDropdown string|integer
+---@field priorityListDropdown integer|nil
 
 -- Volatile storage for UI toggle states (Reset on login)
 PrioritySettings.toggles = {
@@ -77,7 +78,7 @@ function PrioritySettings:GenerateListOptions(listName, orderOffset)
         func = function() self.toggles[listName] = not self.toggles[listName] end,
     }
 
-    -- Override Button
+    -- Override Button (Future Feature)
     args.btnOverride = {
         type = "execute",
         name = "Manual Override (Drag & Drop)",
@@ -111,7 +112,7 @@ function PrioritySettings:GetPriorityListConfig()
     args.headerAdd = { type = "header", name = "Create New List", order = 1 }
     args.inputNewList = {
         type = "input",
-        name = "List Name",
+        name = "New List Name",
         desc = "Enter a name for the new priority list.",
         order = 2,
         set = function(_, val) self.newListInput = val end,
@@ -119,12 +120,13 @@ function PrioritySettings:GetPriorityListConfig()
     }
     args.btnAddList = {
         type = "execute",
-        name = "Add List",
+        name = "Create List",
         order = 3,
         func = function()
             if self.newListInput and self.newListInput ~= "" then
                 DesolateLootcouncil:AddPriorityList(self.newListInput)
                 self.newListInput = ""
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
             end
         end,
     }
@@ -132,39 +134,49 @@ function PrioritySettings:GetPriorityListConfig()
     -- MANAGE EXISTING LISTS
     args.headerManage = { type = "header", name = "Manage Existing Lists", order = 10 }
 
-    local listNames = DesolateLootcouncil:GetPriorityListNames()
-    for i, name in ipairs(listNames) do
-        local groupArgs = {}
+    args.selectList = {
+        type = "select",
+        name = "Select List to Edit",
+        order = 11,
+        values = function()
+            local names = DesolateLootcouncil:GetPriorityListNames()
+            local t = {}
+            for i, n in ipairs(names) do t[i] = n end -- Map Index -> Name
+            return t
+        end,
+        set = function(_, val) self.priorityListDropdown = val end,
+        get = function() return self.priorityListDropdown end,
+    }
 
-        -- Rename Input
-        groupArgs.inputRename = {
-            type = "input",
-            name = "Rename To:",
-            order = 1,
-            set = function(_, val) DesolateLootcouncil:RenamePriorityList(i, val) end,
-            get = function() return "" end, -- Dont persist text in input
-            width = "half",
-        }
+    args.inputRename = {
+        type = "input",
+        name = "Rename List",
+        order = 12,
+        disabled = function() return not self.priorityListDropdown end,
+        get = function() return "" end, -- Action-only input
+        set = function(_, val)
+            if self.priorityListDropdown and val ~= "" then
+                DesolateLootcouncil:RenamePriorityList(self.priorityListDropdown, val)
+                self.priorityListDropdown = nil -- Reset selection
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end
+        end,
+    }
 
-        -- Delete Button
-        groupArgs.btnDelete = {
-            type = "execute",
-            name = "Delete List",
-            order = 2,
-            confirm = true,
-            confirmText = "Are you sure you want to delete this list? This cannot be undone.",
-            func = function() DesolateLootcouncil:RemovePriorityList(i) end,
-            width = "half",
-        }
-
-        args["group" .. i] = {
-            type = "group",
-            name = name,
-            inline = true,
-            order = 10 + i,
-            args = groupArgs,
-        }
-    end
+    args.btnDelete = {
+        type = "execute",
+        name = "Delete List",
+        order = 13,
+        confirm = true,
+        disabled = function() return not self.priorityListDropdown end,
+        func = function()
+            if self.priorityListDropdown then
+                DesolateLootcouncil:RemovePriorityList(self.priorityListDropdown)
+                self.priorityListDropdown = nil -- Reset selection
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end
+        end,
+    }
 
     return args
 end
@@ -201,13 +213,13 @@ function PrioritySettings:GetManagementArgs()
             order = 13,
             func = function() DesolateLootcouncil:ShowHistoryWindow() end,
         },
-        headerLists = { type = "header", name = "Priority Lists", order = 20 },
+        headerViews = { type = "header", name = "Priority List Views", order = 20 },
     }
 
-    -- Iterate dynamic lists
+    -- Inject dynamic list views
     local names = DesolateLootcouncil:GetPriorityListNames()
     for i, name in ipairs(names) do
-        args["list" .. i] = self:GenerateListOptions(name, 20 + i)
+        args["view" .. i] = self:GenerateListOptions(name, 20 + i)
     end
 
     return args
@@ -215,25 +227,23 @@ end
 
 function PrioritySettings:GetOptions()
     return {
-        name = "Player Priority",
+        name = "Priority Lists",
         type = "group",
         order = 3,
-        childGroups = "tab", -- Split into Tabs
+        childGroups = "tab",
         args = {
-            tabManage = {
-                type = "group",
-                name = "Management",
-                order = 1,
-                -- Use a function wrapper to ensure dynamic rebuilding
-                args = self:GetManagementArgs(),
-            },
-            tabConfig = {
-                type = "group",
+            config = {
                 name = "Configuration",
-                order = 2,
-                -- Use a function wrapper to ensure dynamic rebuilding
+                type = "group",
+                order = 1,
                 args = self:GetPriorityListConfig(),
             },
-        },
+            management = {
+                name = "Management & Views",
+                type = "group",
+                order = 2,
+                args = self:GetManagementArgs(),
+            },
+        }
     }
 end

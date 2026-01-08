@@ -12,6 +12,7 @@
 ---@field SetItemCategory fun(self: DLC_Ref_UILoot, itemID: number, listIndex: number)
 ---@field Print fun(self: DLC_Ref_UILoot, msg: string)
 ---@field UnassignItem fun(self: DLC_Ref_UILoot, itemID: number)
+---@field GetActiveUserCount fun(self: DLC_Ref_UILoot): number
 
 ---@type DLC_Ref_UILoot
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UILoot]]
@@ -22,7 +23,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 function UI:CreateLootFrame()
     ---@type AceGUIFrame
     local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-    frame:SetTitle("Desolate Loot Council")
+    frame:SetTitle("Desolate Loot Council   ")
     frame:SetLayout("Flow")
     frame:SetWidth(400)
     frame:SetHeight(500)
@@ -57,6 +58,48 @@ function UI:ShowLootWindow(lootTable)
     if (self.lootFrame --[[@as any]]).statusbg then
         (self.lootFrame --[[@as any]]).statusbg:Hide()
     end
+
+    -- 1.5 Addon Status Indicator Light (Top Right)
+    local parent = (self.lootFrame --[[@as any]]).frame
+    if not self.lootFrame.statusIcon then
+        local icon = parent:CreateTexture(nil, "OVERLAY")
+        icon:SetSize(12, 12)
+        icon:SetPoint("TOP", parent, "TOP", 78, -2) -- Move to corner
+        icon:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+        icon:SetDrawLayer("OVERLAY", 7)             -- Force on top
+        self.lootFrame.statusIcon = icon
+
+        -- Tooltip Frame (Invisible Hit Rect)
+        local ttFrame = CreateFrame("Button", nil, parent)
+        ttFrame:SetAllPoints(icon)
+        ttFrame:SetScript("OnEnter", function()
+            GameTooltip:SetOwner(ttFrame, "ANCHOR_BOTTOMLEFT")
+            local active = DesolateLootcouncil:GetActiveUserCount()
+            local total = GetNumGroupMembers()
+            if total == 0 then
+                total = 1; active = 1
+            end -- Solo Logic
+            GameTooltip:AddLine(string.format("Addon Connection: [%d] / [%d]", active, total), 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        ttFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+
+    -- Update Light Color
+    local activeCount = DesolateLootcouncil:GetActiveUserCount()
+    local totalCount = GetNumGroupMembers()
+    if totalCount == 0 then
+        totalCount = 1; activeCount = 1
+    end                     -- Solo safety
+
+    local r, g, b = 1, 0, 0 -- Red (Default/None)
+    if activeCount >= totalCount then
+        r, g, b = 0, 1, 0   -- Green (Full)
+    elseif activeCount > 0 then
+        r, g, b = 1, 1, 0   -- Yellow (Partial)
+    end
+    self.lootFrame.statusIcon:SetVertexColor(r, g, b)
+    self.lootFrame.statusIcon:Show()
 
     -- 2. Clear Session Button (Top)
     ---@type AceGUIButton

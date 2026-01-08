@@ -33,6 +33,7 @@
 ---@field NewModule fun(self: DLC_Ref_UI, name: string, ...): any
 ---@field GetModule fun(self: DLC_Ref_UI, name: string): any
 ---@field activeLootMaster string
+---@field GetActiveUserCount fun(self: DLC_Ref_UI): number
 
 ---@type DLC_Ref_UI
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UI]]
@@ -62,6 +63,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@field btnTrades table
 ---@field btnEnd table
 ---@field statusbg table
+---@field statusIcon table
 
 ---@class AceGUIFrame : AceGUIWidget
 ---@class AceGUIScrollFrame : AceGUIWidget

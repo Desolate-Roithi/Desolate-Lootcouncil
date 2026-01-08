@@ -160,6 +160,7 @@ function Dist:SendStopSession()
     ---@type UI
     local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
     if UI.monitorFrame then UI.monitorFrame:Hide() end
+    if UI.ResetVoting then UI:ResetVoting() end
     DesolateLootcouncil:Print("[DLC] Session Stopped. Broadcast sent.")
 end
 
@@ -264,7 +265,9 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
         -- Close/Reset UI
         ---@type UI
         local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
-        if UI.votingFrame then
+        if UI.ResetVoting then
+            UI:ResetVoting()
+        elseif UI.votingFrame then
             UI.votingFrame:Hide()
         end
         DesolateLootcouncil:Print("[DLC] The Loot Session was ended by the Master.")

@@ -16,13 +16,12 @@ function UI:ShowHistoryWindow()
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
         frame:SetTitle("Session History")
         frame:SetLayout("Flow")
-        frame:SetWidth(400)
-        frame:SetHeight(300)
-        -- Fix 'anchor family connection' error by clearing points first
-        -- We use the underlying Blizzard frame (.frame) to ensure a clean state
+        frame:SetWidth(500)
+        frame:SetHeight(400)
+        -- Fix 'anchor family connection' error
         local blizzardFrame = (frame --[[@as any]]).frame
         blizzardFrame:ClearAllPoints()
-        blizzardFrame:SetPoint("CENTER", UIParent, "CENTER", 400, 0)
+        blizzardFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         frame:SetCallback("OnClose", function(widget) widget:Hide() end)
         self.historyFrame = frame
     end
@@ -31,8 +30,89 @@ function UI:ShowHistoryWindow()
     self.historyFrame:ReleaseChildren()
 
     local session = DesolateLootcouncil.db.profile.session
-    local awarded = session.awarded
+    local awarded = session.awarded or {}
 
+    -- 1. Date Processing
+    local dates = {}
+    local dateMap = {}
+    for _, item in ipairs(awarded) do
+        local d = date("%Y-%m-%d", item.timestamp or time())
+        if not dateMap[d] then
+            dateMap[d] = true
+            table.insert(dates, d)
+        end
+    end
+    -- Sort Newest -> Oldest
+    table.sort(dates, function(a, b) return a > b end)
+
+    -- Default Selection
+    if not self.selectedHistoryDate and #dates > 0 then
+        self.selectedHistoryDate = dates[1]
+    end
+    -- Safety Check: If selected date no longer exists (deleted), reset
+    if self.selectedHistoryDate and not dateMap[self.selectedHistoryDate] then
+        if #dates > 0 then
+            self.selectedHistoryDate = dates[1]
+        else
+            self.selectedHistoryDate = nil
+        end
+    end
+
+    -- 2. UI Controls (Top Bar)
+    ---@type AceGUISimpleGroup
+    local controlGroup = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+    controlGroup:SetLayout("Flow")
+    controlGroup:SetFullWidth(true)
+    self.historyFrame:AddChild(controlGroup)
+
+    -- Dropdown
+    ---@type AceGUIDropdown
+    local dateDropdown = AceGUI:Create("Dropdown") --[[@as AceGUIDropdown]]
+    dateDropdown:SetLabel("Select Date")
+    dateDropdown:SetRelativeWidth(0.5)
+
+    local dropdownList = {}
+    for _, d in ipairs(dates) do
+        dropdownList[d] = d
+    end
+    dateDropdown:SetList(dropdownList)
+
+    if self.selectedHistoryDate then
+        dateDropdown:SetValue(self.selectedHistoryDate)
+    end
+
+    dateDropdown:SetCallback("OnValueChanged", function(widget, event, key)
+        self.selectedHistoryDate = key
+        self:ShowHistoryWindow()
+    end)
+    controlGroup:AddChild(dateDropdown)
+
+    -- Delete Button
+    ---@type AceGUIButton
+    local btnDelete = AceGUI:Create("Button") --[[@as AceGUIButton]]
+    btnDelete:SetText("Delete Date")
+    btnDelete:SetRelativeWidth(0.3)
+    btnDelete:SetCallback("OnClick", function()
+        if not self.selectedHistoryDate then return end
+
+        -- Filter Loop (Backwards safe removal)
+        local countRemoved = 0
+        for i = #awarded, 1, -1 do
+            local item = awarded[i]
+            local d = date("%Y-%m-%d", item.timestamp or time())
+            if d == self.selectedHistoryDate then
+                table.remove(awarded, i)
+                countRemoved = countRemoved + 1
+            end
+        end
+
+        DesolateLootcouncil:Print("Removed " .. countRemoved .. " entries for " .. self.selectedHistoryDate)
+        self.selectedHistoryDate = nil -- Reset selection to force refresh logic
+        self:ShowHistoryWindow()
+    end)
+    controlGroup:AddChild(btnDelete)
+
+    -- 3. Scroll List
     ---@type AceGUIScrollFrame
     local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
     scroll:SetLayout("List")
@@ -40,49 +120,67 @@ function UI:ShowHistoryWindow()
     scroll:SetFullHeight(true)
     self.historyFrame:AddChild(scroll)
 
-    if awarded then
+    local hasItems = false
+    if self.selectedHistoryDate then
+        -- Iterate backwards for display? Or forwards. Usually history is newest top.
+        -- Let's do Newest Top (Backwards iteration matches standard "newest added is last" if list is append-only)
+        -- Assuming 'awarded' is appended to, index 1 is oldest.
         for i = #awarded, 1, -1 do
             local item = awarded[i]
-            ---@type AceGUISimpleGroup
-            local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-            row:SetLayout("Flow")
-            row:SetFullWidth(true)
+            local d = date("%Y-%m-%d", item.timestamp or time())
 
-            -- Icon (Using Label with Image)
-            ---@type AceGUILabel
-            local icon = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            icon:SetText(" ")
-            icon:SetImage(item.texture)
-            icon:SetImageSize(16, 16)
-            icon:SetWidth(24)
+            if d == self.selectedHistoryDate then
+                hasItems = true
+                ---@type AceGUISimpleGroup
+                local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+                row:SetLayout("Flow")
+                row:SetFullWidth(true)
 
-            -- Text: Link -> Winner (Colorized)
-            ---@type AceGUIInteractiveLabel
-            local text = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-            local class = item.winnerClass
-            local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
+                -- Icon
+                ---@type AceGUILabel
+                local icon = AceGUI:Create("Label") --[[@as AceGUILabel]]
+                icon:SetText(" ")
+                icon:SetImage(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+                icon:SetImageSize(16, 16)
+                icon:SetWidth(24)
 
-            text:SetText(item.link .. " -> |c" .. classColor .. item.winner .. "|r")
-            text:SetRelativeWidth(0.60)
-            text:SetCallback("OnEnter", function(widget)
-                GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
-                GameTooltip:SetHyperlink(item.link)
-                GameTooltip:Show()
-            end)
-            text:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+                -- Link -> Winner
+                ---@type AceGUIInteractiveLabel
+                local text = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+                local class = item.winnerClass
+                local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
 
-            -- Info: Type
-            ---@type AceGUILabel
-            local info = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            info:SetText("(" .. (item.voteType or "?") .. ")")
-            info:SetRelativeWidth(0.30)
-            info:SetColor(0.7, 0.7, 0.7)
+                text:SetText((item.link or "???") .. " -> |c" .. classColor .. (item.winner or "Unknown") .. "|r")
+                text:SetRelativeWidth(0.60)
+                text:SetCallback("OnEnter", function(widget)
+                    if item.link then
+                        GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
+                        GameTooltip:SetHyperlink(item.link)
+                        GameTooltip:Show()
+                    end
+                end)
+                text:SetCallback("OnLeave", function() GameTooltip:Hide() end)
 
-            row:AddChild(icon)
-            row:AddChild(text)
-            row:AddChild(info)
-            scroll:AddChild(row)
+                -- Type
+                ---@type AceGUILabel
+                local info = AceGUI:Create("Label") --[[@as AceGUILabel]]
+                info:SetText("(" .. (item.voteType or "?") .. ")")
+                info:SetRelativeWidth(0.30)
+                info:SetColor(0.7, 0.7, 0.7)
+
+                row:AddChild(icon)
+                row:AddChild(text)
+                row:AddChild(info)
+                scroll:AddChild(row)
+            end
         end
+    end
+
+    if not hasItems then
+        local lbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
+        lbl:SetText("No entries for this date.")
+        lbl:SetFullWidth(true)
+        scroll:AddChild(lbl)
     end
 end
 

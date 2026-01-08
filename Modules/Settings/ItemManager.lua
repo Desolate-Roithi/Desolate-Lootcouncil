@@ -1,3 +1,4 @@
+---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 ---@type ItemSettings
 local ItemSettings = DesolateLootcouncil:NewModule("ItemSettings")
@@ -30,7 +31,10 @@ function ItemSettings:GetItemOptions()
         order = 2,
         style = "dropdown",
         width = "double",
-        set = function(_, val) ItemSettings.selectedListIndex = val end,
+        set = function(_, val)
+            ItemSettings.selectedListIndex = val
+            LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+        end,
         get = function() return ItemSettings.selectedListIndex end,
     }
 
@@ -53,6 +57,7 @@ function ItemSettings:GetItemOptions()
             if ItemSettings.itemInput and ItemSettings.itemInput ~= "" then
                 DesolateLootcouncil:AddItemToList(ItemSettings.itemInput, ItemSettings.selectedListIndex)
                 ItemSettings.itemInput = ""
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
             end
         end,
     }
@@ -96,7 +101,11 @@ function ItemSettings:GetItemOptions()
                         name = "Remove",
                         order = 3,
                         width = "half",
-                        func = function() DesolateLootcouncil:RemoveItemFromList(self.selectedListIndex, itemID) end,
+                        width = "half",
+                        func = function()
+                            DesolateLootcouncil:RemoveItemFromList(self.selectedListIndex, itemID)
+                            LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+                        end,
                     }
                 }
             }

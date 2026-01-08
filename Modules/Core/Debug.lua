@@ -36,7 +36,7 @@ function Debug:ToggleVerbose()
 end
 
 function Debug:ShowStatus()
-    local userCount = 0
+    local userCount = 1
     for _ in pairs(DesolateLootcouncil.activeAddonUsers) do userCount = userCount + 1 end
 
     local activeLM = DesolateLootcouncil:DetermineLootMaster()

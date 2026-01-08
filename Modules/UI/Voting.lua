@@ -57,13 +57,20 @@ function UI:RemoveVotingItem(guid)
     self:ShowVotingWindow(nil, true)
 end
 
+function UI:ResetVoting()
+    self.myVotes = {}
+    self.cachedVotingItems = {}
+    if self.votingFrame then self.votingFrame:Hide() end
+end
+
 function UI:ShowVotingWindow(lootTable, isRefresh)
     if not self.votingFrame then self:CreateVotingFrame() end
 
     -- New Session Data
     if lootTable then
         self.cachedVotingItems = lootTable
-        self.myVotes = {}
+        -- Fix: Preserve local votes on append
+        self.myVotes = self.myVotes or {}
     end
     local items = self.cachedVotingItems
     if not items then return end

@@ -1,8 +1,11 @@
 ---@class Loot : AceModule, AceEvent-3.0, AceTimer-3.0, AceConsole-3.0
 ---@field sessionLoot table
 ---@field lootedMobs table
+---@field sessionItems table
 ---@field OnLootOpened fun(self: Loot)
 ---@field OnLootClosed fun(self: Loot)
+---@field OnStartLootRoll fun(self: Loot, event: string, rollID: number)
+---@field AddSessionItem fun(self: Loot, link: string, itemGUID: string, texture: number|string, quantity: number, category: string, itemID: number): boolean
 ---@field OnInitialize function
 ---@field OnEnable function
 ---@field ClearLootBacklog fun(self: Loot)
@@ -12,6 +15,7 @@
 ---@field AwardItem fun(self: Loot, itemGUID: string, winner: string, response: string)
 ---@field EndSession fun(self: Loot)
 ---@field MarkAsTraded fun(self: Loot, itemGUID: string, winner: string)
+---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 ---@type Loot
 local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0", "AceConsole-3.0")
@@ -25,27 +29,25 @@ end
 function Loot:OnEnable()
     -- Safety Check: Ensure Core has initialized the DB
     if not DesolateLootcouncil.db or not DesolateLootcouncil.db.profile then
-        self:Print("Error: Database not ready. Loot module disabled.")
+        -- Retry logic: If Core hasn't loaded DB yet, wait a bit.
+        self:ScheduleTimer("OnEnable", 0.1)
         return
     end
     -- Link local references to the persistent DB tables
     self.sessionLoot = DesolateLootcouncil.db.profile.session.loot
     self.lootedMobs = DesolateLootcouncil.db.profile.session.lootedMobs
 
+    -- Transient lookup for duplicate prevention
+    self.sessionItems = {}
+
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
     self:RegisterEvent("LOOT_CLOSED", "OnLootClosed")
+    self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
 
     self:Print("[DLC] Loot Module Loaded (Session Persistent)")
 
     -- Check if we have data to restore
     if self.sessionLoot and #self.sessionLoot > 0 then
-        -- Only restore if it was previously open or just always offer it?
-        -- For now, let's just print that we have data.
-        -- If the user wants it to auto-open, we can implement that,
-        -- but usually they might just click the minimap button or slash command.
-        -- However, for development speed, let's restore it if it has data.
-
-        -- We wait a moment for UI to be ready?
         self:ScheduleTimer(function()
             ---@type UI
             local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
@@ -53,6 +55,46 @@ function Loot:OnEnable()
                 UI:ShowLootWindow(self.sessionLoot)
             end
         end, 1)
+    end
+end
+
+function Loot:OnStartLootRoll(event, rollID)
+    local db = DesolateLootcouncil.db.profile
+    if not db.enableAutoLoot then return end
+
+    local isLM = DesolateLootcouncil:AmILootMaster()
+    local link = GetLootRollItemLink(rollID)
+
+    if isLM then
+        -- Branch 1: LM Auto-Acquire
+        -- Get detailed info
+        local _, _, _, _, isBoP, canNeed, canGreed, canDisenchant, _, _, _, _, canTransmog = GetLootRollItemInfo(rollID)
+
+        -- Safety Check: BoP Collectables
+        local cat = self:CategorizeItem(link)
+        if isBoP and cat == "Collectables" then
+            self:Print("[DLC] Auto-Loot Aborted: " ..
+                (link or "Unknown") .. " is a BoP Collectable. Roll manually to ensure safety.")
+            return -- Abort
+        end
+
+        if canNeed then
+            RollOnLoot(rollID, 1) -- Need
+            self:Print("[DLC] LM Auto-Acquire: Rolling Need on " .. (link or "Unknown"))
+        elseif canGreed then
+            RollOnLoot(rollID, 2) -- Greed
+            self:Print("[DLC] LM Auto-Acquire: Rolling Greed on " .. (link or "Unknown"))
+        elseif canTransmog then
+            RollOnLoot(rollID, 4) -- Transmog
+            self:Print("[DLC] LM Auto-Acquire: Rolling Transmog on " .. (link or "Unknown"))
+        elseif canDisenchant then
+            RollOnLoot(rollID, 3) -- Disenchant
+            self:Print("[DLC] LM Auto-Acquire: Rolling DE on " .. (link or "Unknown"))
+        end
+    else
+        -- Branch 2: Raider Auto-Pass
+        RollOnLoot(rollID, 0) -- Pass
+        self:Print("[DLC] Auto-Pass: " .. (link or "Unknown"))
     end
 end
 
@@ -69,7 +111,7 @@ function Loot:OnLootOpened()
             local itemLink = GetLootSlotLink(i)
             local texture, itemName, quantity, currencyID, quality = GetLootSlotInfo(i)
 
-            -- Force Number type for ID (Safe split to avoid bad argument #2 error)
+            -- Force Number type for ID
             local rawID = C_Item.GetItemInfoInstant(itemLink)
             local itemID = tonumber(rawID)
 
@@ -85,42 +127,14 @@ function Loot:OnLootOpened()
                 -- Check quality threshold
                 if not isImportant and (quality or 0) < minQuality then
                     DLC:Print("[DLC] Skipped low quality item: " .. itemLink)
-                    -- Skip to next iteration (using a goto simulates 'continue' or just wrap in if)
                 else
-                    -- EXTRACT UNIQUE SPAWN ID (The last hex segment of the GUID)
-                    -- Pattern: match the hyphen followed by hex digits at the end of the string
-                    local spawnUID = sourceGUID:match("%-(%x+)$") or sourceGUID
+                    -- CONSTRUCT UNIQUE ID
+                    local uniqueKey = sourceGUID .. "-" .. itemID
 
-                    for k = 1, (quantity or 1) do
-                        local alreadyExists = false
-
-                        for _, existing in ipairs(session.loot) do
-                            -- Compare the Spawn Suffixes, NOT the full GUIDs
-                            local existingSpawnUID = existing.sourceGUID:match("%-(%x+)$") or existing.sourceGUID
-
-                            if existingSpawnUID == spawnUID and
-                                existing.itemID == itemID and
-                                existing.stackIndex == k then
-                                alreadyExists = true
-                                break
-                            end
-                        end
-                        if not alreadyExists then
-                            table.insert(session.loot, {
-                                link = itemLink,
-                                itemID = itemID,
-                                category = category,
-                                sourceGUID = sourceGUID, -- Keep full GUID for reference
-                                stackIndex = k,
-                                texture = texture
-                            })
-
-                            itemsChanged = true
-                            session.lootedMobs[sourceGUID] = true
-
-                            DLC:Print("ADDED: " .. itemName .. " (" .. k .. ")")
-                            DLC:Print("   UID: " .. tostring(spawnUID))
-                        end
+                    if self:AddSessionItem(itemLink, uniqueKey, texture, quantity, category, itemID) then
+                        itemsChanged = true
+                        session.lootedMobs[sourceGUID] = true
+                        DLC:Print("ADDED: " .. itemName)
                     end
                 end
             end
@@ -132,6 +146,24 @@ function Loot:OnLootOpened()
         local UI = DLC:GetModule("UI") --[[@as UI]]
         UI:ShowLootWindow(session.loot)
     end
+end
+
+function Loot:AddSessionItem(link, itemGUID, texture, quantity, category, itemID)
+    -- Critical Check: if self.sessionItems[itemGUID] then return end.
+    if self.sessionItems[itemGUID] then return false end
+
+    local session = DesolateLootcouncil.db.profile.session
+    table.insert(session.loot, {
+        link = link,
+        itemID = itemID,
+        category = category,
+        sourceGUID = itemGUID,
+        stackIndex = quantity,
+        texture = texture
+    })
+
+    self.sessionItems[itemGUID] = true
+    return true
 end
 
 function Loot:OnLootClosed()
@@ -147,54 +179,40 @@ function Loot:ClearLootBacklog()
     -- Also clear local reference just in case
     if self.sessionLoot then wipe(self.sessionLoot) end
     if self.lootedMobs then wipe(self.lootedMobs) end
+    if self.sessionItems then wipe(self.sessionItems) end
 
     self:Print("[DLC] Loot backlog cleared.")
 end
 
 function Loot:AddManualItem(rawLink)
-    -- 1. Sanitize: Ensure we have a valid link string
+    -- 1. Sanitize
     if not rawLink then return end
 
     -- 2. Robust ID Extraction
-    -- Try Instant API first
     local itemID = C_Item.GetItemInfoInstant(rawLink)
-
-    -- Fallback: Regex (Item String)
     if not itemID then
         itemID = string.match(rawLink, "item:(%d+)")
     end
-
-    -- Fallback: Plain Number
     if not itemID then
         itemID = tonumber(rawLink)
     end
-
-    -- Final conversion
     itemID = tonumber(itemID)
 
     if itemID then
-        -- 3. Categorize (Use new Safe Backend)
+        -- 3. Categorize
         local category = DesolateLootcouncil:GetItemCategory(itemID)
-
-        -- Override with default "Rest" if backend returns nothing?
-        -- Actually GetItemCategory returns "Junk/Pass".
-        -- If we want to default to "Rest" for epics etc, we can check CategorizeItem?
-        -- But GetItemCategory checks the *Saved Variables*.
         if category == "Junk/Pass" then
-            category = self:CategorizeItem(rawLink) -- Use algorithmic fallback
+            category = self:CategorizeItem(rawLink)
         end
 
-        -- 4. Get Display Info (Async Safe)
+        -- 4. Get Display Info
         local name, link, quality, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
-
-        -- Fallback if not cached
         if not link then
             link = "Item " .. itemID
-            -- Trigger a silent load?
             local _ = C_Item.GetItemInfo(itemID)
         end
         if not icon then
-            icon = C_Item.GetItemIconByID(itemID) -- Try icon by ID
+            icon = C_Item.GetItemIconByID(itemID)
         end
 
         -- 5. Add to Database
@@ -203,7 +221,7 @@ function Loot:AddManualItem(rawLink)
             link = link,
             itemID = itemID,
             category = category,
-            sourceGUID = "Manual-" .. itemID .. "-" .. math.random(100), -- Unique marker
+            sourceGUID = "Manual-" .. itemID .. "-" .. math.random(100),
             stackIndex = 1,
             texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
             isManual = true
@@ -225,7 +243,6 @@ function Loot:AddTestItems()
         DesolateLootcouncil:Print("Error: You must be the Loot Master to generate test items.")
         return
     end
-    -- Clear previous data to avoid duplicates
     self:ClearLootBacklog()
     DesolateLootcouncil:Print("Generating Test Items with Categories...")
     -- Define items with explicit categories
@@ -237,20 +254,18 @@ function Loot:AddTestItems()
         { id = "item:5498::::::",  cat = "Collectables" } -- Small Blue Pouch (Generic Item)
     }
     for _, data in ipairs(testData) do
-        -- Retrieve item info
         local name, link, quality, _, _, _, _, _, _, icon = C_Item.GetItemInfo(data.id)
 
         if link then
             table.insert(DesolateLootcouncil.db.profile.session.loot, {
                 link = link,
-                itemID = tonumber(data.id:match("item:(%d+)")), -- Extract ID
+                itemID = tonumber(data.id:match("item:(%d+)")),
                 texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
                 sourceGUID = "Test-" .. math.random(10000, 99999),
                 owner = UnitName("player"),
-                category = data.cat -- Use the hardcoded category
+                category = data.cat
             })
         else
-            -- Fallback if item info isn't cached yet
             table.insert(DesolateLootcouncil.db.profile.session.loot, {
                 link = "[Loading: " .. data.id .. "]",
                 itemID = tonumber(data.id:match("item:(%d+)")), -- Extract ID for safety
@@ -273,8 +288,7 @@ function Loot:CategorizeItem(itemLink)
     local itemID, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(itemLink)
     if not itemID then return "Junk/Pass" end
 
-    -- Check configured lists
-    -- Using safe access in case db isn't fully ready (methods usually safe if called after OnEnable)
+    -- Check configured lists (Safe access)
     local lists = DLC.db.profile.lootLists
     if lists then
         if lists.tier[itemID] then return "Tier" end
@@ -285,7 +299,7 @@ function Loot:CategorizeItem(itemLink)
     -- Fallback (API)
     if classID == 2 then return "Weapons" end -- Weapon
     if classID == 4 then                      -- Armor
-        -- Quality check: 0=Poor, 1=Common, 2=Uncommon, 3=Rare, 4=Epic, 5=Legendary
+        -- Quality check
         local _, _, quality = C_Item.GetItemInfo(itemLink)
         if quality and quality > 1 then
             return "Rest"
@@ -296,7 +310,6 @@ function Loot:CategorizeItem(itemLink)
 end
 
 function Loot:AwardItem(itemGUID, winnerName, voteType)
-    -- Find the item data in session.bidding
     local session = DesolateLootcouncil.db.profile.session
     local itemData = nil
     local removeIndex = nil
@@ -317,8 +330,7 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     end
 
     local link = itemData.link
-    local VOTE_TEXT = { [1] = "Bis", [2] = "Major", [3] = "Minor", [4] = "Unknown" } -- Mapping for display if voteType is ID
-    -- If voteType is string (e.g. from buttons), use it, otherwise map it
+    local VOTE_TEXT = { [1] = "Bis", [2] = "Major", [3] = "Minor", [4] = "Unknown" }
     local displayVote = tonumber(voteType) and (VOTE_TEXT[tonumber(voteType)] or "Vote") or voteType
 
     -- 1. Announcement
@@ -350,7 +362,6 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
 
     -- 3. Distribution Stub
     self:Print("[DLC] Master Looter would now give item to " .. winnerName)
-    -- Future: GiveMasterLoot(slot, index)
 
     -- 3.1 Apply Penalty if Bid
     if voteType == "Bid" or voteType == "1" then
@@ -365,10 +376,10 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             texture = itemData.texture,
             itemID = itemData.itemID,
             winner = winnerName,
-            winnerClass = winnerClass, -- Store for reliable coloring
+            winnerClass = winnerClass,
             voteType = displayVote,
             timestamp = GetServerTime(),
-            traded = isSelf -- Auto-trade if self
+            traded = isSelf
         })
 
         -- Tell all raiders to remove this item
@@ -383,7 +394,6 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if removeIndex then
         table.remove(session.bidding, removeIndex)
 
-        -- Safe removal from vote cache if module is loaded
         ---@type Distribution
         local Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
         if Dist and Dist.sessionVotes then
@@ -395,34 +405,9 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     ---@type UI
     local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
     if UI.ShowMonitorWindow then UI:ShowMonitorWindow() end
-    if UI.ShowAwardWindow then UI:ShowAwardWindow(nil) end -- Close award window? or refresh
-    -- Close award window actually, since item is gone
     if UI.awardFrame then UI.awardFrame:Hide() end
 
     self:Print("[DLC] Item awarded successfully.")
-
-    -- Clear Votes function call (if needed globally)
-    -- But since we just removed one item, maybe we don't clear ALL votes?
-    -- The original code called ClearVotes here which wipes everything.
-    -- session.bidding is the *list* of items. If we remove one, the others remain.
-    -- Wiping ALL votes might be incorrect if multiple items are being voted on simultaneously?
-    -- Taking the Safe path: The user requested ClearVotes() in EndSession(), but in MarkAsTraded (single item),
-    -- we probably shouldn't wipe everything unless it's the last item?
-    -- For now, respecting previous logic but fixing the scope.
-
-    ---@type Distribution
-    local Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
-    if Dist and Dist.ClearVotes then
-        -- Dist:ClearVotes() -- Commented out to prevent wiping other items' votes during a multi-item session
-    end
-
-    -- Update UI
-    ---@type UI
-    local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
-    if UI then
-        -- Refresh Monitor with remaining items
-        UI:ShowMonitorWindow()
-    end
 end
 
 function Loot:EndSession()
@@ -455,11 +440,10 @@ function Loot:MarkAsTraded(itemLink, winnerName)
     if not session or not session.awarded then return end
 
     for _, award in ipairs(session.awarded) do
-        -- Check for matching link and winner, AND not already traded
         if award.link == itemLink and award.winner == winnerName and not award.traded then
             award.traded = true
             self:Print(string.format("[DLC] Trade confirmed. %s marked as delivered.", itemLink))
-            return -- Mark only one instance if multiple exist (oldest first due to loop order)
+            return
         end
     end
 end

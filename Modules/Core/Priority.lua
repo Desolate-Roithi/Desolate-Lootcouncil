@@ -1,9 +1,9 @@
----@class Priority : AceModule
----@field OnInitialize fun(self: Priority)
+---@class Priority : AceModule, AceConsole-3.0, AceTimer-3.0
+---@field OnEnable fun(self: Priority)
 
 ---@class (partial) DLC_Ref_Priority
 ---@field db table
----@field NewModule fun(self: DLC_Ref_Priority, name: string): any
+---@field NewModule fun(self: DLC_Ref_Priority, name: string, ...): any
 ---@field Print fun(self: DLC_Ref_Priority, msg: string)
 ---@field GetPriorityListNames fun(self: DLC_Ref_Priority): table
 ---@field AddPriorityList fun(self: DLC_Ref_Priority, name: string)
@@ -21,10 +21,16 @@
 
 ---@type DLC_Ref_Priority
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Priority]]
-local Priority = DesolateLootcouncil:NewModule("Priority") --[[@as Priority]]
+local Priority = DesolateLootcouncil:NewModule("Priority", "AceConsole-3.0", "AceTimer-3.0") --[[@as Priority]]
 
-function Priority:OnInitialize()
+function Priority:OnEnable()
     -- Ensure list structure exists in DB (Strict Persistence)
+    -- Check if DB is ready
+    if not DesolateLootcouncil.db or not DesolateLootcouncil.db.profile then
+        -- Retry logic: If Core hasn't loaded DB yet, wait a bit.
+        self:ScheduleTimer("OnEnable", 0.1)
+        return
+    end
     local db = DesolateLootcouncil.db.profile
 
     -- Crucial: Use OR to preserve existing data (fixes wipe on reload)
@@ -97,6 +103,7 @@ end
 -- --- Globally Attached Functions ---
 
 function DesolateLootcouncil:GetPriorityListNames()
+    if not DesolateLootcouncil.db then return {} end
     local db = DesolateLootcouncil.db.profile
     local names = {}
     if db.PriorityLists then
@@ -108,6 +115,7 @@ function DesolateLootcouncil:GetPriorityListNames()
 end
 
 function DesolateLootcouncil:AddPriorityList(name)
+    if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if not name or name == "" then return end
 
@@ -132,6 +140,7 @@ function DesolateLootcouncil:AddPriorityList(name)
 end
 
 function DesolateLootcouncil:RemovePriorityList(index)
+    if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] then
         local removed = table.remove(db.PriorityLists, index)
@@ -141,6 +150,7 @@ function DesolateLootcouncil:RemovePriorityList(index)
 end
 
 function DesolateLootcouncil:RenamePriorityList(index, newName)
+    if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] and newName ~= "" then
         db.PriorityLists[index].name = newName
@@ -150,6 +160,7 @@ function DesolateLootcouncil:RenamePriorityList(index, newName)
 end
 
 function DesolateLootcouncil:LogPriorityChange(msg)
+    if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if not db.History then db.History = {} end
     local timestamp = date("%Y-%m-%d %H:%M:%S")
@@ -162,6 +173,7 @@ function DesolateLootcouncil:LogPriorityChange(msg)
 end
 
 function DesolateLootcouncil:ShuffleLists()
+    if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     -- CLEAR HISTORY on season reset
     db.History = {}
@@ -193,6 +205,7 @@ function DesolateLootcouncil:ShuffleLists()
 end
 
 function DesolateLootcouncil:SyncMissingPlayers()
+    if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if not db.MainRoster or not db.PriorityLists then return end
 
@@ -232,11 +245,13 @@ function DesolateLootcouncil:SyncMissingPlayers()
 end
 
 function DesolateLootcouncil:MovePlayerToBottom(listName, playerName)
+    if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if not db.PriorityLists then return end
 
     -- Helper: Smart Exact Lookup (Local Duplicate)
     local function GetLinkedMain(name)
+        if not DesolateLootcouncil.db then return nil end
         local db = DesolateLootcouncil.db.profile
         if not db or not db.playerRoster or not db.playerRoster.alts then return nil end
 

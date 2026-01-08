@@ -1,7 +1,7 @@
 ## Interface: 120001
 ## Title: Desolate Lootcouncil
 ## Author: Roithi
-## Version: 0.2-Alpha
+## Version: 0.0.2-Alpha
 ## SavedVariables: DesolateLootDB
 
 # 0. Libraries (MUST BE FIRST)
@@ -12,6 +12,7 @@ Core.lua
 
 # 2. Load Core Modules (Logic)
 Modules/Core/Debug.lua
+Modules/Core/Comm.lua
 Modules/Core/Loot.lua
 Modules/Core/Distribution.lua
 Modules/Core/Trade.lua
@@ -30,3 +31,4 @@ Modules/UI/Loot.lua
 Modules/UI/Monitor.lua
 Modules/UI/Voting.lua
 Modules/UI/Utility.lua
+Modules/UI/Version.lua
