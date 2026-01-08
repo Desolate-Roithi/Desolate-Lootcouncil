@@ -10,6 +10,15 @@
 ---@field SendVote fun(self: Distribution, itemGUID: string, voteType: any)
 ---@field ClearVotes fun(self: Distribution)
 ---@field OnEnable fun(self: Distribution)
+---@class (partial) Distribution
+---@field sessionExpiry number?
+---@field sessionVotes table
+---@field myLocalVotes table
+---@field clientLootList table
+---@field closedItems table
+---@field SaveSessionState fun(self: Distribution)
+---@field RestoreSession fun(self: Distribution)
+
 ---@class (partial) DLC_Ref_Distribution
 ---@field db table
 ---@field NewModule fun(self: DLC_Ref_Distribution, name: string, ...): any
@@ -33,6 +42,59 @@ local Dist = DesolateLootcouncil:NewModule("Distribution", "AceEvent-3.0", "AceC
 
 function Dist:OnEnable()
     self:RegisterComm("DLC_Loot", "OnCommReceived")
+    -- Attempt Rehydration
+    C_Timer.After(1, function() self:RestoreSession() end)
+end
+
+function Dist:SaveSessionState()
+    local session = DesolateLootcouncil.db.profile.session
+    session.activeState = {
+        lootList = self.clientLootList,
+        votes = self.sessionVotes,
+        myVotes = self.myLocalVotes,
+        closed = self.closedItems,
+        expiry = self.sessionExpiry -- Absolute timestamp
+    }
+end
+
+function Dist:RestoreSession()
+    local session = DesolateLootcouncil.db.profile.session
+    local state = session.activeState
+
+    if state and state.lootList and #state.lootList > 0 then
+        local now = time() -- Use Unix
+        local expiry = state.expiry or 0
+
+        if now < expiry then
+            -- Scenario A: Active
+            self.clientLootList = state.lootList
+            self.sessionVotes = state.votes or {}
+            self.myLocalVotes = state.myVotes or {}
+            self.closedItems = state.closed or {}
+            self.sessionExpiry = expiry
+
+            DesolateLootcouncil:Print("[DLC] Restored active session (" .. #self.clientLootList .. " items).")
+
+            -- Re-open UI
+            ---@type UI
+            local UI = DesolateLootcouncil:GetModule("UI")
+            if UI then
+                UI:ShowVotingWindow(self.clientLootList)
+                -- If LM, show Monitor
+                if DesolateLootcouncil:AmILootMaster() then
+                    UI:ShowMonitorWindow()
+                end
+            end
+        else
+            -- Scenario B: Expired
+            DesolateLootcouncil:Print("[DLC] Session expired while offline.")
+            wipe(session.activeState) -- Clear
+            -- Clean UI
+            ---@type UI
+            local UI = DesolateLootcouncil:GetModule("UI")
+            if UI and UI.ResetVoting then UI:ResetVoting() end
+        end
+    end
 end
 
 function Dist:StartSession(lootTable)
@@ -161,6 +223,10 @@ function Dist:SendStopSession()
     local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
     if UI.monitorFrame then UI.monitorFrame:Hide() end
     if UI.ResetVoting then UI:ResetVoting() end
+
+    -- Clear Saved State
+    wipe(DesolateLootcouncil.db.profile.session.activeState)
+
     DesolateLootcouncil:Print("[DLC] Session Stopped. Broadcast sent.")
 end
 
@@ -179,6 +245,7 @@ function Dist:SendCloseItem(itemGUID)
     -- 2. Local Instant Update (Fix "Everyone Voted" lag)
     self.closedItems = self.closedItems or {}
     self.closedItems[itemGUID] = true
+    self:SaveSessionState()
 
     ---@type UI
     local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
@@ -244,6 +311,7 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
 
         -- Initialize accumulator
         self.clientLootList = self.clientLootList or {}
+        self.myLocalVotes = {} -- Reset local votes on new start (Scope Safety)
 
         if newItems then
             for _, item in ipairs(newItems) do
@@ -257,10 +325,15 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
         ---@type UI
         local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
         UI:ShowVotingWindow(self.clientLootList)
+
+        -- Save State
+        self.sessionExpiry = time() + (payload.duration or 300)
+        self:SaveSessionState()
     elseif payload.command == "STOP_SESSION" then
         -- Clear Client Data
         self.clientLootList = {}
         self.sessionVotes = {}
+        wipe(DesolateLootcouncil.db.profile.session.activeState)
 
         -- Close/Reset UI
         ---@type UI
@@ -363,6 +436,9 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
             -- Refresh Monitor
             local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
             UI:ShowMonitorWindow()
+
+            -- Save State (Critical Fix)
+            self:SaveSessionState()
         end
     elseif payload.command == "SYNC_LM" then
         local lm = payload.data and payload.data.lm
@@ -401,6 +477,15 @@ function Dist:SendVote(itemGUID, voteType)
     -- Target Logic: Always Whisper the Determined Loot Master
     local target = DesolateLootcouncil:DetermineLootMaster()
 
+    -- Save Local Vote (Critical Fix: Sync myLocalVotes and Persist)
+    self.myLocalVotes = self.myLocalVotes or {}
+    if voteType == 0 then
+        self.myLocalVotes[itemGUID] = nil -- Retract means nil, so UI treats it as "Not Voted"
+    else
+        self.myLocalVotes[itemGUID] = voteType
+    end
+    self:SaveSessionState()
+
     if target and target ~= "Unknown" then
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", target)
         DesolateLootcouncil:Print("[DLC] Sent Vote " .. voteType .. " to " .. target)
@@ -411,6 +496,8 @@ end
 
 function Dist:ClearVotes()
     self.sessionVotes = {}
+    self.myLocalVotes = {}
     self.closedItems = {}
+    wipe(DesolateLootcouncil.db.profile.session.activeState)
     DesolateLootcouncil:Print("[DLC] Session data cleared (Votes & Closed Status).")
 end
