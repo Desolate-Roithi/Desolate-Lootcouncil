@@ -1,5 +1,4 @@
 ---@class Distribution : AceModule, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0, AceConsole-3.0
----@field clientLootList table
 ---@field StartSession fun(self: Distribution, lootTable: table)
 ---@field SendStopSession fun(self: Distribution)
 ---@field SendCloseItem fun(self: Distribution, itemGUID: string)
@@ -10,7 +9,7 @@
 ---@field SendVote fun(self: Distribution, itemGUID: string, voteType: any)
 ---@field ClearVotes fun(self: Distribution)
 ---@field OnEnable fun(self: Distribution)
----@class (partial) Distribution
+---@field ResetVoting fun(self: Distribution)
 ---@field sessionExpiry number?
 ---@field sessionVotes table
 ---@field myLocalVotes table

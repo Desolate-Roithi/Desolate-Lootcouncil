@@ -1,7 +1,13 @@
----@type DesolateLootcouncil
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+---@class (partial) DLC_Ref_ItemSettings
+---@field db table
+---@field NewModule fun(self: any, name: string, ...: any): any
+---@field Print fun(self: any, msg: string)
+---@field AddItemToList fun(self: any, input: string|number, listIdx: number)
+---@field RemoveItemFromList fun(self: any, listIndex: number, itemID: number)
+---@type DLC_Ref_ItemSettings
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_ItemSettings]]
 ---@type ItemSettings
-local ItemSettings = DesolateLootcouncil:NewModule("ItemSettings")
+local ItemSettings = DesolateLootcouncil:NewModule("ItemSettings") --[[@as ItemSettings]]
 
 ---@class ItemSettings : AceModule
 ---@field GetItemOptions function
@@ -100,7 +106,6 @@ function ItemSettings:GetItemOptions()
                         type = "execute",
                         name = "Remove",
                         order = 3,
-                        width = "half",
                         width = "half",
                         func = function()
                             DesolateLootcouncil:RemoveItemFromList(self.selectedListIndex, itemID)

@@ -1,6 +1,8 @@
 ---@class VersionUI : AceModule
----@field versionFrame AceGUIFrame
+---@field versionFrame AceGUIFrame|nil
+---@field scrollFrame AceGUIScrollFrame|nil
 ---@field ShowVersionWindow fun(self: VersionUI, isTest: boolean)
+---@field UpdateVersionList fun(self: VersionUI, isTest: boolean)
 
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
@@ -69,7 +71,7 @@ end
 function VersionUI:UpdateVersionList(isTest)
     if not self.scrollFrame then return end
     self.scrollFrame:ReleaseChildren()
-    local scroll = self.scrollFrame
+    local scroll = self.scrollFrame --[[@as AceGUIScrollFrame]]
 
     -- 3. Gather Data
     local roster = {}

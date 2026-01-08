@@ -16,8 +16,19 @@
 ---@field ReawardItem fun(self: Loot, awardIndex: number)
 ---@field EndSession fun(self: Loot)
 ---@field MarkAsTraded fun(self: Loot, itemGUID: string, winner: string)
----@type DesolateLootcouncil
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+---@class (partial) DLC_Ref_Loot
+---@field db table
+---@field currentSessionLoot table
+---@field GetItemCategory fun(self: any, itemID: number): string
+---@field AmILootMaster fun(self: any): boolean
+---@field GetModule fun(self: any, name: string): any
+---@field NewModule fun(self: any, name: string, ...: any): any
+---@field Print fun(self: any, msg: string)
+---@field GetReversionIndex fun(self: any, listName: string, origIndex: number, timestamp: number): number
+---@field RestorePlayerPosition fun(self: any, listName: string, playerName: string, index: number)
+---@field MovePlayerToBottom fun(self: any, listName: string, playerName: string): number|nil
+---@type DLC_Ref_Loot
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Loot]]
 ---@type Loot
 local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0", "AceConsole-3.0")
 local DLC = DesolateLootcouncil
@@ -373,6 +384,11 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     -- 4. Store History & Cleanup
     if session.awarded then
         local _, winnerClass = UnitClassBase(winnerName)
+
+        -- Get Distribution module EARLY for snapshot
+        ---@type Distribution
+        local DLC_Dist = DesolateLootcouncil:GetModule("Distribution")
+
         table.insert(session.awarded, {
             link = itemData.link,
             texture = itemData.texture,
@@ -380,19 +396,16 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             winner = winnerName,
             winnerClass = winnerClass,
             voteType = displayVote,
-            voteType = displayVote,
             timestamp = GetServerTime(),
-            originalIndex = origIndex,                                                        -- Captured from MovePlayerToBottom
-            fullItemData = itemData,                                                          -- Store full item snapshot for re-awarding
-            votesSnapshot = Dist and Dist.sessionVotes and Dist.sessionVotes[itemGUID] or {}, -- Store votes
+            originalIndex = origIndex,                                                                    -- Captured from MovePlayerToBottom
+            fullItemData = itemData,                                                                      -- Store full item snapshot for re-awarding
+            votesSnapshot = DLC_Dist and DLC_Dist.sessionVotes and DLC_Dist.sessionVotes[itemGUID] or {}, -- Store votes
             traded = isSelf
         })
 
         -- Tell all raiders to remove this item
-        ---@type Distribution
-        local Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
-        if Dist and Dist.SendRemoveItem then
-            Dist:SendRemoveItem(itemGUID)
+        if DLC_Dist and DLC_Dist.SendRemoveItem then
+            DLC_Dist:SendRemoveItem(itemGUID)
         end
     end
 
@@ -401,9 +414,9 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
         table.remove(session.bidding, removeIndex)
 
         ---@type Distribution
-        local Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
-        if Dist and Dist.sessionVotes then
-            Dist.sessionVotes[itemGUID] = nil
+        local DLC_Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
+        if DLC_Dist and DLC_Dist.sessionVotes then
+            DLC_Dist.sessionVotes[itemGUID] = nil
         end
     end
 

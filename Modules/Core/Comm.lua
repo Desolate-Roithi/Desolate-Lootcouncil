@@ -1,6 +1,7 @@
 ---@class Comm : AceModule, AceComm-3.0, AceSerializer-3.0, AceEvent-3.0
 ---@field OnCommReceived fun(self: Comm, prefix: string, message: string, distribution: string, sender: string)
 ---@field SendComm fun(self: Comm, command: string, data: any, target?: string)
+---@field OnEnable fun(self: Comm)
 ---@field playerVersions table<string, string>
 ---@field SendVersionCheck fun(self: Comm)
 ---@field GetActiveUserCount fun(self: Comm): number

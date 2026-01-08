@@ -67,7 +67,8 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
     if not self.votingFrame then self:CreateVotingFrame() end
 
     -- Sync Persistence
-    local Dist = DesolateLootcouncil:GetModule("Distribution")
+    ---@type Distribution
+    local Dist = DesolateLootcouncil:GetModule("Distribution") --[[@as Distribution]]
     if Dist and Dist.myLocalVotes then
         self.myVotes = Dist.myLocalVotes
     end

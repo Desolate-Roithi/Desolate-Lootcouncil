@@ -24,6 +24,26 @@
 ---@field AddItemToList fun(self: DesolateLootcouncil, link: string, listIndex: number)
 ---@field RemoveItemFromList fun(self: DesolateLootcouncil, listIndex: number, itemID: number)
 ---@field GetOptions fun(self: DesolateLootcouncil): table
+---@field version string
+---@field db table
+---@field optionsFrame table
+---@field currentSessionLoot table
+---@field OnInitialize fun(self: DesolateLootcouncil)
+---@field OnEnable fun(self: DesolateLootcouncil)
+---@field GET_ITEM_INFO_RECEIVED fun(self: DesolateLootcouncil)
+---@field ChatCommand fun(self: DesolateLootcouncil, input: string)
+---@field PriorityLog table
+---@field RestorePlayerPosition fun(self: DesolateLootcouncil, listName: string, playerName: string, index: number)
+---@field GetReversionIndex fun(self: DesolateLootcouncil, listName: string, origIndex: number, timestamp: number): number
+---@field AddManualItem fun(self: DesolateLootcouncil, itemLink: string)
+---@field GetPlayerVersion fun(self: DesolateLootcouncil, name: string): string
+---@field activeLootMaster string
+---@field RegisterChatCommand fun(self: any, cmd: string, func: string|function)
+---@field RegisterEvent fun(self: any, event: string, func?: string|function)
+---@field ScheduleTimer fun(self: any, func: function, delay: number, ...: any): any
+---@field CancelTimer fun(self: any, timer: any)
+---@field GetModule fun(self: any, name: string, silent?: boolean): any
+---@field Print fun(self: any, msg: string)
 
 ---@type DesolateLootcouncil
 DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "AceConsole-3.0", "AceEvent-3.0",
@@ -157,7 +177,7 @@ function DesolateLootcouncil:DetermineLootMaster()
         for i = 1, GetNumSubgroupMembers() do
             local unit = "party" .. i
             if UnitIsGroupLeader(unit) then
-                return UnitName(unit)
+                return (UnitName(unit))
             end
         end
     end
@@ -197,7 +217,7 @@ function DesolateLootcouncil:AddMain(name)
     if not name or name == "" then return end
 
     local devDB = self.db.profile
-    if not devDB then return end
+    if not devDB or not devDB.MainRoster or not devDB.playerRoster then return end
 
     devDB.MainRoster[name] = { addedAt = time() } -- Store main with timestamp
     devDB.playerRoster.alts[name] = nil           -- Ensure not an alt
@@ -214,6 +234,7 @@ function DesolateLootcouncil:AddAlt(altName, mainName)
     end
 
     local profile = self.db.profile
+    if not profile or not profile.playerRoster or not profile.playerRoster.alts then return end
     local roster = profile.playerRoster
 
     -- 1. Check if the 'new alt' was previously a Main with their own alts
@@ -227,7 +248,7 @@ function DesolateLootcouncil:AddAlt(altName, mainName)
     -- 2. Perform the standard assignment
     roster.alts[altName] = mainName
     -- 3. Remove from Mains list if present
-    if profile.MainRoster[altName] then
+    if profile.MainRoster and profile.MainRoster[altName] then
         profile.MainRoster[altName] = nil
         self:Print("Converted Main to Alt: " .. altName)
     end

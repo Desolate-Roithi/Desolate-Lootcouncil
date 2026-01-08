@@ -12,6 +12,7 @@
 ---@field monitorFrame AceGUIFrame|nil
 ---@field awardFrame AceGUIFrame|nil
 ---@field historyFrame AceGUIFrame|nil
+---@field selectedHistoryDate string|nil
 ---@field tradeListFrame AceGUIFrame|nil
 ---@field lootFrame AceGUIFrame|nil
 ---@field votingFrame AceGUIFrame|nil
@@ -26,6 +27,7 @@
 ---@field CreateLootFrame fun(self: UI)
 ---@field CancelAllTimers fun(self: UI)
 ---@field RemoveVotingItem fun(self: UI, guid: string)
+---@field ResetVoting fun(self: UI)
 ---@field OnEnable fun(self: UI)
 
 ---@class (partial) DLC_Ref_UI
@@ -55,6 +57,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@field ReleaseChildren fun(self: self)
 ---@field SetTitle fun(self: self, title: string)
 ---@field SetText fun(self: self, text: string)
+---@field SetColor fun(self: self, r: number, g: number, b: number)
 ---@field SetDisabled fun(self: self, disabled: boolean)
 ---@field EnableResize fun(self: self, state: boolean)
 ---@field DoLayout fun(self: self)
@@ -75,18 +78,16 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@field SetList fun(self: self, list: table)
 ---@field SetValue fun(self: self, value: any)
 
----@class Distribution : AceModule, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0
----@field sessionVotes table
----@field closedItems table
+---@class (partial) Distribution
 ---@field sessionDuration number
 ---@field RemoveSessionItem fun(self: Distribution, guid: string)
 ---@field SendStopSession fun(self: Distribution)
----@field SendVote fun(self: Distribution, guid: string, vote: number)
+---@field SendVote fun(self: Distribution, guid: string, vote: any)
 ---@field SendRemoveItem fun(self: Distribution, guid: string)
 ---@field ClearVotes fun(self: Distribution)
 ---@field OnCommReceived fun(self: Distribution, prefix: string, msg: string, dist: string, sender: string)
 
----@class Loot : AceModule, AceEvent-3.0, AceTimer-3.0
+---@class (partial) Loot
 ---@field AwardItem fun(self: Loot, itemGUID: string, winner: string, response: string)
 ---@field ClearLootBacklog fun(self: Loot)
 
@@ -98,4 +99,12 @@ local AceGUI = LibStub("AceGUI-3.0")
 
 function UI:OnEnable()
     -- Empty for now
+end
+
+function UI:ResetVoting()
+    -- This is called when a session expires or is cleared
+    if self.votingFrame then self.votingFrame:Hide() end
+    if self.monitorFrame then self.monitorFrame:Hide() end
+    if self.awardFrame then self.awardFrame:Hide() end
+    self:Print("Voting data cleared.")
 end

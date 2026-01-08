@@ -1,5 +1,4 @@
----@class UI
----@field sessionVotes table
+---@class UI (partial)
 
 
 ---@class (partial) DLC_Ref_UILoot
