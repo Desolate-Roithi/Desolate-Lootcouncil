@@ -37,6 +37,15 @@ function GeneralSettings:GetGeneralOptions()
                 get = function() return DesolateLootcouncil.db.profile.enableAutoLoot end,
                 set = function(_, val) DesolateLootcouncil.db.profile.enableAutoLoot = val end,
             },
+            debugMode = {
+                type = "toggle",
+                name = "Enable Debug Mode",
+                desc = "Enables detailed logging for developers and advanced users.",
+                order = 4,
+                width = "full",
+                get = function() return DesolateLootcouncil.db.profile.debugMode end,
+                set = function(_, val) DesolateLootcouncil.db.profile.debugMode = val end,
+            },
         }
     }
 end

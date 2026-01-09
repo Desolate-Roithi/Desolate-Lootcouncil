@@ -38,6 +38,7 @@ local Dist = DesolateLootcouncil:NewModule("Distribution", "AceEvent-3.0", "AceC
 ---@field command string
 ---@field data table
 ---@field duration number?
+---@field endTime number?
 
 function Dist:OnEnable()
     self:RegisterComm("DLC_Loot", "OnCommReceived")
@@ -61,7 +62,7 @@ function Dist:RestoreSession()
     local state = session.activeState
 
     if state and state.lootList and #state.lootList > 0 then
-        local now = time() -- Use Unix
+        local now = GetServerTime()
         local expiry = state.expiry or 0
 
         if now < expiry then
@@ -72,7 +73,7 @@ function Dist:RestoreSession()
             self.closedItems = state.closed or {}
             self.sessionExpiry = expiry
 
-            DesolateLootcouncil:Print("[DLC] Restored active session (" .. #self.clientLootList .. " items).")
+            DesolateLootcouncil:DLC_Log("Restored active session (" .. #self.clientLootList .. " items).")
 
             -- Re-open UI
             ---@type UI
@@ -86,7 +87,7 @@ function Dist:RestoreSession()
             end
         else
             -- Scenario B: Expired
-            DesolateLootcouncil:Print("[DLC] Session expired while offline.")
+            DesolateLootcouncil:DLC_Log("Session expired while offline.")
             wipe(session.activeState) -- Clear
             -- Clean UI
             ---@type UI
@@ -102,7 +103,7 @@ function Dist:StartSession(lootTable)
     end
 
     if not lootTable or #lootTable == 0 then
-        DesolateLootcouncil:Print("[DLC] No items to distribute!")
+        DesolateLootcouncil:DLC_Log("No items to distribute!")
         return
     end
 
@@ -134,7 +135,7 @@ function Dist:StartSession(lootTable)
         -- Handle case where all items are junk
         Loot:ClearLootBacklog()
         if UI.lootFrame then UI.lootFrame:Hide() end
-        DesolateLootcouncil:Print("[DLC] Session contained only junk. Loot cleared locally; no broadcast sent.")
+        DesolateLootcouncil:DLC_Log("Session contained only junk. Loot cleared locally; no broadcast sent.")
         return
     end
 
@@ -143,13 +144,14 @@ function Dist:StartSession(lootTable)
     -- wipe(session.bidding)
 
     -- Copy clean list to persistent storage
-    local duration = DesolateLootcouncil.db.profile.sessionDuration or 60
+    local duration = DesolateLootcouncil.db.profile.sessionDuration or 300
+    local endTime = GetServerTime() + duration
     for _, item in ipairs(cleanList) do
-        item.expiry = GetTime() + duration -- Per-item expiry
+        item.expiry = endTime -- Per-item expiry (Absolute)
         table.insert(session.bidding, item)
     end
 
-    DesolateLootcouncil:Print("[DLC] Loot moved to Bidding Storage. Collection cleared.")
+    DesolateLootcouncil:DLC_Log("Loot moved to Bidding Storage. Collection cleared.")
 
     -- 2. Clear Collection (Wipe session.loot so we can keep looting new mobs)
     Loot:ClearLootBacklog()
@@ -171,12 +173,13 @@ function Dist:StartSession(lootTable)
     local payload = {
         command = "START_SESSION",
         data = payloadData,
-        duration = 300 -- 5 minutes default
+        duration = duration,
+        endTime = endTime
     }
     local serialized = self:Serialize(payload)
 
     -- Debug: Packet Size
-    DesolateLootcouncil:Print("[DLC] Sent packet size: " .. #serialized .. " bytes")
+    DesolateLootcouncil:DLC_Log("Sent packet size: " .. #serialized .. " bytes")
 
     -- 5. Broadcasting
     local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
@@ -184,13 +187,13 @@ function Dist:StartSession(lootTable)
     -- Debug Fallback (Broadcast to self for testing if solo)
     if not channel then
         channel = "WHISPER"
-        DesolateLootcouncil:Print("[DLC] Not in group, simulating broadcast to self.")
+        DesolateLootcouncil:DLC_Log("Not in group, simulating broadcast to self.")
         self:SendCommMessage("DLC_Loot", serialized, channel, UnitName("player"))
     else
         self:SendCommMessage("DLC_Loot", serialized, channel)
     end
 
-    DesolateLootcouncil:Print("[DLC] Broadcasting Bidding Session to " .. channel .. " (" .. itemCount .. " items)...")
+    DesolateLootcouncil:DLC_Log("Broadcasting Bidding Session to " .. channel .. " (" .. itemCount .. " items)...")
 
     -- Open Monitor Window for LM
     UI:ShowMonitorWindow()
@@ -226,7 +229,7 @@ function Dist:SendStopSession()
     -- Clear Saved State
     wipe(DesolateLootcouncil.db.profile.session.activeState)
 
-    DesolateLootcouncil:Print("[DLC] Session Stopped. Broadcast sent.")
+    DesolateLootcouncil:DLC_Log("Session Stopped. Broadcast sent.", true)
 end
 
 function Dist:SendCloseItem(itemGUID)
@@ -252,7 +255,7 @@ function Dist:SendCloseItem(itemGUID)
         UI:ShowVotingWindow(nil, true)
     end
 
-    DesolateLootcouncil:Print("[DLC] Voting closed for item: " .. string.sub(itemGUID, -8))
+    DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(itemGUID, -8))
 end
 
 function Dist:SendRemoveItem(guid)
@@ -288,7 +291,7 @@ function Dist:RemoveSessionItem(guid)
     local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
     if UI.ShowMonitorWindow then UI:ShowMonitorWindow() end
 
-    DesolateLootcouncil:Print("[DLC] Removed item from session.")
+    DesolateLootcouncil:DLC_Log("Removed item from session.")
 end
 
 function Dist:OnCommReceived(prefix, message, distribution, sender)
@@ -296,7 +299,7 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
 
     local success, payload = self:Deserialize(message)
     if not success then
-        DesolateLootcouncil:Print("[DLC] Error deserializing message from " .. sender)
+        DesolateLootcouncil:DLC_Log("Error deserializing message from " .. sender)
         return
     end
 
@@ -306,7 +309,7 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
         local newItems = payload.data
         local count = newItems and #newItems or 0
         local duration = payload.duration or 300
-        local localExpiry = GetTime() + duration
+        local expiry = payload.endTime or (GetServerTime() + duration)
 
         -- Initialize accumulator
         self.clientLootList = self.clientLootList or {}
@@ -314,19 +317,19 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
 
         if newItems then
             for _, item in ipairs(newItems) do
-                item.expiry = localExpiry
+                item.expiry = expiry
                 table.insert(self.clientLootList, item)
             end
         end
 
-        DesolateLootcouncil:Print("[DLC] Added " .. count .. " items to the session.")
+        DesolateLootcouncil:DLC_Log("Added " .. count .. " items to the session.")
 
         ---@type UI
         local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
         UI:ShowVotingWindow(self.clientLootList)
 
         -- Save State
-        self.sessionExpiry = time() + (payload.duration or 300)
+        self.sessionExpiry = expiry
         self:SaveSessionState()
     elseif payload.command == "STOP_SESSION" then
         -- Clear Client Data
@@ -342,7 +345,7 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
         elseif UI.votingFrame then
             UI.votingFrame:Hide()
         end
-        DesolateLootcouncil:Print("[DLC] The Loot Session was ended by the Master.")
+        DesolateLootcouncil:DLC_Log("The Loot Session was ended by the Master.", true)
     elseif payload.command == "REMOVE_ITEM" then
         local guid = payload.data and payload.data.guid
         if guid and self.clientLootList then
@@ -369,7 +372,7 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
         if guid then
             self.closedItems = self.closedItems or {}
             self.closedItems[guid] = true
-            DesolateLootcouncil:Print("[DLC] Voting closed for item: " .. string.sub(guid, -8))
+            DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(guid, -8))
 
             -- Refresh UI
             ---@type UI
@@ -389,12 +392,12 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
                 -- CASE: Retract Vote
                 -- Remove the player's entry entirely
                 self.sessionVotes[data.guid][sender] = nil
-                DesolateLootcouncil:Print("[DLC] Vote retracted by " ..
+                DesolateLootcouncil:DLC_Log("Vote retracted by " ..
                     sender .. " for item " .. string.sub(data.guid, -8))
             else
                 -- CASE: New Vote
                 local serverRoll = math.random(1, 100)
-                DesolateLootcouncil:Print("[DLC-Debug] Generated Roll: " .. serverRoll .. " for " .. sender)
+                DesolateLootcouncil:DLC_Log("Generated Roll: " .. serverRoll .. " for " .. sender)
                 self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll }
 
                 -- Support both legacy integer and new string votes
@@ -404,7 +407,7 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
                     voteName = VOTE_TEXT[data.vote] or voteName
                 end
 
-                DesolateLootcouncil:Print("[DLC] Received Vote: " .. voteName .. " from " .. sender)
+                DesolateLootcouncil:DLC_Log("Received Vote: " .. voteName .. " from " .. sender)
 
                 -- Auto-Close Check
                 if DesolateLootcouncil:AmILootMaster() then
@@ -487,7 +490,7 @@ function Dist:SendVote(itemGUID, voteType)
 
     if target and target ~= "Unknown" then
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", target)
-        DesolateLootcouncil:Print("[DLC] Sent Vote " .. voteType .. " to " .. target)
+        DesolateLootcouncil:DLC_Log("Sent Vote " .. voteType .. " to " .. target)
     else
         DesolateLootcouncil:Print("Error: Could not determine Loot Master to vote.")
     end
@@ -498,5 +501,5 @@ function Dist:ClearVotes()
     self.myLocalVotes = {}
     self.closedItems = {}
     wipe(DesolateLootcouncil.db.profile.session.activeState)
-    DesolateLootcouncil:Print("[DLC] Session data cleared (Votes & Closed Status).")
+    DesolateLootcouncil:DLC_Log("Session data cleared (Votes & Closed Status).")
 end

@@ -52,7 +52,7 @@ function Priority:OnEnable()
         end
 
         if isOldFormat then
-            DesolateLootcouncil:Print("Migrating Priority Lists to Dynamic Format...")
+            DesolateLootcouncil:DLC_Log("Migrating Priority Lists to Dynamic Format...")
             local old = db.PriorityLists
             local new = {}
 
@@ -203,7 +203,8 @@ function DesolateLootcouncil:ShuffleLists()
         listObj.players = newList
     end
 
-    self:Print("All " .. #db.PriorityLists .. " Priority Lists have been shuffled and initialized for the new season.")
+    DesolateLootcouncil:DLC_Log("All " ..
+        #db.PriorityLists .. " Priority Lists have been shuffled and initialized for the new season.")
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
@@ -239,10 +240,10 @@ function DesolateLootcouncil:SyncMissingPlayers()
     end
 
     if addedCount > 0 then
-        self:Print(string.format("Synced missing players to bottom of lists (%d additions).",
+        DesolateLootcouncil:DLC_Log(string.format("Synced missing players to bottom of lists (%d additions).",
             addedCount / #db.PriorityLists))
     else
-        self:Print("No missing players found to sync.")
+        DesolateLootcouncil:DLC_Log("No missing players found to sync.")
     end
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
@@ -298,8 +299,8 @@ function DesolateLootcouncil:MovePlayerToBottom(listName, playerName)
         table.remove(players, foundIndex)
         table.insert(players, targetName)
 
-        local msg = string.format("[DLC] Priority Update: %s moved to bottom of %s (Item Awarded).", targetName, listName)
-        self:Print(msg)
+        local msg = string.format("Priority Update: %s moved to bottom of %s (Item Awarded).", targetName, listName)
+        DesolateLootcouncil:DLC_Log(msg)
         self:LogPriorityChange(string.format("Awarded item to %s (%s). Priority Reset.", targetName, listName))
 
         -- Structured Logging
@@ -319,7 +320,9 @@ function DesolateLootcouncil:MovePlayerToBottom(listName, playerName)
 end
 
 function DesolateLootcouncil:RestorePlayerPosition(listName, playerName, index)
-    if not DesolateLootcouncil.db then return end
+    if not DesolateLootcouncil.db then
+        return
+    end
     local db = DesolateLootcouncil.db.profile
 
     local targetList = nil
@@ -328,21 +331,33 @@ function DesolateLootcouncil:RestorePlayerPosition(listName, playerName, index)
             targetList = list; break
         end
     end
-    if not targetList then return end
+    if not targetList then
+        return
+    end
 
     local players = targetList.players
-    -- Find current
+    -- Find current (Alt-Aware)
     local currentIdx = nil
+    local targetMain = DesolateLootcouncil:GetMain(playerName)
+
     for i, p in ipairs(players) do
-        if p == playerName then
-            currentIdx = i; break
+        local entryMain = DesolateLootcouncil:GetMain(p)
+        if entryMain == targetMain then
+            currentIdx = i
+            break
         end
+    end
+
+    if not currentIdx then
+        DesolateLootcouncil:DLC_Log(string.format("Warning: Could not find %s (Main: %s) in %s.", playerName, targetMain,
+            listName))
     end
 
     if currentIdx then
         -- 1. Conditional Logic: Skip if already at correct position
         if currentIdx == index then
-            self:Print(string.format("[DLC] %s is already at the correct position (%d).", playerName, index))
+            DesolateLootcouncil:DLC_Log(string.format("%s is already at the correct position (%d).", playerName, index),
+                true)
             return
         end
 
@@ -358,9 +373,14 @@ function DesolateLootcouncil:RestorePlayerPosition(listName, playerName, index)
 
         table.insert(players, savedIndex, playerName)
 
-        -- 4. Generate & Output Log Message
-        self:Print(string.format("[DLC] Reverting %s to position %d from position %d in %s.",
-            playerName, savedIndex, currentIndex, listName))
+        -- 4. Generate & Output Log Message (Sanitized)
+        local sIndex = tonumber(savedIndex) or -1
+        local cIndex = tonumber(currentIndex) or -1
+        local pName = tostring(playerName or "Unknown")
+        local lName = tostring(listName or "Unknown List")
+
+        DesolateLootcouncil:DLC_Log(string.format("Reverting %s to position %d from position %d in %s.",
+            pName, sIndex, cIndex, lName), true)
 
         -- 5. Structured Logging
         table.insert(db.PriorityLog, {

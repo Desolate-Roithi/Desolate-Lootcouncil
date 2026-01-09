@@ -19,6 +19,16 @@ local DLC = DesolateLootcouncil
 
 function Trade:OnEnable()
     self:RegisterEvent("TRADE_SHOW", "OnTradeShow")
+    -- Watch for trade results to clean up Loot Inbox
+    self:RegisterEvent("UI_INFO_MESSAGE", "OnUIInfo")
+end
+
+function Trade:OnUIInfo(event, msgID, msg)
+    if msg == ERR_TRADE_COMPLETE then
+        -- This handles the case where we don't have currentTrade set (manual trade)
+        -- We'll scan the inbox and history to see if anything was just traded.
+        -- But first, let's see if CHAT_MSG_SYSTEM already handled it.
+    end
 end
 
 function Trade:OnTradeShow()
@@ -53,7 +63,7 @@ function Trade:AttemptTrade(award)
                     -- Put in trade window
                     C_Container.UseContainerItem(bag, slot)
 
-                    DLC:Print(string.format("[DLC] Auto-staging %s for %s.", award.link, award.winner))
+                    DLC:DLC_Log(string.format("Auto-staging %s for %s.", award.link, award.winner))
 
                     -- Track as current
                     self.currentTrade = self.currentTrade or {}
@@ -88,7 +98,13 @@ function Trade:CHAT_MSG_SYSTEM(event, message)
                         if award.link == pending.link and award.winner == pending.winner and not award.traded then
                             award.traded = true
                             changed = true
-                            DLC:Print(string.format("[DLC] Trade successful. %s marked as delivered.", pending.link))
+                            DLC:DLC_Log(string.format("Trade successful. %s marked as delivered.", pending.link))
+
+                            -- [NEW] Also remove from Loot Inbox (Core/Loot.lua)
+                            local Loot = DLC:GetModule("Loot")
+                            if Loot and Loot.RemoveSessionItem then
+                                Loot:RemoveSessionItem(pending.guid)
+                            end
                             break
                         end
                     end

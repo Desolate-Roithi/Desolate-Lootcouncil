@@ -38,6 +38,7 @@
 ---@field AddManualItem fun(self: DesolateLootcouncil, itemLink: string)
 ---@field GetPlayerVersion fun(self: DesolateLootcouncil, name: string): string
 ---@field activeLootMaster string
+---@field DLC_Log fun(self: DesolateLootcouncil, msg: any)
 ---@field RegisterChatCommand fun(self: any, cmd: string, func: string|function)
 ---@field RegisterEvent fun(self: any, event: string, func?: string|function)
 ---@field ScheduleTimer fun(self: any, func: function, delay: number, ...: any): any
@@ -50,6 +51,9 @@ DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "A
     "AceComm-3.0", "AceTimer-3.0")
 _G.DesolateLootcouncil = DesolateLootcouncil
 DesolateLootcouncil.version = C_AddOns and C_AddOns.GetAddOnMetadata("Desolate_Lootcouncil", "Version") or "1.0.0"
+
+-- 0. Hardcode Initial State (Silences startup spam before DB loads)
+local INITIAL_DEBUG_MODE = false
 
 ---@type UI
 local UI
@@ -74,6 +78,7 @@ local defaults = {
         MainRoster = {},
         playerRoster = { alts = {}, decay = {} }, -- mains moved to MainRoster
         verboseMode = false,
+        debugMode = false,
         session = {
             loot = {},
             bidding = {},       -- Items currently being voted on (Safe Space)
@@ -107,8 +112,8 @@ function DesolateLootcouncil:OnInitialize()
     self:RegisterChatCommand("dlc", "ChatCommand")
     self:RegisterChatCommand("dl", "ChatCommand")
 
-    -- 8. Welcome Message
-    self:Print("Desolate Lootcouncil " .. self.version .. " Loaded.")
+    -- 8. Welcome Message (Silenced if debugMode is OFF)
+    self:DLC_Log("Desolate Lootcouncil " .. self.version .. " Loaded.")
 end
 
 function DesolateLootcouncil:OnEnable()
@@ -194,7 +199,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
 
     self.amILM = (targetLM == myName)
 
-    self:Print("[DLC] Role Update: You are " .. (self.amILM and "LOOT MASTER" or "Raider"))
+    self:DLC_Log("Role Update: You are " .. (self.amILM and "LOOT MASTER" or "Raider"), true)
 
     -- Communication: Sync functionality if I am the LM
     if self.amILM and IsInGroup() then
@@ -283,6 +288,15 @@ function DesolateLootcouncil:RemovePlayer(name)
         profile.playerRoster.alts[name] = nil
         self:Print("Removed Alt: " .. name)
     end
+end
+
+function DesolateLootcouncil:GetMain(name)
+    if not self.db or not name then return name end
+    local profile = self.db.profile
+    if profile.playerRoster and profile.playerRoster.alts and profile.playerRoster.alts[name] then
+        return profile.playerRoster.alts[name]
+    end
+    return name
 end
 
 -- --- Priority List & Item Management Logic ---
@@ -534,6 +548,19 @@ function DesolateLootcouncil:ChatCommand(input)
     -- 1. CONFIG
     if cmd == "config" or cmd == "options" then
         LibStub("AceConfigDialog-3.0"):Open("DesolateLootcouncil")
+        -- 1.5 SHOW / VOTE
+    elseif cmd == "show" or cmd == "vote" then
+        local session = self.db.profile.session
+        if session and session.bidding and #session.bidding > 0 then
+            ---@type UI
+            local UI = self:GetModule("UI")
+            if UI and UI.ShowVotingWindow then
+                UI:ShowVotingWindow(session.bidding)
+                self:Print("Re-opening Voting Window for active session.")
+            end
+        else
+            self:Print("No active session to show.")
+        end
         -- 2. TEST (Generates items - LM Only)
     elseif cmd == "test" then
         if self:AmILootMaster() then
@@ -656,7 +683,25 @@ function DesolateLootcouncil:ChatCommand(input)
 end
 
 function DesolateLootcouncil:Print(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[DLC]|r " .. tostring(msg))
+    self:DLC_Log(msg, true)
+end
+
+function DesolateLootcouncil:DLC_Log(msg, forceShow)
+    -- 1. STRICT FILTER: If not forced AND debug is off, STOP immediately.
+    local debugMode = false
+    if self.db and self.db.profile then
+        debugMode = self.db.profile.debugMode
+    else
+        debugMode = INITIAL_DEBUG_MODE
+    end
+
+    if not forceShow and not debugMode then return end
+
+    -- 2. CLEANUP: Remove any existing [DLC] prefix to prevent doubles.
+    local cleanMsg = tostring(msg):gsub("^%[DLC%]%s*", "")
+
+    -- 3. PRINT: Add the single prefix and print.
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[DLC]|r " .. cleanMsg)
 end
 
 function DesolateLootcouncil:GetOptions()

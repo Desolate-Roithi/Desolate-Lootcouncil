@@ -92,7 +92,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
 
     -- 1. Ticker (Visual Only)
     self.votingTicker = C_Timer.NewTicker(0.5, function()
-        local now = GetTime()
+        local now = GetServerTime()
         ---@type Distribution
         local Dist = DesolateLootcouncil:GetModule("Distribution")
         local closedItems = (Dist and Dist.closedItems) or {}
@@ -123,7 +123,7 @@ function UI:ShowVotingWindow(lootTable, isRefresh)
     ---@type Distribution
     local Dist = DesolateLootcouncil:GetModule("Distribution")
     local closedItems = (Dist and Dist.closedItems) or {}
-    local now = GetTime()
+    local now = GetServerTime()
 
     for _, data in ipairs(items) do
         local guid = data.sourceGUID or data.link

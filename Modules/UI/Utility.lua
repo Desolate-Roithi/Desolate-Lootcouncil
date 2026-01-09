@@ -303,13 +303,13 @@ function UI:ShowTradeListWindow()
                         if CheckInteractDistance("target", 2) then
                             InitiateTrade("target")
                         else
-                            DesolateLootcouncil:Print("[DLC] " .. item.winner .. " is out of trade range.")
+                            DesolateLootcouncil:DLC_Log(item.winner .. " is out of trade range.")
                         end
                         return
                     end
                     -- 3. Failure: Ask user to target manually
-                    DesolateLootcouncil:Print("[DLC] Could not auto-target " ..
-                        item.winner .. ". Please target them manually and click Trade again.")
+                    DesolateLootcouncil:DLC_Log("Could not auto-target " ..
+                        item.winner .. ". Please target them manually and click Trade again.", true)
                 end)
 
                 -- Remove Button
@@ -319,7 +319,7 @@ function UI:ShowTradeListWindow()
                 btnRemove:SetRelativeWidth(0.10)
                 btnRemove:SetCallback("OnClick", function()
                     item.traded = true
-                    DesolateLootcouncil:Print("[DLC] Marked " .. item.link .. " as traded.")
+                    DesolateLootcouncil:DLC_Log("Marked " .. item.link .. " as traded.")
                     self:ShowTradeListWindow()
                 end)
 

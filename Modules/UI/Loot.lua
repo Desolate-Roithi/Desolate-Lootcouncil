@@ -214,7 +214,7 @@ function UI:ShowLootWindow(lootTable)
                 local idx = listIndexMap[value]
                 if idx then
                     DesolateLootcouncil:SetItemCategory(data.itemID, idx)
-                    DesolateLootcouncil:Print("[DLC] Category updated to: " .. value)
+                    DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
                 elseif value == "Junk/Pass" then
                     -- Unassign from backend, but KEEP in session (as requested)
                     DesolateLootcouncil:UnassignItem(data.itemID)
@@ -229,7 +229,7 @@ function UI:ShowLootWindow(lootTable)
             removeBtn:SetWidth(50) -- User requested 50 (increased)
             removeBtn:SetCallback("OnClick", function()
                 table.remove(lootTable, i)
-                DesolateLootcouncil:Print("[DLC] Removed " .. link .. " from session.")
+                DesolateLootcouncil:DLC_Log("Removed " .. link .. " from session.")
                 self:ShowLootWindow(lootTable) -- Refresh
             end)
 
@@ -288,5 +288,5 @@ function UI:ShowLootWindow(lootTable)
     LayoutScroll()
     self.lootFrame:SetCallback("OnResize", LayoutScroll)
 
-    self:Print(string.format("[DLC-UI] Loot Window Populated with %d items", count))
+    DesolateLootcouncil:DLC_Log(string.format("Loot Window Populated with %d items", count))
 end

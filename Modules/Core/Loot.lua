@@ -30,8 +30,18 @@
 ---@type DLC_Ref_Loot
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Loot]]
 ---@type Loot
-local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0", "AceConsole-3.0")
 local DLC = DesolateLootcouncil
+local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0", "AceConsole-3.0")
+
+---@diagnostic disable-next-line: lowercase-global
+local function DeepCopy(t)
+    if type(t) ~= 'table' then return t end
+    local res = {}
+    for k, v in pairs(t) do
+        res[DeepCopy(k)] = DeepCopy(v)
+    end
+    return res
+end
 
 
 function Loot:OnInitialize()
@@ -56,7 +66,7 @@ function Loot:OnEnable()
     self:RegisterEvent("LOOT_CLOSED", "OnLootClosed")
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
 
-    self:Print("[DLC] Loot Module Loaded (Session Persistent)")
+    DLC:DLC_Log("Loot Module Loaded (Session Persistent)")
 
     -- Check if we have data to restore
     if self.sessionLoot and #self.sessionLoot > 0 then
@@ -85,38 +95,45 @@ function Loot:OnStartLootRoll(event, rollID)
         -- Safety Check: BoP Collectables
         local cat = self:CategorizeItem(link)
         if isBoP and cat == "Collectables" then
-            self:Print("[DLC] Auto-Loot Aborted: " ..
-                (link or "Unknown") .. " is a BoP Collectable. Roll manually to ensure safety.")
+            DesolateLootcouncil:DLC_Log("Auto-Loot Aborted: " ..
+                (link or "Unknown") .. " is a BoP Collectable. Roll manually to ensure safety.", true)
             return -- Abort
         end
 
         if canNeed then
             RollOnLoot(rollID, 1) -- Need
-            self:Print("[DLC] LM Auto-Acquire: Rolling Need on " .. (link or "Unknown"))
+            DLC:DLC_Log("LM Auto-Acquire: Rolling Need on " .. (link or "Unknown"))
         elseif canGreed then
             RollOnLoot(rollID, 2) -- Greed
-            self:Print("[DLC] LM Auto-Acquire: Rolling Greed on " .. (link or "Unknown"))
+            DLC:DLC_Log("LM Auto-Acquire: Rolling Greed on " .. (link or "Unknown"))
         elseif canTransmog then
             RollOnLoot(rollID, 4) -- Transmog
-            self:Print("[DLC] LM Auto-Acquire: Rolling Transmog on " .. (link or "Unknown"))
+            DLC:DLC_Log("LM Auto-Acquire: Rolling Transmog on " .. (link or "Unknown"))
         elseif canDisenchant then
             RollOnLoot(rollID, 3) -- Disenchant
-            self:Print("[DLC] LM Auto-Acquire: Rolling DE on " .. (link or "Unknown"))
+            DLC:DLC_Log("LM Auto-Acquire: Rolling DE on " .. (link or "Unknown"))
         end
     else
         -- Branch 2: Raider Auto-Pass
         RollOnLoot(rollID, 0) -- Pass
-        self:Print("[DLC] Auto-Pass: " .. (link or "Unknown"))
+        DLC:DLC_Log("Auto-Pass: " .. (link or "Unknown"))
     end
 end
 
 function Loot:OnLootOpened()
     local DLC = DesolateLootcouncil
     local session = DLC.db.profile.session
+    local debugMode = DLC.db.profile.debugMode
+
+    -- [NEW] Raid/Debug Check
+    if not IsInRaid() and not debugMode then
+        DLC:DLC_Log("Loot suppression: Not in raid and debug mode off.")
+        return
+    end
 
     local itemsChanged = false
     local numItems = GetNumLootItems()
-    DLC:Print("--- LOOT SCAN START (" .. numItems .. " slots) ---")
+    DLC:DLC_Log("--- LOOT SCAN START (" .. numItems .. " slots) ---")
     for i = 1, numItems do
         if GetLootSlotType(i) == Enum.LootSlotType.Item then
             local sourceGUID = GetLootSourceInfo(i)
@@ -138,7 +155,7 @@ function Loot:OnLootOpened()
 
                 -- Check quality threshold
                 if not isImportant and (quality or 0) < minQuality then
-                    DLC:Print("[DLC] Skipped low quality item: " .. itemLink)
+                    DLC:DLC_Log("Skipped low quality item: " .. itemLink)
                 else
                     -- CONSTRUCT UNIQUE ID
                     local uniqueKey = sourceGUID .. "-" .. itemID
@@ -146,13 +163,13 @@ function Loot:OnLootOpened()
                     if self:AddSessionItem(itemLink, uniqueKey, texture, quantity, category, itemID) then
                         itemsChanged = true
                         session.lootedMobs[sourceGUID] = true
-                        DLC:Print("ADDED: " .. itemName)
+                        DLC:DLC_Log("ADDED: " .. itemName)
                     end
                 end
             end
         end
     end
-    DLC:Print("--- SCAN END ---")
+    DLC:DLC_Log("--- SCAN END ---")
     if itemsChanged then
         ---@type UI
         local UI = DLC:GetModule("UI") --[[@as UI]]
@@ -178,8 +195,29 @@ function Loot:AddSessionItem(link, itemGUID, texture, quantity, category, itemID
     return true
 end
 
+function Loot:RemoveSessionItem(itemGUID)
+    local session = DesolateLootcouncil.db.profile.session
+    if not session or not session.loot then return end
+
+    for i, item in ipairs(session.loot) do
+        if item.sourceGUID == itemGUID then
+            table.remove(session.loot, i)
+            self.sessionItems[itemGUID] = nil -- Allow re-adding if looted again? Or keep it locked?
+            -- Usually if removed from inbox, it means we don't want it there.
+            break
+        end
+    end
+
+    -- Refresh UI
+    ---@type UI
+    local UI = DesolateLootcouncil:GetModule("UI")
+    if UI and UI.ShowLootWindow then
+        UI:ShowLootWindow(session.loot)
+    end
+end
+
 function Loot:OnLootClosed()
-    self:Print("[DLC-Loot] Window Closed, items retained")
+    DLC:DLC_Log("Window Closed, items retained")
 end
 
 function Loot:ClearLootBacklog()
@@ -193,7 +231,7 @@ function Loot:ClearLootBacklog()
     if self.lootedMobs then wipe(self.lootedMobs) end
     if self.sessionItems then wipe(self.sessionItems) end
 
-    self:Print("[DLC] Loot backlog cleared.")
+    DLC:DLC_Log("Loot backlog cleared.")
 end
 
 function Loot:AddManualItem(rawLink)
@@ -256,7 +294,7 @@ function Loot:AddTestItems()
         return
     end
     self:ClearLootBacklog()
-    DesolateLootcouncil:Print("Generating Test Items with Categories...")
+    DesolateLootcouncil:DLC_Log("Generating Test Items with Categories...")
     -- Define items with explicit categories
     local testData = {
         { id = "item:19019::::::", cat = "Weapons" },     -- Thunderfury
@@ -288,7 +326,7 @@ function Loot:AddTestItems()
             })
         end
     end
-    DesolateLootcouncil:Print("Test items added. Opening Loot Window...")
+    DesolateLootcouncil:DLC_Log("Test items added. Opening Loot Window...")
     ---@type UI
     local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
     if UI and UI.ShowLootWindow then
@@ -346,7 +384,7 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     local displayVote = tonumber(voteType) and (VOTE_TEXT[tonumber(voteType)] or "Vote") or voteType
 
     -- 1. Announcement
-    local msg = string.format("[DLC] Winner of %s is %s! (%s)", link, winnerName, displayVote)
+    local msg = string.format("Winner of %s is %s! (%s)", link, winnerName, displayVote)
     if IsInRaid() then
         if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then
             ---@diagnostic disable-next-line: deprecated
@@ -359,21 +397,21 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
         ---@diagnostic disable-next-line: deprecated
         SendChatMessage(msg, "PARTY")
     else
-        self:Print(msg)
+        DesolateLootcouncil:DLC_Log(msg)
     end
 
     -- 2. Whisper Winner (Conditional)
     local isSelf = (winnerName == UnitName("player"))
-    local whisperMsg = string.format("[DLC] You have been awarded %s! Trade me to receive it.", link)
+    local whisperMsg = string.format("You have been awarded %s! Trade me to receive it.", link)
 
     if not isSelf then
         C_ChatInfo.SendChatMessage(whisperMsg, "WHISPER", nil, winnerName)
     else
-        self:Print("[DLC] Awarding to self (" .. link .. ").")
+        DesolateLootcouncil:DLC_Log("Awarding to self (" .. link .. ").")
     end
 
     -- 3. Distribution Stub
-    self:Print("[DLC] Master Looter would now give item to " .. winnerName)
+    DesolateLootcouncil:DLC_Log("Master Looter would now give item to " .. winnerName)
 
     -- 3.1 Apply Penalty if Bid & Capture Original Index
     local origIndex = nil
@@ -397,9 +435,9 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             winnerClass = winnerClass,
             voteType = displayVote,
             timestamp = GetServerTime(),
-            originalIndex = origIndex,                                                                    -- Captured from MovePlayerToBottom
-            fullItemData = itemData,                                                                      -- Store full item snapshot for re-awarding
-            votesSnapshot = DLC_Dist and DLC_Dist.sessionVotes and DLC_Dist.sessionVotes[itemGUID] or {}, -- Store votes
+            originalIndex = origIndex,                                                                      -- Captured from MovePlayerToBottom
+            fullItemData = itemData,                                                                        -- Store full item snapshot for re-awarding
+            votes = DLC_Dist and DLC_Dist.sessionVotes and DeepCopy(DLC_Dist.sessionVotes[itemGUID]) or {}, -- Store votes
             traded = isSelf
         })
 
@@ -426,15 +464,20 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if UI.ShowMonitorWindow then UI:ShowMonitorWindow() end
     if UI.awardFrame then UI.awardFrame:Hide() end
 
-    self:Print("[DLC] Item awarded successfully.")
+    DesolateLootcouncil:DLC_Log("Item awarded successfully.")
 end
 
 function Loot:ReawardItem(awardIndex)
     local session = DesolateLootcouncil.db.profile.session
-    if not session or not session.awarded or not session.awarded[awardIndex] then return end
+    if not session or not session.awarded or not session.awarded[awardIndex] then
+        return
+    end
 
     local award = session.awarded[awardIndex]
     local itemData = award.fullItemData
+    if not itemData then
+        return
+    end
     local itemGUID = itemData.sourceGUID
 
     -- 1. Restore to Bidding List
@@ -446,12 +489,21 @@ function Loot:ReawardItem(awardIndex)
     local Dist = DesolateLootcouncil:GetModule("Distribution")
     if Dist then
         Dist.sessionVotes = Dist.sessionVotes or {}
-        local snapshot = award.votesSnapshot or {}
+        -- [FIX] Try multiple keys for compatibility with older history entries
+        local snapshot = award.votes or award.receivedVotes or award.votesSnapshot or {}
 
         -- Diagnostic Logging
         local voteCount = 0
         for _ in pairs(snapshot) do voteCount = voteCount + 1 end
-        self:Print(string.format("[DLC] Restoring %d votes for item %s", voteCount, itemData.link or "???"))
+        DLC:DLC_Log(string.format("Restoring %d votes for item %s", voteCount, itemData.link or "???"))
+
+        -- [NEW] Strict Task: Log the entire history item structure if it's empty
+        if voteCount == 0 then
+            DLC:DLC_Log("History Item has 0 votes. Raw structure follows:")
+            for k, v in pairs(award) do
+                DLC:DLC_Log(string.format("  Key: %s = %s", tostring(k), type(v)))
+            end
+        end
 
         Dist.sessionVotes[itemGUID] = snapshot
 
@@ -462,7 +514,7 @@ function Loot:ReawardItem(awardIndex)
     end
 
     -- 3. Revert Priority Position (if applicable)
-    if award.originalIndex and award.voteType == "Bid" then
+    if award.originalIndex and (award.voteType == "Bid" or award.voteType == "Bis" or award.voteType == "1") then
         -- Methods are attached to the Addon object (Global API pattern in Priority.lua)
         if DesolateLootcouncil.GetReversionIndex and DesolateLootcouncil.RestorePlayerPosition then
             -- Calculate drift based on subsequent events
@@ -481,7 +533,7 @@ function Loot:ReawardItem(awardIndex)
     if UI.ShowMonitorWindow then UI:ShowMonitorWindow() end
     if UI.ShowHistoryWindow then UI:ShowHistoryWindow() end -- Refresh history list
 
-    self:Print("[DLC] RE-AWARDING: " .. (itemData.link or "Item") .. ". Monitor restored.")
+    DesolateLootcouncil:DLC_Log("RE-AWARDING: " .. (itemData.link or "Item") .. ". Monitor restored.")
 end
 
 function Loot:EndSession()
@@ -506,7 +558,7 @@ function Loot:EndSession()
     end
 
     -- 4. Notify
-    self:Print("Bidding session ended. Items cleared from monitor.")
+    DesolateLootcouncil:DLC_Log("Bidding session ended. Items cleared from monitor.", true)
 end
 
 function Loot:MarkAsTraded(itemLink, winnerName)
@@ -516,12 +568,12 @@ function Loot:MarkAsTraded(itemLink, winnerName)
     for _, award in ipairs(session.awarded) do
         if award.link == itemLink and award.winner == winnerName and not award.traded then
             award.traded = true
-            self:Print(string.format("[DLC] Trade confirmed. %s marked as delivered.", itemLink))
+            DesolateLootcouncil:DLC_Log(string.format("Trade confirmed. %s marked as delivered.", itemLink), true)
             return
         end
     end
 end
 
 function Loot:Print(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[DLC]|r " .. tostring(msg))
+    DesolateLootcouncil:DLC_Log(msg)
 end

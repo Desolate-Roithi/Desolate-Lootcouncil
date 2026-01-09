@@ -134,6 +134,6 @@ function DesolateLootcouncil:UnassignItem(itemID)
 
     if found then
         -- Don't print if not found to reduce spam, or maybe print confirmaton only if found.
-        self:Print("[DLC] Item unassigned from all priority lists.")
+        DesolateLootcouncil:DLC_Log("Item unassigned from all priority lists.")
     end
 end

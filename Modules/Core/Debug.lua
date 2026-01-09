@@ -20,7 +20,7 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 local Debug = DesolateLootcouncil:NewModule("Debug", "AceConsole-3.0") --[[@as Debug]]
 
 local function Print(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[DLC-Debug]|r " .. tostring(msg))
+    DesolateLootcouncil:DLC_Log(msg)
 end
 
 function Debug:OnEnable()
@@ -100,11 +100,11 @@ function Debug:DumpKeys()
         return
     end
 
-    self:Print("[DLC] --- DUMPING ALT ROSTER ---")
+    self:Print("--- DUMPING ALT ROSTER ---")
     local count = 0
     for k, v in pairs(db.playerRoster.alts) do
-        self:Print("[DLC] Alt: [" .. tostring(k) .. "] -> Main: [" .. tostring(v) .. "]")
+        self:Print("Alt: [" .. tostring(k) .. "] -> Main: [" .. tostring(v) .. "]")
         count = count + 1
     end
-    self:Print("[DLC] --- END DUMP (" .. count .. " entries) ---")
+    self:Print("--- END DUMP (" .. count .. " entries) ---")
 end
