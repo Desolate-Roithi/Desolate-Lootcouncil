@@ -1,11 +1,44 @@
----@class DesolateLootcouncil : AceAddon, AceConsole-3.0, AceEvent-3.0, AceComm-3.0, AceTimer-3.0
+---@class DesolateLootcouncil : AceAddon, AceConsole-3.0, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0, AceTimer-3.0
+---@field db table
+---@field version string
+---@field amILM boolean
+---@field activeAddonUsers table<string, boolean>
+---@field activeLootMaster string
+---@field currentSessionLoot table
+---@field PriorityLog table
+---@field simulatedGroup table
+---@field DefaultLayouts table<string, table>
+---@field optionsFrame table
+---@field OnInitialize fun(self: DesolateLootcouncil)
+---@field OnEnable fun(self: DesolateLootcouncil)
+---@field GET_ITEM_INFO_RECEIVED fun(self: DesolateLootcouncil)
+---@field ChatCommand fun(self: DesolateLootcouncil, input: string)
+---@field RestorePlayerPosition fun(self: DesolateLootcouncil, listName: string, playerName: string, index: number)
+---@field GetReversionIndex fun(self: DesolateLootcouncil, listName: string, origIndex: number, timestamp: number): number
+---@field AddManualItem fun(self: DesolateLootcouncil, itemLink: string)
+---@field GetPlayerVersion fun(self: DesolateLootcouncil, name: string): string
+---@field DLC_Log fun(self: DesolateLootcouncil, msg: any, force?: boolean)
+---@field RegisterChatCommand fun(self: any, cmd: string, func: string|function)
+---@field RegisterEvent fun(self: any, event: string, func?: string|function)
+---@field ScheduleTimer fun(self: any, func: function, delay: number, ...: any): any
+---@field CancelTimer fun(self: any, timer: any)
+---@field GetModule fun(self: DesolateLootcouncil, name: string, silent?: boolean): any
+---@field NewModule fun(self: DesolateLootcouncil, name: string, ...): any
+---@field Print fun(self: DesolateLootcouncil, msg: any)
+---@field IsUnitInRaid fun(self: DesolateLootcouncil, unitName: string): boolean
+---@field SaveFramePosition fun(self: DesolateLootcouncil, frame: any, windowName: string)
+---@field RestoreFramePosition fun(self: DesolateLootcouncil, frame: any, windowName: string)
+---@field OpenConfig fun(self: DesolateLootcouncil)
+---@field ToggleWindowCollapse fun(self: DesolateLootcouncil, frame: any)
+---@field ApplyCollapseHook fun(self: DesolateLootcouncil, widget: any)
+---@field GetMain fun(self: DesolateLootcouncil, name: string): string
+---@field GetEnchantingSkillLevel fun(self: DesolateLootcouncil, name?: string): number
 ---@field ShowPriorityOverrideWindow fun(self: DesolateLootcouncil, listName: string)
 ---@field GetItemCategory fun(self: DesolateLootcouncil, item: any): string
 ---@field SetItemCategory fun(self: DesolateLootcouncil, itemID: number|string, listIndex: number)
 ---@field LogPriorityChange fun(self: DesolateLootcouncil, msg: string)
 ---@field UpdateLootMasterStatus fun(self: DesolateLootcouncil, event?: string)
 ---@field DetermineLootMaster fun(self: DesolateLootcouncil): string
----@field amILM boolean
 ---@field GetPriorityListNames fun(self: DesolateLootcouncil): table
 ---@field AddPriorityList fun(self: DesolateLootcouncil, name: string)
 ---@field RemovePriorityList fun(self: DesolateLootcouncil, index: number)
@@ -14,42 +47,20 @@
 ---@field ShuffleLists fun(self: DesolateLootcouncil)
 ---@field SyncMissingPlayers fun(self: DesolateLootcouncil)
 ---@field ShowHistoryWindow fun(self: DesolateLootcouncil)
+---@field ShowPriorityHistoryWindow fun(self: DesolateLootcouncil)
 ---@field AmILootMaster fun(self: DesolateLootcouncil): boolean
 ---@field AddMain fun(self: DesolateLootcouncil, name: string)
 ---@field AddAlt fun(self: DesolateLootcouncil, altName: string, mainName: string)
 ---@field RemovePlayer fun(self: DesolateLootcouncil, name: string)
 ---@field SendVersionCheck fun(self: DesolateLootcouncil)
 ---@field GetActiveUserCount fun(self: DesolateLootcouncil): number
----@field activeAddonUsers table
 ---@field AddItemToList fun(self: DesolateLootcouncil, link: string, listIndex: number)
 ---@field RemoveItemFromList fun(self: DesolateLootcouncil, listIndex: number, itemID: number)
 ---@field GetOptions fun(self: DesolateLootcouncil): table
----@field version string
----@field db table
----@field optionsFrame table
----@field currentSessionLoot table
----@field OnInitialize fun(self: DesolateLootcouncil)
----@field OnEnable fun(self: DesolateLootcouncil)
----@field GET_ITEM_INFO_RECEIVED fun(self: DesolateLootcouncil)
----@field ChatCommand fun(self: DesolateLootcouncil, input: string)
----@field PriorityLog table
----@field RestorePlayerPosition fun(self: DesolateLootcouncil, listName: string, playerName: string, index: number)
----@field GetReversionIndex fun(self: DesolateLootcouncil, listName: string, origIndex: number, timestamp: number): number
----@field AddManualItem fun(self: DesolateLootcouncil, itemLink: string)
----@field GetPlayerVersion fun(self: DesolateLootcouncil, name: string): string
----@field activeLootMaster string
----@field DLC_Log fun(self: DesolateLootcouncil, msg: any)
----@field RegisterChatCommand fun(self: any, cmd: string, func: string|function)
----@field RegisterEvent fun(self: any, event: string, func?: string|function)
----@field ScheduleTimer fun(self: any, func: function, delay: number, ...: any): any
----@field CancelTimer fun(self: any, timer: any)
----@field GetModule fun(self: any, name: string, silent?: boolean): any
----@field Print fun(self: any, msg: string)
----@field IsUnitInRaid fun(self: DesolateLootcouncil, unitName: string): boolean
 
 ---@type DesolateLootcouncil
 DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "AceConsole-3.0", "AceEvent-3.0",
-    "AceComm-3.0", "AceTimer-3.0")
+    "AceComm-3.0", "AceSerializer-3.0", "AceTimer-3.0")
 _G.DesolateLootcouncil = DesolateLootcouncil
 DesolateLootcouncil.version = C_AddOns and C_AddOns.GetAddOnMetadata("Desolate_Lootcouncil", "Version") or "1.0.0"
 
@@ -98,6 +109,7 @@ local defaults = {
             currentAttendees = {},  -- Table: [MainName] = true
         },
         AttendanceHistory = {},     -- List of past sessions { date, zone, attendees }
+        positions = {},             -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
     }
 }
 
@@ -128,6 +140,7 @@ function DesolateLootcouncil:OnInitialize()
     self:RegisterChatCommand("dl", "ChatCommand")
 
     -- 8. Welcome Message (Silenced if debugMode is OFF)
+    if not self.db.profile.positions then self.db.profile.positions = {} end
     self:DLC_Log("Desolate Lootcouncil " .. self.version .. " Loaded.")
 end
 
@@ -338,57 +351,6 @@ function DesolateLootcouncil:GetMain(name)
     return candidate
 end
 
--- --- Priority List & Item Management Logic ---
-
-function DesolateLootcouncil:AddPriorityList(name)
-    if not self.db then return end
-    local db = self.db.profile
-    if not name or name == "" then return end
-
-    -- Check duplicate
-    for _, list in ipairs(db.PriorityLists) do
-        if list.name == name then return end
-    end
-
-    -- Create new list populated with SHUFFLED roster (Basic Implementation)
-    local newList = {}
-    if db.MainRoster then
-        for rName, _ in pairs(db.MainRoster) do
-            table.insert(newList, rName)
-        end
-    end
-
-    -- Simple shuffle
-    for i = #newList, 2, -1 do
-        local j = math.random(i)
-        newList[i], newList[j] = newList[j], newList[i]
-    end
-
-    table.insert(db.PriorityLists, { name = name, players = newList, items = {} })
-    self:DLC_Log("Added new Priority List: " .. name)
-    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-end
-
-function DesolateLootcouncil:RemovePriorityList(index)
-    if not self.db then return end
-    local db = self.db.profile
-    if db.PriorityLists[index] then
-        local removed = table.remove(db.PriorityLists, index)
-        self:DLC_Log("Removed Priority List: " .. removed.name)
-        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-    end
-end
-
-function DesolateLootcouncil:RenamePriorityList(index, newName)
-    if not self.db then return end
-    local db = self.db.profile
-    if db.PriorityLists[index] and newName ~= "" then
-        db.PriorityLists[index].name = newName
-        self:DLC_Log("Renamed list to: " .. newName)
-        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-    end
-end
-
 -- Item Manager Impl
 
 function DesolateLootcouncil:AddItemToList(input, listIdx)
@@ -488,73 +450,93 @@ end
 -- --- Missing Utility Methods (Restored) ---
 
 function DesolateLootcouncil:GetPriorityListNames()
-    if not self.db then return {} end
-    local names = {}
-    if self.db.profile.PriorityLists then
-        for _, list in ipairs(self.db.profile.PriorityLists) do
-            table.insert(names, list.name)
-        end
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.GetPriorityListNames then
+        return Priority:GetPriorityListNames()
     end
-    return names
+    return {}
+end
+
+function DesolateLootcouncil:AddPriorityList(name)
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.AddPriorityList then
+        Priority:AddPriorityList(name)
+    end
+end
+
+function DesolateLootcouncil:RemovePriorityList(index)
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.RemovePriorityList then
+        Priority:RemovePriorityList(index)
+    end
+end
+
+function DesolateLootcouncil:RenamePriorityList(index, newName)
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.RenamePriorityList then
+        Priority:RenamePriorityList(index, newName)
+    end
+end
+
+function DesolateLootcouncil:LogPriorityChange(msg)
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.LogPriorityChange then
+        Priority:LogPriorityChange(msg)
+    end
 end
 
 function DesolateLootcouncil:ShuffleLists()
-    if not self.db then return end
-    local db = self.db.profile
-    if not db.PriorityLists then return end
-
-    -- Master list of all players (MainRoster)
-    local masterList = {}
-    if db.MainRoster then
-        for name in pairs(db.MainRoster) do
-            table.insert(masterList, name)
-        end
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.ShuffleLists then
+        Priority:ShuffleLists()
     end
-
-    for _, listObj in ipairs(db.PriorityLists) do
-        -- Clone master list
-        local currentList = {}
-        for _, name in ipairs(masterList) do
-            table.insert(currentList, name)
-        end
-
-        -- Shuffle
-        for i = #currentList, 2, -1 do
-            local j = math.random(i)
-            currentList[i], currentList[j] = currentList[j], currentList[i]
-        end
-        listObj.players = currentList
-        self:DLC_Log("Shuffled List: " .. listObj.name)
-    end
-    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
 function DesolateLootcouncil:SyncMissingPlayers()
-    if not self.db then return end
-    local db = self.db.profile
-    if not db.PriorityLists then return end
-
-    local masterList = {}
-    if db.MainRoster then
-        for name in pairs(db.MainRoster) do
-            masterList[name] = true
-        end
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.SyncMissingPlayers then
+        Priority:SyncMissingPlayers()
     end
+end
 
-    for _, listObj in ipairs(db.PriorityLists) do
-        local currentSet = {}
-        for _, p in ipairs(listObj.players) do
-            currentSet[p] = true
-        end
-
-        for name in pairs(masterList) do
-            if not currentSet[name] then
-                table.insert(listObj.players, name)
-                self:DLC_Log("Added missing " .. name .. " to " .. listObj.name)
-            end
-        end
+function DesolateLootcouncil:MovePlayerToBottom(listName, playerName)
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.MovePlayerToBottom then
+        return Priority:MovePlayerToBottom(listName, playerName)
     end
-    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+end
+
+function DesolateLootcouncil:RestorePlayerPosition(listName, playerName, index)
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.RestorePlayerPosition then
+        Priority:RestorePlayerPosition(listName, playerName, index)
+    end
+end
+
+function DesolateLootcouncil:GetReversionIndex(listName, origIndex, timestamp)
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.GetReversionIndex then
+        return Priority:GetReversionIndex(listName, origIndex, timestamp)
+    end
+    return origIndex
+end
+
+function DesolateLootcouncil:ShowPriorityHistoryWindow()
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.ShowPriorityHistoryWindow then
+        Priority:ShowPriorityHistoryWindow()
+    end
 end
 
 function DesolateLootcouncil:ShowHistoryWindow()
@@ -566,12 +548,27 @@ function DesolateLootcouncil:ShowHistoryWindow()
 end
 
 function DesolateLootcouncil:ShowPriorityOverrideWindow(listName)
-    -- Placeholder for now or check if UI module implements it
-    self:DLC_Log("Priority Override Window not implemented yet.")
+    ---@type Priority
+    local Priority = self:GetModule("Priority")
+    if Priority and Priority.ShowPriorityOverrideWindow then
+        Priority:ShowPriorityOverrideWindow(listName)
+    end
 end
 
-function DesolateLootcouncil:LogPriorityChange(msg)
-    -- Placeholder
+function DesolateLootcouncil:OpenConfig()
+    local frame = LibStub("AceConfigDialog-3.0"):Open("DesolateLootcouncil")
+    if frame then
+        self:RestoreFramePosition(frame, "Config")
+        local savePos = function(f)
+            DesolateLootcouncil:SaveFramePosition(f, "Config")
+        end
+        frame.frame:SetScript("OnDragStop", function(f)
+            f:StopMovingOrSizing()
+            savePos(f)
+        end)
+        frame.frame:SetScript("OnHide", savePos)
+        self:ApplyCollapseHook(frame)
+    end
 end
 
 -- --- Chat Command ---
@@ -579,14 +576,14 @@ end
 function DesolateLootcouncil:ChatCommand(input)
     -- Default to Config if empty
     if not input or input:trim() == "" then
-        LibStub("AceConfigDialog-3.0"):Open("DesolateLootcouncil")
+        self:OpenConfig()
         return
     end
     local args = { strsplit(" ", input) }
     local cmd = string.lower(args[1])
     -- 1. CONFIG
     if cmd == "config" or cmd == "options" then
-        LibStub("AceConfigDialog-3.0"):Open("DesolateLootcouncil")
+        self:OpenConfig()
         -- 1.5 SHOW / VOTE
     elseif cmd == "show" or cmd == "vote" then
         local session = self.db.profile.session
@@ -747,6 +744,178 @@ function DesolateLootcouncil:DLC_Log(msg, forceShow)
 
     -- 3. PRINT: Add the single prefix and print.
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[DLC]|r " .. cleanMsg)
+end
+
+function DesolateLootcouncil:SaveFramePosition(frame, windowName)
+    local actualFrame = frame.frame or frame
+    local point, _, relativePoint, xOfs, yOfs = actualFrame:GetPoint()
+
+    if not self.db.profile.positions then self.db.profile.positions = {} end
+
+    self.db.profile.positions[windowName] = {
+        point = point,
+        relativePoint = relativePoint,
+        x = xOfs,
+        y = yOfs,
+        width = actualFrame:GetWidth(),
+        height = actualFrame:GetHeight(),
+    }
+    self:DLC_Log("Saved Layout: " .. windowName)
+end
+
+function DesolateLootcouncil:ToggleWindowCollapse(widget)
+    local frame = widget.frame or widget
+    if not frame.isCollapsed then
+        -- Collapse
+        frame.savedHeight = frame:GetHeight()
+        frame:SetHeight(30)
+
+        -- Helper to detect if an element is part of the header area
+        local function IsInHeader(obj)
+            -- Check explicit references first
+            if obj == widget.titletext or obj == widget.titlebg or obj == widget.statusIcon or obj.isTitleOverlay then return true end
+
+            -- Check all anchor points
+            for i = 1, obj:GetNumPoints() do
+                local point, relativeTo, relativePoint, x, y = obj:GetPoint(i)
+
+                -- Keep elements anchored TO our protected parts
+                if relativeTo == widget.titletext or relativeTo == widget.titlebg or relativeTo == widget.statusIcon then return true end
+
+                -- Central Header ornaments (anchored to TOP and within title bar height)
+                -- We EXCLUDE TOPLEFT/TOPRIGHT to hide side rails
+                if relativePoint == "TOP" and (y or 0) > -25 then
+                    return true
+                end
+            end
+
+            return false
+        end
+
+        -- 1. Hide the main content container (AceGUI standard)
+        if widget.content then
+            widget.content:Hide()
+            widget.content.tempHidden = true
+        end
+        if frame.content and frame.content ~= widget.content then
+            frame.content:Hide()
+            frame.content.tempHidden = true
+        end
+
+        -- 2. Handle child frames (Buttons, status icons, etc.)
+        local children = { frame:GetChildren() }
+        for _, child in ipairs(children) do
+            if not IsInHeader(child) then
+                if child:IsShown() then
+                    child:Hide()
+                    child.tempHidden = true
+                end
+            else
+                child:Show()
+                child.tempHidden = nil
+            end
+        end
+
+        -- 3. Handle regions (Textures/Borders)
+        local regions = { frame:GetRegions() }
+        for _, region in ipairs(regions) do
+            if not IsInHeader(region) then
+                if region:IsShown() then
+                    region:Hide()
+                    region.tempHidden = true
+                end
+            else
+                region:Show()
+                region.tempHidden = nil
+            end
+        end
+
+        frame.isCollapsed = true
+    else
+        -- Expand
+        frame:SetHeight(frame.savedHeight or 400)
+
+        if widget.content and widget.content.tempHidden then
+            widget.content:Show()
+            widget.content.tempHidden = nil
+        end
+        if frame.content and frame.content.tempHidden then
+            frame.content:Show()
+            frame.content.tempHidden = nil
+        end
+
+        local children = { frame:GetChildren() }
+        for _, child in ipairs(children) do
+            if child.tempHidden then
+                child:Show()
+                child.tempHidden = nil
+            end
+        end
+
+        local regions = { frame:GetRegions() }
+        for _, region in ipairs(regions) do
+            if region.tempHidden then
+                region:Show()
+                region.tempHidden = nil
+            end
+        end
+
+        frame.isCollapsed = false
+    end
+end
+
+function DesolateLootcouncil:ApplyCollapseHook(widget)
+    local frame = widget.frame or widget
+    -- Invisible button covering the title bar
+    local titleBtn = CreateFrame("Button", nil, frame)
+    titleBtn.isTitleOverlay = true
+    titleBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    titleBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -30, 0) -- Leave space for Close [X]
+    titleBtn:SetHeight(24)
+    titleBtn:SetFrameLevel(frame:GetFrameLevel() + 5)        -- Low enough to be behind text but capture clicks
+    titleBtn:EnableMouse(true)
+    titleBtn:RegisterForClicks("LeftButtonUp")
+
+    frame:SetMovable(true)
+
+    -- 1. Handle Double Click (Collapse)
+    titleBtn:SetScript("OnDoubleClick", function()
+        DesolateLootcouncil:ToggleWindowCollapse(widget)
+    end)
+
+    -- 2. Handle Dragging (Passthrough)
+    titleBtn:SetScript("OnMouseDown", function()
+        if not frame.isCollapsed then frame:StartMoving() end
+    end)
+    titleBtn:SetScript("OnMouseUp", function()
+        frame:StopMovingOrSizing()
+        DesolateLootcouncil:SaveFramePosition(frame, widget.type or "Window")
+    end)
+end
+
+function DesolateLootcouncil:RestoreFramePosition(frame, windowName)
+    local actualFrame = frame.frame or frame
+    if not self.db.profile.positions then self.db.profile.positions = {} end
+    local pos = self.db.profile.positions[windowName]
+    local def = self.DefaultLayouts and self.DefaultLayouts[windowName]
+
+    actualFrame:ClearAllPoints()
+
+    if pos and pos.point then
+        -- Use UIParent as the base
+        actualFrame:SetPoint(pos.point, UIParent, pos.relativePoint or pos.point, pos.x, pos.y)
+        if pos.width and pos.height then
+            if frame.SetWidth then frame:SetWidth(pos.width) else actualFrame:SetWidth(pos.width) end
+            if frame.SetHeight then frame:SetHeight(pos.height) else actualFrame:SetHeight(pos.height) end
+        end
+    elseif def then
+        -- Use centralized DefaultLayouts
+        actualFrame:SetPoint(def.point, UIParent, def.relativePoint or def.point, def.x, def.y)
+        if def.width and def.height then
+            if frame.SetWidth then frame:SetWidth(def.width) else actualFrame:SetWidth(def.width) end
+            if frame.SetHeight then frame:SetHeight(def.height) else actualFrame:SetHeight(def.height) end
+        end
+    end
 end
 
 --- Global Helper: Is unit in raid/party OR simulated?

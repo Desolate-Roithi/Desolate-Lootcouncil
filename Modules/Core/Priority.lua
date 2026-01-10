@@ -1,29 +1,37 @@
 ---@class Priority : AceModule, AceConsole-3.0, AceTimer-3.0
----@field OnEnable fun(self: Priority)
-
----@class (partial) DLC_Ref_Priority
 ---@field db table
----@field NewModule fun(self: DLC_Ref_Priority, name: string, ...): any
----@field Print fun(self: DLC_Ref_Priority, msg: string)
----@field GetPriorityListNames fun(self: DLC_Ref_Priority): table
----@field AddPriorityList fun(self: DLC_Ref_Priority, name: string)
----@field RemovePriorityList fun(self: DLC_Ref_Priority, index: number)
----@field RenamePriorityList fun(self: DLC_Ref_Priority, index: number, newName: string)
----@field LogPriorityChange fun(self: DLC_Ref_Priority, msg: string)
----@field ShuffleLists fun(self: DLC_Ref_Priority)
----@field SyncMissingPlayers fun(self: DLC_Ref_Priority)
----@field MovePlayerToBottom fun(self: DLC_Ref_Priority, listName: string, playerName: string): number|nil
----@field ShowHistoryWindow fun(self: DLC_Ref_Priority)
----@field ShowPriorityOverrideWindow fun(self: DLC_Ref_Priority, listName: string)
----@field RestorePlayerPosition fun(self: DLC_Ref_Priority, listName: string, playerName: string, index: number)
----@field GetReversionIndex fun(self: DLC_Ref_Priority, listName: string, origIndex: number, timestamp: number): number
----@field historyFrame AceGUIWidget
----@field priorityOverrideFrame AceGUIWidget
----@field priorityOverrideContent AceGUIWidget
----@field DLC_Log fun(self: DLC_Ref_Priority, msg: string, force?: boolean)
+---@field historyFrame any
+---@field priorityOverrideFrame any
+---@field priorityOverrideContent any
+---@field DLC_Log fun(self: any, msg: any, force?: boolean)
+---@field GetMain fun(self: any, name: string): string
+---@field SaveFramePosition fun(self: any, frame: any, windowName: string)
+---@field RestoreFramePosition fun(self: any, frame: any, windowName: string)
+---@field ApplyCollapseHook fun(self: any, widget: any)
+---@field DefaultLayouts table<string, table>
+---@field Print fun(self: any, msg: string)
+---@field GetPriorityListNames fun(self: any): table
+---@field AddPriorityList fun(self: any, name: string)
+---@field RemovePriorityList fun(self: any, index: number)
+---@field RenamePriorityList fun(self: any, index: number, newName: string)
+---@field LogPriorityChange fun(self: any, msg: string)
+---@field ShuffleLists fun(self: any)
+---@field SyncMissingPlayers fun(self: any)
+---@field MovePlayerToBottom fun(self: any, listName: string, targetName: string): number|nil
+---@field ShowPriorityHistoryWindow fun(self: any)
+---@field ShowPriorityOverrideWindow fun(self: any, listName: string)
+---@field RestorePlayerPosition fun(self: any, listName: string, playerName: string, index: number)
+---@field GetReversionIndex fun(self: any, listName: string, origIndex: number, timestamp: number): number
+---@field version string
+---@field amILM boolean
+---@field activeAddonUsers table<string, boolean>
+---@field activeLootMaster string
+---@field currentSessionLoot table
+---@field PriorityLog table
+---@field simulatedGroup table
+---@field OnEnable fun(self: any)
 
----@type DLC_Ref_Priority
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Priority]]
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 local Priority = DesolateLootcouncil:NewModule("Priority", "AceConsole-3.0", "AceTimer-3.0") --[[@as Priority]]
 
 function Priority:OnEnable()
@@ -106,7 +114,7 @@ end
 
 -- --- Globally Attached Functions ---
 
-function DesolateLootcouncil:GetPriorityListNames()
+function Priority:GetPriorityListNames()
     if not DesolateLootcouncil.db then return {} end
     local db = DesolateLootcouncil.db.profile
     local names = {}
@@ -118,7 +126,7 @@ function DesolateLootcouncil:GetPriorityListNames()
     return names
 end
 
-function DesolateLootcouncil:AddPriorityList(name)
+function Priority:AddPriorityList(name)
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if not name or name == "" then return end
@@ -138,32 +146,38 @@ function DesolateLootcouncil:AddPriorityList(name)
     ShuffleTable(newList)
 
     table.insert(db.PriorityLists, { name = name, players = newList, items = {} })
-    DesolateLootcouncil:DLC_Log("Added new Priority List: " .. name .. " (Initialized with shuffled roster)")
+    local msg = "Added new Priority List: " .. name .. " (Initialized with shuffled roster)"
+    DesolateLootcouncil:DLC_Log(msg)
+    self:LogPriorityChange(msg)
     self:SyncMissingPlayers() -- Auto-populate (and notifies change internally)
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
-function DesolateLootcouncil:RemovePriorityList(index)
+function Priority:RemovePriorityList(index)
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] then
         local removed = table.remove(db.PriorityLists, index)
-        DesolateLootcouncil:DLC_Log("Removed Priority List: " .. removed.name)
+        local msg = "Removed Priority List: " .. removed.name
+        DesolateLootcouncil:DLC_Log(msg)
+        self:LogPriorityChange(msg)
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
 
-function DesolateLootcouncil:RenamePriorityList(index, newName)
+function Priority:RenamePriorityList(index, newName)
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] and newName ~= "" then
         db.PriorityLists[index].name = newName
-        DesolateLootcouncil:DLC_Log("Renamed list to: " .. newName)
+        local msg = "Renamed list to: " .. newName
+        DesolateLootcouncil:DLC_Log(msg)
+        self:LogPriorityChange(msg)
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
 
-function DesolateLootcouncil:LogPriorityChange(msg)
+function Priority:LogPriorityChange(msg)
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if not db.History then db.History = {} end
@@ -176,7 +190,7 @@ function DesolateLootcouncil:LogPriorityChange(msg)
     end
 end
 
-function DesolateLootcouncil:ShuffleLists()
+function Priority:ShuffleLists()
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     -- CLEAR HISTORY on season reset
@@ -209,7 +223,7 @@ function DesolateLootcouncil:ShuffleLists()
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
-function DesolateLootcouncil:SyncMissingPlayers()
+function Priority:SyncMissingPlayers()
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if not db.MainRoster or not db.PriorityLists then return end
@@ -242,14 +256,17 @@ function DesolateLootcouncil:SyncMissingPlayers()
 
     if addedCount > 0 then
         DesolateLootcouncil:DLC_Log(string.format("Synced missing players to bottom of lists (%d additions).",
-            addedCount / #db.PriorityLists))
+            addedCount / #db.PriorityLists), true)
     else
-        DesolateLootcouncil:DLC_Log("No missing players found to sync.")
+        DesolateLootcouncil:DLC_Log("No missing players found to sync.", true)
     end
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
-function DesolateLootcouncil:MovePlayerToBottom(listName, playerName)
+---@param listName string
+---@param playerName string
+---@return number|nil
+function Priority:MovePlayerToBottom(listName, playerName)
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if not db.PriorityLists then return end
@@ -309,7 +326,9 @@ function DesolateLootcouncil:MovePlayerToBottom(listName, playerName)
         table.insert(db.PriorityLog, {
             time = time(),
             type = "TO_BOTTOM",
+            ---@type any
             list = listName,
+            ---@type any
             player = targetName,
             from = foundIndex,
             to = #players
@@ -320,7 +339,7 @@ function DesolateLootcouncil:MovePlayerToBottom(listName, playerName)
     return nil
 end
 
-function DesolateLootcouncil:RestorePlayerPosition(listName, playerName, index)
+function Priority:RestorePlayerPosition(listName, playerName, index)
     if not DesolateLootcouncil.db then
         return
     end
@@ -380,8 +399,10 @@ function DesolateLootcouncil:RestorePlayerPosition(listName, playerName, index)
         local pName = tostring(playerName or "Unknown")
         local lName = tostring(listName or "Unknown List")
 
-        DesolateLootcouncil:DLC_Log(string.format("Reverting %s to position %d from position %d in %s.",
-            pName, sIndex, cIndex, lName), true)
+        local logMsg = string.format("Reverting %s to position %d from position %d in %s.",
+            pName, sIndex, cIndex, lName)
+        DesolateLootcouncil:DLC_Log(logMsg, true)
+        self:LogPriorityChange(logMsg)
 
         -- 5. Structured Logging
         table.insert(db.PriorityLog, {
@@ -396,7 +417,11 @@ function DesolateLootcouncil:RestorePlayerPosition(listName, playerName, index)
     end
 end
 
-function DesolateLootcouncil:GetReversionIndex(listName, origIndex, timestamp)
+---@param listName string
+---@param origIndex number
+---@param timestamp number
+---@return number
+function Priority:GetReversionIndex(listName, origIndex, timestamp)
     local db = DesolateLootcouncil.db.profile
     if not db.PriorityLog then return origIndex end
 
@@ -422,7 +447,7 @@ function DesolateLootcouncil:GetReversionIndex(listName, origIndex, timestamp)
     return simulated
 end
 
-function DesolateLootcouncil:ShowHistoryWindow()
+function Priority:ShowPriorityHistoryWindow()
     if self.historyFrame then
         self.historyFrame:Hide()
     end
@@ -432,14 +457,29 @@ function DesolateLootcouncil:ShowHistoryWindow()
 
     local frame = CreateFrame("Frame", "DLCHistoryFrame", UIParent, "BackdropTemplate")
     frame:SetSize(600, 400)
-    frame:SetPoint("CENTER")
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    local function SavePos(f)
+        DesolateLootcouncil:SaveFramePosition(f, "PriorityHistory")
+    end
+    frame:SetScript("OnDragStop", function(f)
+        f:StopMovingOrSizing()
+        SavePos(f)
+    end)
+    frame:SetScript("OnHide", SavePos)
+    DesolateLootcouncil:RestoreFramePosition(frame, "PriorityHistory")
+
+    -- [NEW] Title Bar for Double-Click Collapse
+    local titleBar = CreateFrame("Frame", "DLCHistoryTitleBar", frame)
+    titleBar:SetPoint("TOPLEFT", 8, -8)
+    titleBar:SetPoint("TOPRIGHT", -32, -8) -- Leave space for close button
+    titleBar:SetHeight(25)
+    titleBar:EnableMouse(true)
+    DesolateLootcouncil:ApplyCollapseHook({ frame = frame, titleBar = titleBar })
 
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -482,7 +522,7 @@ function DesolateLootcouncil:ShowHistoryWindow()
     frame:Show()
 end
 
-function DesolateLootcouncil:ShowPriorityOverrideWindow(listName)
+function Priority:ShowPriorityOverrideWindow(listName)
     if self.priorityOverrideFrame then
         self.priorityOverrideFrame:Hide()
     end
@@ -504,14 +544,29 @@ function DesolateLootcouncil:ShowPriorityOverrideWindow(listName)
 
     local frame = CreateFrame("Frame", "DLCPriorityOverride", UIParent, "BackdropTemplate")
     frame:SetSize(350, 500)
-    frame:SetPoint("CENTER")
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    local function SavePos(f)
+        DesolateLootcouncil:SaveFramePosition(f, "PriorityOverride")
+    end
+    frame:SetScript("OnDragStop", function(f)
+        f:StopMovingOrSizing()
+        SavePos(f)
+    end)
+    frame:SetScript("OnHide", SavePos)
+    DesolateLootcouncil:RestoreFramePosition(frame, "PriorityOverride")
+
+    -- [NEW] Title Bar for Double-Click Collapse
+    local titleBar = CreateFrame("Frame", "DLCPriorityTitleBar", frame)
+    titleBar:SetPoint("TOPLEFT", 8, -8)
+    titleBar:SetPoint("TOPRIGHT", -32, -8)
+    titleBar:SetHeight(25)
+    titleBar:EnableMouse(true)
+    DesolateLootcouncil:ApplyCollapseHook({ frame = frame, titleBar = titleBar })
 
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",

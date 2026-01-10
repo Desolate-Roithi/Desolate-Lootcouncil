@@ -1,8 +1,11 @@
 ---@type UI
 ---@class (partial) DLC_Ref_UIUtility
 ---@field db table
----@field GetModule fun(self: DLC_Ref_UIUtility, name: string): any
 ---@field Print fun(self: DLC_Ref_UIUtility, msg: string)
+---@field RestoreFramePosition fun(self: DLC_Ref_UIUtility, frame: any, windowName: string)
+---@field SaveFramePosition fun(self: DLC_Ref_UIUtility, frame: any, windowName: string)
+---@field ApplyCollapseHook fun(self: DLC_Ref_UIUtility, widget: any)
+---@field DLC_Log fun(self: DLC_Ref_UIUtility, msg: any, force?: boolean)
 
 ---@type DLC_Ref_UIUtility
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UIUtility]]
@@ -18,12 +21,23 @@ function UI:ShowHistoryWindow()
         frame:SetLayout("Flow")
         frame:SetWidth(500)
         frame:SetHeight(400)
-        -- Fix 'anchor family connection' error
-        local blizzardFrame = (frame --[[@as any]]).frame
-        blizzardFrame:ClearAllPoints()
-        blizzardFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         frame:SetCallback("OnClose", function(widget) widget:Hide() end)
+
+        local blizzardFrame = (frame --[[@as any]]).frame
         self.historyFrame = frame
+
+        -- [NEW] Position Persistence
+        DesolateLootcouncil:RestoreFramePosition(frame, "History")
+        local function SavePos(f)
+            DesolateLootcouncil:SaveFramePosition(f, "History")
+        end
+        local rawFrame = (frame --[[@as any]]).frame
+        rawFrame:SetScript("OnDragStop", function(f)
+            f:StopMovingOrSizing()
+            SavePos(frame)
+        end)
+        rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+        DesolateLootcouncil:ApplyCollapseHook(frame)
     end
 
     self.historyFrame:Show()
@@ -214,10 +228,21 @@ function UI:ShowTradeListWindow()
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
         frame:SetTitle("Pending Trades")
         frame:SetLayout("Flow")
-        frame:SetWidth(450)
-        frame:SetHeight(350)
         frame:SetCallback("OnClose", function(widget) widget:Hide() end)
         self.tradeListFrame = frame
+
+        -- [NEW] Position Persistence
+        DesolateLootcouncil:RestoreFramePosition(frame, "Trade")
+        local function SavePos(f)
+            DesolateLootcouncil:SaveFramePosition(f, "Trade")
+        end
+        local rawFrame = (frame --[[@as any]]).frame
+        rawFrame:SetScript("OnDragStop", function(f)
+            f:StopMovingOrSizing()
+            SavePos(frame)
+        end)
+        rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+        DesolateLootcouncil:ApplyCollapseHook(frame)
     end
 
     self.tradeListFrame:Show()

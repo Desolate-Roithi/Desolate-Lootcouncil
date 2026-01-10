@@ -8,7 +8,7 @@
 ---@field playerEnchantingSkill table<string, number>
 
 ---@type DesolateLootcouncil
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 ---@type Comm
 local Comm = DesolateLootcouncil:NewModule("Comm", "AceComm-3.0", "AceSerializer-3.0", "AceEvent-3.0")
 

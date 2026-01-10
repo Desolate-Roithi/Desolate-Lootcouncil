@@ -25,6 +25,20 @@ function UI:CreateVotingFrame()
         widget:Hide()
     end)
     self.votingFrame = frame
+
+    -- [NEW] Position Persistence
+    DesolateLootcouncil:RestoreFramePosition(frame, "Voting")
+    local function SavePos(f)
+        DesolateLootcouncil:SaveFramePosition(f, "Voting")
+    end
+    local rawFrame = (frame --[[@as any]]).frame
+    rawFrame:SetScript("OnDragStop", function(f)
+        f:StopMovingOrSizing()
+        SavePos(frame)
+    end)
+    rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+    DesolateLootcouncil:ApplyCollapseHook(frame)
+
     self.myVotes = self.myVotes or {}
     self.timerLabels = {}
     self.expirationTimers = {} -- Store expiration triggers

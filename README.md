@@ -2,7 +2,7 @@
 
 **Desolate Lootcouncil** is a World of Warcraft (Retail) addon designed to reintroduce a streamlined, fair, and automated "Master Loot" system. It layers a robust addon-controlled distribution system on top of WoW's default "Group Loot," centralizing control under a designated Loot Master to reduce confusion and automate the bidding process.
 
-Current Version: **0.2.0-Beta**
+Current Version: **0.2.1-Beta**
 
 📄 **[View Full Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)**
 
@@ -73,6 +73,13 @@ The addon uses **`/dlc`** as its primary command.
 ---
 
 ### 📝 Changelog
+
+**v0.2.1-beta**
+* **Feature:** Implemented **Window Collapse** (Minimize) functionality for all AceGUI windows.
+* **Feature:** Added **Window Position Persistence** (Automatic scale, position, and size saving).
+* **Feature:** Refactored **Disenchanter Dashboard** into an external sidebar for the Session Monitor.
+* **Enhancement:** Precise header isolation logic for a clean, decorated collapsed title bar.
+* **Fix/Cleanup:** Centralized layout defaults in `Layouts.lua` and added a "Reset Layouts" button.
 
 **v0.2.0-Beta**
 * **Feature:** Implemented **Attendance Tracking** with history review UI.

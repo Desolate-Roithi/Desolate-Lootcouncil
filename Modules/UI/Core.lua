@@ -1,4 +1,4 @@
----@class UI : AceModule, AceConsole-3.0
+---@class UI : AceModule, AceConsole-3.0, AceEvent-3.0, AceTimer-3.0
 ---@field ShowLootWindow fun(self: UI, lootTable: table|nil)
 ---@field ShowVotingWindow fun(self: UI, lootTable: table|nil, isRefresh: boolean?)
 ---@field ShowMonitorWindow fun(self: UI)
@@ -10,6 +10,9 @@
 ---@field ShowTradeListWindow fun(self: UI)
 ---@field RefreshTradeWindow fun(self: UI)
 ---@field Print fun(self: UI, msg: any)
+---@field UpdateDisenchanters fun(self: UI)
+---@field CreateDisenchanterFrame fun(self: UI)
+---@field deFrame table|nil
 ---@field monitorFrame AceGUIFrame|nil
 ---@field awardFrame AceGUIFrame|nil
 ---@field attendanceFrame AceGUIFrame|nil
@@ -38,11 +41,17 @@
 ---@field GetModule fun(self: DLC_Ref_UI, name: string): any
 ---@field activeLootMaster string
 ---@field GetActiveUserCount fun(self: DLC_Ref_UI): number
+---@field SaveFramePosition fun(self: DLC_Ref_UI, frame: any, windowName: string)
+---@field RestoreFramePosition fun(self: DLC_Ref_UI, frame: any, windowName: string)
+---@field ApplyCollapseHook fun(self: DLC_Ref_UI, widget: any)
+---@field DLC_Log fun(self: DLC_Ref_UI, msg: any, force?: boolean)
+---@field GetMain fun(self: DLC_Ref_UI, name: string): string
+---@field DefaultLayouts table<string, table>
 
 ---@type DLC_Ref_UI
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UI]]
 ---@type UI
-local UI = DesolateLootcouncil:NewModule("UI", "AceConsole-3.0")
+local UI = DesolateLootcouncil:NewModule("UI", "AceConsole-3.0", "AceEvent-3.0", "AceTimer-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
 ---@class AceGUIWidget
@@ -65,10 +74,11 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@field DoLayout fun(self: self)
 ---@field SetJustifyH fun(self: self, align: string)
 ---@field SetFontObject fun(self: self, font: any)
----@field btnTrades table
----@field btnEnd table
----@field statusbg table
----@field statusIcon table
+---@field statusbg any
+---@field statusIcon any
+---@field SetLabel fun(self: self, text: string)
+---@field SetSliderValues fun(self: self, min: number, max: number, step: number)
+---@field SetValue fun(self: self, value: any)
 
 ---@class AceGUIFrame : AceGUIWidget
 ---@class AceGUIScrollFrame : AceGUIWidget
@@ -79,6 +89,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@class AceGUIDropdown : AceGUIWidget
 ---@field SetList fun(self: self, list: table)
 ---@field SetValue fun(self: self, value: any)
+---@field SetLabel fun(self: self, text: string)
 
 ---@class (partial) Distribution
 ---@field sessionDuration number
@@ -100,7 +111,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@field GetOptions fun(self: Roster): table
 
 function UI:OnEnable()
-    -- Empty for now
+    self:RegisterMessage("DLC_VERSION_UPDATE", "UpdateDisenchanters")
 end
 
 function UI:ResetVoting()

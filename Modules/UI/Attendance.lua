@@ -59,6 +59,19 @@ function UI:ShowAttendanceWindow()
     end)
     self.attendanceFrame = frame
 
+    -- [NEW] Position Persistence
+    DesolateLootcouncil:RestoreFramePosition(frame, "Attendance")
+    local function SavePos(f)
+        DesolateLootcouncil:SaveFramePosition(f, "Attendance")
+    end
+    local rawFrame = frame.frame --[[@as any]]
+    rawFrame:SetScript("OnDragStop", function(f)
+        f:StopMovingOrSizing()
+        SavePos(frame)
+    end)
+    rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+    DesolateLootcouncil:ApplyCollapseHook(frame)
+
     -- 3. Top Label
     local label = AceGUI:Create("Label")
     label:SetText("Review attendance before ending session. Click names to move them between lists.")
@@ -230,38 +243,33 @@ function UI:ApplyDecayAndEndSession()
             local currentList = listObj.players -- Array of strings (names)
             DLC:DLC_Log("Processing List Category: [" .. listName .. "] with " .. #currentList .. " entries.")
 
-            local players = listObj.players -- Array of strings
             local tempList = {}
 
             -- Populate tempList with object {name, priority, isAbsent}
-            for i, name in ipairs(players) do
+            for i, name in ipairs(currentList) do
+                local isAbsent = tempAbsent[name] or false
+                local prio = i
+                if isAbsent then
+                    prio = prio + currentDecayAmount
+                end
+
                 table.insert(tempList, {
                     name = name,
-                    priority = i,
-                    isAbsent = IsAbsent(name)
+                    priority = prio,
+                    isAbsent = isAbsent
                 })
             end
 
-            -- 5. Apply Decay and Sort
+            -- 5. Sort based on new priorities
             table.sort(tempList, function(a, b)
-                -- 1. Primary Sort: Priority (Lower is better)
+                -- 1. Primary Sort: Penalty-Adjusted Priority (Lower is better)
                 if a.priority ~= b.priority then
                     return a.priority < b.priority
                 end
 
-                -- 2. Secondary Sort: Attendance (Present beats Absent)
-                -- We want the Present player (Not Absent) to come FIRST (Lower Index)
-                local aAbsent = false
-                if tempAbsent[a.name] then aAbsent = true end
-
-                local bAbsent = false
-                if tempAbsent[b.name] then bAbsent = true end
-
-                if aAbsent ~= bAbsent then
-                    -- If A is Present (false) and B is Absent (true), A < B (A wins)
-                    -- If aAbsent is false (Present), we want it to return true (A comes before B)
-                    -- so: return not aAbsent
-                    return not aAbsent
+                -- 2. Secondary Sort: Attendance (Present beats Absent if priorities match)
+                if a.isAbsent ~= b.isAbsent then
+                    return not a.isAbsent
                 end
 
                 -- 3. Tertiary Sort: Alphabetical (Stability)

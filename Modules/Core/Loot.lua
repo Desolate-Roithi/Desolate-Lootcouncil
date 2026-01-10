@@ -16,6 +16,7 @@
 ---@field ReawardItem fun(self: Loot, awardIndex: number)
 ---@field EndSession fun(self: Loot)
 ---@field MarkAsTraded fun(self: Loot, itemGUID: string, winner: string)
+---@field ScanDisenchanters fun(self: Loot)
 ---@class (partial) DLC_Ref_Loot
 ---@field db table
 ---@field currentSessionLoot table
@@ -29,8 +30,9 @@
 ---@field RestorePlayerPosition fun(self: any, listName: string, playerName: string, index: number)
 ---@field MovePlayerToBottom fun(self: any, listName: string, playerName: string): number|nil
 ---@field DLC_Log fun(self: any, msg: string, force?: boolean)
----@type DLC_Ref_Loot
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Loot]]
+---@field IsUnitInRaid fun(self: any, unitName: string): boolean
+---@type DesolateLootcouncil
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 ---@type Loot
 local DLC = DesolateLootcouncil
 local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0", "AceConsole-3.0")
@@ -664,6 +666,14 @@ function Loot:MarkAsTraded(itemLink, winnerName)
             DesolateLootcouncil:DLC_Log(string.format("Trade confirmed. %s marked as delivered.", itemLink), true)
             return
         end
+    end
+end
+
+function Loot:ScanDisenchanters()
+    local Comm = DesolateLootcouncil:GetModule("Comm")
+    if Comm and Comm.SendVersionCheck then
+        Comm:SendVersionCheck()
+        DesolateLootcouncil:DLC_Log("Triggered disenchanter scan via version check.")
     end
 end
 

@@ -9,6 +9,7 @@
 ---@field ShuffleLists fun(self: DLC_Ref_PrioritySettings)
 ---@field SyncMissingPlayers fun(self: DLC_Ref_PrioritySettings)
 ---@field ShowHistoryWindow fun(self: DLC_Ref_PrioritySettings)
+---@field ShowPriorityHistoryWindow fun(self: DLC_Ref_PrioritySettings)
 ---@field Print fun(self: DLC_Ref_PrioritySettings, msg: string)
 
 ---@type DLC_Ref_PrioritySettings
@@ -211,7 +212,7 @@ function PrioritySettings:GetManagementArgs()
             type = "execute",
             name = "View History Log",
             order = 13,
-            func = function() DesolateLootcouncil:ShowHistoryWindow() end,
+            func = function() DesolateLootcouncil:ShowPriorityHistoryWindow() end,
         },
         headerViews = { type = "header", name = "Priority List Views", order = 20 },
     }

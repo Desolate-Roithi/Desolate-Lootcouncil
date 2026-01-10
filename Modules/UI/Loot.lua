@@ -12,6 +12,10 @@
 ---@field Print fun(self: DLC_Ref_UILoot, msg: string)
 ---@field UnassignItem fun(self: DLC_Ref_UILoot, itemID: number)
 ---@field GetActiveUserCount fun(self: DLC_Ref_UILoot): number
+---@field RestoreFramePosition fun(self: DLC_Ref_UILoot, frame: any, windowName: string)
+---@field SaveFramePosition fun(self: DLC_Ref_UILoot, frame: any, windowName: string)
+---@field ApplyCollapseHook fun(self: DLC_Ref_UILoot, widget: any)
+---@field DLC_Log fun(self: DLC_Ref_UILoot, msg: any, force?: boolean)
 
 ---@type DLC_Ref_UILoot
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UILoot]]
@@ -32,6 +36,19 @@ function UI:CreateLootFrame()
     end)
 
     self.lootFrame = frame
+
+    -- [NEW] Position Persistence
+    DesolateLootcouncil:RestoreFramePosition(frame, "Loot")
+    local function SavePos(f)
+        DesolateLootcouncil:SaveFramePosition(f, "Loot")
+    end
+    local rawFrame = (frame --[[@as any]]).frame
+    rawFrame:SetScript("OnDragStop", function(f)
+        f:StopMovingOrSizing()
+        SavePos(frame)
+    end)
+    rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+    DesolateLootcouncil:ApplyCollapseHook(frame)
 end
 
 function UI:ShowLootWindow(lootTable)
@@ -156,15 +173,13 @@ function UI:ShowLootWindow(lootTable)
             itemLabel:SetText(DisplayName)
             itemLabel:SetRelativeWidth(0.55) -- User requested 0.55
             itemLabel:SetCallback("OnClick", function()
-                local widget = itemLabel --[[@as {frame: table}]]
-                GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
+                GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
                 GameTooltip:SetHyperlink(link)
                 GameTooltip:Show()
             end)
             itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
             itemLabel:SetCallback("OnEnter", function()
-                local widget = itemLabel --[[@as {frame: table}]]
-                GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
+                GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
                 GameTooltip:SetHyperlink(link)
                 GameTooltip:Show()
             end)

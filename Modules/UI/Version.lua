@@ -8,6 +8,7 @@
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 ---@type VersionUI
 local VersionUI = DesolateLootcouncil:NewModule("VersionUI", "AceEvent-3.0")
+local UI = DesolateLootcouncil:GetModule("UI")
 local AceGUI = LibStub("AceGUI-3.0")
 
 -- Helper: Parse version string "1.0.0" into number 100 for comparison
@@ -56,6 +57,19 @@ function VersionUI:ShowVersionWindow(isTest)
         frame:SetWidth(400)
         frame:SetHeight(500)
         self.versionFrame = frame
+
+        -- [NEW] Position Persistence
+        DesolateLootcouncil:RestoreFramePosition(frame, "Version")
+        local function SavePos(f)
+            DesolateLootcouncil:SaveFramePosition(f, "Version")
+        end
+        local rawFrame = (frame --[[@as any]]).frame
+        rawFrame:SetScript("OnDragStop", function(f)
+            f:StopMovingOrSizing()
+            SavePos(frame)
+        end)
+        rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+        DesolateLootcouncil:ApplyCollapseHook(frame)
 
         -- 2. Container (Scroll)
         local scroll = AceGUI:Create("ScrollFrame")
