@@ -20,6 +20,7 @@
 ---@field historyFrame AceGUIWidget
 ---@field priorityOverrideFrame AceGUIWidget
 ---@field priorityOverrideContent AceGUIWidget
+---@field DLC_Log fun(self: DLC_Ref_Priority, msg: string, force?: boolean)
 
 ---@type DLC_Ref_Priority
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Priority]]
@@ -137,7 +138,7 @@ function DesolateLootcouncil:AddPriorityList(name)
     ShuffleTable(newList)
 
     table.insert(db.PriorityLists, { name = name, players = newList, items = {} })
-    self:Print("Added new Priority List: " .. name .. " (Initialized with shuffled roster)")
+    DesolateLootcouncil:DLC_Log("Added new Priority List: " .. name .. " (Initialized with shuffled roster)")
     self:SyncMissingPlayers() -- Auto-populate (and notifies change internally)
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
@@ -147,7 +148,7 @@ function DesolateLootcouncil:RemovePriorityList(index)
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] then
         local removed = table.remove(db.PriorityLists, index)
-        self:Print("Removed Priority List: " .. removed.name)
+        DesolateLootcouncil:DLC_Log("Removed Priority List: " .. removed.name)
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
@@ -157,7 +158,7 @@ function DesolateLootcouncil:RenamePriorityList(index, newName)
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] and newName ~= "" then
         db.PriorityLists[index].name = newName
-        self:Print("Renamed list to: " .. newName)
+        DesolateLootcouncil:DLC_Log("Renamed list to: " .. newName)
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
@@ -598,7 +599,7 @@ function DesolateLootcouncil:ShowPriorityOverrideWindow(listName)
                     table.insert(currentList, newIndex, player)
                     local msg = string.format("Manually moved %s from Rank %d to %d in %s list.", player, i, newIndex,
                         listName)
-                    DesolateLootcouncil:Print(msg)
+                    DesolateLootcouncil:DLC_Log(msg)
                     DesolateLootcouncil:LogPriorityChange(msg)
                 end
 

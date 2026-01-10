@@ -8,6 +8,7 @@
 ---@field AddItemToList fun(self: DLC_Ref_ItemManager, item: string, listIndex: number)
 ---@field RemoveItemFromList fun(self: DLC_Ref_ItemManager, listIndex: number, itemID: number)
 ---@field UnassignItem fun(self: DLC_Ref_ItemManager, itemID: number)
+---@field DLC_Log fun(self: DLC_Ref_ItemManager, msg: string, force?: boolean)
 
 ---@type DLC_Ref_ItemManager
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_ItemManager]]
@@ -67,11 +68,11 @@ function DesolateLootcouncil:SetItemCategory(itemID, targetListIndex)
         if list.items and list.items[itemID] then
             if i ~= targetListIndex then
                 list.items[itemID] = nil
-                self:Print(string.format("Moved Item %d from '%s' to '%s'", itemID, list.name,
+                DesolateLootcouncil:DLC_Log(string.format("Moved Item %d from '%s' to '%s'", itemID, list.name,
                     db.PriorityLists[targetListIndex].name))
             else
                 -- Already in the target list, nothing to do
-                self:Print("Item already exists in this list.")
+                DesolateLootcouncil:DLC_Log("Item already exists in this list.")
                 return
             end
         end
@@ -83,7 +84,7 @@ function DesolateLootcouncil:SetItemCategory(itemID, targetListIndex)
     targetList.items[itemID] = true
 
     -- 3. Persist & Notify
-    self:Print(string.format("Added Item %d to '%s'", itemID, targetList.name))
+    DesolateLootcouncil:DLC_Log(string.format("Added Item %d to '%s'", itemID, targetList.name))
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
@@ -92,7 +93,7 @@ end
 function DesolateLootcouncil:AddItemToList(listIndex, itemInput)
     local itemID = self:GetItemIDFromLink(itemInput)
     if not itemID then
-        self:Print("Invalid Item. Please provide a Link or Item ID.")
+        DesolateLootcouncil:DLC_Log("Invalid Item. Please provide a Link or Item ID.")
         return
     end
 
@@ -106,7 +107,7 @@ function DesolateLootcouncil:RemoveItemFromList(listIndex, itemID)
 
     if db.PriorityLists[listIndex].items then
         db.PriorityLists[listIndex].items[itemID] = nil
-        self:Print(string.format("Removed Item %d from '%s'", itemID, db.PriorityLists[listIndex].name))
+        DesolateLootcouncil:DLC_Log(string.format("Removed Item %d from '%s'", itemID, db.PriorityLists[listIndex].name))
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end

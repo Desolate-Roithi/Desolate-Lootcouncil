@@ -22,8 +22,7 @@ function Comm:OnEnable()
     self.playerEnchantingSkill = {}
 
     -- [DEBUG SANITY CHECK]
-    DesolateLootcouncil:DLC_Log(
-    "DEBUG: My Enchanting Skill: " .. tostring(DesolateLootcouncil:GetEnchantingSkillLevel()), true)
+    DesolateLootcouncil:DLC_Log("DEBUG: My Enchanting Skill: " .. tostring(DesolateLootcouncil:GetEnchantingSkillLevel()))
 end
 
 function Comm:SendComm(command, data, target)
@@ -95,7 +94,10 @@ function Comm:SendVersionCheck()
     -- Explicitly add Self
     local myName = UnitName("player")
     self.playerVersions[myName] = DesolateLootcouncil.version
-    self.playerEnchantingSkill[myName] = DesolateLootcouncil:GetEnchantingSkillLevel()
+    local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
+    -- [TEST] Hardcode 300 if 0
+    if mySkill == 0 then mySkill = 300 end
+    self.playerEnchantingSkill[myName] = mySkill
 
     self:SendComm("VERSION_REQ", nil) -- Broadcast
 end

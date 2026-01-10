@@ -311,6 +311,8 @@ function UI:ShowAwardWindow(itemData)
         end
         table.sort(disenchanters, function(a, b) return a.skill > b.skill end)
     end
+    -- [DEBUG]
+    DesolateLootcouncil:DLC_Log("Monitor: Disenchanters found: " .. #disenchanters)
 
     if #disenchanters > 0 then
         local deHeader = AceGUI:Create("Label")

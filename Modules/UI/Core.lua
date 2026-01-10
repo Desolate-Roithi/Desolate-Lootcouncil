@@ -6,11 +6,13 @@
 ---@field CloseMasterLootWindow fun(self: UI)
 ---@field ShowMasterLootWindow fun(self: UI)
 ---@field ShowHistoryWindow fun(self: UI)
+---@field ShowAttendanceWindow fun(self: UI)
 ---@field ShowTradeListWindow fun(self: UI)
 ---@field RefreshTradeWindow fun(self: UI)
 ---@field Print fun(self: UI, msg: any)
 ---@field monitorFrame AceGUIFrame|nil
 ---@field awardFrame AceGUIFrame|nil
+---@field attendanceFrame AceGUIFrame|nil
 ---@field historyFrame AceGUIFrame|nil
 ---@field selectedHistoryDate string|nil
 ---@field tradeListFrame AceGUIFrame|nil

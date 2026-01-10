@@ -1,32 +1,35 @@
 ## Interface: 120001
 ## Title: Desolate Lootcouncil
 ## Author: Roithi
-## Version: 0.1.0-Beta
+## Version: 0.2.0-Beta
 ## SavedVariables: DesolateLootDB
 
-# 0. Libraries (MUST BE FIRST)
+# 0. Libraries
 embeds.xml
 
-# 1. Load Core First (Initializes DB)
+# 1. Load Core First
 Core.lua
 
-# 2. Load Core Modules (Logic)
+# 2. Load Core Modules
 Modules/Core/Debug.lua
 Modules/Core/Comm.lua
 Modules/Core/Loot.lua
 Modules/Core/Distribution.lua
+Modules/Core/Session.lua
 Modules/Core/Trade.lua
 Modules/Core/Priority.lua
 Modules/Core/ItemManager.lua
+Modules/Core/Simulation.lua
 
-# 3. Load Settings (Configs)
+# 3. Load Settings
 Modules/Settings/General.lua
 Modules/Settings/Roster.lua
 Modules/Settings/Priority.lua
 Modules/Settings/ItemManager.lua
 
-# 4. Load UI (Visuals)
+# 4. Load UI
 Modules/UI/Core.lua
+Modules/UI/Attendance.lua
 Modules/UI/Loot.lua
 Modules/UI/Monitor.lua
 Modules/UI/Voting.lua

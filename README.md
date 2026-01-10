@@ -2,7 +2,7 @@
 
 **Desolate Lootcouncil** is a World of Warcraft (Retail) addon designed to reintroduce a streamlined, fair, and automated "Master Loot" system. It layers a robust addon-controlled distribution system on top of WoW's default "Group Loot," centralizing control under a designated Loot Master to reduce confusion and automate the bidding process.
 
-Current Version: **0.1.0-Beta**
+Current Version: **0.2.0-Beta**
 
 📄 **[View Full Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)**
 
@@ -37,10 +37,14 @@ Current Version: **0.1.0-Beta**
 * **Session History:** A persistent log of every awarded item and priority change.
 * [cite_start]**Developer Tools:** Debug mode toggle (`/dlc config`), solo simulation mode for testing UI without a group [cite: 687-688], and database dumps.
 
-### 🚧 Planned (Coming in 0.2.0-Beta)
-* [cite_start]**Priority Decay:** Automated decay system for raid absences [cite: 469-473].
-* [cite_start]**Attendance Tracking:** Roster snapshots to penalize players who miss raids [cite: 515-519].
-* [cite_start]**Session Persistence:** Robust handling of disconnects/reloads during active bidding [cite: 640-642].
+**Attendance & Decay**
+* **Priority Decay System:** Automated loss of priority for players who miss raids. Configurable penalty amounts and manual review before applying.
+* **Attendance Tracking:** Robust session management with roster snapshots. Includes a dedicated UI for reviewing attendance and deleting history records.
+* **Session Persistence:** Full rehydration of active betting sessions and votes after a disconnect or UI reload.
+
+**Simulation & Testing**
+* **Active Simulation Module:** Power-user tools for testing. Use `/dlc sim` to add/remove virtual players and auto-generate complex voting scenarios.
+* **Dual Identity Re-awards:** Intelligent handling of Alts during "Undo" operations. Restores the Main's priority position while preserving the Alt's name in the UI history.
 
 ## 🛠️ Installation
 
@@ -62,11 +66,22 @@ The addon uses **`/dlc`** as its primary command.
 | `/dlc trade` | **(LM)** Open the Pending Trades window. |
 | `/dlc history` | **(Public)** Open the Session History log. |
 | `/dlc status` | **(Public)** Show debug status (Current LM, version check). |
-| `/dlc test` | **(LM)** Generate test items to simulate a loot drop. |
+| `/dlc test` | **(LM)** Generate test items to simulate a loot drop: |
+| `/dlc session` | **(LM)** Manage Raid Sessions (start, stop, kill, attend). |
+| `/dlc sim` | **(Dev)** Manage Simulated Players (add, remove, vote, list, clear). |
 
 ---
 
 ### 📝 Changelog
+
+**v0.2.0-Beta**
+* **Feature:** Implemented **Attendance Tracking** with history review UI.
+* **Feature:** Added **Priority Decay** system for raid absences.
+* **Feature:** New **Simulation Module** for advanced testing (`/dlc sim`).
+* **Feature:** Added **Session Persistence** for reloads/disconnects.
+* **Fix:** Improved Alt detection in `AwardItem` using persistent roster lookup.
+* **Fix:** Handled "Dual Identity" in `ReawardItem` to properly restore Main's position.
+* **Refactor:** Unified all raid membership checks to support simulated players.
 
 **v0.1.0-Beta**
 * **Feature:** Added Smart Priority Reversion (Undo functionality).

@@ -24,9 +24,11 @@
 ---@field GetModule fun(self: any, name: string): any
 ---@field NewModule fun(self: any, name: string, ...: any): any
 ---@field Print fun(self: any, msg: string)
+---@field GetMain fun(self: any, name: string): string
 ---@field GetReversionIndex fun(self: any, listName: string, origIndex: number, timestamp: number): number
 ---@field RestorePlayerPosition fun(self: any, listName: string, playerName: string, index: number)
 ---@field MovePlayerToBottom fun(self: any, listName: string, playerName: string): number|nil
+---@field DLC_Log fun(self: any, msg: string, force?: boolean)
 ---@type DLC_Ref_Loot
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Loot]]
 ---@type Loot
@@ -277,20 +279,91 @@ function Loot:AddManualItem(rawLink)
             isManual = true
         })
         -- 6. Refresh UI
-        self:Print("Manually added: " .. link)
+        -- 6. Refresh UI
+        -- Strict requirement says Replace print("...") to DLC_Log("...", true).
+        -- Loot:Print is defined at bottom as DesolateLootcouncil:DLC_Log(msg). Let's explicitly use DesolateLootcouncil:DLC_Log(msg, true) for visibility.
+        DesolateLootcouncil:DLC_Log("Manually added: " .. link, true)
         ---@type UI
         local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
         if UI and UI.ShowLootWindow then
             UI:ShowLootWindow(session.loot)
         end
     else
-        self:Print("Error: Could not identify item ID from input: " .. tostring(rawLink))
+        DesolateLootcouncil:DLC_Log("Error: Could not identify item ID from input: " .. tostring(rawLink), true)
     end
+end
+
+function Loot:IsValidCandidate(unit)
+    return DesolateLootcouncil:IsUnitInRaid(unit)
+end
+
+function Loot:GetCandidates()
+    local candidates = {}
+
+    -- 1. Real Group
+    if IsInRaid() then
+        for i = 1, MAX_RAID_MEMBERS do
+            local name = GetRaidRosterInfo(i)
+            if name then candidates[name] = true end
+        end
+    elseif IsInGroup() then
+        for i = 1, GetNumGroupMembers() do
+            local name = GetRaidRosterInfo(i)
+            if name then candidates[name] = true end
+        end
+    else
+        candidates[UnitName("player")] = true
+    end
+
+    -- 2. Simulated Players
+    ---@type Simulation
+    local Sim = DesolateLootcouncil:GetModule("Simulation")
+    if Sim then
+        local sims = Sim:GetRoster()
+        for _, name in ipairs(sims) do
+            candidates[name] = true
+        end
+    end
+
+    return candidates
+end
+
+function Loot:SimulateSession()
+    if not DesolateLootcouncil:AmILootMaster() then
+        DesolateLootcouncil:DLC_Log("Error: You must be Loot Master to simulate a session.", true)
+        return
+    end
+
+    ---@type Simulation
+    local Sim = DesolateLootcouncil:GetModule("Simulation")
+    if not Sim then return end
+
+    -- 1. Ensure at least one sim exists if empty
+    local roster = Sim:GetRoster()
+    if #roster == 0 then
+        Sim:Add(UnitName("player"))
+        DesolateLootcouncil:DLC_Log("No simulated players found. Added self.")
+    end
+
+    -- 2. Generate Test Items
+    self:AddTestItems()
+
+    -- 3. Trigger Simulated Voting (Delayed)
+    C_Timer.After(2, function()
+        Sim:SimulateVote()
+    end)
+end
+
+-- Helper
+local function countKeys(t)
+    local c = 0
+    for _ in pairs(t) do c = c + 1 end
+    return c
 end
 
 function Loot:AddTestItems()
     if not DesolateLootcouncil:AmILootMaster() then
-        DesolateLootcouncil:Print("Error: You must be the Loot Master to generate test items.")
+        DesolateLootcouncil:DLC_Log("Error: You must be the Loot Master to generate test items.", true)
         return
     end
     self:ClearLootBacklog()
@@ -375,7 +448,7 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     end
 
     if not itemData then
-        self:Print("Error: Could not find item to award.")
+        DesolateLootcouncil:DLC_Log("Error: Could not find item to award.", true)
         return
     end
 
@@ -423,6 +496,20 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if session.awarded then
         local _, winnerClass = UnitClassBase(winnerName)
 
+        -- NEW: Alt Detection (Global Roster Lookup)
+        local db = DesolateLootcouncil.db.profile
+        local alts = db.playerRoster and db.playerRoster.alts
+        local isAlt = false
+        if alts then
+            local realm = GetRealmName():gsub("%s+", "")
+            local full = string.find(winnerName, "-") and winnerName or (winnerName .. "-" .. realm)
+            local short = Ambiguate(winnerName, "none")
+            if alts[winnerName] or alts[full] or alts[short] then
+                isAlt = true
+            end
+        end
+        DesolateLootcouncil:DLC_Log("Awarding to " .. winnerName .. " - Final IsAlt Status: " .. tostring(isAlt))
+
         -- Get Distribution module EARLY for snapshot
         ---@type Distribution
         local DLC_Dist = DesolateLootcouncil:GetModule("Distribution")
@@ -433,6 +520,7 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             itemID = itemData.itemID,
             winner = winnerName,
             winnerClass = winnerClass,
+            isAlt = isAlt,
             voteType = displayVote,
             timestamp = GetServerTime(),
             originalIndex = origIndex,                                                                      -- Captured from MovePlayerToBottom
@@ -515,12 +603,17 @@ function Loot:ReawardItem(awardIndex)
 
     -- 3. Revert Priority Position (if applicable)
     if award.originalIndex and (award.voteType == "Bid" or award.voteType == "Bis" or award.voteType == "1") then
+        local historyName = award.winner                          -- The Alt (e.g. Roithivoker)
+        local mainName = DesolateLootcouncil:GetMain(historyName) -- The Main (e.g. Roithi)
+
         -- Methods are attached to the Addon object (Global API pattern in Priority.lua)
         if DesolateLootcouncil.GetReversionIndex and DesolateLootcouncil.RestorePlayerPosition then
             -- Calculate drift based on subsequent events
             local currentTarget = DesolateLootcouncil:GetReversionIndex(itemData.category, award.originalIndex,
                 award.timestamp or 0)
-            DesolateLootcouncil:RestorePlayerPosition(itemData.category, award.winner, currentTarget)
+
+            DesolateLootcouncil:DLC_Log(string.format("Reaward Identity: Alt (%s) -> Main (%s)", historyName, mainName))
+            DesolateLootcouncil:RestorePlayerPosition(itemData.category, mainName, currentTarget)
         end
     end
 
@@ -558,7 +651,7 @@ function Loot:EndSession()
     end
 
     -- 4. Notify
-    DesolateLootcouncil:DLC_Log("Bidding session ended. Items cleared from monitor.", true)
+    DesolateLootcouncil:DLC_Log("Bidding session ended. Items cleared from monitor.")
 end
 
 function Loot:MarkAsTraded(itemLink, winnerName)

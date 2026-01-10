@@ -239,7 +239,7 @@ function Dist:SendStopSession()
     -- Clear Saved State
     wipe(DesolateLootcouncil.db.profile.session.activeState)
 
-    DesolateLootcouncil:DLC_Log("Session Stopped. Broadcast sent.", true)
+    DesolateLootcouncil:DLC_Log("Session Stopped. Broadcast sent.")
 end
 
 function Dist:SendCloseItem(itemGUID)
@@ -427,15 +427,11 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
                     local totalMembers = GetNumGroupMembers()
                     if totalMembers == 0 then totalMembers = 1 end -- Self
 
-                    -- [DEBUG] If testing solo, add simulated users to the required count
-                    if GetNumGroupMembers() <= 1 and DesolateLootcouncil.activeAddonUsers then
-                        local myName = UnitName("player")
-                        for name in pairs(DesolateLootcouncil.activeAddonUsers) do
-                            -- Add anyone in the sim list who isn't me
-                            if name ~= myName then
-                                totalMembers = totalMembers + 1
-                            end
-                        end
+                    -- [FIX] Combine Real Group + Active Sims
+                    ---@type Simulation
+                    local Sim = DesolateLootcouncil:GetModule("Simulation")
+                    if Sim then
+                        totalMembers = totalMembers + Sim:GetCount()
                     end
 
                     -- Only close if everyone (Real + Sim) has voted
@@ -456,7 +452,7 @@ function Dist:OnCommReceived(prefix, message, distribution, sender)
         local lm = payload.data and payload.data.lm
         if lm then
             DesolateLootcouncil.activeLootMaster = lm
-            DesolateLootcouncil:Print("Loot Master synced to: " .. lm)
+            DesolateLootcouncil:DLC_Log("Loot Master synced to: " .. lm)
 
             -- Update local cache
             DesolateLootcouncil.amILM = (lm == UnitName("player"))
@@ -502,7 +498,7 @@ function Dist:SendVote(itemGUID, voteType)
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", target)
         DesolateLootcouncil:DLC_Log("Sent Vote " .. voteType .. " to " .. target)
     else
-        DesolateLootcouncil:Print("Error: Could not determine Loot Master to vote.")
+        DesolateLootcouncil:DLC_Log("Error: Could not determine Loot Master to vote.")
     end
 end
 

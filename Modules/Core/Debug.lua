@@ -13,6 +13,7 @@
 ---@field DetermineLootMaster fun(self: DLC_Ref_Debug): string
 ---@field NewModule fun(self: DLC_Ref_Debug, name: string, ...): any
 ---@field GetModule fun(self: DLC_Ref_Debug, name: string): any
+---@field DLC_Log fun(self: DLC_Ref_Debug, msg: string, force?: boolean)
 
 ---@type DLC_Ref_Debug
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
@@ -31,7 +32,7 @@ function Debug:ToggleVerbose()
     local profile = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if profile then
         profile.verboseMode = not profile.verboseMode
-        self:Print("Verbose Mode: " .. (profile.verboseMode and "ON" or "OFF"))
+        DesolateLootcouncil:DLC_Log("Verbose Mode: " .. (profile.verboseMode and "ON" or "OFF"), true)
     end
 end
 
@@ -41,13 +42,13 @@ function Debug:ShowStatus()
 
     local activeLM = DesolateLootcouncil:DetermineLootMaster()
 
-    self:Print("--- Status Report ---")
-    self:Print("Configured LM: " .. (DesolateLootcouncil.db.profile.configuredLM or "None"))
-    self:Print("Active LM: " .. tostring(activeLM))
-    self:Print("Am I LM?: " .. tostring(activeLM == UnitName("player")))
-    self:Print("Addon Users Found: " .. userCount)
-    self:Print("Current Zone: " .. GetRealZoneText())
-    self:Print("---------------------")
+    DesolateLootcouncil:DLC_Log("--- Status Report ---", true)
+    DesolateLootcouncil:DLC_Log("Configured LM: " .. (DesolateLootcouncil.db.profile.configuredLM or "None"), true)
+    DesolateLootcouncil:DLC_Log("Active LM: " .. tostring(activeLM), true)
+    DesolateLootcouncil:DLC_Log("Am I LM?: " .. tostring(activeLM == UnitName("player")), true)
+    DesolateLootcouncil:DLC_Log("Addon Users Found: " .. userCount, true)
+    DesolateLootcouncil:DLC_Log("Current Zone: " .. GetRealZoneText(), true)
+    DesolateLootcouncil:DLC_Log("---------------------", true)
 end
 
 function Debug:SimulateComm(arg)
@@ -55,7 +56,7 @@ function Debug:SimulateComm(arg)
         self:SimulateVoting()
     else
         DesolateLootcouncil.activeAddonUsers[arg] = true
-        self:Print("Simulated PONG from " .. arg)
+        DesolateLootcouncil:DLC_Log("Simulated PONG from " .. arg)
     end
 end
 
@@ -65,7 +66,7 @@ function Debug:SimulateVoting()
     if not Dist then return end
     local session = DesolateLootcouncil.db.profile.session.bidding
     if not session or #session == 0 then
-        self:Print("No active session items found.")
+        DesolateLootcouncil:DLC_Log("No active session items found.")
         return
     end
     local myName = UnitName("player")
@@ -90,21 +91,37 @@ function Debug:SimulateVoting()
             votedCount = votedCount + 1
         end
     end
-    self:Print("Simulated random votes for " .. votedCount .. " users.")
+    DesolateLootcouncil:DLC_Log("Simulated random votes for " .. votedCount .. " users.")
 end
 
 function Debug:DumpKeys()
     local db = DesolateLootcouncil.db.profile
-    if not db.playerRoster or not db.playerRoster.alts then
-        self:Print("No Alts database found.")
+    if not db then
+        DesolateLootcouncil:DLC_Log("No database found.")
         return
     end
 
-    self:Print("--- DUMPING ALT ROSTER ---")
-    local count = 0
-    for k, v in pairs(db.playerRoster.alts) do
-        self:Print("Alt: [" .. tostring(k) .. "] -> Main: [" .. tostring(v) .. "]")
-        count = count + 1
+    DesolateLootcouncil:DLC_Log("--- DUMPING ROSTER KEYS ---")
+
+    -- Dump Mains
+    if db.MainRoster then
+        DesolateLootcouncil:DLC_Log("--- Mains ---")
+        for k, v in pairs(db.MainRoster) do
+            DesolateLootcouncil:DLC_Log("Key: [" .. tostring(k) .. "]")
+        end
+    else
+        DesolateLootcouncil:DLC_Log("No MainRoster table.")
     end
-    self:Print("--- END DUMP (" .. count .. " entries) ---")
+
+    -- Dump Alts
+    if db.playerRoster and db.playerRoster.alts then
+        DesolateLootcouncil:DLC_Log("--- Alts ---")
+        for k, v in pairs(db.playerRoster.alts) do
+            DesolateLootcouncil:DLC_Log("Alt: [" .. tostring(k) .. "] -> Main: [" .. tostring(v) .. "]")
+        end
+    else
+        DesolateLootcouncil:DLC_Log("No Alts table.")
+    end
+
+    DesolateLootcouncil:DLC_Log("--- END DUMP ---")
 end
