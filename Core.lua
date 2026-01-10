@@ -734,3 +734,17 @@ function DesolateLootcouncil:GetOptions()
 
     return options
 end
+
+function DesolateLootcouncil:GetEnchantingSkillLevel()
+    local prof1, prof2 = GetProfessions()
+    local profs = { prof1, prof2 }
+    for _, index in pairs(profs) do
+        if index then
+            local name, _, rank = GetProfessionInfo(index)
+            if name and (name == "Enchanting" or string.find(name, "Enchanting")) then
+                return rank
+            end
+        end
+    end
+    return 0
+end

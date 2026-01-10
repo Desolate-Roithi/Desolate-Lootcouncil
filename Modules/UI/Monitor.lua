@@ -298,6 +298,57 @@ function UI:ShowAwardWindow(itemData)
             row:AddChild(btnGive)
         end
     end
+
+    -- [NEW] Disenchanters Section
+    local Comm = DesolateLootcouncil:GetModule("Comm")
+    local disenchanters = {}
+
+    if Comm and Comm.playerEnchantingSkill then
+        for name, skill in pairs(Comm.playerEnchantingSkill) do
+            if skill > 0 then
+                table.insert(disenchanters, { name = name, skill = skill })
+            end
+        end
+        table.sort(disenchanters, function(a, b) return a.skill > b.skill end)
+    end
+
+    if #disenchanters > 0 then
+        local deHeader = AceGUI:Create("Label")
+        deHeader:SetText("\n|cffaaaaaaDisenchanters|r")
+        deHeader:SetFullWidth(true)
+        deHeader:SetJustifyH("CENTER")
+        deHeader:SetFontObject(GameFontNormal)
+        scroll:AddChild(deHeader)
+
+        for _, de in ipairs(disenchanters) do
+            local row = AceGUI:Create("SimpleGroup")
+            row:SetLayout("Flow")
+            row:SetFullWidth(true)
+            scroll:AddChild(row)
+
+            local lblName = AceGUI:Create("Label")
+            lblName:SetText(de.name)
+            lblName:SetRelativeWidth(0.30)
+            row:AddChild(lblName)
+
+            local lblSkill = AceGUI:Create("Label")
+            lblSkill:SetText("Lvl " .. de.skill)
+            lblSkill:SetRelativeWidth(0.45)
+            row:AddChild(lblSkill)
+
+            local btnGive = AceGUI:Create("Button")
+            btnGive:SetText("Give")
+            btnGive:SetRelativeWidth(0.25)
+            btnGive:SetCallback("OnClick", function()
+                self.awardFrame:Hide()
+                local Loot = DesolateLootcouncil:GetModule("Loot")
+                if Loot and Loot.AwardItem then
+                    Loot:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
+                end
+            end)
+            row:AddChild(btnGive)
+        end
+    end
 end
 
 function UI:CloseMasterLootWindow()

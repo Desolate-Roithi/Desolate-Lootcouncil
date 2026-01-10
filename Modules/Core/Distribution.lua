@@ -188,6 +188,16 @@ function Dist:StartSession(lootTable)
     if not channel then
         channel = "WHISPER"
         DesolateLootcouncil:DLC_Log("Not in group, simulating broadcast to self.")
+
+        -- [SOLO SIMULATION FIX]
+        -- Ensure the Comm module knows about "Self" even if we skipped a Version Check
+        local Comm = DesolateLootcouncil:GetModule("Comm")
+        if Comm then
+            local myName = UnitName("player")
+            if not Comm.playerEnchantingSkill then Comm.playerEnchantingSkill = {} end
+            Comm.playerEnchantingSkill[myName] = DesolateLootcouncil:GetEnchantingSkillLevel()
+        end
+
         self:SendCommMessage("DLC_Loot", serialized, channel, UnitName("player"))
     else
         self:SendCommMessage("DLC_Loot", serialized, channel)

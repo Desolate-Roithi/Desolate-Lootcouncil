@@ -5,16 +5,25 @@
 ---@field playerVersions table<string, string>
 ---@field SendVersionCheck fun(self: Comm)
 ---@field GetActiveUserCount fun(self: Comm): number
+---@field playerEnchantingSkill table<string, number>
 
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 ---@type Comm
 local Comm = DesolateLootcouncil:NewModule("Comm", "AceComm-3.0", "AceSerializer-3.0", "AceEvent-3.0")
 
+
+
+
 function Comm:OnEnable()
     -- Register the communication prefix
     self:RegisterComm("DLC_COMM", "OnCommReceived")
     self.playerVersions = {}
+    self.playerEnchantingSkill = {}
+
+    -- [DEBUG SANITY CHECK]
+    DesolateLootcouncil:DLC_Log(
+    "DEBUG: My Enchanting Skill: " .. tostring(DesolateLootcouncil:GetEnchantingSkillLevel()), true)
 end
 
 function Comm:SendComm(command, data, target)
@@ -49,23 +58,45 @@ function Comm:OnCommReceived(prefix, message, distribution, sender)
     if not success then return end
 
     if command == "VERSION_REQ" then
-        -- Reply with my version
-        self:SendComm("VERSION_RESP", DesolateLootcouncil.version, sender)
+        -- Reply with my version and enchanting skill
+        local responseData = {
+            version = DesolateLootcouncil.version,
+            enchantingSkill = DesolateLootcouncil:GetEnchantingSkillLevel()
+        }
+        self:SendComm("VERSION_RESP", responseData, sender)
     elseif command == "VERSION_RESP" then
-        -- Store sender's version
-        self.playerVersions[sender] = data
+        -- Store sender's version and enchanting skill
+        local ver, skill
+        if type(data) == "table" then
+            ver = data.version
+            skill = data.enchantingSkill
+        else
+            ver = data
+            skill = 0
+        end
+
+        self.playerVersions[sender] = ver
+        self.playerEnchantingSkill[sender] = skill
+
         -- Sync to Core for Debug module
         if DesolateLootcouncil.activeAddonUsers then
             DesolateLootcouncil.activeAddonUsers[sender] = true
         end
         -- Fire AceEvent DLC_VERSION_UPDATE
-        self:SendMessage("DLC_VERSION_UPDATE", sender, data)
+        self:SendMessage("DLC_VERSION_UPDATE", sender, ver)
     end
 end
 
 function Comm:SendVersionCheck()
     -- Broadcast VERSION_REQ
-    self.playerVersions = {}          -- Reset locally on new check? Logic implies yes.
+    self.playerVersions = {}        -- Reset locally on new check
+    self.playerEnchantingSkill = {} -- Reset skills too
+
+    -- Explicitly add Self
+    local myName = UnitName("player")
+    self.playerVersions[myName] = DesolateLootcouncil.version
+    self.playerEnchantingSkill[myName] = DesolateLootcouncil:GetEnchantingSkillLevel()
+
     self:SendComm("VERSION_REQ", nil) -- Broadcast
 end
 
