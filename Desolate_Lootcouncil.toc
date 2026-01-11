@@ -1,38 +1,52 @@
 ## Interface: 120001
 ## Title: Desolate Lootcouncil
 ## Author: Roithi
-## Version: 0.2.1-Beta
+## Version: 0.3.0-Beta
 ## SavedVariables: DesolateLootDB
 
 # 0. Libraries
 embeds.xml
 
-# 1. Load Core First
-Core.lua
+# 1. Core
+Core/Addon.lua
+Core/Constants.lua
 
-# 2. Load Core Modules
-Modules/Core/Debug.lua
-Modules/Core/Comm.lua
-Modules/Core/Loot.lua
-Modules/Core/Distribution.lua
-Modules/Core/Session.lua
-Modules/Core/Trade.lua
-Modules/Core/Priority.lua
-Modules/Core/ItemManager.lua
-Modules/Core/Simulation.lua
+# 2. Utilities
+Utilities/Logger.lua
+Utilities/Persistence.lua
+Utilities/Debug.lua
+Utilities/Simulation.lua
 
-# 3. Load Settings
-Modules/Settings/General.lua
-Modules/Settings/Roster.lua
-Modules/Settings/Priority.lua
-Modules/Settings/ItemManager.lua
+# 3. Core Modules
+Core/Comm.lua
+Core/SlashCommands.lua
 
-# 4. Load UI
-Modules/UI/Layouts.lua
-Modules/UI/Core.lua
-Modules/UI/Attendance.lua
-Modules/UI/Loot.lua
-Modules/UI/Monitor.lua
-Modules/UI/Voting.lua
-Modules/UI/Utility.lua
-Modules/UI/Version.lua
+# 4. Settings
+Settings/Loader.lua
+Settings/General.lua
+Settings/ItemSettings.lua
+Settings/PrioritySettings.lua
+Settings/Roster.lua
+Settings/LootRules.lua
+
+# 5. Systems
+Systems/Priority.lua
+Systems/Loot.lua
+Systems/Session.lua
+Systems/Roster.lua
+Systems/Trade.lua
+
+# 6. Legacy Modules
+
+# 6. UI
+UI/Core.lua
+UI/Widgets/Sidebar.lua
+UI/Layouts.lua
+UI/Windows/Attendance.lua
+UI/Windows/History.lua
+UI/Windows/Loot.lua
+UI/Windows/Monitor.lua
+UI/Windows/PriorityOverride.lua
+UI/Windows/TradeList.lua
+UI/Windows/Version.lua
+UI/Windows/Voting.lua
