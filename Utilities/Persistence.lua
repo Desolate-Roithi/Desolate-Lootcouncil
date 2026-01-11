@@ -1,17 +1,17 @@
 ---@class Persistence
+---@field DefaultLayouts table<string, table>
 local Persistence = {}
+
+---@class (partial) PersistenceAddon : AceAddon
+---@field db table
+---@field DefaultLayouts table<string, table>
+---@field Persistence Persistence
+---@field Print fun(self: PersistenceAddon, msg: string)
+
+---@type PersistenceAddon
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 
-Persistence.DefaultLayouts = {
-    ["Monitor"] = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0, width = 900, height = 650 },
-    ["Loot"] = { point = "LEFT", relativePoint = "LEFT", x = 20, y = 0, width = 700, height = 600 },
-    ["History"] = { point = "CENTER", relativePoint = "CENTER", x = -60, y = 25, width = 500, height = 400 },
-    ["PriorityHistory"] = { point = "CENTER", relativePoint = "CENTER", x = -60, y = 25, width = 600, height = 400 },
-    ["Trade"] = { point = "CENTER", relativePoint = "CENTER", x = -160, y = 25, width = 500, height = 350 },
-    ["Voting"] = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 100, width = 450, height = 550 },
-    ["Overrides"] = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0, width = 400, height = 500 },
-    ["Version"] = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0, width = 500, height = 400 },
-}
+Persistence.DefaultLayouts = {}
 
 function Persistence:SaveFramePosition(frame, windowName)
     local db = DesolateLootcouncil.db.profile
@@ -68,14 +68,14 @@ function Persistence:RestoreFramePosition(frame, windowName)
         target:SetPoint(config.point or "CENTER", UIParent, config.relativePoint or "CENTER", config.x or 0,
             config.y or 0)
 
-        -- SetWidth/SetHeight on AceGUI widget is preferred if available (handles resizing logic),
-        -- otherwise raw frame.
-        if frame.SetWidth then
-            if config.width then frame:SetWidth(config.width) end
-            if config.height then frame:SetHeight(config.height) end
-        else
-            if config.width then target:SetWidth(config.width) end
-            if config.height then target:SetHeight(config.height) end
+        -- Force size application
+        if config.width then
+            if frame.SetWidth then frame:SetWidth(config.width) end
+            target:SetWidth(config.width)
+        end
+        if config.height then
+            if frame.SetHeight then frame:SetHeight(config.height) end
+            target:SetHeight(config.height)
         end
     else
         -- Fallback if no default exists (Should not happen)
@@ -184,7 +184,7 @@ function Persistence:ToggleWindowCollapse(widget)
     end
 end
 
-function Persistence:ApplyCollapseHook(widget)
+function Persistence:ApplyCollapseHook(widget, windowName)
     local frame = widget.frame or widget
     -- Invisible button covering the title bar
     local titleBtn = CreateFrame("Button", nil, frame)
@@ -209,7 +209,7 @@ function Persistence:ApplyCollapseHook(widget)
     end)
     titleBtn:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
-        self:SaveFramePosition(frame, widget.type or "Window")
+        self:SaveFramePosition(frame, windowName or widget.type or "Window")
     end)
 end
 

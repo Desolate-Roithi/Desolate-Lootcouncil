@@ -74,7 +74,7 @@ function UI_Version:ShowVersionWindow(isTest)
             SavePos(frame)
         end)
         rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Version")
 
         -- 2. Container (Scroll)
         ---@type AceGUIScrollFrame

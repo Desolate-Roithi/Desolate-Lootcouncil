@@ -7,8 +7,8 @@ DesolateLootcouncil.DefaultLayouts = {
         relativePoint = "CENTER",
         x = 0,
         y = 0,
-        width = 800,
-        height = 600
+        width = 790,
+        height = 500
     },
     ["Loot"] = {
         point = "CENTER",
@@ -89,5 +89,13 @@ DesolateLootcouncil.DefaultLayouts = {
         y = 0,
         width = 500,
         height = 400
+    },
+    ["ItemManager"] = {
+        point = "CENTER",
+        relativePoint = "CENTER",
+        x = 0,
+        y = 0,
+        width = 600,
+        height = 500
     },
 }

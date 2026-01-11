@@ -17,11 +17,12 @@ function UI_PriorityLogHistory:ShowLogWindow()
 
         -- AceGUI "Frame" container exposes the raw frame via .frame
         local rawFrame = frame.frame
-        rawFrame:SetScript("OnDragStop", function(f)
+        rawFrame:HookScript("OnDragStop", function(f)
             f:StopMovingOrSizing()
-            SavePos(f) -- Pass the raw frame 'f', not the AceGUI widget 'frame'
+            SavePos(frame)
         end)
-        rawFrame:SetScript("OnHide", function(f) SavePos(f) end)
+        rawFrame:HookScript("OnHide", function(f) SavePos(frame) end)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "PriorityHistory")
     end
 
     self.logFrame:Show()

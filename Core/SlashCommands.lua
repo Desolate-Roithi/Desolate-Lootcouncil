@@ -15,15 +15,6 @@ function SlashCommands.Handle(input)
     if cmd == "config" or cmd == "options" then
         DesolateLootcouncil:OpenConfig()
 
-        -- Reset
-    elseif cmd == "reset" then
-        if DesolateLootcouncil.db and DesolateLootcouncil.db.ResetDB then
-            DesolateLootcouncil.db:ResetDB()
-            DesolateLootcouncil:Print("Configuration reset.")
-        else
-            DesolateLootcouncil:Print("Error: Database reset not available.")
-        end
-
         -- Version
     elseif cmd == "version" then
         local UI = DesolateLootcouncil:GetModule("UI")

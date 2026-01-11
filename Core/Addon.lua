@@ -2,16 +2,13 @@
 ---@field db table
 ---@field version string
 ---@field amILM boolean
----@field activeAddonUsers table<string, boolean>
 ---@field activeLootMaster string
 ---@field PriorityLog table
----@field simulatedGroup table
----@field optionsFrame table
----@field Constants table
----@field Logger table
----@field Persistence Persistence
----@field Debug table
----@field Simulation Simulation
+---@field Logic table
+---@field Comm Comm
+---@field Session Session
+---@field Loot Loot
+---@field DefaultLayouts table<string, table>
 ---@field SlashCommands table
 ---@field SettingsLoader table
 DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "AceConsole-3.0", "AceEvent-3.0",
@@ -167,21 +164,28 @@ function DesolateLootcouncil:GetActiveUserCount()
 end
 
 function DesolateLootcouncil:OpenConfig()
+    -- Set default size for AceConfig specifically before opening
+    local layouts = self.DefaultLayouts
+    if layouts and layouts["Config"] then
+        LibStub("AceConfigDialog-3.0"):SetDefaultSize("DesolateLootcouncil", layouts["Config"].width,
+            layouts["Config"].height)
+    end
+
     local frame = LibStub("AceConfigDialog-3.0"):Open("DesolateLootcouncil")
     if frame then
         self:RestoreFramePosition(frame, "Config")
         local savePos = function(f) self:SaveFramePosition(f, "Config") end
         local rawFrame = (frame --[[@as any]]).frame
         if rawFrame then
-            rawFrame:SetScript("OnDragStop", function(f)
+            rawFrame:HookScript("OnDragStop", function(f)
                 f:StopMovingOrSizing()
                 savePos(frame)
             end)
-            rawFrame:SetScript("OnHide", function() savePos(frame) end)
+            rawFrame:HookScript("OnHide", function() savePos(frame) end)
         end
 
         if self.Persistence and self.Persistence.ApplyCollapseHook then
-            self.Persistence:ApplyCollapseHook(frame)
+            self.Persistence:ApplyCollapseHook(frame, "Config")
         end
     end
 end

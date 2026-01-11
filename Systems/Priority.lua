@@ -243,8 +243,7 @@ function Priority:SyncMissingPlayers()
     end
 
     if addedCount > 0 or removedCount > 0 then
-        DesolateLootcouncil:DLC_Log(string.format("Synced Lists: +%d / -%d players.",
-            addedCount, removedCount), true)
+        DesolateLootcouncil:DLC_Log("Synced Lists: All missing players removed/added", true)
     else
         DesolateLootcouncil:DLC_Log("Lists synced. No changes.", true)
     end
@@ -288,7 +287,7 @@ function Priority:MovePlayerToBottom(listName, playerName)
         table.insert(players, targetName)
 
         local msg = string.format("Priority Update: %s moved to bottom of %s (Item Awarded).", targetName, listName)
-        DesolateLootcouncil:DLC_Log(msg)
+        DesolateLootcouncil:DLC_Log(msg, true)
         self:LogPriorityChange(string.format("Awarded item to %s (%s). Priority Reset.", targetName, listName))
 
         -- Structured Logging

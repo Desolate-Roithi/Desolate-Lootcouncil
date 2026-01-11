@@ -16,6 +16,7 @@ Utilities/Logger.lua
 Utilities/Persistence.lua
 Utilities/Debug.lua
 Utilities/Simulation.lua
+Utilities/Base64.lua
 
 # 3. Core Modules
 Core/Comm.lua
@@ -28,6 +29,7 @@ Settings/ItemSettings.lua
 Settings/PrioritySettings.lua
 Settings/Roster.lua
 Settings/LootRules.lua
+Settings/ProfileSettings.lua
 
 # 5. Systems
 Systems/Priority.lua
@@ -49,5 +51,6 @@ UI/Windows/Loot.lua
 UI/Windows/Monitor.lua
 UI/Windows/PriorityOverride.lua
 UI/Windows/TradeList.lua
+UI/Windows/ItemManager.lua
 UI/Windows/Version.lua
 UI/Windows/Voting.lua

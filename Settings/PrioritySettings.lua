@@ -88,7 +88,7 @@ function PrioritySettings:GetOptions()
                                 -- Standard AceConfig doesn't put buttons inline easily next to inputs without widths.
                                 -- Let's rely on the input set.
                                 order = 2.5,
-                                width = "half",
+                                width = "normal",
                                 func = function()
                                     if self.tempSelectedListIndex and self.tempRenameVal ~= "" then
                                         DesolateLootcouncil:GetModule("Priority"):RenamePriorityList(

@@ -42,6 +42,12 @@ function SettingsLoader.GetOptions()
         options.args.attendance = Attendance:GetAttendanceOptions()
     end
 
+    ---@type ProfileSettings
+    local Profiles = DesolateLootcouncil:GetModule("ProfileSettings", true)
+    if Profiles and Profiles.GetProfileOptions then
+        options.args.profiles = Profiles:GetProfileOptions()
+    end
+
     return options
 end
 

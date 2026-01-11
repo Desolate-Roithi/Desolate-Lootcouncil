@@ -41,12 +41,12 @@ function UI_Loot:CreateLootFrame()
         DesolateLootcouncil:SaveFramePosition(f, "Loot")
     end
     local rawFrame = (frame --[[@as any]]).frame
-    rawFrame:SetScript("OnDragStop", function(f)
+    rawFrame:HookScript("OnDragStop", function(f)
         f:StopMovingOrSizing()
         SavePos(frame)
     end)
-    rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-    DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
+    rawFrame:HookScript("OnHide", function() SavePos(frame) end)
+    DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Loot")
 end
 
 function UI_Loot:ShowLootWindow(lootTable)

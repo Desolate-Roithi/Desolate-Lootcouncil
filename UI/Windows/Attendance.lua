@@ -70,7 +70,7 @@ function UI_Attendance:ShowAttendanceWindow()
     end)
     rawFrame:SetScript("OnHide", function() SavePos(frame) end)
     if DesolateLootcouncil.Persistence then
-        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Attendance")
     end
 
     -- 3. Top Label

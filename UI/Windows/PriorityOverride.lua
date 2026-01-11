@@ -16,17 +16,9 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-
     -- Persistence
-    frame:SetScript("OnDragStop", function(f)
-        f:StopMovingOrSizing()
-        DesolateLootcouncil:SaveFramePosition(f, "PriorityOverride")
-    end)
     DesolateLootcouncil:RestoreFramePosition(frame, "PriorityOverride")
+    DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "PriorityOverride")
 
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
