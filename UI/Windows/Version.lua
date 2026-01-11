@@ -10,6 +10,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@field RestoreFramePosition fun(self: DLC_Ref_Version, frame: any, windowName: string)
 ---@field SaveFramePosition fun(self: DLC_Ref_Version, frame: any, windowName: string)
 ---@field ApplyCollapseHook fun(self: DLC_Ref_Version, widget: any)
+---@field Persistence Persistence
 
 ---@type DLC_Ref_Version
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Version]]
@@ -58,8 +59,8 @@ function UI_Version:ShowVersionWindow(isTest)
             self.scrollFrame = nil
         end)
         frame:SetLayout("Fill")
-        frame:SetWidth(400)
-        frame:SetHeight(500)
+        frame:SetWidth(300)
+        frame:SetHeight(350)
         self.versionFrame = frame
 
         -- [NEW] Position Persistence
@@ -73,7 +74,7 @@ function UI_Version:ShowVersionWindow(isTest)
             SavePos(frame)
         end)
         rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil:ApplyCollapseHook(frame)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
 
         -- 2. Container (Scroll)
         ---@type AceGUIScrollFrame

@@ -57,7 +57,7 @@ function UI_Monitor:ShowMonitorWindow()
             SavePos(frame)
         end)
         rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil:ApplyCollapseHook(frame)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
     end
 
     self.monitorFrame:Show()
@@ -248,7 +248,7 @@ function UI_Monitor:ShowAwardWindow(itemData)
             SavePos(frame)
         end)
         rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil:ApplyCollapseHook(frame)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
     end
     self.awardFrame:Show()
     self.awardFrame:ReleaseChildren()

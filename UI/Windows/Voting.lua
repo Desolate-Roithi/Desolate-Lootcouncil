@@ -46,7 +46,7 @@ function UI_Voting:CreateVotingFrame()
         SavePos(frame)
     end)
     rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-    DesolateLootcouncil:ApplyCollapseHook(frame)
+    DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
 
     self.myVotes = self.myVotes or {}
     self.timerLabels = {}

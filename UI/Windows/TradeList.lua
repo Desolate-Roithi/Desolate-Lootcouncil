@@ -22,7 +22,7 @@ function UI_TradeList:ShowTradeListWindow()
             SavePos(frame)
         end)
         rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil:ApplyCollapseHook(frame)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
     end
 
     self.tradeListFrame:Show()

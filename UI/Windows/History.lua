@@ -25,7 +25,7 @@ function UI_History:ShowHistoryWindow()
             SavePos(frame)
         end)
         rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil:ApplyCollapseHook(frame)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
     end
 
     self.historyFrame:Show()

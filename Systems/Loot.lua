@@ -366,13 +366,77 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if UI then UI:ShowMonitorWindow() end
 end
 
+function Loot:ReawardItem(index)
+    local session = DesolateLootcouncil.db.profile.session
+    if not session.awarded or not session.awarded[index] then return end
+
+    local awardedItem = session.awarded[index]
+    -- Restore to Bidding
+    table.insert(session.bidding, awardedItem.fullItemData or {
+        link = awardedItem.link,
+        itemID = awardedItem.itemID,
+        texture = awardedItem.texture,
+        category = "Re-awarded",
+        sourceGUID = "Reaward-" .. (awardedItem.itemID or 0) .. "-" .. math.random(100),
+        stackIndex = 1
+    })
+
+    -- Revert Priority
+    if awardedItem.originalIndex and awardedItem.winner then
+        ---@type Priority
+        local Priority = DesolateLootcouncil:GetModule("Priority") --[[@as Priority]]
+        if Priority and Priority.RestorePlayerPosition then
+            local cat = awardedItem.fullItemData and awardedItem.fullItemData.category
+            if cat then
+                Priority:RestorePlayerPosition(cat, awardedItem.winner, awardedItem.originalIndex)
+            end
+        end
+    end
+
+    -- [FIX] Restore Votes to Session
+    if awardedItem.votes then
+        local Session = DesolateLootcouncil:GetModule("Session")
+        if Session then
+            if not Session.sessionVotes then Session.sessionVotes = {} end
+            -- Map by GUID (which we generated on restore or original)
+            -- Ideally we use the ORIGINAL sourceGUID if possible, but Reaward generates a new one.
+            -- Wait, if we generate a NEW GUID, the old votes won't map!
+            -- We must use the OLD GUID if we want votes to match, OR we update the votes key.
+            -- The Reaward logic below generates a NEW GUID: "Reaward-..."
+            -- Let's use that NEW GUID for the vote key.
+
+            -- Update bidding item to use the Reaward GUID
+            local newItem = session.bidding[#session.bidding]
+            local newGUID = newItem.sourceGUID
+
+            Session.sessionVotes[newGUID] = DeepCopy(awardedItem.votes)
+            local vCount = 0
+            for _ in pairs(awardedItem.votes) do vCount = vCount + 1 end
+            DesolateLootcouncil:DLC_Log("Restored " .. vCount .. " votes for re-awarded item.")
+        end
+    end
+
+    table.remove(session.awarded, index)
+    DesolateLootcouncil:DLC_Log("Re-awarded item: " .. (awardedItem.link or "???"))
+
+    -- Refresh UIs
+    local History = DesolateLootcouncil:GetModule("UI_History")
+    if History then History:ShowHistoryWindow() end
+
+    -- Open Monitor to show it's back
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+    if Monitor then Monitor:ShowMonitorWindow() end
+
+    DesolateLootcouncil:Print("Item reverted to bidding session.")
+end
+
 function Loot:AddTestItems()
     local testItems = {
-        "item:19019:::::::20:257::::::", -- Thunderfury
-        "item:18832:::::::20:257::::::", -- Brutality Blade
-        "item:16914:::::::20:257::::::", -- Netherwind Belt
-        "item:17075:::::::20:257::::::", -- Vis'kag
-        "item:12345:::::::20:257::::::", -- Random
+        "item:16914:::::::20:257::::::", -- Tier (Netherwind Belt)
+        "item:17075:::::::20:257::::::", -- Weapons (Vis'kag)
+        "item:19136:::::::20:257::::::", -- Rest (Mana Igniting Cord)
+        "item:13335:::::::20:257::::::", -- Collectables (Deathcharger's Reins)
+        "item:19019:::::::20:257::::::", -- Extra (Thunderfury)
     }
     for _, itemLink in ipairs(testItems) do
         self:AddManualItem(itemLink)

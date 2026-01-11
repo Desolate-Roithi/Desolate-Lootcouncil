@@ -33,11 +33,7 @@ function SettingsLoader.GetOptions()
         options.args.priority = Priority:GetOptions()
     end
 
-    ---@type LootSettings
-    local LootRules = DesolateLootcouncil:GetModule("LootSettings", true)
-    if LootRules and LootRules.GetOptions then
-        options.args.lootRules = LootRules:GetOptions()
-    end
+
 
     -- UI Module injects its own Attendance options
     ---@type UI_Attendance

@@ -180,7 +180,7 @@ function Simulation:HandleSlashCommand(input)
         self:Clear()
     elseif cmd == "vote" then
         self:SimulateVote()
-    elseif cmd == "start" or cmd == "test" then
+    elseif cmd == "test" then
         self:RunTest(args[2])
     elseif cmd == "list" then
         local roster = self:GetRoster()
@@ -191,7 +191,7 @@ function Simulation:HandleSlashCommand(input)
         end
     else
         DesolateLootcouncil:DLC_Log(
-            "Sim Usage: /dlc sim [add <name> | remove <name> | clear | vote | list | start <count>]", true)
+            "Sim Usage: /dlc sim [add <name> | remove <name> | clear | vote | list | test <count>]", true)
     end
 end
 

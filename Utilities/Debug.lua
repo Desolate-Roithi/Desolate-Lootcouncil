@@ -1,5 +1,5 @@
 ---@class Debug : AceModule, AceConsole-3.0
----@field ToggleVerbose fun(self: Debug)
+
 ---@field ShowStatus fun(self: Debug)
 ---@field SimulateComm fun(self: Debug, name: string)
 ---@field OnEnable function
@@ -34,14 +34,6 @@ end
 function Debug:OnEnable()
     -- Passive module: No longer registers chat commands directly (handled by SlashCommands.lua).
     DesolateLootcouncil:DLC_Log("Utilities/Debug Loaded")
-end
-
-function Debug:ToggleVerbose()
-    local profile = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    if profile then
-        profile.verboseMode = not profile.verboseMode
-        DesolateLootcouncil:DLC_Log("Verbose Mode: " .. (profile.verboseMode and "ON" or "OFF"), true)
-    end
 end
 
 function Debug:ShowStatus()

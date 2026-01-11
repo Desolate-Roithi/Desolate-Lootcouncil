@@ -69,7 +69,9 @@ function UI_Attendance:ShowAttendanceWindow()
         SavePos(frame)
     end)
     rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-    DesolateLootcouncil:ApplyCollapseHook(frame)
+    if DesolateLootcouncil.Persistence then
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
+    end
 
     -- 3. Top Label
     local label = AceGUI:Create("Label")
@@ -139,16 +141,12 @@ function UI_Attendance:ShowAttendanceWindow()
         controls:AddChild(spacer)
     end
 
-    -- Save & Close / End No Decay
-    local btnClose = AceGUI:Create("Button")
-    if isDecayEnabled then
-        btnClose:SetText("Close (No Action)")
-        btnClose:SetCallback("OnClick", function()
-            frame:Hide()
-        end)
-    else
-        btnClose:SetText("End Session (Save History)")
-        btnClose:SetCallback("OnClick", function()
+    -- End Session (Only if Decay Disabled - otherwise we use the Apply button)
+    if not isDecayEnabled then
+        local btnEnd = AceGUI:Create("Button")
+        btnEnd:SetText("End Session (Save History)")
+        btnEnd:SetWidth(200)
+        btnEnd:SetCallback("OnClick", function()
             -- Call StopRaidSession(true) directly
             local Roster = DesolateLootcouncil:GetModule("Roster")
             if Roster then
@@ -160,9 +158,8 @@ function UI_Attendance:ShowAttendanceWindow()
             local Registry = LibStub("AceConfigRegistry-3.0", true)
             if Registry then Registry:NotifyChange("DesolateLootcouncil") end
         end)
+        controls:AddChild(btnEnd)
     end
-    btnClose:SetWidth(200)
-    controls:AddChild(btnClose)
 
     -- Apply Decay & End (Conditional)
     if isDecayEnabled then

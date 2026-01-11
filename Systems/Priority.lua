@@ -206,6 +206,7 @@ function Priority:SyncMissingPlayers()
     if not db.MainRoster or not db.PriorityLists then return end
 
     local addedCount = 0
+    local removedCount = 0
 
     for _, listObj in ipairs(db.PriorityLists) do
         local currentList = listObj.players
@@ -214,6 +215,7 @@ function Priority:SyncMissingPlayers()
             currentSet[name] = true
         end
 
+        -- 1. Add Missing
         local missing = {}
         for name, data in pairs(db.MainRoster) do
             if not currentSet[name] then
@@ -221,7 +223,6 @@ function Priority:SyncMissingPlayers()
             end
         end
 
-        -- Sort missing by addedAt (Oldest -> Top, Newest -> Bottom)
         table.sort(missing, function(a, b) return a.addedAt < b.addedAt end)
 
         for _, player in ipairs(missing) do
@@ -229,13 +230,23 @@ function Priority:SyncMissingPlayers()
             addedCount = addedCount + 1
             self:LogPriorityChange(string.format("Synced %s to bottom of %s list.", player.name, listObj.name))
         end
+
+        -- 2. Remove Stale
+        for i = #currentList, 1, -1 do
+            local name = currentList[i]
+            if not db.MainRoster[name] then
+                table.remove(currentList, i)
+                removedCount = removedCount + 1
+                self:LogPriorityChange(string.format("Removed %s from %s list (Not in Roster).", name, listObj.name))
+            end
+        end
     end
 
-    if addedCount > 0 then
-        DesolateLootcouncil:DLC_Log(string.format("Synced missing players to bottom of lists (%d additions).",
-            addedCount / #db.PriorityLists), true)
+    if addedCount > 0 or removedCount > 0 then
+        DesolateLootcouncil:DLC_Log(string.format("Synced Lists: +%d / -%d players.",
+            addedCount, removedCount), true)
     else
-        DesolateLootcouncil:DLC_Log("No missing players found to sync.", true)
+        DesolateLootcouncil:DLC_Log("Lists synced. No changes.", true)
     end
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end

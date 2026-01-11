@@ -3,6 +3,9 @@
 
 ---@diagnostic disable: undefined-global
 -- Mock Global WoW Functions
+StaticPopupDialogs = {}
+function StaticPopup_Show(name) end
+
 function GetRealmName() return "TestRealm" end
 
 function time() return os.time() end

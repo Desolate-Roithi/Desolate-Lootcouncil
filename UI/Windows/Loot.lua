@@ -46,7 +46,7 @@ function UI_Loot:CreateLootFrame()
         SavePos(frame)
     end)
     rawFrame:SetScript("OnHide", function() SavePos(frame) end)
-    DesolateLootcouncil:ApplyCollapseHook(frame)
+    DesolateLootcouncil.Persistence:ApplyCollapseHook(frame)
 end
 
 function UI_Loot:ShowLootWindow(lootTable)
@@ -189,7 +189,8 @@ function UI_Loot:ShowLootWindow(lootTable)
 
             -- Dynamic Categories
             local catList = {}
-            local prioNames = DesolateLootcouncil:GetPriorityListNames()
+            local Priority = DesolateLootcouncil:GetModule("Priority")
+            local prioNames = Priority and Priority:GetPriorityListNames() or {}
             local listIndexMap = {} -- Map Name -> Index for SetItemCategory
 
             -- Re-fetch names *and* map them to indices cause SetItemCategory needs Index?
@@ -213,7 +214,8 @@ function UI_Loot:ShowLootWindow(lootTable)
             catDropdown:SetList(catList)
 
             -- INITIAL VALUE: Check Saved Persistence First
-            local savedCat = DesolateLootcouncil:GetItemCategory(data.itemID)
+            local Loot = DesolateLootcouncil:GetModule("Loot")
+            local savedCat = Loot and Loot:GetItemCategory(data.itemID)
             if savedCat == "Junk/Pass" then
                 -- If nothing saved, fall back to Session category
                 savedCat = data.category or "Junk/Pass"
@@ -226,11 +228,11 @@ function UI_Loot:ShowLootWindow(lootTable)
                 -- PERSIST CHANGE TO BACKEND
                 local idx = listIndexMap[value]
                 if idx then
-                    DesolateLootcouncil:SetItemCategory(data.itemID, idx)
+                    if Loot then Loot:SetItemCategory(data.itemID, idx) end
                     DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
                 elseif value == "Junk/Pass" then
                     -- Unassign from backend, but KEEP in session (as requested)
-                    DesolateLootcouncil:UnassignItem(data.itemID)
+                    if Loot then Loot:UnassignItem(data.itemID) end
                     -- No UI refresh needed as we just changed the backend state
                 end
             end)

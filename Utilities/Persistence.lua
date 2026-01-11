@@ -1,5 +1,6 @@
 ---@class Persistence
 local Persistence = {}
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 
 Persistence.DefaultLayouts = {
     ["Monitor"] = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0, width = 900, height = 650 },
@@ -16,6 +17,10 @@ function Persistence:SaveFramePosition(frame, windowName)
     local db = DesolateLootcouncil.db.profile
     if not db.positions then db.positions = {} end
     if not frame then return end
+    -- Unwrap AceGUI widget if passed accidentally
+    if frame.frame and type(frame.frame) == "table" and frame.frame.GetPoint then
+        frame = frame.frame
+    end
 
     local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
     local width = frame:GetWidth()
@@ -39,13 +44,39 @@ function Persistence:RestoreFramePosition(frame, windowName)
     local default = self.DefaultLayouts[windowName]
 
     -- Load
-    local config = saved or default
+    local config = saved
+
+    if not config then
+        -- Fallback sequence:
+        -- 1. DesolateLootcouncil.DefaultLayouts (User configured in UI/Layouts.lua)
+        -- 2. Persistence.DefaultLayouts (Hardcoded backup)
+        if DesolateLootcouncil.DefaultLayouts and DesolateLootcouncil.DefaultLayouts[windowName] then
+            config = DesolateLootcouncil.DefaultLayouts[windowName]
+        else
+            config = self.DefaultLayouts[windowName]
+        end
+    end
 
     if config then
-        frame:ClearAllPoints()
-        frame:SetPoint(config.point or "CENTER", UIParent, config.relativePoint or "CENTER", config.x or 0, config.y or 0)
-        if config.width then frame:SetWidth(config.width) end
-        if config.height then frame:SetHeight(config.height) end
+        -- Unwrap if AceGUI
+        local target = frame
+        if frame.frame and type(frame.frame) == "table" and frame.frame.GetPoint then
+            target = frame.frame
+        end
+
+        target:ClearAllPoints()
+        target:SetPoint(config.point or "CENTER", UIParent, config.relativePoint or "CENTER", config.x or 0,
+            config.y or 0)
+
+        -- SetWidth/SetHeight on AceGUI widget is preferred if available (handles resizing logic),
+        -- otherwise raw frame.
+        if frame.SetWidth then
+            if config.width then frame:SetWidth(config.width) end
+            if config.height then frame:SetHeight(config.height) end
+        else
+            if config.width then target:SetWidth(config.width) end
+            if config.height then target:SetHeight(config.height) end
+        end
     else
         -- Fallback if no default exists (Should not happen)
         frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
@@ -180,6 +211,12 @@ function Persistence:ApplyCollapseHook(widget)
         frame:StopMovingOrSizing()
         self:SaveFramePosition(frame, widget.type or "Window")
     end)
+end
+
+function Persistence:ResetPositions()
+    local db = DesolateLootcouncil.db.profile
+    db.positions = {}
+    DesolateLootcouncil:Print("Window positions reset to defaults. Please reload UI or re-open windows.")
 end
 
 DesolateLootcouncil.Persistence = Persistence

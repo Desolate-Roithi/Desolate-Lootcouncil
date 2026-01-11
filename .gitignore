@@ -22,3 +22,5 @@ Desktop.ini
 
 # Install libs
 install_libs.py
+
+manual_testing_guide.md
