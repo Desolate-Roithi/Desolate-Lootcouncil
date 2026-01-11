@@ -1,5 +1,10 @@
 ---@class UI_PriorityOverride : AceModule
+---@field priorityOverrideFrame Frame
+---@field priorityOverrideContent Frame
 local UI_PriorityOverride = DesolateLootcouncil:NewModule("UI_PriorityOverride")
+
+---@type DesolateLootcouncil
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 
 function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
     if self.priorityOverrideFrame then
@@ -18,7 +23,10 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
     frame:SetToplevel(true)
     -- Persistence
     DesolateLootcouncil:RestoreFramePosition(frame, "PriorityOverride")
-    DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "PriorityOverride")
+    if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ApplyCollapseHook then
+        ---@diagnostic disable-next-line: redundant-parameter
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "PriorityOverride")
+    end
 
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -134,7 +142,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
 
                     local msg = string.format("Manual Override: Moved %s from %d to %d in %s.", player, i, newIndex,
                         list.name or listKey)
-                    local Priority = DesolateLootcouncil:GetModule("Priority")
+                    local Priority = DesolateLootcouncil:GetModule("Priority") --[[@as Priority]]
                     if Priority then Priority:LogPriorityChange(msg) end
 
                     -- Defer refresh to prevent event collisions or double-processing

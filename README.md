@@ -2,7 +2,7 @@
 
 **Desolate Lootcouncil** is a World of Warcraft (Retail) addon designed to reintroduce a streamlined, fair, and automated "Master Loot" system. It layers a robust addon-controlled distribution system on top of WoW's default "Group Loot," centralizing control under a designated Loot Master to reduce confusion and automate the bidding process.
 
-Current Version: **0.3.0-Beta**
+Current Version: **0.3.1-Beta**
 
 📄 **[View Full Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)**
 
@@ -74,10 +74,17 @@ The addon uses **`/dlc`** as its primary command.
 
 ### 📝 Changelog
 
+**v0.3.1-Beta** (The Stability Update)
+* **Collapse Fix:** Resolved a critical bug where windows stayed collapsed after a UI reload.
+* **Voting Fix:** Fixed a bug where votes were lost or shown as "Auto Pass" when adding new items to an active session.
+* **Monitor Enhancements:** Added **[Closed]** status indicators and a **Pending Voters** tooltip to the Session Monitor.
+* **UI Polish:** Resolved scrolling and clipping issues in the Loot Vote window.
+* **Unit Testing:** Updated the test suite to include Persistence mocks and resolved all test failures.
+
 **v0.3.0-Beta** (The Modularity Update)
 * **Architecture Reform:** Decoupled `Core/Addon.lua`, migrating Roster management and UI utilities to specialized modules for a cleaner, more maintainable "Hub-and-Spoke" architecture.
 * **Standardization:** Enforced the `GetModule` pattern across all inter-module communication, removing legacy direct dependencies on the global addon object.
-* **Automated Testing:** Introduced a comprehensive suite of 7 unit and integration tests (Loot Flow, Comm, Roster, etc.) with a Python test runner to ensure stability.
+* **Automated Testing:** Introduced a comprehensive suite of 15 unit and integration tests (Loot Flow, Comm, Roster, etc.) with a Python test runner to ensure stability.
 * **Robust Name Resolution:** Standardized Alt-to-Main linking across Priority, Loot, and Roster modules, fixing edge cases in re-award logic and priority point application.
 * **Cleanup:** Removed empty legacy directories and resolved deep-seated lint warnings and syntax errors across the entire codebase.
 * **Fix:** Restored `/dlc test` and `/dlc add` functionality.

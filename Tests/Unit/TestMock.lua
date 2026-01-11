@@ -226,11 +226,13 @@ DesolateLootcouncil.db = {
 }
 
 -- [NEW] Module Stubs for Refactored Code
+---@class RosterStub : AceModule
 local RosterStub = DesolateLootcouncil:NewModule("Roster")
 function RosterStub:GetMain(name) return name end
 
 function RosterStub:IsUnitInRaid(name) return true end
 
+---@class PriorityStub : AceModule
 local PriorityStub = DesolateLootcouncil:NewModule("Priority")
 function PriorityStub:MovePlayerToBottom(list, p) return 1 end
 
@@ -241,6 +243,16 @@ end
 DesolateLootcouncil.AmILootMaster = function() return true end
 DesolateLootcouncil.DetermineLootMaster = function() return "SimPlayer" end
 DesolateLootcouncil.GetEnchantingSkillLevel = function(self) return 300 end
+
+-- [NEW] Persistence Mocks
+DesolateLootcouncil.Persistence = {
+    ApplyCollapseHook = function(self, widget, windowName) end,
+    ToggleWindowCollapse = function(self, widget) end,
+    SaveFramePosition = function(self, frame, name) end,
+    RestoreFramePosition = function(self, frame, name) end
+}
+DesolateLootcouncil.RestoreFramePosition = function(self, frame, name) end
+DesolateLootcouncil.SaveFramePosition = function(self, frame, name) end
 ---@diagnostic enable: duplicate-set-field
 
 -- Simple Assertion Framework

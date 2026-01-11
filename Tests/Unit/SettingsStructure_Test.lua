@@ -1,4 +1,5 @@
 -- Tests/Unit/SettingsStructure_Test.lua
+---@diagnostic disable: undefined-global
 dofile("Tests/Unit/TestMock.lua")
 
 -- Mock Modules

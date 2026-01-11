@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field, undefined-global
 ---@class DesolateLootcouncil : AceAddon, AceConsole-3.0, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0, AceTimer-3.0
 ---@field db table
 ---@field version string
@@ -11,6 +12,8 @@
 ---@field DefaultLayouts table<string, table>
 ---@field SlashCommands table
 ---@field SettingsLoader table
+---@field Persistence Persistence
+---@field Logger table
 DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "AceConsole-3.0", "AceEvent-3.0",
     "AceComm-3.0", "AceSerializer-3.0", "AceTimer-3.0")
 _G.DesolateLootcouncil = DesolateLootcouncil

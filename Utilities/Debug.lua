@@ -1,5 +1,4 @@
 ---@class Debug : AceModule, AceConsole-3.0
-
 ---@field ShowStatus fun(self: Debug)
 ---@field SimulateComm fun(self: Debug, name: string)
 ---@field OnEnable function
@@ -7,16 +6,12 @@
 ---@field DumpKeys fun(self: Debug)
 ---@field OpenConfig fun()
 
----@class (partial) DLC_Ref_Debug_Util
----@field db table
+---@class (partial) DesolateLootcouncil : AceAddon
+---@field Debug Debug
 ---@field activeAddonUsers table
----@field DetermineLootMaster fun(self: DLC_Ref_Debug_Util): string
----@field NewModule fun(self: DLC_Ref_Debug_Util, name: string, ...): any
----@field GetModule fun(self: DLC_Ref_Debug_Util, name: string): any
----@field DLC_Log fun(self: DLC_Ref_Debug_Util, msg: string, force?: boolean)
 
----@type DLC_Ref_Debug_Util
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Debug_Util]]
+---@type DesolateLootcouncil
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 
 ---@type Debug
 local Debug = DesolateLootcouncil:NewModule("Debug", "AceConsole-3.0") --[[@as Debug]]
@@ -91,7 +86,9 @@ function Debug:SimulateVoting()
                             vote = roll
                         }
                     }
-                    -- Serialize and Inject into Distribution Module (Wait, Session module)
+                    local itemGUID = item.sourceGUID or item.link
+                    local name, link, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice =
+                    C_Item.GetItemInfo(itemGUID)
                     -- Session module handles OnCommReceived with "DLC_Loot" prefix?
                     -- Systems/Session.lua registers "DLC_Loot".
                     local serialized = Session:Serialize(payload)

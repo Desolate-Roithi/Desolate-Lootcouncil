@@ -1,18 +1,9 @@
 ---@class UI_Monitor : AceModule
-local UI_Monitor = DesolateLootcouncil:NewModule("UI_Monitor")
+local UI_Monitor = DesolateLootcouncil:NewModule("UI_Monitor", "AceEvent-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
----@class (partial) DLC_Ref_Monitor
----@field db table
----@field GetModule fun(self: DLC_Ref_Monitor, name: string): any
----@field Print fun(self: DLC_Ref_Monitor, msg: string)
----@field RestoreFramePosition fun(self: DLC_Ref_Monitor, frame: any, windowName: string)
----@field SaveFramePosition fun(self: DLC_Ref_Monitor, frame: any, windowName: string)
----@field ApplyCollapseHook fun(self: DLC_Ref_Monitor, widget: any)
----@field DLC_Log fun(self: DLC_Ref_Monitor, msg: any, force?: boolean)
-
----@type DLC_Ref_Monitor
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Monitor]]
+---@type DesolateLootcouncil
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 
 -- [NEW] Helper: Resolve Alt to Main (Exact + Realm-Smart)
 local function GetLinkedMain(name)
@@ -64,26 +55,74 @@ function UI_Monitor:ShowMonitorWindow()
     self.monitorFrame:ReleaseChildren()
 
     -- Helper: Vote Counts
-    local function GetVoteCounts(guid)
-        local Session = DesolateLootcouncil:GetModule("Session")
-        local votes = Session and Session.sessionVotes and Session.sessionVotes[guid]
+    -- Helper: Vote Info
+    local function GetVoteInfo(guid)
+        local SessionData = DesolateLootcouncil:GetModule("Session")
+        ---@type boolean
+        local isClosed = SessionData and SessionData.closedItems and SessionData.closedItems[guid]
+        local votes = SessionData and SessionData.sessionVotes and SessionData.sessionVotes[guid] or {}
+
         local bids, rolls, tm, pass = 0, 0, 0, 0
-        if votes then
-            for _, voteData in pairs(votes) do
-                local vType = type(voteData) == "table" and voteData.type or voteData
-                if vType == 1 then
-                    bids = bids + 1
-                elseif vType == 2 then
-                    rolls = rolls + 1
-                elseif vType == 3 then
-                    tm = tm + 1
-                elseif vType == 4 then
-                    pass = pass + 1
+        local votedPlayers = {}
+        for name, voteData in pairs(votes) do
+            local vType = type(voteData) == "table" and voteData.type or voteData
+            if vType == 1 then
+                bids = bids + 1
+            elseif vType == 2 then
+                rolls = rolls + 1
+            elseif vType == 3 then
+                tm = tm + 1
+            elseif vType == 4 then
+                pass = pass + 1
+            end
+            votedPlayers[name] = true
+        end
+
+        local countsText = string.format(
+            "|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r",
+            bids, rolls, tm, pass)
+
+        if isClosed then
+            return countsText .. " |cffff0000[Closed]|r", {}
+        end
+
+        -- Calculate Pending
+        local pending = {}
+        local numMembers = GetNumGroupMembers()
+        if numMembers > 0 then
+            local prefix = IsInRaid() and "raid" or "party"
+            for i = 1, numMembers do
+                local name, realm = UnitName(prefix .. i)
+                if name then
+                    if realm and realm ~= "" then name = name .. "-" .. realm end
+                    if not votedPlayers[name] then
+                        table.insert(pending, name)
+                    end
+                end
+            end
+        else
+            -- Solo?
+            local name, realm = UnitName("player")
+            if realm and realm ~= "" then name = name .. "-" .. realm end
+            if not votedPlayers[name] then table.insert(pending, name) end
+        end
+
+        -- Handle Simulation if module exists
+        local Sim = DesolateLootcouncil:GetModule("Simulation")
+        if Sim and Sim.GetPendingVoters then
+            local simPending = Sim:GetPendingVoters(guid)
+            if simPending then
+                for _, sName in ipairs(simPending) do
+                    table.insert(pending, sName)
                 end
             end
         end
-        return string.format("|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r",
-            bids, rolls, tm, pass)
+
+        if #pending > 0 then
+            countsText = countsText .. " |cffaaaaaa(Pending: " .. #pending .. ")|r"
+        end
+
+        return countsText, pending
     end
 
     local session = DesolateLootcouncil.db.profile.session
@@ -120,11 +159,26 @@ function UI_Monitor:ShowMonitorWindow()
             labelLink:SetCallback("OnLeave", function() GameTooltip:Hide() end)
             group:AddChild(labelLink)
 
-            -- Counts
-            ---@type AceGUILabel
-            local labelCounts = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            labelCounts:SetText(GetVoteCounts(guid))
+            -- Counts & Pending Info
+            local countsText, pendingList = GetVoteInfo(guid)
+
+            ---@type AceGUIInteractiveLabel
+            local labelCounts = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+            labelCounts:SetText(countsText)
             labelCounts:SetRelativeWidth(0.35)
+
+            if #pendingList > 0 then
+                labelCounts:SetCallback("OnEnter", function(widget)
+                    GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
+                    GameTooltip:ClearLines()
+                    GameTooltip:AddLine("Still Pending Response:", 1, 1, 1)
+                    for _, name in ipairs(pendingList) do
+                        GameTooltip:AddLine("- " .. name, 0.7, 0.7, 0.7)
+                    end
+                    GameTooltip:Show()
+                end)
+                labelCounts:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+            end
             group:AddChild(labelCounts)
 
             -- Award Button
@@ -188,8 +242,21 @@ function UI_Monitor:ShowMonitorWindow()
     mFrame.btnEnd:Show()
 
     local function LayoutMonitor()
-        local h = (self.monitorFrame --[[@as any]]).frame:GetHeight()
-        if scroll then scroll:SetHeight(h - 80) end
+        local rawFrame = (self.monitorFrame --[[@as any]]).frame
+        local h = rawFrame:GetHeight()
+
+        -- Safety: If collapsed, don't try to layout the scroll frame with negative size
+        if h > 80 then
+            local scrollFrame = scroll and (scroll --[[@as any]]).frame
+            if scrollFrame then
+                scroll:SetHeight(h - 80)
+                scrollFrame:Show()
+            end
+        else
+            local scrollFrame = scroll and (scroll --[[@as any]]).frame
+            if scrollFrame then scrollFrame:Hide() end
+        end
+
         self.monitorFrame:DoLayout()
         -- Sync Sidebar Height
         if self.deFrame then self.deFrame:SetHeight(h) end

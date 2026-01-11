@@ -1,10 +1,11 @@
+---@diagnostic disable: undefined-field
 ---@class UI_PriorityLogHistory : AceModule
 local UI_PriorityLogHistory = DesolateLootcouncil:NewModule("UI_PriorityLogHistory")
 local AceGUI = LibStub("AceGUI-3.0")
 
 function UI_PriorityLogHistory:ShowLogWindow()
     if not self.logFrame then
-        local frame = AceGUI:Create("Frame")
+        local frame = AceGUI:Create("Frame") --[[@as any]]
         frame:SetTitle("Priority Log History")
         frame:SetLayout("Fill")
         frame:SetWidth(600)
@@ -16,7 +17,7 @@ function UI_PriorityLogHistory:ShowLogWindow()
         local function SavePos(f) DesolateLootcouncil:SaveFramePosition(f, "PriorityHistory") end
 
         -- AceGUI "Frame" container exposes the raw frame via .frame
-        local rawFrame = frame.frame
+        local rawFrame = (frame --[[@as any]]).frame
         rawFrame:HookScript("OnDragStop", function(f)
             f:StopMovingOrSizing()
             SavePos(frame)

@@ -2,13 +2,13 @@
 local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting")
 local AceGUI = LibStub("AceGUI-3.0")
 
----@class (partial) DLC_Ref_UIVoting
+---@class (partial) DLC_Ref_UIVoting : AceAddon
 ---@field db table
----@field NewModule fun(self: DLC_Ref_UIVoting, name: string, ...): any
----@field GetModule fun(self: DLC_Ref_UIVoting, name: string): any
 ---@field RestoreFramePosition fun(self: DLC_Ref_UIVoting, frame: any, windowName: string)
 ---@field SaveFramePosition fun(self: DLC_Ref_UIVoting, frame: any, windowName: string)
----@field ApplyCollapseHook fun(self: DLC_Ref_UIVoting, widget: any)
+---@field Persistence table
+---@field activeLootMaster string
+---@field amILM boolean
 
 ---@type DLC_Ref_UIVoting
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UIVoting]]
@@ -24,7 +24,7 @@ function UI_Voting:CreateVotingFrame()
     ---@type AceGUIFrame
     local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
     frame:SetTitle("Loot Vote")
-    frame:SetLayout("Flow")
+    frame:SetLayout("Fill")
     frame:EnableResize(false)
     frame:SetWidth(800)
     frame:SetHeight(450)
@@ -140,6 +140,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     scroll:SetFullWidth(true)
     scroll:SetFullHeight(true)
     self.votingFrame:AddChild(scroll)
+    self.scrollContainer = scroll
 
     local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "T-Mog", [4] = "Pass" }
     local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cffeda55f", [4] = "|cffaaaaaa" }
@@ -280,4 +281,12 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
             actionGroup:AddChild(b4)
         end
     end
+
+    -- Add a small spacer at the bottom to ensure the last item isn't obscured by the status bar
+    local spacer = AceGUI:Create("Label")
+    spacer:SetText(" ")
+    spacer:SetFullWidth(true)
+    scroll:AddChild(spacer)
+
+    self.votingFrame:DoLayout()
 end

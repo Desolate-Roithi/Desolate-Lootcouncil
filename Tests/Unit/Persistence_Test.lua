@@ -20,7 +20,7 @@ local function Test_SaveRestore()
 
     -- Add Spy Logic to Frame
     frame.pointsSet = false
-    frame.SetPoint = function(self, point, relTo, relPoint, x, y)
+    (frame --[[@as any]]).SetPoint = function(self, point, relTo, relPoint, x, y)
         self.pointsSet = { point = point, relativePoint = relPoint, x = x, y = y }
     end
     frame.GetPoint = function()
@@ -30,6 +30,7 @@ local function Test_SaveRestore()
     frame.GetHeight = function() return 400 end
 
     -- 1. Test Save
+    ---@diagnostic disable-next-line: redundant-parameter
     Persistence:SaveFramePosition(frame, "TestWindow")
 
     local saved = DesolateLootcouncil.db.profile.positions["TestWindow"]
@@ -42,6 +43,7 @@ local function Test_SaveRestore()
     -- Reset Frame Spy
     frame.pointsSet = nil
 
+    ---@diagnostic disable-next-line: redundant-parameter
     Persistence:RestoreFramePosition(frame, "TestWindow")
 
     Assertions.True(frame.pointsSet ~= nil, "Points Applied")

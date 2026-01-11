@@ -88,6 +88,21 @@ function Simulation:GetRoster()
     return list
 end
 
+function Simulation:GetPendingVoters(guid)
+    ---@type Session
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if not Session or not Session.sessionVotes then return nil end
+
+    local votes = Session.sessionVotes[guid] or {}
+    local pending = {}
+    for name, _ in pairs(self.activeSims) do
+        if not votes[name] then
+            table.insert(pending, name .. " (Sim)")
+        end
+    end
+    return #pending > 0 and pending or nil
+end
+
 function Simulation:SimulateVote()
     ---@type Session
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]

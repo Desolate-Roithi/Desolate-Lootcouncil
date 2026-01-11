@@ -1,5 +1,9 @@
 ---@class Persistence
 ---@field DefaultLayouts table<string, table>
+---@field RestoreFramePosition fun(self: Persistence, frame: any, windowName: string)
+---@field SaveFramePosition fun(self: Persistence, frame: any, windowName: string)
+---@field ApplyCollapseHook fun(self: Persistence, widget: any, windowName?: string)
+---@field ToggleWindowCollapse fun(self: Persistence, widget: any)
 local Persistence = {}
 
 ---@class (partial) PersistenceAddon : AceAddon
@@ -7,6 +11,7 @@ local Persistence = {}
 ---@field DefaultLayouts table<string, table>
 ---@field Persistence Persistence
 ---@field Print fun(self: PersistenceAddon, msg: string)
+---@field DLC_Log fun(self: PersistenceAddon, msg: string, force?: boolean)
 
 ---@type PersistenceAddon
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
@@ -17,14 +22,21 @@ function Persistence:SaveFramePosition(frame, windowName)
     local db = DesolateLootcouncil.db.profile
     if not db.positions then db.positions = {} end
     if not frame then return end
+
     -- Unwrap AceGUI widget if passed accidentally
+    local target = frame
     if frame.frame and type(frame.frame) == "table" and frame.frame.GetPoint then
-        frame = frame.frame
+        target = frame.frame
     end
 
-    local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-    local width = frame:GetWidth()
-    local height = frame:GetHeight()
+    local h = target:GetHeight()
+    -- If collapsed, save the height it was BEFORE collapsing
+    if target.isCollapsed and target.savedHeight then
+        h = target.savedHeight
+    end
+
+    local point, relativeTo, relativePoint, xOfs, yOfs = target:GetPoint()
+    local width = target:GetWidth()
 
     db.positions[windowName] = {
         point = point,
@@ -32,7 +44,8 @@ function Persistence:SaveFramePosition(frame, windowName)
         x = xOfs,
         y = yOfs,
         width = width,
-        height = height
+        height = h,
+        isCollapsed = target.isCollapsed or false
     }
 end
 
@@ -41,21 +54,10 @@ function Persistence:RestoreFramePosition(frame, windowName)
     if not db.positions then db.positions = {} end
 
     local saved = db.positions[windowName]
-    local default = self.DefaultLayouts[windowName]
+    local default = (DesolateLootcouncil.DefaultLayouts and DesolateLootcouncil.DefaultLayouts[windowName])
+        or self.DefaultLayouts[windowName]
 
-    -- Load
-    local config = saved
-
-    if not config then
-        -- Fallback sequence:
-        -- 1. DesolateLootcouncil.DefaultLayouts (User configured in UI/Layouts.lua)
-        -- 2. Persistence.DefaultLayouts (Hardcoded backup)
-        if DesolateLootcouncil.DefaultLayouts and DesolateLootcouncil.DefaultLayouts[windowName] then
-            config = DesolateLootcouncil.DefaultLayouts[windowName]
-        else
-            config = self.DefaultLayouts[windowName]
-        end
-    end
+    local config = saved or default
 
     if config then
         -- Unwrap if AceGUI
@@ -77,8 +79,13 @@ function Persistence:RestoreFramePosition(frame, windowName)
             if frame.SetHeight then frame:SetHeight(config.height) end
             target:SetHeight(config.height)
         end
+
+        -- Store the collapsed state to apply AFTER the window is fully initialized
+        if config.isCollapsed then
+            target.startCollapsed = true
+        end
     else
-        -- Fallback if no default exists (Should not happen)
+        -- Fallback if no default exists
         frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     end
 end
@@ -201,6 +208,7 @@ function Persistence:ApplyCollapseHook(widget, windowName)
     -- 1. Handle Double Click (Collapse)
     titleBtn:SetScript("OnDoubleClick", function()
         self:ToggleWindowCollapse(widget)
+        self:SaveFramePosition(frame, windowName or widget.type or "Window")
     end)
 
     -- 2. Handle Dragging (Passthrough)
@@ -211,6 +219,16 @@ function Persistence:ApplyCollapseHook(widget, windowName)
         frame:StopMovingOrSizing()
         self:SaveFramePosition(frame, windowName or widget.type or "Window")
     end)
+
+    -- Apply initial collapsed state if requested
+    if frame.startCollapsed then
+        C_Timer.After(0.1, function()
+            if frame.startCollapsed then
+                self:ToggleWindowCollapse(widget)
+                frame.startCollapsed = nil
+            end
+        end)
+    end
 end
 
 function Persistence:ResetPositions()

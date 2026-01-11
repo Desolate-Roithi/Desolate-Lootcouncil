@@ -1,4 +1,5 @@
 -- Tests/Unit/ModuleConflict_Test.lua
+---@diagnostic disable: undefined-global
 dofile("Tests/Unit/TestMock.lua")
 
 -- Mock global DesolateLootcouncil to be ready for module creation

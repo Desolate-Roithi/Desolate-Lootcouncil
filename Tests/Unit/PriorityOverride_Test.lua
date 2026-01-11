@@ -1,4 +1,5 @@
 -- Tests/Unit/PriorityOverride_Test.lua
+---@diagnostic disable: undefined-global, missing-fields, undefined-field, duplicate-set-field
 dofile("Tests/Unit/TestMock.lua")
 
 -- Mock DB
@@ -64,8 +65,8 @@ DesolateLootcouncil.GetModule = function(self, name)
     return originalGetModule(self, name)
 end
 
--- Mocks for Persistence (Must be defined before ShowPriorityOverrideWindow is called)
-DesolateLootcouncil.SaveFramePosition = function(self, f, key) end
+-- The Persistence mocks are now in TestMock.lua
+-- We only override RestoreFramePosition here to track it for this specific test
 DesolateLootcouncil.RestoreFramePosition = function(self, f, key)
     if key == "PriorityOverride" then f.restored = true end
 end

@@ -5,14 +5,9 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@class (partial) DLC_Ref_ItemManager
 ---@field db table
 ---@field GetModule fun(self: DLC_Ref_ItemManager, name: string): any
----@field Print fun(self: DLC_Ref_ItemManager, msg: string)
----@field RestoreFramePosition fun(self: DLC_Ref_ItemManager, frame: any, windowName: string)
----@field SaveFramePosition fun(self: DLC_Ref_ItemManager, frame: any, windowName: string)
----@field ApplyCollapseHook fun(self: DLC_Ref_ItemManager, widget: any, windowName: string)
----@field DLC_Log fun(self: DLC_Ref_ItemManager, msg: any, force?: boolean)
 
----@type DLC_Ref_ItemManager
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_ItemManager]]
+---@type DesolateLootcouncil
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 
 function UI_ItemManager:ShowItemManagerWindow()
     if not self.frame then
@@ -26,16 +21,18 @@ function UI_ItemManager:ShowItemManagerWindow()
         self.frame = frame
 
         -- Persistence
-        DesolateLootcouncil:RestoreFramePosition(frame, "ItemManager")
-        local function SavePos(f)
-            DesolateLootcouncil:SaveFramePosition(f, "ItemManager")
+        local rawFrame = (frame --[[@as any]]).frame
+        if rawFrame then
+            DesolateLootcouncil:RestoreFramePosition(frame, "ItemManager")
+            local function SavePos(f)
+                DesolateLootcouncil:SaveFramePosition(f, "ItemManager")
+            end
+            rawFrame:HookScript("OnDragStop", function(f)
+                f:StopMovingOrSizing()
+                SavePos(frame)
+            end)
+            rawFrame:HookScript("OnHide", function() SavePos(frame) end)
         end
-        local rawFrame = frame.frame
-        rawFrame:HookScript("OnDragStop", function(f)
-            f:StopMovingOrSizing()
-            SavePos(frame)
-        end)
-        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
         if DesolateLootcouncil.Persistence then
             DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "ItemManager")
         end
@@ -152,19 +149,19 @@ function UI_ItemManager:RefreshWindow()
         local list = db.PriorityLists[self.viewListKey]
         if list and list.items then
             for itemID, _ in pairs(list.items) do
-                local itemName, itemLink, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture =
-                    GetItemInfo(itemID)
+                local name, itemLink, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture =
+                    C_Item.GetItemInfo(itemID)
 
                 if not itemLink then
                     -- Fetch if missing (async issue possible, but simpler for now)
-                    local item = Item:CreateFromItemID(itemID)
-                    if not item:IsItemEmpty() then
-                        item:ContinueOnItemLoad(function()
+                    local itemObj = Item:CreateFromItemID(itemID)
+                    if not itemObj:IsItemEmpty() then
+                        itemObj:ContinueOnItemLoad(function()
                             -- Refresh if loaded later? For now rely on next refresh
                         end)
                     end
-                    itemName = "ID: " .. itemID
-                    itemTexture = GetItemIcon(itemID)
+                    name = "ID: " .. itemID
+                    itemTexture = C_Item.GetItemIconByID(itemID)
                 end
 
                 -- Row Group (Horizontal Flow)
@@ -191,7 +188,7 @@ function UI_ItemManager:RefreshWindow()
                 -- Name (Interactive)
                 ---@type AceGUIInteractiveLabel
                 local nameLabel = AceGUI:Create("InteractiveLabel")
-                nameLabel:SetText(itemLink or itemName)
+                nameLabel:SetText(itemLink or name)
                 nameLabel:SetRelativeWidth(0.70)
                 nameLabel:SetCallback("OnEnter", function(widget)
                     GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")

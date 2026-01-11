@@ -297,7 +297,7 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
         local expiry = payload.endTime or (GetServerTime() + duration)
 
         self.clientLootList = self.clientLootList or {}
-        self.myLocalVotes = {}
+        self.myLocalVotes = self.myLocalVotes or {}
 
         if newItems then
             for _, item in ipairs(newItems) do

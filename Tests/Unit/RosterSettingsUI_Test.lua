@@ -1,4 +1,5 @@
 -- Tests/Unit/RosterSettingsUI_Test.lua
+---@diagnostic disable: undefined-global, duplicate-set-field, undefined-field
 dofile("Tests/Unit/TestMock.lua")
 
 -- Mock Roster System

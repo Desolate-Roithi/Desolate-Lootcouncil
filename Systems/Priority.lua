@@ -1,4 +1,8 @@
 ---@class Priority : AceModule, AceConsole-3.0, AceTimer-3.0
+---@field LogPriorityChange fun(self: Priority, msg: string)
+---@field GetReversionIndex fun(self: Priority, listName: string, origIndex: number, timestamp: number): number
+---@field RestorePlayerPosition fun(self: Priority, listName: string, playerName: string, index: number)
+---@field MovePlayerToBottom fun(self: Priority, listName: string, playerName: string): number|nil
 local Priority = DesolateLootcouncil:NewModule("Priority", "AceConsole-3.0", "AceTimer-3.0")
 
 ---@class (partial) DLC_Ref_Priority
