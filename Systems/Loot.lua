@@ -11,6 +11,8 @@ local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0
 ---@field MovePlayerToBottom fun(self: any, listName: string, playerName: string): number|nil
 ---@field GetReversionIndex fun(self: any, listName: string, origIndex: number, timestamp: number): number
 ---@field IsUnitInRaid fun(self: any, unitName: string): boolean
+---@field GetActiveUserCount fun(self: any): number
+---@field Print fun(self: any, msg: string)
 
 
 ---@type DLC_Ref_Loot
@@ -169,7 +171,10 @@ function Loot:OnStartLootRoll(event, rollID)
 
     local isLM = DesolateLootcouncil:AmILootMaster()
     local link = GetLootRollItemLink(rollID)
+    local addonUserCount = DesolateLootcouncil:GetActiveUserCount()
+    local groupSize = GetNumGroupMembers()
 
+    if addonUserCount < groupSize then return end
     if isLM then
         local _, _, _, _, isBoP, canNeed, canGreed, canDisenchant, _, _, _, _, canTransmog = GetLootRollItemInfo(rollID)
         local cat = self:CategorizeItem(link)

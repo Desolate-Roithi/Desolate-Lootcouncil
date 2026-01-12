@@ -2,6 +2,15 @@
 local UI_Loot = DesolateLootcouncil:NewModule("UI_Loot", "AceConsole-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
+---@class (partial) UI_Loot : AceModule
+---@field lootFrame LootFrame
+---@field btnStart Button
+
+---@class LootFrame : AceGUIFrame
+---@field statusIcon Texture
+---@field statusTooltip Button
+---@field statusbg Frame
+
 ---@class (partial) DLC_Ref_UILoot
 ---@field db table
 ---@field NewModule fun(self: DLC_Ref_UILoot, name: string, ...): any
@@ -22,8 +31,8 @@ local AceGUI = LibStub("AceGUI-3.0")
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UILoot]]
 
 function UI_Loot:CreateLootFrame()
-    ---@type AceGUIFrame
-    local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
+    ---@type LootFrame
+    local frame = AceGUI:Create("Frame") --[[@as LootFrame]]
     frame:SetTitle("Desolate Loot Council   ")
     frame:SetLayout("Flow")
     frame:SetWidth(400)
@@ -86,6 +95,10 @@ function UI_Loot:ShowLootWindow(lootTable)
         -- Tooltip Frame (Invisible Hit Rect)
         local ttFrame = CreateFrame("Button", nil, parent)
         ttFrame:SetAllPoints(icon)
+        ttFrame:SetFrameLevel(parent:GetFrameLevel() + 20) -- Ensure above collapse-handle button
+        ttFrame.isTitleOverlay = true                      -- Protect from collapse-hider logic
+        self.lootFrame.statusTooltip = ttFrame
+
         ttFrame:SetScript("OnEnter", function()
             GameTooltip:SetOwner(ttFrame, "ANCHOR_BOTTOMLEFT")
             local active = DesolateLootcouncil:GetActiveUserCount()
@@ -109,11 +122,12 @@ function UI_Loot:ShowLootWindow(lootTable)
     local r, g, b = 1, 0, 0 -- Red (Default/None)
     if activeCount >= totalCount then
         r, g, b = 0, 1, 0   -- Green (Full)
-    elseif activeCount > 0 then
+    elseif activeCount > 1 then
         r, g, b = 1, 1, 0   -- Yellow (Partial)
     end
     self.lootFrame.statusIcon:SetVertexColor(r, g, b)
     self.lootFrame.statusIcon:Show()
+    if self.lootFrame.statusTooltip then self.lootFrame.statusTooltip:Show() end
 
     -- 2. Clear Session Button (Top)
     ---@type AceGUIButton

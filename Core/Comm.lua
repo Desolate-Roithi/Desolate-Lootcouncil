@@ -113,7 +113,7 @@ function Comm:SendVersionCheck()
 end
 
 function Comm:GetActiveUserCount()
-    local count = 0
+    local count = 1
     for _ in pairs(self.playerVersions) do
         count = count + 1
     end
