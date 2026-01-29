@@ -173,13 +173,6 @@ function Simulation:RunTest(count)
             isTest = true
         })
     end
-
-    ---@type Loot
-    local Loot = DesolateLootcouncil:GetModule("Loot")
-    if Loot then
-        Loot:StartSession(items)
-        DesolateLootcouncil:DLC_Log("Started Test Session with " .. numItems .. " items.")
-    end
 end
 
 -- Slash Command Handler
@@ -195,8 +188,6 @@ function Simulation:HandleSlashCommand(input)
         self:Clear()
     elseif cmd == "vote" then
         self:SimulateVote()
-    elseif cmd == "test" then
-        self:RunTest(args[2])
     elseif cmd == "list" then
         local roster = self:GetRoster()
         if #roster == 0 then
@@ -206,7 +197,7 @@ function Simulation:HandleSlashCommand(input)
         end
     else
         DesolateLootcouncil:DLC_Log(
-            "Sim Usage: /dlc sim [add <name> | remove <name> | clear | vote | list | test <count>]", true)
+            "Sim Usage: /dlc sim [add <name> | remove <name> | clear | vote | list]", true)
     end
 end
 
