@@ -1,4 +1,4 @@
-package-as: Desolate_LootCouncil
+package-as: Desolate_Lootcouncil
 
 externals:
   # GitHub
@@ -20,4 +20,4 @@ changelog:
     @debug@
     @commits-short@
 move-folders:
-  DesolateLootCouncil-Dev: DesolateLootCouncil
+  Desolate_Lootcouncil-Dev: Desolate_Lootcouncil
