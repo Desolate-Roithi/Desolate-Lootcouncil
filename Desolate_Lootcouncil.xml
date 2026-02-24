@@ -1,0 +1,49 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+    <Include file="Libs\Libs.xml"/>
+
+    <!-- 1. Core -->
+    <Script file="Core\Addon.lua"/>
+    <Script file="Core\Constants.lua"/>
+
+    <!-- 2. Utilities -->
+    <Script file="Utilities\Logger.lua"/>
+    <Script file="Utilities\Persistence.lua"/>
+    <Script file="Utilities\Debug.lua"/>
+    <Script file="Utilities\Simulation.lua"/>
+    <Script file="Utilities\Base64.lua"/>
+
+    <!-- 3. Core Modules -->
+    <Script file="Core\Comm.lua"/>
+    <Script file="Core\SlashCommands.lua"/>
+
+    <!-- 4. Settings -->
+    <Script file="Settings\Loader.lua"/>
+    <Script file="Settings\General.lua"/>
+    <Script file="Settings\ItemSettings.lua"/>
+    <Script file="Settings\PrioritySettings.lua"/>
+    <Script file="Settings\Roster.lua"/>
+    <Script file="Settings\LootRules.lua"/>
+    <Script file="Settings\ProfileSettings.lua"/>
+
+    <!-- 5. Systems -->
+    <Script file="Systems\Priority.lua"/>
+    <Script file="Systems\Loot.lua"/>
+    <Script file="Systems\Session.lua"/>
+    <Script file="Systems\Roster.lua"/>
+    <Script file="Systems\Trade.lua"/>
+
+    <!-- 6. UI -->
+    <Script file="UI\Core.lua"/>
+    <Script file="UI\Widgets\Sidebar.lua"/>
+    <Script file="UI\Layouts.lua"/>
+    <Script file="UI\Windows\Attendance.lua"/>
+    <Script file="UI\Windows\PriorityLogHistory.lua"/>
+    <Script file="UI\Windows\History.lua"/>
+    <Script file="UI\Windows\Loot.lua"/>
+    <Script file="UI\Windows\Monitor.lua"/>
+    <Script file="UI\Windows\PriorityOverride.lua"/>
+    <Script file="UI\Windows\TradeList.lua"/>
+    <Script file="UI\Windows\ItemManager.lua"/>
+    <Script file="UI\Windows\Version.lua"/>
+    <Script file="UI\Windows\Voting.lua"/>
+</Ui>

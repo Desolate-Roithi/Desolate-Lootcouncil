@@ -2,7 +2,7 @@
 
 **Desolate Lootcouncil** is a World of Warcraft (Retail) addon designed to reintroduce a streamlined, fair, and automated "Master Loot" system. It layers a robust addon-controlled distribution system on top of WoW's default "Group Loot," centralizing control under a designated Loot Master to reduce confusion and automate the bidding process.
 
-Current Version: **0.2.1-Beta**
+Current Version: **0.3.1-Beta**
 
 📄 **[View Full Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)**
 
@@ -35,7 +35,7 @@ Current Version: **0.2.1-Beta**
 **Configuration & Tools**
 * **Priority Lists:** Fully customizable lists for Tier, Weapons, etc.
 * **Session History:** A persistent log of every awarded item and priority change.
-* [cite_start]**Developer Tools:** Debug mode toggle (`/dlc config`), solo simulation mode for testing UI without a group [cite: 687-688], and database dumps.
+* [cite_start]**Developer Tools:** Debug mode toggle (`/dlc config`), solo simulation mode for testing UI without a group [cite: 687-688], database dumps, and a **comprehensive automated test suite** (Unit/Integration).
 
 **Attendance & Decay**
 * **Priority Decay System:** Automated loss of priority for players who miss raids. Configurable penalty amounts and manual review before applying.
@@ -66,7 +66,7 @@ The addon uses **`/dlc`** as its primary command.
 | `/dlc trade` | **(LM)** Open the Pending Trades window. |
 | `/dlc history` | **(Public)** Open the Session History log. |
 | `/dlc status` | **(Public)** Show debug status (Current LM, version check). |
-| `/dlc test` | **(LM)** Generate test items to simulate a loot drop: |
+| `/dlc test` | **(LM)** Generate test items to simulate a loot drop. |
 | `/dlc session` | **(LM)** Manage Raid Sessions (start, stop, kill, attend). |
 | `/dlc sim` | **(Dev)** Manage Simulated Players (add, remove, vote, list, clear). |
 
@@ -74,7 +74,22 @@ The addon uses **`/dlc`** as its primary command.
 
 ### 📝 Changelog
 
-**v0.2.1-beta**
+**v0.3.1-Beta** (The Stability Update)
+* **Collapse Fix:** Resolved a critical bug where windows stayed collapsed after a UI reload.
+* **Voting Fix:** Fixed a bug where votes were lost or shown as "Auto Pass" when adding new items to an active session.
+* **Monitor Enhancements:** Added **[Closed]** status indicators and a **Pending Voters** tooltip to the Session Monitor.
+* **UI Polish:** Resolved scrolling and clipping issues in the Loot Vote window.
+* **Unit Testing:** Updated the test suite to include Persistence mocks and resolved all test failures.
+
+**v0.3.0-Beta** (The Modularity Update)
+* **Architecture Reform:** Decoupled `Core/Addon.lua`, migrating Roster management and UI utilities to specialized modules for a cleaner, more maintainable "Hub-and-Spoke" architecture.
+* **Standardization:** Enforced the `GetModule` pattern across all inter-module communication, removing legacy direct dependencies on the global addon object.
+* **Automated Testing:** Introduced a comprehensive suite of 15 unit and integration tests (Loot Flow, Comm, Roster, etc.) with a Python test runner to ensure stability.
+* **Robust Name Resolution:** Standardized Alt-to-Main linking across Priority, Loot, and Roster modules, fixing edge cases in re-award logic and priority point application.
+* **Cleanup:** Removed empty legacy directories and resolved deep-seated lint warnings and syntax errors across the entire codebase.
+* **Fix:** Restored `/dlc test` and `/dlc add` functionality.
+
+**v0.2.1-Beta**
 * **Feature:** Implemented **Window Collapse** (Minimize) functionality for all AceGUI windows.
 * **Feature:** Added **Window Position Persistence** (Automatic scale, position, and size saving).
 * **Feature:** Refactored **Disenchanter Dashboard** into an external sidebar for the Session Monitor.

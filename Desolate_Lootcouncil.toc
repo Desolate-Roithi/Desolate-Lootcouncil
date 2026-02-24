@@ -1,38 +1,10 @@
-## Interface: 120001
+## Interface: 120000
 ## Title: Desolate Lootcouncil
+## Notes: A FIFO Loot Council Addon
 ## Author: Roithi
-## Version: 0.2.1-Beta
+## Version: @project-version@
 ## SavedVariables: DesolateLootDB
+## OptionalDeps: LibStub
+## X-Curse-Project-ID: 1448287
 
-# 0. Libraries
-embeds.xml
-
-# 1. Load Core First
-Core.lua
-
-# 2. Load Core Modules
-Modules/Core/Debug.lua
-Modules/Core/Comm.lua
-Modules/Core/Loot.lua
-Modules/Core/Distribution.lua
-Modules/Core/Session.lua
-Modules/Core/Trade.lua
-Modules/Core/Priority.lua
-Modules/Core/ItemManager.lua
-Modules/Core/Simulation.lua
-
-# 3. Load Settings
-Modules/Settings/General.lua
-Modules/Settings/Roster.lua
-Modules/Settings/Priority.lua
-Modules/Settings/ItemManager.lua
-
-# 4. Load UI
-Modules/UI/Layouts.lua
-Modules/UI/Core.lua
-Modules/UI/Attendance.lua
-Modules/UI/Loot.lua
-Modules/UI/Monitor.lua
-Modules/UI/Voting.lua
-Modules/UI/Utility.lua
-Modules/UI/Version.lua
+Desolate_Lootcouncil.xml
