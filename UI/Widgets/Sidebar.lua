@@ -53,10 +53,11 @@ function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
 
     if Comm and Comm.playerEnchantingSkill then
         for name, skill in pairs(Comm.playerEnchantingSkill) do
-            if skill > 0 then
+            if skill then
                 table.insert(disenchanters, { name = name, skill = skill })
             end
         end
+
         table.sort(disenchanters, function(a, b) return a.skill > b.skill end)
     end
 

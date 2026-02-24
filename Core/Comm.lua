@@ -65,8 +65,9 @@ function Comm:OnCommReceived(prefix, message, distribution, sender)
             skill = data.enchantingSkill
         else
             ver = data
-            skill = 0
+            skill = nil
         end
+
 
         self:UpdatePlayerInfo(sender, ver, skill)
     elseif command == "SESSION_START" then
@@ -87,9 +88,10 @@ end
 
 function Comm:UpdatePlayerInfo(sender, version, skill)
     self.playerVersions[sender] = version
-    self.playerEnchantingSkill[sender] = skill or 0
+    self.playerEnchantingSkill[sender] = skill
 
     -- Sync to Global for Debug module
+
     if DesolateLootcouncil.activeAddonUsers then
         DesolateLootcouncil.activeAddonUsers[sender] = true
     end
@@ -106,8 +108,8 @@ function Comm:SendVersionCheck()
     local myName = UnitName("player")
     self.playerVersions[myName] = DesolateLootcouncil.version
     local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
-    if mySkill == 0 then mySkill = 300 end -- Test/Default
     self.playerEnchantingSkill[myName] = mySkill
+
 
     self:SendComm("VERSION_REQ", { version = DesolateLootcouncil.version })
 end

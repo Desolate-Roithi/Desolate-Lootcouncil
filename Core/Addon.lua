@@ -231,13 +231,44 @@ function DesolateLootcouncil:GetOptions()
     return { type = "group", args = {} }
 end
 
+--- Returns the player's enchanting skill level.
+--- Returns nil if the player does not have Enchanting.
+--- Returns the highest expansion skill level learned.
+---@return number|nil
 function DesolateLootcouncil:GetEnchantingSkillLevel()
     local prof1, prof2 = GetProfessions()
-    local function CheckProf(id)
-        if not id then return 0 end
-        local name, icon, rank = GetProfessionInfo(id)
-        if name == "Enchanting" or name == "Verzauberkunst" then return rank end
-        return 0
+    local function IsEnchanting(id)
+        if not id then return false end
+        local name = GetProfessionInfo(id)
+        return name == "Enchanting" or name == "Verzauberkunst"
     end
-    return math.max(CheckProf(prof1), CheckProf(prof2))
+
+    if not IsEnchanting(prof1) and not IsEnchanting(prof2) then
+        return nil
+    end
+
+    local highestRank = 0
+    local found = false
+
+    local ok, childInfos = pcall(C_TradeSkillUI.GetChildProfessionInfos)
+    if ok and childInfos then
+        for _, info in ipairs(childInfos) do
+            if info.skillLevel then
+                highestRank = math.max(highestRank, info.skillLevel)
+                found = true
+            end
+        end
+    end
+
+    if not found then
+        local function GetLegacyRank(id)
+            if not id then return 0 end
+            local name, _, rank = GetProfessionInfo(id)
+            if name == "Enchanting" or name == "Verzauberkunst" then return rank end
+            return 0
+        end
+        highestRank = math.max(GetLegacyRank(prof1), GetLegacyRank(prof2))
+    end
+
+    return highestRank
 end

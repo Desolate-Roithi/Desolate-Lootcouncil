@@ -1,4 +1,4 @@
-## Interface: 120000
+## Interface: 120001
 ## Title: Desolate Lootcouncil
 ## Notes: A FIFO Loot Council Addon
 ## Author: Roithi
