@@ -1,0 +1,22 @@
+name: Release Addon
+
+on:
+  push:
+    tags:
+      - '*' # This triggers the script every time you push a tag (like v1.0.1)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for the packager to read your git history
+
+      - name: Package and Upload
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -o
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}

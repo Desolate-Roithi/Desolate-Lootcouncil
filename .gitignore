@@ -1,14 +1,13 @@
-# Operating System files
+# --- Editor & System Junk ---
+.vscode/
+.agent/
 .DS_Store
 Thumbs.db
-Desktop.ini
 
-# Editor & IDE directories
-.vscode/
-.idea/
-.aiexclude
-*.sublime-project
-*.swp
+# --- Development Tools ---
+.luacheckrc
+Tests/
+Desolate_Lootcouncil-Dev.toc
 
 # Backup and Temporary files
 *.bak
@@ -16,11 +15,10 @@ Desktop.ini
 *.tmp
 *.log
 
-# Compressed files (if you zip builds locally)
+# --- Libraries (Externals) ---
+Libs/LibStub/
+Libs/Ace3/
+
+# --- Packager Output ---
+.release/
 *.zip
-*.rar
-
-# Install libs
-install_libs.py
-
-manual_testing_guide.md

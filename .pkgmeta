@@ -1,0 +1,23 @@
+package-as: DesolateLootCouncil
+
+externals:
+  # GitHub
+  Libs/LibStub: https://github.com/lua-wow/LibStub.git
+  Libs/Ace3: https://github.com/WoWUIDev/Ace3.git
+
+ignore:
+  - .gitignore
+  - .pkgmeta
+  - .luacheckrc
+  - README.md
+  - .github
+  - .vscode
+
+changelog:
+  line-label: "-"
+  template: |
+    # Changelog for @project-version@
+    @debug@
+    @commits-short@
+move-folders:
+  DesolateLootCouncil-Dev: DesolateLootCouncil
