@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.3.2-Beta  
-**Last Updated:** 2026-02-24  
+**Latest Version:** v0.3.3-Beta  
+**Last Updated:** 2026-02-25  
 **Compatibility:** WoW 12.0.1 (Midnight)  
 
 📄 [View Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)
@@ -44,6 +44,10 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.3.3-Beta
+* **Fixes:** corrected disenchanters overview to only display characters with the Enchanting profession and accurately show the latest expansion's skill level.
+* **Communication:** improved data handling for profession skill levels in addon messages.
 
 ### v0.3.2-Beta
 * **Automation:** Set up CurseForge automation with GitHub Actions and optimized `.pkgmeta`.
