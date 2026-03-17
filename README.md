@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.3.3-Beta  
-**Last Updated:** 2026-02-25  
+**Latest Version:** v0.3.4-Beta  
+**Last Updated:** 2026-03-17  
 **Compatibility:** WoW 12.0.1 (Midnight)  
 
 📄 [View Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)
