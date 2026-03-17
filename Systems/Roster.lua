@@ -53,6 +53,12 @@ function Roster:StartRaidSession()
         return
     end
 
+    local _, instanceType = GetInstanceInfo()
+    if instanceType ~= "raid" then
+        self:Printf("Sessions can only be started in Raid instances.")
+        return
+    end
+
     config.sessionActive = true
     config.currentSessionID = time()
     config.currentAttendees = {}
@@ -317,8 +323,11 @@ end
 
 function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, groupSize, success)
     if success == 1 then
-        self:SnapshotRoster()
-        self:Printf("Encounter '%s' Defeated. Attendance updated.", encounterName)
+        local _, instanceType = GetInstanceInfo()
+        if instanceType == "raid" then
+            self:SnapshotRoster()
+            self:Printf("Encounter '%s' Defeated. Attendance updated.", encounterName)
+        end
     end
 end
 

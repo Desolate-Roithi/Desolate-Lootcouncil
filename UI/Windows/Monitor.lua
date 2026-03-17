@@ -150,10 +150,21 @@ function UI_Monitor:ShowMonitorWindow()
             ---@type AceGUIInteractiveLabel
             local labelLink = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
             labelLink:SetText(link)
+            local itemID = item.itemID or (type(link) == "string" and tonumber(link:match("item:(%d+)")))
+            local itemObj = itemID and Item:CreateFromItemID(itemID) or Item:CreateFromItemLink(link)
+            if itemObj and not itemObj:IsItemEmpty() then
+                itemObj:ContinueOnItemLoad(function()
+                    local loadedLink = itemObj:GetItemLink()
+                    if loadedLink then
+                        item.link = loadedLink
+                        labelLink:SetText(loadedLink)
+                    end
+                end)
+            end
             labelLink:SetRelativeWidth(0.40)
             labelLink:SetCallback("OnEnter", function(widget)
                 GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
-                GameTooltip:SetHyperlink(link)
+                GameTooltip:SetHyperlink(item.link)
                 GameTooltip:Show()
             end)
             labelLink:SetCallback("OnLeave", function() GameTooltip:Hide() end)
@@ -450,7 +461,24 @@ function UI_Monitor:ShowAwardWindow(itemData)
     if Comm and Comm.playerEnchantingSkill then
         for name, skill in pairs(Comm.playerEnchantingSkill) do
             if skill > 0 then
-                table.insert(disenchanters, { name = name, skill = skill })
+                local inGroup = false
+                local myName, myRealm = UnitName("player")
+                myRealm = myRealm and myRealm:gsub("%s+", "") or GetRealmName():gsub("%s+", "")
+                local fullName = myName .. "-" .. myRealm
+                if name == myName or name == fullName then
+                    inGroup = true
+                elseif UnitInRaid(name) or UnitInParty(name) then
+                    inGroup = true
+                else
+                    local shortName = Ambiguate(name, "none")
+                    if UnitInRaid(shortName) or UnitInParty(shortName) then
+                        inGroup = true
+                    end
+                end
+
+                if inGroup then
+                    table.insert(disenchanters, { name = name, skill = skill })
+                end
             end
         end
         table.sort(disenchanters, function(a, b) return a.skill > b.skill end)

@@ -26,6 +26,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@field SaveFramePosition fun(self: DLC_Ref_UILoot, frame: any, windowName: string)
 ---@field ApplyCollapseHook fun(self: DLC_Ref_UILoot, widget: any)
 ---@field DLC_Log fun(self: DLC_Ref_UILoot, msg: any, force?: boolean)
+---@field Persistence any
 
 ---@type DLC_Ref_UILoot
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UILoot]]
@@ -169,20 +170,18 @@ function UI_Loot:ShowLootWindow(lootTable)
             ---@type AceGUIInteractiveLabel
             local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
 
-            -- FIX TRUNCATION: Use GetItemInfo to ensure we have a full link/name
-            local DisplayName = link
-
-            -- FIX CRASH: Ensure itemID exists
-            if not data.itemID and data.link then
-                data.itemID = tonumber(data.link:match("item:(%d+)"))
+            itemLabel:SetText(data.link)
+            local itemID = data.itemID or (type(data.link) == "string" and tonumber(data.link:match("item:(%d+)")))
+            local itemObj = itemID and Item:CreateFromItemID(itemID) or Item:CreateFromItemLink(data.link)
+            if itemObj and not itemObj:IsItemEmpty() then
+                itemObj:ContinueOnItemLoad(function()
+                    local loadedLink = itemObj:GetItemLink()
+                    if loadedLink then
+                        data.link = loadedLink
+                        itemLabel:SetText(loadedLink)
+                    end
+                end)
             end
-
-            if data.itemID then
-                local itemName, itemLink = C_Item.GetItemInfo(data.itemID)
-                if itemLink then DisplayName = itemLink end
-            end
-
-            itemLabel:SetText(DisplayName)
             itemLabel:SetRelativeWidth(0.55) -- User requested 0.55
             itemLabel:SetCallback("OnClick", function()
                 GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")

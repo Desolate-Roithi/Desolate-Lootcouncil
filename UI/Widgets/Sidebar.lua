@@ -54,7 +54,24 @@ function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
     if Comm and Comm.playerEnchantingSkill then
         for name, skill in pairs(Comm.playerEnchantingSkill) do
             if skill then
-                table.insert(disenchanters, { name = name, skill = skill })
+                local inGroup = false
+                local myName, myRealm = UnitName("player")
+                myRealm = myRealm and myRealm:gsub("%s+", "") or GetRealmName():gsub("%s+", "")
+                local fullName = myName .. "-" .. myRealm
+                if name == myName or name == fullName then
+                    inGroup = true
+                elseif UnitInRaid(name) or UnitInParty(name) then
+                    inGroup = true
+                else
+                    local shortName = Ambiguate(name, "none")
+                    if UnitInRaid(shortName) or UnitInParty(shortName) then
+                        inGroup = true
+                    end
+                end
+
+                if inGroup then
+                    table.insert(disenchanters, { name = name, skill = skill })
+                end
             end
         end
 
@@ -62,8 +79,10 @@ function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
     end
 
     if #disenchanters == 0 then
+        sidebarFrame:Hide()
         sidebarFrame.content:SetText("|cff9d9d9dNo data.\nScanning...|r")
     else
+        sidebarFrame:Show()
         local listString = ""
         for _, de in ipairs(disenchanters) do
             listString = listString .. string.format("%s (|cff00ff00%d|r)\n", de.name, de.skill)

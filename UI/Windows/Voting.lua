@@ -176,6 +176,17 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         ---@type AceGUIInteractiveLabel
         local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
         itemLabel:SetText(data.link)
+        local itemID = data.itemID or (type(data.link) == "string" and tonumber(data.link:match("item:(%d+)")))
+        local itemObj = itemID and Item:CreateFromItemID(itemID) or Item:CreateFromItemLink(data.link)
+        if itemObj and not itemObj:IsItemEmpty() then
+            itemObj:ContinueOnItemLoad(function()
+                local loadedLink = itemObj:GetItemLink()
+                if loadedLink then
+                    data.link = loadedLink
+                    itemLabel:SetText(loadedLink)
+                end
+            end)
+        end
         itemLabel:SetRelativeWidth(0.35)
         itemLabel:SetCallback("OnEnter", function(widget)
             GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
@@ -283,7 +294,8 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     end
 
     -- Add a small spacer at the bottom to ensure the last item isn't obscured by the status bar
-    local spacer = AceGUI:Create("Label")
+    ---@type AceGUILabel
+    local spacer = AceGUI:Create("Label") --[[@as AceGUILabel]]
     spacer:SetText(" ")
     spacer:SetFullWidth(true)
     scroll:AddChild(spacer)
