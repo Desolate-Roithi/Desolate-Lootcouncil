@@ -108,6 +108,11 @@ function DesolateLootcouncil:DetermineLootMaster()
     local myName = UnitName("player")
     if not IsInGroup() then return myName end
 
+    -- Disable entirely if we are in LFR
+    if IsPartyLFG() or HasLFGRestrictions() then
+        return nil
+    end
+
     local configuredLM = self.db.profile.configuredLM
     if configuredLM and configuredLM ~= "" then
         if self:IsUnitInRaid(configuredLM) or configuredLM == myName then
@@ -128,7 +133,7 @@ function DesolateLootcouncil:DetermineLootMaster()
             if UnitIsGroupLeader(unit) then return (UnitName(unit)) end
         end
     end
-    return myName
+    return nil
 end
 
 function DesolateLootcouncil:UpdateLootMasterStatus()
