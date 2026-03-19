@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.3.5-Beta  
-**Last Updated:** 2026-03-18  
+**Latest Version:** v0.4.0-Beta  
+**Last Updated:** 2026-03-20  
 **Compatibility:** WoW 12.0.1 (Midnight)  
 
 📄 [View Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)
@@ -44,6 +44,18 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.4.0-Beta
+* **Loot Display:** Items now show the correct dropped ilvl and affixes in all windows (Loot, Vote, Trade, Monitor).
+* **Trading:** All pending items for a player are now staged in a single trade window; awarded items are removed from the pending list automatically.
+* **Vote Window:** Already-awarded items are filtered out of the Loot Vote window.
+* **Loot Window:** Restricted to the Loot Master only (or Raid Assist for read-only view).
+* **Autopass:** Enabled by default; only passes on managed items; only triggers when all in-zone online raid members have the addon.
+* **History:** Loot History is now broadcast to all raiders on each award and auto-refreshes when open. Accessible from Settings → General.
+* **Monitor Collapse:** Footer buttons and disenchanter sidebar correctly hide when the window is minimised.
+* **Version Window:** Refresh/Ping button now waits 1.5 s for responses before re-rendering.
+* **Session Persistence:** Loot Master identity is saved across /reload.
+* **Stability:** Fixed `db.callbacks:Register` crash on login (`RegisterCallback` API correction).
 
 ### v0.3.3-Beta
 * **Fixes:** corrected disenchanters overview to only display characters with the Enchanting profession and accurately show the latest expansion's skill level.
