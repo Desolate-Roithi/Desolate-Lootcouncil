@@ -268,6 +268,26 @@ function Session:SendRemoveItem(guid)
     end
 end
 
+-- Bug 4: Broadcast an awarded history entry to all players
+function Session:SendHistoryUpdate(entry)
+    -- Avoid serializing fullItemData (too large/circular refs); only send display fields
+    local safeEntry = {
+        link        = entry.link,
+        texture     = entry.texture,
+        itemID      = entry.itemID,
+        winner      = entry.winner,
+        winnerClass = entry.winnerClass,
+        voteType    = entry.voteType,
+        timestamp   = entry.timestamp,
+    }
+    local payload = { command = "HISTORY_UPDATE", data = safeEntry }
+    local serialized = self:Serialize(payload)
+    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    if channel then
+        self:SendCommMessage("DLC_Loot", serialized, channel)
+    end
+end
+
 function Session:RemoveSessionItem(guid)
     -- 1. Tell clients to REMOVE the item (not just close)
     self:SendRemoveItem(guid)
@@ -356,6 +376,33 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
             local Voting = DesolateLootcouncil:GetModule("UI_Voting")
             if Voting and Voting.ShowVotingWindow then
                 Voting:ShowVotingWindow(nil, true)
+            end
+        end
+    elseif payload.command == "HISTORY_UPDATE" then
+        -- Bug 4: All players (not just LM) store the history entry
+        local data = payload.data
+        if data and data.link then
+            local session = DesolateLootcouncil.db.profile.session
+            if not session.awarded then session.awarded = {} end
+
+            -- Avoid duplicate entries (LM already stored it locally)
+            if not DesolateLootcouncil:AmILootMaster() then
+                table.insert(session.awarded, {
+                    link        = data.link,
+                    texture     = data.texture,
+                    itemID      = data.itemID,
+                    winner      = data.winner,
+                    winnerClass = data.winnerClass,
+                    voteType    = data.voteType,
+                    timestamp   = data.timestamp,
+                    traded      = false
+                })
+
+                -- Auto-refresh History window if open
+                local UI_H = DesolateLootcouncil:GetModule("UI_History")
+                if UI_H and UI_H.historyFrame and UI_H.historyFrame.frame and UI_H.historyFrame.frame:IsShown() then
+                    UI_H:ShowHistoryWindow()
+                end
             end
         end
     elseif payload.command == "VOTE" then

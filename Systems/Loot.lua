@@ -170,11 +170,22 @@ function Loot:OnStartLootRoll(event, rollID)
 
     local isLM = DesolateLootcouncil:AmILootMaster()
     local link = GetLootRollItemLink(rollID)
-    local addonUserCount = DesolateLootcouncil:GetActiveUserCount()
-    local groupSize = GetNumGroupMembers()
 
-    if addonUserCount < groupSize then return end
+    -- Bug 0: Only autopass if every raid member in the same zone and connected has the addon
+    local myZone = GetRealZoneText()
+    local inZoneAndOnline = 0
+    local numMembers = GetNumGroupMembers()
+    local prefix = IsInRaid() and "raid" or "party"
+    for i = 1, numMembers do
+        local unit = prefix .. i
+        if UnitIsConnected(unit) and GetRealZoneText(unit) == myZone then
+            inZoneAndOnline = inZoneAndOnline + 1
+        end
+    end
+    if DesolateLootcouncil:GetActiveUserCount() < inZoneAndOnline then return end
+
     if isLM then
+        -- LM collects it via Need/Greed to award manually; skip BoP Collectables
         local _, _, _, _, isBoP, canNeed, canGreed, canDisenchant, _, _, _, _, canTransmog = GetLootRollItemInfo(rollID)
         local cat = self:CategorizeItem(link)
         if isBoP and cat == "Collectables" then
@@ -191,7 +202,7 @@ function Loot:OnStartLootRoll(event, rollID)
             RollOnLoot(rollID, 3)
         end
     else
-        -- Bug 5 fix: only pass on items in a managed category (ignore world drops / unmanaged items)
+        -- Only pass on items in a managed category (ignore world drops / unmanaged items)
         local cat = self:CategorizeItem(link)
         if cat ~= "Junk/Pass" then
             RollOnLoot(rollID, 0) -- Pass — LM handles distribution
@@ -263,9 +274,12 @@ end
 
 function Loot:ClearLootBacklog()
     local session = DesolateLootcouncil.db.profile.session
+    -- Bug 1: ONLY wipe the loot queue, NOT sessionItems.
+    -- sessionItems is the dedup store that prevents re-adding the same drop
+    -- when the LM opens the loot window a second time (e.g. for crests).
+    -- It is only reset on addon load (OnEnable) for the full raid night.
     if session and session.loot then wipe(session.loot) end
-    if self.sessionItems then wipe(self.sessionItems) end
-    DesolateLootcouncil:DLC_Log("Loot backlog cleared.")
+    DesolateLootcouncil:DLC_Log("Loot backlog cleared (dedup store preserved).")
 end
 
 function Loot:AddManualItem(rawLink)
@@ -342,19 +356,31 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
         ---@type Session
         local Session = DesolateLootcouncil:GetModule("Session")
 
-        table.insert(session.awarded, {
-            link = itemData.link,
-            texture = itemData.texture,
-            itemID = itemData.itemID,
-            winner = winnerName,
+        local entry = {
+            link        = itemData.link,
+            texture     = itemData.texture,
+            itemID      = itemData.itemID,
+            winner      = winnerName,
             winnerClass = winnerClass,
-            voteType = voteType,
-            timestamp = GetServerTime(),
+            voteType    = voteType,
+            timestamp   = GetServerTime(),
             originalIndex = origIndex,
-            fullItemData = itemData,
-            votes = Session and Session.sessionVotes and DeepCopy(Session.sessionVotes[itemGUID]) or {},
-            traded = (winnerName == UnitName("player"))
-        })
+            fullItemData  = itemData,
+            votes       = Session and Session.sessionVotes and DeepCopy(Session.sessionVotes[itemGUID]) or {},
+            traded      = (winnerName == UnitName("player"))
+        }
+        table.insert(session.awarded, entry)
+
+        -- Bug 4: Broadcast to all raiders so everyone has history, not just LM
+        if Session and Session.SendHistoryUpdate then
+            Session:SendHistoryUpdate(entry)
+        end
+
+        -- Bug 4: Auto-refresh History window if it's open
+        local UI_H = DesolateLootcouncil:GetModule("UI_History")
+        if UI_H and UI_H.historyFrame and UI_H.historyFrame.frame and UI_H.historyFrame.frame:IsShown() then
+            UI_H:ShowHistoryWindow()
+        end
 
         if Session and Session.SendRemoveItem then
             Session:SendRemoveItem(itemGUID)

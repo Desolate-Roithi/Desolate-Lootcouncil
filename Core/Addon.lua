@@ -78,7 +78,7 @@ function DesolateLootcouncil:OnInitialize()
     --    becomes {} and is deleted — wiping imported or cross-character shared data.
     --    OnDatabaseShutdown fires BEFORE RegisterDefaults(nil), so we replace it with a
     --    no-op on this specific DB instance. Profiles are only removed by explicit user action.
-    self.db.callbacks:Register("OnDatabaseShutdown", function(_, db)
+    self.db.RegisterCallback(self, "OnDatabaseShutdown", function(_, db)
         db.RegisterDefaults = function() end
     end)
 
@@ -179,6 +179,21 @@ end
 
 function DesolateLootcouncil:AmILootMaster()
     return self.amILM
+end
+
+-- Bug 3: Raid Assists can view Monitor but not award
+function DesolateLootcouncil:AmIRaidAssistOrLM()
+    if self.amILM then return true end
+    if IsInRaid() then
+        -- Check own rank: 0=member, 1=assist, 2=leader
+        for i = 1, GetNumGroupMembers() do
+            local name, rank = GetRaidRosterInfo(i)
+            if name == UnitName("player") and rank >= 1 then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 -- --- Version Logic ---

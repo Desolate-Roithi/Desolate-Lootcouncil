@@ -258,8 +258,12 @@ function UI_Version:UpdateVersionList(isTest)
         ---@type Comm
         local C = DesolateLootcouncil:GetModule("Comm")
         if C then C:SendVersionCheck() end
-        -- Update UI
-        self:UpdateVersionList(isTest)
+        -- Bug 5: delay refresh so responses can arrive before we re-render
+        C_Timer.After(1.5, function()
+            if self.versionFrame then
+                self:UpdateVersionList(isTest)
+            end
+        end)
     end)
     scroll:AddChild(btnRefresh)
 end

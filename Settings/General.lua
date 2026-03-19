@@ -67,8 +67,7 @@ function GeneralSettings:GetGeneralOptions()
                 name = "Reset Window Layout",
                 desc = "Reset the positions of all addon windows to their default center status.",
                 order = 5,
-                width = "normal", -- User screenshot shows button isn't full width, but maybe default width. 'normal' usually fits. "Reset Window Layo..." implies truncation if it was small?
-                -- Or maybe it's just the label.
+                width = "normal",
                 func = function()
                     if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ResetPositions then
                         DesolateLootcouncil.Persistence:ResetPositions()
@@ -76,6 +75,18 @@ function GeneralSettings:GetGeneralOptions()
                     else
                         DesolateLootcouncil:Print("Persistence module not loaded.")
                     end
+                end,
+            },
+            -- Bug 4: History link in settings so all players can open it
+            openHistory = {
+                type = "execute",
+                name = "Loot History",
+                desc = "Open the Loot History window showing all awarded items.",
+                order = 6,
+                width = "normal",
+                func = function()
+                    local UI = DesolateLootcouncil:GetModule("UI_History")
+                    if UI then UI:ShowHistoryWindow() end
                 end,
             }
         }

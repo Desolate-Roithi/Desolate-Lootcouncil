@@ -130,6 +130,8 @@ function UI_Monitor:ShowMonitorWindow()
 
     local session = DesolateLootcouncil.db.profile.session
     local items = session.bidding
+    local parent = (self.monitorFrame --[[@as any]]).frame
+    local isLM = DesolateLootcouncil:AmILootMaster()
 
     ---@type AceGUIScrollFrame
     local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
@@ -149,21 +151,10 @@ function UI_Monitor:ShowMonitorWindow()
             group:SetFullWidth(true)
             scroll:AddChild(group)
 
-            -- Link
+            -- Link (Bug 1: display as-is — don't overwrite with ID-based base link)
             ---@type AceGUIInteractiveLabel
             local labelLink = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
             labelLink:SetText(link)
-            local itemID = item.itemID or (type(link) == "string" and tonumber(link:match("item:(%d+)")))
-            local itemObj = itemID and Item:CreateFromItemID(itemID) or Item:CreateFromItemLink(link)
-            if itemObj and not itemObj:IsItemEmpty() then
-                itemObj:ContinueOnItemLoad(function()
-                    local loadedLink = itemObj:GetItemLink()
-                    if loadedLink then
-                        item.link = loadedLink
-                        labelLink:SetText(loadedLink)
-                    end
-                end)
-            end
             labelLink:SetRelativeWidth(0.40)
             labelLink:SetCallback("OnEnter", function(widget)
                 GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
@@ -195,7 +186,7 @@ function UI_Monitor:ShowMonitorWindow()
             end
             group:AddChild(labelCounts)
 
-            -- Award Button
+            -- Award Button (Bug 3: LM-only)
             ---@type AceGUIButton
             local btnAward = AceGUI:Create("Button") --[[@as AceGUIButton]]
             btnAward:SetText("Award")
@@ -203,9 +194,9 @@ function UI_Monitor:ShowMonitorWindow()
             btnAward:SetCallback("OnClick", function()
                 self:ShowAwardWindow(item)
             end)
-            group:AddChild(btnAward)
+            if isLM then group:AddChild(btnAward) end
 
-            -- Remove Button
+            -- Remove Button (Bug 3: LM-only)
             ---@type AceGUIButton
             local btnRemove = AceGUI:Create("Button") --[[@as AceGUIButton]]
             btnRemove:SetText("X")
@@ -218,13 +209,13 @@ function UI_Monitor:ShowMonitorWindow()
                     end
                 end)
             end)
-            group:AddChild(btnRemove)
+            if isLM then group:AddChild(btnRemove) end
         end
     end
 
-    -- Footer
-    local parent = (self.monitorFrame --[[@as any]]).frame
     local mFrame = self.monitorFrame --[[@as any]]
+    local isCollapsed = mFrame.frame and mFrame.frame.isCollapsed
+
     if not mFrame.btnTrades then
         local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
         btn:SetText("Pending Trades")
@@ -238,7 +229,8 @@ function UI_Monitor:ShowMonitorWindow()
         end)
         mFrame.btnTrades = btn
     end
-    mFrame.btnTrades:Show()
+    -- Bug 2: Only show footer buttons when not collapsed
+    if not isCollapsed then mFrame.btnTrades:Show() else mFrame.btnTrades:Hide() end
 
     if not mFrame.btnEnd then
         local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
@@ -253,7 +245,8 @@ function UI_Monitor:ShowMonitorWindow()
         end)
         mFrame.btnEnd = btn
     end
-    mFrame.btnEnd:Show()
+    -- Bug 2: Only show footer buttons when not collapsed
+    if not isCollapsed then mFrame.btnEnd:Show() else mFrame.btnEnd:Hide() end
 
     local function LayoutMonitor()
         local rawFrame = (self.monitorFrame --[[@as any]]).frame
