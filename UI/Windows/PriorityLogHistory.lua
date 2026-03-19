@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@diagnostic disable: undefined-field
 ---@class UI_PriorityLogHistory : AceModule
 local UI_PriorityLogHistory = DesolateLootcouncil:NewModule("UI_PriorityLogHistory")

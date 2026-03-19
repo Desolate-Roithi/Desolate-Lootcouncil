@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class Logger
 local Logger = {}
 

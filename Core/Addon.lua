@@ -1,3 +1,16 @@
+local addonName, addonTable = ...
+
+-- --- Conflict Prevention (Dev vs Prod) ---
+-- If both are loaded, one will potentially overwrite the other's DB.
+-- We check if we are the Dev version and if the Prod version is already loaded.
+if addonName == "Desolate_Lootcouncil-Dev" then
+    if C_AddOns.IsAddOnLoaded("Desolate_Lootcouncil") then
+        print("|cffff0000[Desolate Lootcouncil]|r Dev version detected Production version is already loaded. Aborting Dev load to prevent database corruption.")
+        addonTable.abortLoad = true
+        return
+    end
+end
+
 ---@diagnostic disable: duplicate-set-field, undefined-global
 ---@class DesolateLootcouncil : AceAddon, AceConsole-3.0, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0, AceTimer-3.0
 ---@field db table
@@ -51,15 +64,27 @@ local defaults = {
         },
         AttendanceHistory = {},     -- List of past sessions { date, zone, attendees }
         positions = {},             -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
+        dbCreatedAt = 0,            -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
     }
 }
 
 function DesolateLootcouncil:OnInitialize()
     -- 1. Initialize DB
     self.db = LibStub("AceDB-3.0"):New("DesolateLootDB", defaults, true)
-    -- 2. Initialize Active Users
+
+    -- 2. Prevent AceDB from auto-stripping profile data on PLAYER_LOGOUT.
+    --    AceDB's logoutHandler calls db:RegisterDefaults(nil) which runs removeDefaults(),
+    --    stripping any key that equals its default value. If ALL keys match, the profile
+    --    becomes {} and is deleted — wiping imported or cross-character shared data.
+    --    OnDatabaseShutdown fires BEFORE RegisterDefaults(nil), so we replace it with a
+    --    no-op on this specific DB instance. Profiles are only removed by explicit user action.
+    self.db.callbacks:Register("OnDatabaseShutdown", function(_, db)
+        db.RegisterDefaults = function() end
+    end)
+
+    -- 3. Initialize Active Users
     self.activeAddonUsers = {}
-    -- 3. Initialize Simulated Group
+    -- 4. Initialize Simulated Group
     self.simulatedGroup = { [UnitName("player")] = true }
 
     -- 5. Register with AceConfig

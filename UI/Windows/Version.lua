@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class UI_Version : AceModule
 local UI_Version = DesolateLootcouncil:NewModule("UI_Version", "AceEvent-3.0")
 local AceGUI = LibStub("AceGUI-3.0")

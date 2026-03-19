@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class UI : AceModule, AceConsole-3.0, AceEvent-3.0, AceTimer-3.0
 ---@field ShowLootWindow fun(self: UI, lootTable: table|nil)
 ---@field ShowVotingWindow fun(self: UI, lootTable: table|nil, isRefresh: boolean?)

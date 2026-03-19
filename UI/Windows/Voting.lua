@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class UI_Voting : AceModule
 local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting")
 local AceGUI = LibStub("AceGUI-3.0")

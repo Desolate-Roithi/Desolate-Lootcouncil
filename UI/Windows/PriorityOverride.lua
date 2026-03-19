@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class UI_PriorityOverride : AceModule
 ---@field priorityOverrideFrame Frame
 ---@field priorityOverrideContent Frame

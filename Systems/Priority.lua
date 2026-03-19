@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class Priority : AceModule, AceConsole-3.0, AceTimer-3.0
 ---@field LogPriorityChange fun(self: Priority, msg: string)
 ---@field GetReversionIndex fun(self: Priority, listName: string, origIndex: number, timestamp: number): number

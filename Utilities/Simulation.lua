@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class Simulation : AceModule, AceConsole-3.0
 ---@field activeSims table
 ---@field HandleSlashCommand fun(self: Simulation, input: string)

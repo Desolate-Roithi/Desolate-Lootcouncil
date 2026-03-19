@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class Session : AceModule, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0, AceConsole-3.0
 local Session = DesolateLootcouncil:NewModule("Session", "AceEvent-3.0", "AceComm-3.0", "AceSerializer-3.0",
     "AceConsole-3.0")

@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class ProfileSettings : AceModule
 local ProfileSettings = DesolateLootcouncil:NewModule("ProfileSettings")
 local AceConfigRegistry = LibStub("AceConfigRegistry-3.0")

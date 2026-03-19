@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class Persistence
 ---@field DefaultLayouts table<string, table>
 ---@field RestoreFramePosition fun(self: Persistence, frame: any, windowName: string)

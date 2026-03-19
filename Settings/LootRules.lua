@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class LootSettings : AceModule
 local LootSettings = DesolateLootcouncil:NewModule("LootSettings")
 

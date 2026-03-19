@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class Comm : AceModule, AceComm-3.0, AceSerializer-3.0, AceEvent-3.0
 ---@field playerVersions table<string, string>
 ---@field playerEnchantingSkill table<string, number>

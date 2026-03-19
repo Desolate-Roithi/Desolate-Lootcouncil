@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class UI_Sidebar : AceModule
 local UI_Sidebar = DesolateLootcouncil:NewModule("UI_Sidebar")
 

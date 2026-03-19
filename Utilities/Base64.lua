@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class Base64
 local Base64 = {}
 local DLC = DesolateLootcouncil

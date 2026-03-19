@@ -1,3 +1,6 @@
+local _, AT = ...
+if AT.abortLoad then return end
+
 ---@class Debug : AceModule, AceConsole-3.0
 ---@field ShowStatus fun(self: Debug)
 ---@field SimulateComm fun(self: Debug, name: string)
