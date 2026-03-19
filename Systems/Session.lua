@@ -34,11 +34,12 @@ end
 function Session:SaveSessionState()
     local session = DesolateLootcouncil.db.profile.session
     session.activeState = {
-        lootList = self.clientLootList,
-        votes = self.sessionVotes,
-        myVotes = self.myLocalVotes,
-        closed = self.closedItems,
-        expiry = self.sessionExpiry -- Absolute timestamp
+        lootList    = self.clientLootList,
+        votes       = self.sessionVotes,
+        myVotes     = self.myLocalVotes,
+        closed      = self.closedItems,
+        expiry      = self.sessionExpiry,             -- Absolute timestamp
+        activeLM    = DesolateLootcouncil.activeLootMaster -- Bug 6: persist LM identity
     }
 end
 
@@ -53,12 +54,18 @@ function Session:RestoreSession()
         if now < expiry then
             -- Scenario A: Active
             self.clientLootList = state.lootList
-            self.sessionVotes = state.votes or {}
-            self.myLocalVotes = state.myVotes or {}
-            self.closedItems = state.closed or {}
-            self.sessionExpiry = expiry
+            self.sessionVotes   = state.votes or {}
+            self.myLocalVotes   = state.myVotes or {}
+            self.closedItems    = state.closed or {}
+            self.sessionExpiry  = expiry
 
-            DesolateLootcouncil:DLC_Log("Restored active session (" .. #self.clientLootList .. " items).")
+            -- Bug 6: Restore LM identity so AmILootMaster() works immediately after reload
+            if state.activeLM and state.activeLM ~= "" then
+                DesolateLootcouncil.activeLootMaster = state.activeLM
+                DesolateLootcouncil.amILM = (state.activeLM == UnitName("player"))
+            end
+
+            DesolateLootcouncil:DLC_Log("Restored active session (" .. #self.clientLootList .. " items, LM: " .. (state.activeLM or "?") .. ").")
 
             -- Re-open UI
             ---@type UI_Voting
@@ -75,8 +82,7 @@ function Session:RestoreSession()
         else
             -- Scenario B: Expired
             DesolateLootcouncil:DLC_Log("Session expired while offline.")
-            wipe(session.activeState) -- Clear
-            -- Clean UI
+            wipe(session.activeState)
             ---@type UI_Voting
             local UI = DesolateLootcouncil:GetModule("UI_Voting")
             if UI and UI.ResetVoting then UI:ResetVoting() end

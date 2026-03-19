@@ -77,18 +77,8 @@ function UI_TradeList:ShowTradeListWindow()
                 -- Link
                 ---@type AceGUIInteractiveLabel
                 local linkLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+                -- Bug 1: preserve item.link as-is (the original awarded drop link with bonus IDs)
                 linkLabel:SetText(item.link)
-                local itemID = item.itemID or (type(item.link) == "string" and tonumber(item.link:match("item:(%d+)")))
-                local itemObj = itemID and Item:CreateFromItemID(itemID) or Item:CreateFromItemLink(item.link)
-                if itemObj and not itemObj:IsItemEmpty() then
-                    itemObj:ContinueOnItemLoad(function()
-                        local loadedLink = itemObj:GetItemLink()
-                        if loadedLink then
-                            item.link = loadedLink
-                            linkLabel:SetText(loadedLink)
-                        end
-                    end)
-                end
                 linkLabel:SetRelativeWidth(0.45)
                 linkLabel:SetCallback("OnEnter", function(widget)
                     GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")

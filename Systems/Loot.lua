@@ -48,18 +48,14 @@ function Loot:OnEnable()
 
     DesolateLootcouncil:DLC_Log("Systems/Loot Loaded")
 
-    -- Restore UI if session exists
+    -- Restore UI if session exists — only for the Loot Master (Bug 4)
     local session = DesolateLootcouncil.db.profile.session
-    if session.loot and #session.loot > 0 then
+    if session.loot and #session.loot > 0 and DesolateLootcouncil:AmILootMaster() then
         self:ScheduleTimer(function()
             ---@type UI_Loot
             local UI = DesolateLootcouncil:GetModule("UI_Loot")
             if UI and UI.ShowLootWindow then
                 UI:ShowLootWindow(session.loot)
-            else
-                -- Fallback to Facade
-                local MainUI = DesolateLootcouncil:GetModule("UI")
-                if MainUI and MainUI.ShowLootWindow then MainUI:ShowLootWindow(session.loot) end
             end
         end, 1)
     end
@@ -195,7 +191,11 @@ function Loot:OnStartLootRoll(event, rollID)
             RollOnLoot(rollID, 3)
         end
     else
-        RollOnLoot(rollID, 0) -- Pass
+        -- Bug 5 fix: only pass on items in a managed category (ignore world drops / unmanaged items)
+        local cat = self:CategorizeItem(link)
+        if cat ~= "Junk/Pass" then
+            RollOnLoot(rollID, 0) -- Pass — LM handles distribution
+        end
     end
 end
 

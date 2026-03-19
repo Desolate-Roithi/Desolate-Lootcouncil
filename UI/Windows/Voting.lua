@@ -105,6 +105,17 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         -- Fix: Preserve local votes on append
         self.myVotes = self.myVotes or {}
     end
+    -- Bug 3: Build a set of awarded GUIDs so we can skip items already distributed
+    local awardedGUIDs = {}
+    local session = DesolateLootcouncil.db.profile.session
+    if session and session.awarded then
+        for _, award in ipairs(session.awarded) do
+            if award.fullItemData and award.fullItemData.sourceGUID then
+                awardedGUIDs[award.fullItemData.sourceGUID] = true
+            end
+        end
+    end
+
     local items = self.cachedVotingItems
     if not items then return end
 
@@ -154,6 +165,9 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 
     for _, data in ipairs(items) do
         local guid = data.sourceGUID or data.link
+
+        -- Bug 3: Skip already-awarded items
+        if not awardedGUIDs[guid] then
         local currentVote = self.myVotes[guid]
         local isClosed = closedItems[guid]
         local remaining = (data.expiry or 0) - now
@@ -178,18 +192,9 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         -- Link
         ---@type AceGUIInteractiveLabel
         local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+        -- Bug 1: display data.link as-is (the full drop link with bonus IDs)
+        -- Never overwrite from an itemID-based lookup which loses affix/ilvl data
         itemLabel:SetText(data.link)
-        local itemID = data.itemID or (type(data.link) == "string" and tonumber(data.link:match("item:(%d+)")))
-        local itemObj = itemID and Item:CreateFromItemID(itemID) or Item:CreateFromItemLink(data.link)
-        if itemObj and not itemObj:IsItemEmpty() then
-            itemObj:ContinueOnItemLoad(function()
-                local loadedLink = itemObj:GetItemLink()
-                if loadedLink then
-                    data.link = loadedLink
-                    itemLabel:SetText(loadedLink)
-                end
-            end)
-        end
         itemLabel:SetRelativeWidth(0.35)
         itemLabel:SetCallback("OnEnter", function(widget)
             GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
@@ -294,6 +299,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
             b4:SetCallback("OnClick", function() CastVote(4) end)
             actionGroup:AddChild(b4)
         end
+        end -- end Bug 3 awarded filter
     end
 
     -- Add a small spacer at the bottom to ensure the last item isn't obscured by the status bar

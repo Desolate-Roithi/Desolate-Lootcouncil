@@ -172,19 +172,9 @@ function UI_Loot:ShowLootWindow(lootTable)
             -- Item Link (Interactive Logic)
             ---@type AceGUIInteractiveLabel
             local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-
+            -- Bug 1: always display data.link as-is (full drop link with bonus IDs/affixes)
+            -- ID-based Item:CreateFromItemID resolves to base ilvl, losing affix data
             itemLabel:SetText(data.link)
-            local itemID = data.itemID or (type(data.link) == "string" and tonumber(data.link:match("item:(%d+)")))
-            local itemObj = itemID and Item:CreateFromItemID(itemID) or Item:CreateFromItemLink(data.link)
-            if itemObj and not itemObj:IsItemEmpty() then
-                itemObj:ContinueOnItemLoad(function()
-                    local loadedLink = itemObj:GetItemLink()
-                    if loadedLink then
-                        data.link = loadedLink
-                        itemLabel:SetText(loadedLink)
-                    end
-                end)
-            end
             itemLabel:SetRelativeWidth(0.55) -- User requested 0.55
             itemLabel:SetCallback("OnClick", function()
                 GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")

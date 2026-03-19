@@ -35,72 +35,71 @@ function Trade:OnTradeShow()
     local session = DesolateLootcouncil.db.profile.session
     if not session or not session.awarded then return end
 
-    -- Scan History for items won by this player that haven't been traded
+    -- Build list of all untraded items for this player
+    local pendingItems = {}
     for _, award in ipairs(session.awarded) do
         if award.winner == tradeTargetName and not award.traded then
-            -- We found an item that needs to be traded to this person
-            self:AttemptTrade(award)
+            table.insert(pendingItems, award)
         end
+    end
+
+    if #pendingItems > 0 then
+        self:StageAllItems(pendingItems, tradeTargetName)
     end
 end
 
-function Trade:AttemptTrade(award)
-    local targetItemID = award.itemID
+-- Bug 2: Stage ALL pending items for a player in one trade window open
+function Trade:StageAllItems(pendingItems, targetName)
+    self.currentTrade = {}
 
-    -- Scan Bags
-    for bag = 0, 4 do
-        local numSlots = C_Container.GetContainerNumSlots(bag)
-        for slot = 1, numSlots do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID == targetItemID then
-                -- Check if not locked
-                if not info.isLocked then
-                    -- Put in trade window
+    for _, award in ipairs(pendingItems) do
+        local targetItemID = award.itemID
+        local staged = false
+
+        for bag = 0, 4 do
+            if staged then break end
+            local numSlots = C_Container.GetContainerNumSlots(bag)
+            for slot = 1, numSlots do
+                if staged then break end
+                local info = C_Container.GetContainerItemInfo(bag, slot)
+                if info and info.itemID == targetItemID and not info.isLocked then
                     C_Container.UseContainerItem(bag, slot)
-
-                    DesolateLootcouncil:DLC_Log(string.format("Auto-staging %s for %s.", award.link, award.winner))
-
-                    -- Track as current
-                    self.currentTrade = self.currentTrade or {}
                     table.insert(self.currentTrade, {
-                        link = award.link,
+                        link   = award.link,
                         winner = award.winner,
-                        guid = award.sourceGUID -- Store GUID to find exact entry easily
+                        guid   = award.sourceGUID
                     })
-
-                    -- Register System Chat listener if not already
-                    self:RegisterEvent("CHAT_MSG_SYSTEM")
-                    self:RegisterEvent("TRADE_CLOSED")
-
-                    return
+                    DesolateLootcouncil:DLC_Log(string.format("Staged %s for %s.", award.link, targetName))
+                    staged = true
                 end
             end
         end
+
+        if not staged then
+            DesolateLootcouncil:DLC_Log(string.format("Could not find %s in bags for %s.", award.link, targetName))
+        end
+    end
+
+    if #self.currentTrade > 0 then
+        self:RegisterEvent("CHAT_MSG_SYSTEM")
+        self:RegisterEvent("TRADE_CLOSED")
     end
 end
 
 function Trade:CHAT_MSG_SYSTEM(event, message)
     if message == ERR_TRADE_COMPLETE then
-        -- Trade success!
         if self.currentTrade then
             local session = DesolateLootcouncil.db.profile.session
             local changed = false
 
             for _, pending in ipairs(self.currentTrade) do
-                -- Update session manually or via helper
                 if session and session.awarded then
                     for _, award in ipairs(session.awarded) do
                         if award.link == pending.link and award.winner == pending.winner and not award.traded then
                             award.traded = true
                             changed = true
-                            DesolateLootcouncil:DLC_Log(string.format("Trade successful. %s marked as delivered.",
-                                pending.link))
-
-                            -- [NEW] Also remove from Loot Inbox (Core/Loot.lua -> Systems/Loot.lua)
-                            local Loot = DesolateLootcouncil:GetModule("Loot")
-                            if Loot and Loot.RemoveSessionItem then
-                                Loot:RemoveSessionItem(pending.guid)
-                            end
+                            DesolateLootcouncil:DLC_Log(string.format("Trade complete. %s marked as delivered to %s.",
+                                pending.link, pending.winner))
                             break
                         end
                     end
@@ -108,20 +107,19 @@ function Trade:CHAT_MSG_SYSTEM(event, message)
             end
 
             if changed then
-                ---@type UI
-                local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
-                if UI and UI.RefreshTradeWindow then
-                    UI:RefreshTradeWindow()
+                -- Bug 2 fix: refresh the actual trade list window
+                ---@type UI_TradeList
+                local UI = DesolateLootcouncil:GetModule("UI_TradeList") --[[@as UI_TradeList]]
+                if UI and UI.ShowTradeListWindow then
+                    UI:ShowTradeListWindow()
                 end
             end
         end
     end
-    -- Cleanup
     self:ClearPending()
 end
 
 function Trade:TRADE_CLOSED()
-    -- Trade window closed (either success or cancel)
     self:ClearPending()
 end
 

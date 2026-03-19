@@ -53,7 +53,7 @@ local defaults = {
             isOpen = false
         },
         minLootQuality = 3,     -- Default to Rare
-        enableAutoLoot = false, -- Consolidated Logic (LM=Acquire, Raider=Pass)
+        enableAutoLoot  = true,             -- Auto-pass on loot rolls (ON by default) -- Consolidated Logic (LM=Acquire, Raider=Pass)
         DecayConfig = {
             enabled = true,
             defaultPenalty = 1,     -- Configurable (0-3)
