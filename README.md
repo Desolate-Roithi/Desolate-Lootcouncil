@@ -2,9 +2,10 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.4.0-Beta  
+**Latest Version:** v0.4.1-Beta  
 **Last Updated:** 2026-03-20  
 **Compatibility:** WoW 12.0.1 (Midnight)  
+
 
 📄 [View Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)
 
@@ -32,6 +33,7 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 | `/dlc config` | Open configuration (Roster, Priority, Debug). |
 | `/dlc monitor` | **(LM)** Live session & award dashboard. |
 | `/dlc loot` | **(LM)** Inbox for new dropped items. |
+| `/dlc im` | Open Item Manager window. |
 | `/dlc trade` | **(LM)** Pending trades queue. |
 | `/dlc history` | View award logs and priority changes. |
 | `/dlc sim` | **(Dev)** Manage simulated players and scenarios. |
@@ -44,6 +46,12 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.4.1-Beta
+* **Item Caching:** Fixed display issues where items would show as "ID" instead of names. Windows now automatically refresh as soon as item data is cached (ContinueOnItemLoad).
+* **Item Manager:** Added `/dlc im` slash command and a "Sync Raid" button for officers to share item-to-list categorizations with the raid.
+* **Roster:** Improved attendance logs with descriptive rejection reasons (alt resolution) and actionable stale-session alerts.
+* **Auto-Pass:** Added detailed logging when auto-pass is blocked to explain exactly how many raid members are missing the addon.
 
 ### v0.4.0-Beta
 * **Loot Display:** Items now show the correct dropped ilvl and affixes in all windows (Loot, Vote, Trade, Monitor).
