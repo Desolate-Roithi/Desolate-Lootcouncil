@@ -1,11 +1,17 @@
 local addonName, addonTable = ...
 
 -- --- Conflict Prevention (Dev vs Prod) ---
--- If both are loaded, one will potentially overwrite the other's DB.
--- We check if we are the Dev version and if the Prod version is already loaded.
-if addonName == "Desolate_Lootcouncil-Dev" then
-    if C_AddOns.IsAddOnLoaded("Desolate_Lootcouncil") then
-        print("|cffff0000[Desolate Lootcouncil]|r Dev version detected Production version is already loaded. Aborting Dev load to prevent database corruption.")
+-- IsAddOnLoaded() is NOT reliable during main-chunk execution — it only returns
+-- true after ADDON_LOADED fires, which is AFTER all main chunks have run.
+-- Instead we query AceAddon's internal registry via GetAddon(name, silent).
+-- The registry is populated the instant NewAddon("DesolateLootcouncil") succeeds,
+-- so whichever version loads SECOND will correctly detect the first and abort.
+do
+    local existingAddon = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil", true)
+    if existingAddon then
+        local other = (addonName == "Desolate_Lootcouncil-Dev") and "Production" or "Dev"
+        print(string.format("|cffff0000[Desolate Lootcouncil]|r %s ('%s') is already loaded. Aborting '%s' to prevent DB corruption.",
+            other, existingAddon.name or "?", addonName))
         addonTable.abortLoad = true
         return
     end
@@ -72,6 +78,14 @@ function DesolateLootcouncil:OnInitialize()
     -- 1. Initialize DB
     self.db = LibStub("AceDB-3.0"):New("DesolateLootDB", defaults, true)
 
+    -- 1a. Stamp the DB sentinel so it's never 0 (equal to its default).
+    --     AceDB's removeDefaults() strips keys that equal their default value.
+    --     If dbCreatedAt stayed 0 it would match the default and could be pruned,
+    --     defeating the purpose of the sentinel. We only stamp it on first creation.
+    if self.db.profile.dbCreatedAt == 0 then
+        self.db.profile.dbCreatedAt = GetServerTime()
+    end
+
     -- 2. Prevent AceDB from auto-stripping profile data on PLAYER_LOGOUT.
     --    AceDB's logoutHandler calls db:RegisterDefaults(nil) which runs removeDefaults(),
     --    stripping any key that equals its default value. If ALL keys match, the profile
@@ -118,11 +132,21 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
     end
     REFRESH_TIMER = self:ScheduleTimer(function()
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+
+        -- Refresh Loot window if visible
         ---@type UI_Loot
         local LootUI = self:GetModule("UI_Loot") --[[@as UI_Loot]]
         if LootUI and LootUI.lootFrame and LootUI.lootFrame:IsShown() then
             LootUI:ShowLootWindow(self.db.profile.session.loot)
         end
+
+        -- Refresh Item Manager window if visible
+        ---@type UI_ItemManager
+        local ItemMgr = self:GetModule("UI_ItemManager") --[[@as UI_ItemManager]]
+        if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
+            ItemMgr:RefreshWindow()
+        end
+
         REFRESH_TIMER = nil
     end, 0.5)
 end

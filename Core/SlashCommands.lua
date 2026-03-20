@@ -104,6 +104,11 @@ function SlashCommands.Handle(input)
             Roster:HandleSlashCommand(table.concat(args, " ", 2))
         end
 
+        -- Item Manager
+    elseif cmd == "im" or cmd == "manager" then
+        local UI = DesolateLootcouncil:GetModule("UI_ItemManager")
+        if UI and UI.ShowItemManagerWindow then UI:ShowItemManagerWindow() end
+
         -- Simulation
     elseif cmd == "sim" then
         local Sim = DesolateLootcouncil:GetModule("Simulation")
@@ -112,6 +117,7 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:Print("Unknown command.")
         DesolateLootcouncil:Print("Available Commands:")
         DesolateLootcouncil:Print("  |cff33ff99/dlc config|r - Open configuration")
+        DesolateLootcouncil:Print("  |cff33ff99/dlc im|r - Open Item Manager")
         DesolateLootcouncil:Print("  |cff33ff99/dlc show|r - Re-open Voting Window")
         DesolateLootcouncil:Print("  |cff33ff99/dlc history|r - Open Loot History")
         DesolateLootcouncil:Print("  |cff33ff99/dlc version|r - Check versions")
@@ -122,6 +128,7 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:Print("  |cff33ff99/dlc trade|r - Open Trade List")
         DesolateLootcouncil:Print("  |cff33ff99/dlc session|r - Manage Sessions (start/stop)")
         DesolateLootcouncil:Print("  |cff33ff99/dlc test|r - Generate Test Items")
+
     end
 end
 

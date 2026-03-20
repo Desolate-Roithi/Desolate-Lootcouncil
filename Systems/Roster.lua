@@ -131,9 +131,15 @@ function Roster:RegisterAttendance(unitName)
     if DesolateLootcouncil.db.profile.MainRoster[mainName] then
         if not config.currentAttendees[mainName] then
             config.currentAttendees[mainName] = true
+            DesolateLootcouncil:DLC_Log(string.format("Attendance Registered: %s (Main: %s)", unitName, mainName))
         end
     else
-        DesolateLootcouncil:DLC_Log("Attendance Rejected: " .. unitName .. " (Not in Roster)", true)
+        -- Show both the original unit name and the resolved main so the officer
+        -- knows exactly which DB entry is missing.
+        local hint = (mainName ~= unitName)
+            and string.format("'%s' (resolved from alt '%s') is not in the MainRoster", mainName, unitName)
+            or string.format("'%s' is not in the MainRoster — use /dlc roster add to add them", unitName)
+        DesolateLootcouncil:DLC_Log("Attendance Rejected: " .. hint, true)
     end
 end
 
@@ -339,8 +345,9 @@ function Roster:PLAYER_LOGIN()
     if config.sessionActive then
         local delta = time() - (config.lastActivity or 0)
         if delta > 3600 then -- 1 hour stale
-            DesolateLootcouncil:DLC_Log(string.format("DEBUG: Stale Session Detected (Inactive for %.1f hours). Stop?",
-                delta / 3600))
+            DesolateLootcouncil:DLC_Log(string.format(
+                "[DLC] Stale session detected (inactive for %.1f hours). Use '/dlc session stop' to end it.",
+                delta / 3600), true)
         end
     end
 end

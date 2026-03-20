@@ -86,8 +86,33 @@ function Comm:OnCommReceived(prefix, message, distribution, sender)
         ---@type Session
         local Session = DesolateLootcouncil:GetModule("Session")
         if Session and Session.EndSession then Session:EndSession() end
+    elseif command == "IM_SYNC" then
+        -- Sync Item Manager lists (items only, not players)
+        if data and type(data) == "table" then
+            local db = DesolateLootcouncil.db.profile
+            if db.PriorityLists then
+                local count = 0
+                for listName, items in pairs(data) do
+                    for _, localList in ipairs(db.PriorityLists) do
+                        if localList.name == listName then
+                            localList.items = items
+                            count = count + 1
+                            break
+                        end
+                    end
+                end
+                DesolateLootcouncil:DLC_Log(string.format("Item Manager Synced: Updated %d item lists.", count))
+
+                -- Refresh UI if open
+                local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
+                if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
+                    ItemMgr:RefreshWindow()
+                end
+            end
+        end
     end
 end
+
 
 function Comm:UpdatePlayerInfo(sender, version, skill)
     self.playerVersions[sender] = version

@@ -62,7 +62,7 @@ function UI_ItemManager:RefreshWindow()
     ---@type AceGUIEditBox
     local input = AceGUI:Create("EditBox")
     input:SetLabel("Item Name/Link/ID")
-    input:SetRelativeWidth(0.50)
+    input:SetRelativeWidth(0.40)
     input:DisableButton(true) -- Hide the internal "Okay" button
     input:SetCallback("OnEnterPressed", function(widget, event, text)
         if text and text ~= "" and self.tempList then
@@ -80,7 +80,7 @@ function UI_ItemManager:RefreshWindow()
     ---@type AceGUIDropdown
     local listDropdown = AceGUI:Create("Dropdown")
     listDropdown:SetLabel("Target List")
-    listDropdown:SetRelativeWidth(0.30)
+    listDropdown:SetRelativeWidth(0.25)
 
     local listNames = {}
     local Priority = DesolateLootcouncil:GetModule("Priority")
@@ -102,7 +102,7 @@ function UI_ItemManager:RefreshWindow()
     ---@type AceGUIButton
     local addBtn = AceGUI:Create("Button")
     addBtn:SetText("Add")
-    addBtn:SetRelativeWidth(0.20)
+    addBtn:SetRelativeWidth(0.15) -- Reduced from 0.20 to make room
     addBtn:SetCallback("OnClick", function()
         local text = input:GetText()
         if text and text ~= "" and self.tempList then
@@ -115,6 +115,26 @@ function UI_ItemManager:RefreshWindow()
         end
     end)
     headerGroup:AddChild(addBtn)
+
+    -- Sync Button (Officer Only)
+    if DesolateLootcouncil:AmIRaidAssistOrLM() then
+        ---@type AceGUIButton
+        local syncBtn = AceGUI:Create("Button")
+        syncBtn:SetText("Sync Raid")
+        syncBtn:SetRelativeWidth(0.2)
+        syncBtn:SetCallback("OnClick", function()
+            local syncData = {}
+            for _, list in ipairs(db.PriorityLists) do
+                syncData[list.name] = list.items
+            end
+            local Comm = DesolateLootcouncil:GetModule("Comm")
+            if Comm then
+                Comm:SendComm("IM_SYNC", syncData)
+                DesolateLootcouncil:Print("Item Manager lists synced to raid.")
+            end
+        end)
+        headerGroup:AddChild(syncBtn)
+    end
 
 
     -- 2. Separator/Title
@@ -156,14 +176,18 @@ function UI_ItemManager:RefreshWindow()
                     C_Item.GetItemInfo(itemID)
 
                 if not itemLink then
-                    -- Fetch if missing (async issue possible, but simpler for now)
+                    -- Item data not yet in client cache. Fire a load request and
+                    -- auto-refresh the window once it arrives — no manual re-open needed.
                     local itemObj = Item:CreateFromItemID(itemID)
                     if not itemObj:IsItemEmpty() then
                         itemObj:ContinueOnItemLoad(function()
-                            -- Refresh if loaded later? For now rely on next refresh
+                            -- Only refresh if our frame is still alive and shown.
+                            if self.frame and (self.frame --[[@as any]]).frame:IsShown() then
+                                self:RefreshWindow()
+                            end
                         end)
                     end
-                    name = "ID: " .. itemID
+                    name = "Loading..." -- friendlier than a raw ID
                     itemTexture = C_Item.GetItemIconByID(itemID)
                 end
 

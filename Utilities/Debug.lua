@@ -89,9 +89,8 @@ function Debug:SimulateVoting()
                             vote = roll
                         }
                     }
-                    local itemGUID = item.sourceGUID or item.link
-                    local name, link, quality, iLevel, reqLevel, class, subclass, maxStack, equipSlot, texture, vendorPrice =
-                    C_Item.GetItemInfo(itemGUID)
+
+
                     -- Session module handles OnCommReceived with "DLC_Loot" prefix?
                     -- Systems/Session.lua registers "DLC_Loot".
                     local serialized = Session:Serialize(payload)
@@ -116,7 +115,7 @@ function Debug:DumpKeys()
     -- Dump Mains
     if db.MainRoster then
         DesolateLootcouncil:DLC_Log("--- Mains ---")
-        for k, v in pairs(db.MainRoster) do
+        for k in pairs(db.MainRoster) do
             DesolateLootcouncil:DLC_Log("Key: [" .. tostring(k) .. "]")
         end
     else

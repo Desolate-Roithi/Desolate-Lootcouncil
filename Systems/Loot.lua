@@ -171,7 +171,9 @@ function Loot:OnStartLootRoll(event, rollID)
     local isLM = DesolateLootcouncil:AmILootMaster()
     local link = GetLootRollItemLink(rollID)
 
-    -- Bug 0: Only autopass if every raid member in the same zone and connected has the addon
+    -- Bug 0: Only autopass if every connected in-zone raid member has the addon.
+    -- This prevents a pass from firing when the LM has not yet received version pings
+    -- from all players (e.g. immediately after a reload).
     local myZone = GetRealZoneText()
     local inZoneAndOnline = 0
     local numMembers = GetNumGroupMembers()
@@ -182,7 +184,13 @@ function Loot:OnStartLootRoll(event, rollID)
             inZoneAndOnline = inZoneAndOnline + 1
         end
     end
-    if DesolateLootcouncil:GetActiveUserCount() < inZoneAndOnline then return end
+    local addonUsers = DesolateLootcouncil:GetActiveUserCount()
+    if addonUsers < inZoneAndOnline then
+        DesolateLootcouncil:DLC_Log(string.format(
+            "[AutoPass] Blocked for '%s': only %d/%d in-zone members have the addon.",
+            link or "?", addonUsers, inZoneAndOnline), true)
+        return
+    end
 
     if isLM then
         -- LM collects it via Need/Greed to award manually; skip BoP Collectables

@@ -172,15 +172,31 @@ function UI_Loot:ShowLootWindow(lootTable)
             -- Item Link (Interactive Logic)
             ---@type AceGUIInteractiveLabel
             local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-            -- Bug 1: always display data.link as-is (full drop link with bonus IDs/affixes)
-            -- ID-based Item:CreateFromItemID resolves to base ilvl, losing affix data
-            itemLabel:SetText(data.link)
+
+            local itemName = C_Item.GetItemInfo(data.itemID)
+            if not itemName then
+                -- Trigger load and refresh once cached
+                local itemObj = Item:CreateFromItemID(data.itemID)
+                if not itemObj:IsItemEmpty() then
+                    itemObj:ContinueOnItemLoad(function()
+                        if self.lootFrame and (self.lootFrame --[[@as any]]).frame:IsShown() then
+                            self:ShowLootWindow(lootTable)
+                        end
+                    end)
+                end
+                itemLabel:SetText("Loading...")
+            else
+                -- Bug 1: always display data.link as-is (full drop link with bonus IDs/affixes)
+                itemLabel:SetText(data.link)
+            end
+
             itemLabel:SetRelativeWidth(0.55) -- User requested 0.55
             itemLabel:SetCallback("OnClick", function()
                 GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
-                GameTooltip:SetHyperlink(link)
+                if link then GameTooltip:SetHyperlink(link) else GameTooltip:SetItemByID(data.itemID) end
                 GameTooltip:Show()
             end)
+
             itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
             itemLabel:SetCallback("OnEnter", function()
                 GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")

@@ -141,7 +141,7 @@ function UI_Monitor:ShowMonitorWindow()
     self.monitorFrame:AddChild(scroll)
 
     if items then
-        for i, item in ipairs(items) do
+        for _, item in ipairs(items) do
             local link = item.link
             local guid = item.sourceGUID or link
 
