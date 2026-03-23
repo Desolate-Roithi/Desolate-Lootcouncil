@@ -133,14 +133,67 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
     REFRESH_TIMER = self:ScheduleTimer(function()
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 
-        -- Refresh Loot window if visible
-        ---@type UI_Loot
-        local LootUI = self:GetModule("UI_Loot") --[[@as UI_Loot]]
-        if LootUI and LootUI.lootFrame and LootUI.lootFrame:IsShown() then
-            LootUI:ShowLootWindow(self.db.profile.session.loot)
+        local session = self.db and self.db.profile and self.db.profile.session
+        if session then
+            local repaired = false
+            local function repairList(list)
+                if not list then return end
+                for _, item in ipairs(list) do
+                    if item.itemID then
+                        local _, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(item.itemID)
+                        if link and (item.link == nil or string.find(item.link, "^Item %d+") or string.find(item.link, "Item %[%d+%]")) then
+                            item.link = link
+                            repaired = true
+                        end
+                        if icon and item.texture == "Interface\\Icons\\INV_Misc_QuestionMark" then
+                            item.texture = icon
+                            repaired = true
+                        end
+                    end
+                end
+            end
+            
+            repairList(session.loot)
+            repairList(session.bidding)
+            repairList(session.awarded)
+            
+            -- If items were successfully repaired, trigger UI refreshes
+            if repaired then
+                self:DLC_Log("Item Cache Engine repaired uncached session items.", true)
+            end
+            
+            -- Global auto-refresh for any open frames to pull the updated UI data
+            ---@type UI_Loot
+            local LootUI = self:GetModule("UI_Loot") --[[@as UI_Loot]]
+            if LootUI and LootUI.lootFrame and LootUI.lootFrame:IsShown() then
+                LootUI:ShowLootWindow(session.loot)
+            end
+            
+            ---@type UI_Monitor
+            local MonitorUI = self:GetModule("UI_Monitor") --[[@as UI_Monitor]]
+            if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
+                MonitorUI:ShowMonitorWindow()
+            end
+            
+            ---@type UI_Voting
+            local VotingUI = self:GetModule("UI_Voting") --[[@as UI_Voting]]
+            if VotingUI and VotingUI.votingFrame and VotingUI.votingFrame:IsShown() then
+                VotingUI:ShowVotingWindow(self:GetModule("Session").clientLootList, true)
+            end
+            
+            ---@type UI_TradeList
+            local TradeUI = self:GetModule("UI_TradeList") --[[@as UI_TradeList]]
+            if TradeUI and TradeUI.tradeListFrame and TradeUI.tradeListFrame:IsShown() then
+                TradeUI:ShowTradeListWindow()
+            end
+            
+            ---@type UI_History
+            local HistoryUI = self:GetModule("UI_History") --[[@as UI_History]]
+            if HistoryUI and HistoryUI.historyFrame and HistoryUI.historyFrame.frame and HistoryUI.historyFrame.frame:IsShown() then
+                HistoryUI:ShowHistoryWindow()
+            end
         end
 
-        -- Refresh Item Manager window if visible
         ---@type UI_ItemManager
         local ItemMgr = self:GetModule("UI_ItemManager") --[[@as UI_ItemManager]]
         if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then

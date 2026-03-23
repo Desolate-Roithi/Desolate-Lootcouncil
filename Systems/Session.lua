@@ -298,7 +298,7 @@ function Session:SendCloseItem(itemGUID)
 
     ---@type UI_Voting
     local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-    if Voting and Voting.ShowVotingWindow then
+    if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() and Voting.ShowVotingWindow then
         Voting:ShowVotingWindow(nil, true)
     end
 
@@ -426,7 +426,7 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
 
             ---@type UI_Voting
             local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-            if Voting then
+            if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() then
                 if Voting.RemoveVotingItem then
                     Voting:RemoveVotingItem(guid)
                 else
@@ -443,7 +443,7 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
 
             ---@type UI_Voting
             local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-            if Voting and Voting.ShowVotingWindow then
+            if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() and Voting.ShowVotingWindow then
                 Voting:ShowVotingWindow(nil, true)
             end
         end
