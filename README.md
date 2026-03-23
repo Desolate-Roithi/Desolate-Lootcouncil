@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.4.1-Beta  
-**Last Updated:** 2026-03-20  
+**Latest Version:** v0.4.2-Beta  
+**Last Updated:** 2026-03-23  
 **Compatibility:** WoW 12.0.1 (Midnight)  
 
 
@@ -46,6 +46,13 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+ 
+### v0.4.2-Beta
+* **Session Restoration:** Improved login logic; sessions now persist for up to 12 hours. LMs are prompted to close stale or ungrouped sessions on login.
+* **Assist Synchronization:** Added real-time vote syncing. Assistants can now view roll progress in the Session Monitor.
+* **UI Monitor:** The "Award" button is replaced with "View Rolls" for non-LMs to prevent accidental distribution while ensuring transparency.
+* **Micro-Fixes:** Corrected an off-by-one error in player counting for auto-pass and added a 0.5s safety delay to trade completion logic.
+* **Sidebar:** The disenchanter sidebar now automatically hides when the Monitor window is collapsed.
 
 ### v0.4.1-Beta
 * **Item Caching:** Fixed display issues where items would show as "ID" instead of names. Windows now automatically refresh as soon as item data is cached (ContinueOnItemLoad).
