@@ -186,9 +186,12 @@ function Loot:OnStartLootRoll(event, rollID)
     end
     local addonUsers = DesolateLootcouncil:GetActiveUserCount()
     if addonUsers < inZoneAndOnline then
-        DesolateLootcouncil:DLC_Log(string.format(
-            "[AutoPass] Blocked for '%s': only %d/%d in-zone members have the addon.",
-            link or "?", addonUsers, inZoneAndOnline), true)
+        local msg = string.format("[AutoPass] Blocked for '%s': only %d/%d in-zone members have the addon.", link or "?", addonUsers, inZoneAndOnline)
+        if isLM or DesolateLootcouncil:AmIRaidAssistOrLM() then
+            DesolateLootcouncil:Print(msg)
+        else
+            DesolateLootcouncil:DLC_Log(msg, true)
+        end
         return
     end
 

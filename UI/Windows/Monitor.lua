@@ -129,9 +129,10 @@ function UI_Monitor:ShowMonitorWindow()
     end
 
     local session = DesolateLootcouncil.db.profile.session
-    local items = session.bidding
-    local parent = (self.monitorFrame --[[@as any]]).frame
     local isLM = DesolateLootcouncil:AmILootMaster()
+    local SessionInfo = DesolateLootcouncil:GetModule("Session")
+    local items = isLM and session.bidding or (SessionInfo and SessionInfo.clientLootList or {})
+    local parent = (self.monitorFrame --[[@as any]]).frame
 
     ---@type AceGUIScrollFrame
     local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
@@ -186,15 +187,15 @@ function UI_Monitor:ShowMonitorWindow()
             end
             group:AddChild(labelCounts)
 
-            -- Award Button (Bug 3: LM-only)
+            -- Award Button (Bug 3: LM-only name change)
             ---@type AceGUIButton
             local btnAward = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            btnAward:SetText("Award")
+            btnAward:SetText(isLM and "Award" or "View Rolls")
             btnAward:SetRelativeWidth(0.15)
             btnAward:SetCallback("OnClick", function()
                 self:ShowAwardWindow(item)
             end)
-            if isLM then group:AddChild(btnAward) end
+            group:AddChild(btnAward)
 
             -- Remove Button (Bug 3: LM-only)
             ---@type AceGUIButton
@@ -246,14 +247,15 @@ function UI_Monitor:ShowMonitorWindow()
         mFrame.btnEnd = btn
     end
     -- Bug 2: Only show footer buttons when not collapsed
-    if not isCollapsed then mFrame.btnEnd:Show() else mFrame.btnEnd:Hide() end
+    if not isCollapsed and isLM then mFrame.btnEnd:Show() else mFrame.btnEnd:Hide() end
 
     local function LayoutMonitor()
         local rawFrame = (self.monitorFrame --[[@as any]]).frame
         local h = rawFrame:GetHeight()
+        local isCollapsedNow = rawFrame.isCollapsed
 
         -- Safety: If collapsed, don't try to layout the scroll frame with negative size
-        if h > 80 then
+        if h > 80 and not isCollapsedNow then
             local scrollFrame = scroll and (scroll --[[@as any]]).frame
             if scrollFrame then
                 scroll:SetHeight(h - 80)
@@ -266,7 +268,10 @@ function UI_Monitor:ShowMonitorWindow()
 
         self.monitorFrame:DoLayout()
         -- Sync Sidebar Height
-        if self.deFrame then self.deFrame:SetHeight(h) end
+        if self.deFrame then
+            self.deFrame:SetHeight(h)
+            if isCollapsedNow then self.deFrame:Hide() else self.deFrame:Show() end
+        end
     end
     LayoutMonitor()
     self.monitorFrame:SetCallback("OnResize", LayoutMonitor)
@@ -446,7 +451,8 @@ function UI_Monitor:ShowAwardWindow(itemData)
                     Loot:AwardItem(itemData.sourceGUID, v.name, voteDesc)
                 end
             end)
-            row:AddChild(btnGive)
+            local isLM = DesolateLootcouncil:AmILootMaster()
+            if isLM then row:AddChild(btnGive) end
         end
     end
 
@@ -521,7 +527,8 @@ function UI_Monitor:ShowAwardWindow(itemData)
                     Loot:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
                 end
             end)
-            row:AddChild(btnGive)
+            local isLM = DesolateLootcouncil:AmILootMaster()
+            if isLM then row:AddChild(btnGive) end
         end
     end
 end

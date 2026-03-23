@@ -12,6 +12,7 @@ local Session = DesolateLootcouncil:NewModule("Session", "AceEvent-3.0", "AceCom
 ---@field DLC_Log fun(self: any, msg: string, force?: boolean)
 ---@field GetModule fun(self: any, name: string): any
 ---@field GetEnchantingSkillLevel fun(self: any): number
+---@field AmIRaidAssistOrLM fun(self: any): boolean
 ---@field activeLootMaster string
 ---@field amILM boolean
 
@@ -34,12 +35,12 @@ end
 function Session:SaveSessionState()
     local session = DesolateLootcouncil.db.profile.session
     session.activeState = {
-        lootList    = self.clientLootList,
-        votes       = self.sessionVotes,
-        myVotes     = self.myLocalVotes,
-        closed      = self.closedItems,
-        expiry      = self.sessionExpiry,             -- Absolute timestamp
-        activeLM    = DesolateLootcouncil.activeLootMaster -- Bug 6: persist LM identity
+        lootList = self.clientLootList,
+        votes    = self.sessionVotes,
+        myVotes  = self.myLocalVotes,
+        closed   = self.closedItems,
+        expiry   = self.sessionExpiry,                     -- Absolute timestamp
+        activeLM = DesolateLootcouncil.activeLootMaster    -- Bug 6: persist LM identity
     }
 end
 
@@ -50,43 +51,90 @@ function Session:RestoreSession()
     if state and state.lootList and #state.lootList > 0 then
         local now = GetServerTime()
         local expiry = state.expiry or 0
+        local sessionStarted = (expiry > 300) and (expiry - 300) or expiry
+        local isExpiredOver12h = now > (sessionStarted + 43200)
 
-        if now < expiry then
-            -- Scenario A: Active
-            self.clientLootList = state.lootList
-            self.sessionVotes   = state.votes or {}
-            self.myLocalVotes   = state.myVotes or {}
-            self.closedItems    = state.closed or {}
-            self.sessionExpiry  = expiry
+        if state.activeLM and state.activeLM ~= "" then
+            DesolateLootcouncil.activeLootMaster = state.activeLM
+            DesolateLootcouncil.amILM = (state.activeLM == UnitName("player"))
+        end
 
-            -- Bug 6: Restore LM identity so AmILootMaster() works immediately after reload
-            if state.activeLM and state.activeLM ~= "" then
-                DesolateLootcouncil.activeLootMaster = state.activeLM
-                DesolateLootcouncil.amILM = (state.activeLM == UnitName("player"))
-            end
+        local isLM = (state.activeLM == UnitName("player"))
 
-            DesolateLootcouncil:DLC_Log("Restored active session (" .. #self.clientLootList .. " items, LM: " .. (state.activeLM or "?") .. ").")
-
-            -- Re-open UI
-            ---@type UI_Voting
-            local UI = DesolateLootcouncil:GetModule("UI_Voting")
-            if UI then
-                UI:ShowVotingWindow(self.clientLootList)
-                -- If LM, show Monitor
-                if DesolateLootcouncil:AmILootMaster() then
-                    ---@type UI_Monitor
-                    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-                    if Monitor then Monitor:ShowMonitorWindow() end
-                end
-            end
-        else
-            -- Scenario B: Expired
-            DesolateLootcouncil:DLC_Log("Session expired while offline.")
+        if not isLM and isExpiredOver12h then
+            DesolateLootcouncil:DLC_Log("Session > 12h old. Auto-closing for non-LM.")
             wipe(session.activeState)
             ---@type UI_Voting
             local UI = DesolateLootcouncil:GetModule("UI_Voting")
             if UI and UI.ResetVoting then UI:ResetVoting() end
+            return
         end
+
+        if isLM then
+            local decayConfig = DesolateLootcouncil.db.profile.DecayConfig
+            local inactiveFor1h = decayConfig and decayConfig.lastActivity and (now - decayConfig.lastActivity > 3600)
+            local notInGroup = not IsInGroup()
+
+            if isExpiredOver12h or (inactiveFor1h and notInGroup) then
+                StaticPopupDialogs["DLC_CLOSE_SESSION"] = {
+                    text = "A previous Loot Session is still active. Do you want to close it?",
+                    button1 = "Yes (Close Session)",
+                    button2 = "No (Keep Active)",
+                    OnAccept = function()
+                        self:SendStopSession()
+                    end,
+                    OnCancel = function()
+                        self:PerformRestore(state, now, expiry)
+                    end,
+                    timeout = 0,
+                    whileDead = true,
+                    hideOnEscape = true,
+                }
+                StaticPopup_Show("DLC_CLOSE_SESSION")
+                return
+            end
+        end
+
+        self:PerformRestore(state, now, expiry)
+    end
+end
+
+function Session:PerformRestore(state, now, expiry)
+    local session = DesolateLootcouncil.db.profile.session
+    if now < expiry then
+        -- Scenario A: Active
+        self.clientLootList = state.lootList
+        self.sessionVotes   = state.votes or {}
+        self.myLocalVotes   = state.myVotes or {}
+        self.closedItems    = state.closed or {}
+        self.sessionExpiry  = expiry
+
+        if state.activeLM and state.activeLM ~= "" then
+            DesolateLootcouncil.activeLootMaster = state.activeLM
+            DesolateLootcouncil.amILM = (state.activeLM == UnitName("player"))
+        end
+
+        DesolateLootcouncil:DLC_Log("Restored active session (" ..
+        #self.clientLootList .. " items, LM: " .. (state.activeLM or "?") .. ").")
+
+        ---@type UI_Voting
+        local UI = DesolateLootcouncil:GetModule("UI_Voting")
+        if UI then
+            UI:ShowVotingWindow(self.clientLootList)
+            -- Show Monitor for LM and Assists
+            if DesolateLootcouncil:AmIRaidAssistOrLM() then
+                ---@type UI_Monitor
+                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+                if Monitor then Monitor:ShowMonitorWindow() end
+            end
+        end
+    else
+        -- Scenario B: Expired
+        DesolateLootcouncil:DLC_Log("Session expired while offline.")
+        wipe(session.activeState)
+        ---@type UI_Voting
+        local UI = DesolateLootcouncil:GetModule("UI_Voting")
+        if UI and UI.ResetVoting then UI:ResetVoting() end
     end
 end
 
@@ -441,6 +489,22 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
             if Monitor then Monitor:ShowMonitorWindow() end
 
             self:SaveSessionState()
+
+            if DesolateLootcouncil:AmILootMaster() then
+                self:SendSyncVotes()
+            end
+        end
+    elseif payload.command == "SYNC_VOTES" then
+        if payload.data and type(payload.data) == "table" then
+            self.sessionVotes = payload.data
+            -- Update UI if open
+            if DesolateLootcouncil:AmIRaidAssistOrLM() then
+                ---@type UI_Monitor
+                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+                if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+                    Monitor:ShowMonitorWindow()
+                end
+            end
         end
     elseif payload.command == "SYNC_LM" then
         local lm = payload.data and payload.data.lm
@@ -453,6 +517,15 @@ end
 
 function Session:SendSyncLM(targetLM)
     local payload = { command = "SYNC_LM", data = { lm = targetLM } }
+    local serialized = self:Serialize(payload)
+    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    if channel then
+        self:SendCommMessage("DLC_Loot", serialized, channel)
+    end
+end
+
+function Session:SendSyncVotes()
+    local payload = { command = "SYNC_VOTES", data = self.sessionVotes }
     local serialized = self:Serialize(payload)
     local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
     if channel then

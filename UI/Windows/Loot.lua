@@ -64,6 +64,7 @@ end
 
 function UI_Loot:ShowLootWindow(lootTable)
     if not DesolateLootcouncil:AmILootMaster() then
+        if self.lootFrame then self.lootFrame:Hide() end
         self:Print("Error: Only the Loot Master can open the Loot Window.")
         return
     end

@@ -120,7 +120,9 @@ function Trade:CHAT_MSG_SYSTEM(event, message)
 end
 
 function Trade:TRADE_CLOSED()
-    self:ClearPending()
+    C_Timer.After(0.5, function()
+        self:ClearPending()
+    end)
 end
 
 function Trade:ClearPending()
