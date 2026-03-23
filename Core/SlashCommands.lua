@@ -53,13 +53,13 @@ function SlashCommands.Handle(input)
             DesolateLootcouncil:Print("Only the Loot Master can view the Loot Window.")
         end
 
-        -- Monitor (LM Only)
+        -- Monitor (LM/Assist Only)
     elseif cmd == "monitor" or cmd == "master" then
-        if DesolateLootcouncil:AmILootMaster() then
+        if DesolateLootcouncil:AmIRaidAssistOrLM() then
             local UI = DesolateLootcouncil:GetModule("UI")
             if UI and UI.ShowMonitorWindow then UI:ShowMonitorWindow() end
         else
-            DesolateLootcouncil:Print("Only the Loot Master can view the Monitor.")
+            DesolateLootcouncil:Print("Only the Loot Master or Raid Assists can view the Monitor.")
         end
 
         -- History

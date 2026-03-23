@@ -351,12 +351,33 @@ function Session:RemoveSessionItem(guid)
         end
     end
 
-    -- 3. Refresh Monitor
+    -- 3. Remove from Awarded list (Trade List) if it was already dealt out
+    if session and session.awarded then
+        for i = #session.awarded, 1, -1 do
+            local item = session.awarded[i]
+            if (item.sourceGUID or item.link) == guid then
+                table.remove(session.awarded, i)
+                -- Break isn't strictly necessary here, but good practice if guid is unique per item instance
+                break
+            end
+        end
+    end
+
+    -- 4. Refresh Monitor
     ---@type UI_Monitor
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor and Monitor.ShowMonitorWindow then Monitor:ShowMonitorWindow() end
+    if Monitor and Monitor.ShowMonitorWindow and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+        Monitor:ShowMonitorWindow()
+    end
 
-    DesolateLootcouncil:DLC_Log("Removed item from session.")
+    -- 5. Refresh Trade List (if open)
+    ---@type UI_TradeList
+    local TradeListUI = DesolateLootcouncil:GetModule("UI_TradeList")
+    if TradeListUI and TradeListUI.ShowTradeListWindow and TradeListUI.tradeListFrame and TradeListUI.tradeListFrame:IsShown() then
+        TradeListUI:ShowTradeListWindow()
+    end
+
+    DesolateLootcouncil:DLC_Log("Removed item from session and pending trades.")
 end
 
 function Session:OnCommReceived(prefix, message, distribution, sender)
