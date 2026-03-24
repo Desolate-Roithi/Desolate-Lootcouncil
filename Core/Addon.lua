@@ -33,6 +33,7 @@ end
 ---@field SettingsLoader table
 ---@field Persistence Persistence
 ---@field Logger table
+---@field sessionAutopassActive boolean
 DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "AceConsole-3.0", "AceEvent-3.0",
     "AceComm-3.0", "AceSerializer-3.0", "AceTimer-3.0")
 _G.DesolateLootcouncil = DesolateLootcouncil
@@ -122,6 +123,8 @@ end
 
 function DesolateLootcouncil:OnEnable()
     self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    self:RegisterEvent("GROUP_ROSTER_UPDATE", "UpdateLootMasterStatus")
+    self:RegisterEvent("PARTY_LEADER_CHANGED", "UpdateLootMasterStatus")
 end
 
 local REFRESH_TIMER = nil
@@ -263,10 +266,12 @@ function DesolateLootcouncil:AmIRaidAssistOrLM()
     if self.amILM then return true end
     if IsInRaid() then
         -- Check own rank: 0=member, 1=assist, 2=leader
+        local myName = UnitName("player")
         for i = 1, GetNumGroupMembers() do
             local name, rank = GetRaidRosterInfo(i)
-            if name == UnitName("player") and rank >= 1 then
-                return true
+            if name and rank >= 1 then
+                local shortName = Ambiguate(name, "none")
+                if shortName == myName then return true end
             end
         end
     end

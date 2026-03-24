@@ -410,6 +410,13 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
         local Voting = DesolateLootcouncil:GetModule("UI_Voting")
         if Voting then Voting:ShowVotingWindow(self.clientLootList) end
 
+        -- Bug 5: Re-sync Monitor for Assistants on Start Session
+        if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+            ---@type UI_Monitor
+            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+            if Monitor then Monitor:ShowMonitorWindow() end
+        end
+
         self.sessionExpiry = expiry
         self:SaveSessionState()
     elseif payload.command == "STOP_SESSION" then
@@ -433,6 +440,14 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
                     Voting:ShowVotingWindow(self.clientLootList, true)
                 end
             end
+
+            if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+                ---@type UI_Monitor
+                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+                if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+                    Monitor:ShowMonitorWindow()
+                end
+            end
         end
     elseif payload.command == "CLOSE_ITEM" then
         local guid = payload.data and payload.data.guid
@@ -445,6 +460,14 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
             local Voting = DesolateLootcouncil:GetModule("UI_Voting")
             if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() and Voting.ShowVotingWindow then
                 Voting:ShowVotingWindow(nil, true)
+            end
+
+            if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+                ---@type UI_Monitor
+                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+                if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+                    Monitor:ShowMonitorWindow()
+                end
             end
         end
     elseif payload.command == "HISTORY_UPDATE" then

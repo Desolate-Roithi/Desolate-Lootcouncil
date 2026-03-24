@@ -16,6 +16,7 @@ local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0
 ---@field IsUnitInRaid fun(self: any, unitName: string): boolean
 ---@field GetActiveUserCount fun(self: any): number
 ---@field Print fun(self: any, msg: string)
+---@field sessionAutopassActive boolean
 
 
 ---@type DLC_Ref_Loot
@@ -171,29 +172,7 @@ function Loot:OnStartLootRoll(event, rollID)
     local isLM = DesolateLootcouncil:AmILootMaster()
     local link = GetLootRollItemLink(rollID)
 
-    -- Bug 0: Only autopass if every connected in-zone raid member has the addon.
-    -- This prevents a pass from firing when the LM has not yet received version pings
-    -- from all players (e.g. immediately after a reload).
-    local myZone = GetRealZoneText()
-    local inZoneAndOnline = 0
-    local numMembers = GetNumGroupMembers()
-    local prefix = IsInRaid() and "raid" or "party"
-    for i = 1, numMembers do
-        local unit = prefix .. i
-        if UnitIsConnected(unit) and GetRealZoneText(unit) == myZone then
-            inZoneAndOnline = inZoneAndOnline + 1
-        end
-    end
-    local addonUsers = DesolateLootcouncil:GetActiveUserCount()
-    if addonUsers < inZoneAndOnline then
-        local msg = string.format("[AutoPass] Blocked for '%s': only %d/%d in-zone members have the addon.", link or "?", addonUsers, inZoneAndOnline)
-        if isLM or DesolateLootcouncil:AmIRaidAssistOrLM() then
-            DesolateLootcouncil:Print(msg)
-        else
-            DesolateLootcouncil:DLC_Log(msg, true)
-        end
-        return
-    end
+    if not isLM and not DesolateLootcouncil.sessionAutopassActive then return end
 
     if isLM then
         -- LM collects it via Need/Greed to award manually; skip BoP Collectables

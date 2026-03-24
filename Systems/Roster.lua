@@ -9,6 +9,7 @@ local Roster = DesolateLootcouncil:NewModule("Roster", "AceEvent-3.0", "AceConso
 ---@field GetModule fun(self: any, name: string): any
 ---@field DLC_Log fun(self: any, msg: string, force?: boolean)
 ---@field GetMain fun(self: any, name: string): string
+---@field AmILootMaster fun(self: any): boolean
 
 ---@type DLC_Ref_Roster
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Roster]]
@@ -68,6 +69,26 @@ function Roster:StartRaidSession()
     config.lastActivity = time()
 
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
+    
+    if DesolateLootcouncil:AmILootMaster() then
+        StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
+            text = "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
+            button1 = "Enable",
+            button2 = "No",
+            OnAccept = function()
+                local Comm = DesolateLootcouncil:GetModule("Comm")
+                if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
+            end,
+            OnCancel = function()
+                local Comm = DesolateLootcouncil:GetModule("Comm")
+                if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
+            end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+        }
+        StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+    end
 end
 
 --- Stops the current session and optionally saves history

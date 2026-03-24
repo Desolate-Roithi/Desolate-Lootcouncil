@@ -56,6 +56,11 @@ function Comm:OnCommReceived(prefix, message, distribution, sender)
         }
         self:SendComm("VERSION_RESP", responseData, sender)
 
+        -- If the requester asked for Version, the LM broadcasts the current Autopass setting to them
+        if DesolateLootcouncil:AmILootMaster() and DesolateLootcouncil.sessionAutopassActive ~= nil then
+            self:SendComm("SYNC_AUTOPASS", DesolateLootcouncil.sessionAutopassActive, sender)
+        end
+
         -- Track sender too if they sent version
         if data and data.version then
             self:UpdatePlayerInfo(sender, data.version, 0)
@@ -110,6 +115,10 @@ function Comm:OnCommReceived(prefix, message, distribution, sender)
                 end
             end
         end
+    elseif command == "SYNC_AUTOPASS" then
+        DesolateLootcouncil.sessionAutopassActive = data
+        local status = data and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
+        DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.", true)
     end
 end
 
@@ -148,4 +157,11 @@ function Comm:GetActiveUserCount()
         count = count + 1
     end
     return count
+end
+
+function Comm:SendSyncAutopass(isActive)
+    DesolateLootcouncil.sessionAutopassActive = isActive
+    self:SendComm("SYNC_AUTOPASS", isActive)
+    local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
+    DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.", true)
 end
