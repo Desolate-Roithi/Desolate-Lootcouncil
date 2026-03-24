@@ -70,7 +70,7 @@ function Roster:StartRaidSession()
     config.lastActivity = time()
 
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
-    
+
     if DesolateLootcouncil:AmILootMaster() then
         -- Sync Item Manager before prompting autopass
         local db = DesolateLootcouncil.db.profile
@@ -82,12 +82,15 @@ function Roster:StartRaidSession()
             local Comm = DesolateLootcouncil:GetModule("Comm")
             if Comm and Comm.SendComm then
                 Comm:SendComm("IM_SYNC", syncData)
-                DesolateLootcouncil:DLC_Log("Item Manager synced with raid.", true)
+                if config.sessionActive then -- This condition was added based on the patch, assuming 'sessionActive' refers to 'config.sessionActive'
+                    DesolateLootcouncil:DLC_Log("Item Manager synced with raid.", true)
+                end
             end
         end
 
         StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
-            text = "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
+            text =
+            "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
             button1 = "Enable",
             button2 = "No",
             OnAccept = function()
@@ -211,7 +214,7 @@ function Roster:SnapshotRoster()
             self:RegisterAttendance(name)
         end
         if #sims > 0 then
-            DesolateLootcouncil:DLC_Log("Included " .. #sims .. " simulated players in roster snapshot.", true)
+            DesolateLootcouncil:DLC_Log("Included " .. #sims .. " simulated players in roster snapshot.")
         end
     end
 

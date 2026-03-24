@@ -250,9 +250,9 @@ function Priority:SyncMissingPlayers()
     end
 
     if addedCount > 0 or removedCount > 0 then
-        DesolateLootcouncil:DLC_Log("Synced Lists: All missing players removed/added", true)
+        DesolateLootcouncil:DLC_Log("Synced Lists: All missing players removed/added")
     else
-        DesolateLootcouncil:DLC_Log("Lists synced. No changes.", true)
+        DesolateLootcouncil:DLC_Log("Lists synced. No changes.")
     end
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end

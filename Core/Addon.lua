@@ -161,8 +161,8 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
             repairList(session.awarded)
             
             -- If items were successfully repaired, trigger UI refreshes
-            if repaired then
-                self:DLC_Log("Item Cache Engine repaired uncached session items.", true)
+            if DesolateLootcouncil.db.profile.session.awarded then
+                self:DLC_Log("Item Cache Engine repaired uncached session items.")
             end
             
             -- Global auto-refresh for any open frames to pull the updated UI data
@@ -221,9 +221,9 @@ function DesolateLootcouncil:DetermineLootMaster()
     local configuredLM = self.db.profile.configuredLM
     if configuredLM and configuredLM ~= "" then
         if self:IsUnitInRaid(configuredLM) or configuredLM == myName then
-            return configuredLM
+             configuredLM = activeLM
         end
-        self:DLC_Log("Configured LM (" .. configuredLM .. ") not found. Falling back to Group Leader.", true)
+        self:DLC_Log("Configured LM (" .. configuredLM .. ") not found. Falling back to Group Leader.")
     end
 
     if IsInRaid() then
@@ -246,7 +246,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     local targetLM = self:DetermineLootMaster()
     local myName = UnitName("player")
     self.amILM = (targetLM == myName)
-    self:DLC_Log("Role Update: You are " .. (self.amILM and "Loot Master" or "Raider"), true)
+    self:DLC_Log("Role Update: You are " .. (self.amILM and "Loot Master" or "Raider"))
 
     if self.amILM and IsInGroup() then
         ---@type Session
