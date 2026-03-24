@@ -10,6 +10,7 @@ local Roster = DesolateLootcouncil:NewModule("Roster", "AceEvent-3.0", "AceConso
 ---@field DLC_Log fun(self: any, msg: string, force?: boolean)
 ---@field GetMain fun(self: any, name: string): string
 ---@field AmILootMaster fun(self: any): boolean
+---@field SendVersionCheck fun(self: any)
 
 ---@type DLC_Ref_Roster
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Roster]]
@@ -71,6 +72,20 @@ function Roster:StartRaidSession()
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
     
     if DesolateLootcouncil:AmILootMaster() then
+        -- Sync Item Manager before prompting autopass
+        local db = DesolateLootcouncil.db.profile
+        if db.PriorityLists then
+            local syncData = {}
+            for _, list in ipairs(db.PriorityLists) do
+                syncData[list.name] = list.items or {}
+            end
+            local Comm = DesolateLootcouncil:GetModule("Comm")
+            if Comm and Comm.SendComm then
+                Comm:SendComm("IM_SYNC", syncData)
+                DesolateLootcouncil:DLC_Log("Item Manager synced with raid.", true)
+            end
+        end
+
         StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
             text = "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
             button1 = "Enable",
@@ -343,9 +358,13 @@ function Roster:ZONE_CHANGED_NEW_AREA()
     local name, type = GetInstanceInfo()
     local config = DesolateLootcouncil.db.profile.DecayConfig
 
-    if type == "raid" and not config.sessionActive then
-        self:Printf("Entered Raid Instance (%s). Starting Session...", name)
-        self:StartRaidSession()
+    if type == "raid" then
+        if not config.sessionActive then
+            self:Printf("Entered Raid Instance (%s). Starting Session...", name)
+            self:StartRaidSession()
+        end
+        -- Auto-ping the LM to sync Autopass and IM configs if joining late
+        DesolateLootcouncil:SendVersionCheck()
     elseif type ~= "raid" and config.sessionActive then
         DesolateLootcouncil:DLC_Log(string.format("DEBUG: Left Raid (%s). Session is still ACTIVE.", name))
     end

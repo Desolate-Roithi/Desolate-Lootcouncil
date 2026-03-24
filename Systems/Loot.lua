@@ -430,8 +430,7 @@ function Loot:ReawardItem(index)
             -- Let's use that NEW GUID for the vote key.
 
             -- Update bidding item to use the Reaward GUID
-            local newItem = session.bidding[#session.bidding]
-            local newGUID = newItem.sourceGUID
+            local newGUID = session.bidding[#session.bidding].sourceGUID
 
             Session.sessionVotes[newGUID] = DeepCopy(awardedItem.votes)
             local vCount = 0
@@ -443,6 +442,8 @@ function Loot:ReawardItem(index)
     table.remove(session.awarded, index)
     DesolateLootcouncil:DLC_Log("Re-awarded item: " .. (awardedItem.link or "???"))
 
+    local newItem = session.bidding[#session.bidding]
+
     -- Refresh UIs
     local History = DesolateLootcouncil:GetModule("UI_History")
     if History then History:ShowHistoryWindow() end
@@ -450,6 +451,28 @@ function Loot:ReawardItem(index)
     -- Open Monitor to show it's back
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
     if Monitor then Monitor:ShowMonitorWindow() end
+
+    -- Broadcast the restored item to the raid so assistants see it again (Follow-up Fix)
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session and Session.SendCommMessage then
+        local payload = {
+            command = "START_SESSION",
+            data = { {
+                link = newItem.link,
+                texture = newItem.texture,
+                itemID = newItem.itemID,
+                sourceGUID = newItem.sourceGUID,
+                category = newItem.category
+            } },
+            duration = 300,
+            endTime = GetServerTime() + 300
+        }
+        local serialized = Session:Serialize(payload)
+        local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+        if channel then
+            Session:SendCommMessage("DLC_Loot", serialized, channel)
+        end
+    end
 
     DesolateLootcouncil:Print("Item reverted to bidding session.")
 end

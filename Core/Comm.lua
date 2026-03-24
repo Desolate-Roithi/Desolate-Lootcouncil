@@ -57,8 +57,19 @@ function Comm:OnCommReceived(prefix, message, distribution, sender)
         self:SendComm("VERSION_RESP", responseData, sender)
 
         -- If the requester asked for Version, the LM broadcasts the current Autopass setting to them
-        if DesolateLootcouncil:AmILootMaster() and DesolateLootcouncil.sessionAutopassActive ~= nil then
-            self:SendComm("SYNC_AUTOPASS", DesolateLootcouncil.sessionAutopassActive, sender)
+        if DesolateLootcouncil:AmILootMaster() then
+            if DesolateLootcouncil.sessionAutopassActive ~= nil then
+                self:SendComm("SYNC_AUTOPASS", DesolateLootcouncil.sessionAutopassActive, sender)
+            end
+
+            local db = DesolateLootcouncil.db.profile
+            if db.PriorityLists then
+                local syncData = {}
+                for _, list in ipairs(db.PriorityLists) do
+                    syncData[list.name] = list.items or {}
+                end
+                self:SendComm("IM_SYNC", syncData, sender)
+            end
         end
 
         -- Track sender too if they sent version

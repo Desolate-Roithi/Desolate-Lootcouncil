@@ -611,6 +611,12 @@ function Session:EndSession()
         if Voting.ResetVoting then Voting:ResetVoting() end
         if Voting.votingFrame then Voting.votingFrame:Hide() end
     end
+
+    -- Close the monitor window properly for assistants (Follow-up Fix)
+    ---@type UI_Monitor
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+    if Monitor and Monitor.monitorFrame then Monitor.monitorFrame:Hide() end
+
     DesolateLootcouncil:DLC_Log("The Loot Session was ended.", true)
 end
 
