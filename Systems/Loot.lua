@@ -174,11 +174,17 @@ function Loot:OnStartLootRoll(event, rollID)
 
     if not isLM and not DesolateLootcouncil.sessionAutopassActive then return end
 
+    local itemID = C_Item.GetItemInfoInstant(link)
+    if not itemID then return end
+    
+    local dbCat = self:GetItemCategory(itemID)
+    -- If not officially registered in Item Manager, explicitly ignore it for Autopass
+    if dbCat == "Junk/Pass" then return end
+
     if isLM then
         -- LM collects it via Need/Greed to award manually; skip BoP Collectables
         local _, _, _, _, isBoP, canNeed, canGreed, canDisenchant, _, _, _, _, canTransmog = GetLootRollItemInfo(rollID)
-        local cat = self:CategorizeItem(link)
-        if isBoP and cat == "Collectables" then
+        if isBoP and dbCat == "Collectables" then
             return
         end
 
@@ -192,11 +198,8 @@ function Loot:OnStartLootRoll(event, rollID)
             RollOnLoot(rollID, 3)
         end
     else
-        -- Only pass on items in a managed category (ignore world drops / unmanaged items)
-        local cat = self:CategorizeItem(link)
-        if cat ~= "Junk/Pass" then
-            RollOnLoot(rollID, 0) -- Pass — LM handles distribution
-        end
+        -- Only pass natively
+        RollOnLoot(rollID, 0) -- Pass — LM handles distribution
     end
 end
 

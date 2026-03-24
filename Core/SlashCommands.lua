@@ -25,10 +25,13 @@ function SlashCommands.Handle(input)
 
         -- Voting Window (Re-open)
     elseif cmd == "show" or cmd == "vote" then
-        local session = DesolateLootcouncil.db.profile.session
-        if session and session.bidding and #session.bidding > 0 then
+        local SessionInfo = DesolateLootcouncil:GetModule("Session")
+        local isLM = DesolateLootcouncil:AmILootMaster()
+        local items = (isLM and DesolateLootcouncil.db.profile.session.bidding) or (SessionInfo and SessionInfo.clientLootList)
+        
+        if items and #items > 0 then
             local UI = DesolateLootcouncil:GetModule("UI")
-            if UI and UI.ShowVotingWindow then UI:ShowVotingWindow(session.bidding) end
+            if UI and UI.ShowVotingWindow then UI:ShowVotingWindow(items) end
         else
             DesolateLootcouncil:Print("No active voting session to show.")
         end
