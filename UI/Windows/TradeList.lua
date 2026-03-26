@@ -83,7 +83,6 @@ function UI_TradeList:ShowTradeListWindow()
                     GameTooltip:Show()
                 end)
                 icon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-                row:AddChild(icon)
 
                 -- Link
                 ---@type AceGUIInteractiveLabel

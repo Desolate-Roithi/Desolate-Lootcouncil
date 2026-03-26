@@ -159,7 +159,6 @@ function UI_History:ShowHistoryWindow()
                     end
                 end)
                 icon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-                row:AddChild(icon)
 
                 -- Link -> Winner
                 ---@type AceGUIInteractiveLabel
