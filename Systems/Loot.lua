@@ -172,6 +172,8 @@ function Loot:OnStartLootRoll(event, rollID)
     local isLM = DesolateLootcouncil:AmILootMaster()
     local link = GetLootRollItemLink(rollID)
 
+    if IsPartyLFG() or HasLFGRestrictions() then return end
+
     if not DesolateLootcouncil.sessionAutopassActive then return end
 
     local itemID = C_Item.GetItemInfoInstant(link)

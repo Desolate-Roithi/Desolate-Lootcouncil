@@ -236,6 +236,12 @@ function Session:StartSession(lootTable)
 
     DesolateLootcouncil:DLC_Log("Broadcasting Bidding Session to " .. channel .. " (" .. itemCount .. " items)...")
 
+    -- Re-broadcast Autopass State to ensure all raiders have it active
+    local Comm = DesolateLootcouncil:GetModule("Comm")
+    if Comm and Comm.SendSyncAutopass and DesolateLootcouncil.sessionAutopassActive ~= nil then
+        Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+    end
+
     -- Open Monitor Window for LM
     ---@type UI_Monitor
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
@@ -498,8 +504,7 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
             end
         end
     elseif payload.command == "VOTE" then
-        local myName = UnitName("player")
-        if DesolateLootcouncil:DetermineLootMaster() == myName then
+        if DesolateLootcouncil:AmILootMaster() then
             local data = payload.data
             self.sessionVotes = self.sessionVotes or {}
             self.sessionVotes[data.guid] = self.sessionVotes[data.guid] or {}

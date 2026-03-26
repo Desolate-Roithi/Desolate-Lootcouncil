@@ -129,7 +129,7 @@ function Comm:OnCommReceived(prefix, message, distribution, sender)
     elseif command == "SYNC_AUTOPASS" then
         DesolateLootcouncil.sessionAutopassActive = data
         local status = data and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
-        DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.", true)
+        DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
     end
 end
 
@@ -174,5 +174,5 @@ function Comm:SendSyncAutopass(isActive)
     DesolateLootcouncil.sessionAutopassActive = isActive
     self:SendComm("SYNC_AUTOPASS", isActive)
     local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
-    DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.", true)
+    DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
 end

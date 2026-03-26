@@ -119,7 +119,16 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     local items = self.cachedVotingItems
     if not items then return end
 
-    self.votingFrame:Show()
+    if not isRefresh then
+        self.votingFrame:Show()
+        -- Ensure window is maximized if it was previously collapsed
+        if self.votingFrame.frame and self.votingFrame.frame.isCollapsed then
+            DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.votingFrame)
+        end
+    elseif not (self.votingFrame.frame and self.votingFrame.frame:IsShown()) then
+        return -- Don't force pop up if the user manually hid it
+    end
+    
     self.votingFrame:ReleaseChildren()
     self.timerLabels = {}
 
