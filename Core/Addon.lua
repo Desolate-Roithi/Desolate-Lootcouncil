@@ -10,7 +10,8 @@ do
     local existingAddon = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil", true)
     if existingAddon then
         local other = (addonName == "Desolate_Lootcouncil-Dev") and "Production" or "Dev"
-        print(string.format("|cffff0000[Desolate Lootcouncil]|r %s ('%s') is already loaded. Aborting '%s' to prevent DB corruption.",
+        print(string.format(
+            "|cffff0000[Desolate Lootcouncil]|r %s ('%s') is already loaded. Aborting '%s' to prevent DB corruption.",
             other, existingAddon.name or "?", addonName))
         addonTable.abortLoad = true
         return
@@ -41,27 +42,27 @@ DesolateLootcouncil.version = C_AddOns and C_AddOns.GetAddOnMetadata("Desolate_L
 
 local defaults = {
     profile = {
-        configuredLM = "",
-        PriorityLists = {
+        configuredLM      = "",
+        PriorityLists     = {
             { name = "Tier",         players = {}, items = {} },
             { name = "Weapons",      players = {}, items = {} },
             { name = "Rest",         players = {}, items = {} },
             { name = "Collectables", players = {}, items = {} }
         },
-        MainRoster = {},
-        playerRoster = { alts = {}, decay = {} },
-        verboseMode = false,
-        debugMode = false,
-        session = {
+        MainRoster        = {},
+        playerRoster      = { alts = {}, decay = {} },
+        verboseMode       = false,
+        debugMode         = false,
+        session           = {
             loot = {},
             bidding = {},
             awarded = {},
             lootedMobs = {},
             isOpen = false
         },
-        minLootQuality = 3,     -- Default to Rare
-        enableAutoLoot  = true,             -- Auto-pass on loot rolls (ON by default) -- Consolidated Logic (LM=Acquire, Raider=Pass)
-        DecayConfig = {
+        minLootQuality    = 3,  -- Default to Rare
+        enableAutoLoot    = true, -- Auto-pass on loot rolls (ON by default) -- Consolidated Logic (LM=Acquire, Raider=Pass)
+        DecayConfig       = {
             enabled = true,
             defaultPenalty = 1,     -- Configurable (0-3)
             sessionActive = false,
@@ -70,8 +71,8 @@ local defaults = {
             currentAttendees = {},  -- Table: [MainName] = true
         },
         AttendanceHistory = {},     -- List of past sessions { date, zone, attendees }
-        positions = {},             -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
-        dbCreatedAt = 0,            -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
+        positions         = {},     -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
+        dbCreatedAt       = 0,      -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
     }
 }
 
@@ -155,41 +156,41 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
                     end
                 end
             end
-            
+
             repairList(session.loot)
             repairList(session.bidding)
             repairList(session.awarded)
-            
+
             -- If items were successfully repaired, trigger UI refreshes
             if DesolateLootcouncil.db.profile.session.awarded then
                 self:DLC_Log("Item Cache Engine repaired uncached session items.")
             end
-            
+
             -- Global auto-refresh for any open frames to pull the updated UI data
             ---@type UI_Loot
             local LootUI = self:GetModule("UI_Loot") --[[@as UI_Loot]]
             if LootUI and LootUI.lootFrame and LootUI.lootFrame:IsShown() then
                 LootUI:ShowLootWindow(session.loot)
             end
-            
+
             ---@type UI_Monitor
             local MonitorUI = self:GetModule("UI_Monitor") --[[@as UI_Monitor]]
             if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
                 MonitorUI:ShowMonitorWindow()
             end
-            
+
             ---@type UI_Voting
             local VotingUI = self:GetModule("UI_Voting") --[[@as UI_Voting]]
             if VotingUI and VotingUI.votingFrame and VotingUI.votingFrame:IsShown() then
                 VotingUI:ShowVotingWindow(self:GetModule("Session").clientLootList, true)
             end
-            
+
             ---@type UI_TradeList
             local TradeUI = self:GetModule("UI_TradeList") --[[@as UI_TradeList]]
             if TradeUI and TradeUI.tradeListFrame and TradeUI.tradeListFrame:IsShown() then
                 TradeUI:ShowTradeListWindow()
             end
-            
+
             ---@type UI_History
             local HistoryUI = self:GetModule("UI_History") --[[@as UI_History]]
             if HistoryUI and HistoryUI.historyFrame and HistoryUI.historyFrame.frame and HistoryUI.historyFrame.frame:IsShown() then
@@ -221,7 +222,7 @@ function DesolateLootcouncil:DetermineLootMaster()
     local configuredLM = self.db.profile.configuredLM
     if configuredLM and configuredLM ~= "" then
         if self:IsUnitInRaid(configuredLM) or configuredLM == myName then
-             configuredLM = activeLM
+            return configuredLM
         end
         self:DLC_Log("Configured LM (" .. configuredLM .. ") not found. Falling back to Group Leader.")
     end
