@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.4.4-Beta  
-**Last Updated:** 2026-03-23  
+**Latest Version:** v0.6.0-Beta  
+**Last Updated:** 2026-03-27  
 **Compatibility:** WoW 12.0.1 (Midnight)  
 
 
@@ -46,7 +46,40 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.6.0-Beta
+* **Item Icons Everywhere:** Integrated 24x24 interactive icons across Voting, Loot Collector, Session Monitor, History, and Trade List windows. Icons feature full tooltips on hover/click for rapid identification.
+* **Offspec Voting:** Introduced a new "Offspec" vote category. It sits in priority between Transmog and Roll (Bid > Roll > Offspec > T-Mog > Pass).
+* **UI Modernization:** Redesigned the Voting window rows to support a 5-button layout + Icon on a single line, even in minimized states.
+* **LFR Safety:** Added automatic loot collection filtering for LFR/Looking For Raid. The Loot Collector now ignores LFR drops to prevent council interference in personal loot environments.
+* **Simulation Visibility:** Simulation (`/dlc sim`) and Debug logs now output to chat even when solo, ensuring feedback is visible during development and testing.
+* **Window Intelligence:** Minimized loot windows now automatically maximize when new loot is added to the session.
+* **Technical Fixes:** 
+    * Resolved "Cannot anchor to itself" Lua error in Trade List and History.
+    * Fixed item name resolution (placeholder "Item...") using asynchronous `ContinueOnItemLoad` refresh.
+    * Corrected Offspec count tracking in the Monitor summary index.
  
+### v0.5.0-Beta
+* **Efficiency & Sync Update:** Implemented the `IM_SYNC` protocol, allowing officers to sync Item Manager assignments across the raid.
+* **Smart Cache Refresh:** Integrated `ContinueOnItemLoad` across all windows, ensuring UI components (Loot, Monitor, IM) re-render immediately once item data is retrieved from the server.
+* **Attendance UX:** Enhanced the Roster system to provide clear, actionable reasons for player rejection (e.g., stale sessions or alt-resolution conflicts).
+* **Auto-Pass Transparency:** Added detailed logging to explain exactly why an auto-pass was blocked (e.g., missing addon users in zone).
+* **New Commands:** Added `/dlc im` for direct access to the Item Manager.
+
+### v0.4.6-Beta
+* **Raid Reliability Fixes:** Resolved an issue where autopass packets were dropping under high server load.
+* **UI Stability:** Fixed a critical bug where the Loot Vote window could become stuck or unclickable.
+* **LFR Integration:** Added initial support for LFR autopassing to reduce manual effort in personal loot scenarios.
+* **Spam Reduction:** Further reduced chat logging for routine synchronization events.
+* **Session UX:** The Loot Vote window no longer pops up if the session has already expired.
+* **Manual Add Fix:** Corrected an issue where manually adding items (via ID) would sometimes record the wrong item level.
+
+### v0.4.5-Beta
+* **Stability & Conflict Guards:** Implemented a global load guard to prevent Dev and Prod versions of the addon from loading simultaneously and corrupting the shared database.
+* **DB Sentinel:** Added a persistent sentinel value to the database configuration to prevent AceDB-3.0 from wiping profiles during the `PLAYER_LOGOUT` sequence.
+* **Linter Optimization:** Conducted a massive cleanup phase, reducing linter warnings by 72% and optimizing the `.luacheckrc` for the WoW 12.0.1 environment.
+* **Micro-Fixes:** Resolved shadowing and unused variable issues in the Monitor and Debug modules.
+
 ### v0.4.4-Beta
 * **Item Caching Engine:** Automatically repairs uncached items when `C_Item.GetItemInfo()` resolves, preventing windows from getting stuck displaying `"Item [ID]"` by forcing a global UI redraw across all active frames.
 * **Voting Window Suppression:** The Voting window no longer aggressively auto-opens when an item is removed (`REMOVE_ITEM`) or voting closes (`CLOSE_ITEM`) if you had manually closed it.
@@ -80,6 +113,14 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 * **Version Window:** Refresh/Ping button now waits 1.5 s for responses before re-rendering.
 * **Session Persistence:** Loot Master identity is saved across /reload.
 * **Stability:** Fixed `db.callbacks:Register` crash on login (`RegisterCallback` API correction).
+
+### v0.3.5-Beta
+* **LFR Safety:** Restricted the Loot Collector window from opening automatically during LFR sessions.
+
+### v0.3.4-Beta
+* **Performance:** Optimized attendance checks to ignore 5-man dungeon groups, reducing overhead.
+* **Profession Logic:** The Disenchanter/Enchanting window now only displays for raid-member enchanters.
+* **Cache Improvements:** Refined the item-name caching logic to handle rapid multi-item drops more reliably.
 
 ### v0.3.3-Beta
 * **Fixes:** corrected disenchanters overview to only display characters with the Enchanting profession and accurately show the latest expansion's skill level.
