@@ -281,8 +281,13 @@ function Loot:AddManualItem(rawLink)
         local category = self:GetItemCategory(itemID)
         if category == "Junk/Pass" then category = self:CategorizeItem(rawLink) end
 
-        local name, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
-        if not link then link = "Item " .. itemID end
+        -- Preserve the rawLink fully if it is a valid hyperlink to retain ilvl scaling and tertiary stats
+        local isFullLink = type(rawLink) == "string" and rawLink:match("item:[%d:]+")
+        local link = isFullLink and rawLink or nil
+
+        local _, cachedLink, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
+        
+        if not link then link = cachedLink or ("Item " .. itemID) end
         if not icon then icon = C_Item.GetItemIconByID(itemID) end
 
         local session = DesolateLootcouncil.db.profile.session

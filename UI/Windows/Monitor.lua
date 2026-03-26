@@ -91,13 +91,25 @@ function UI_Monitor:ShowMonitorWindow()
 
         -- Calculate Pending
         local pending = {}
-        local numMembers = GetNumGroupMembers()
-        if numMembers > 0 then
-            local prefix = IsInRaid() and "raid" or "party"
-            for i = 1, numMembers do
-                local name, realm = UnitName(prefix .. i)
+        if IsInRaid() then
+            for i = 1, GetNumGroupMembers() do
+                local name, realm = UnitName("raid" .. i)
                 if name then
-                    if realm and realm ~= "" then name = name .. "-" .. realm end
+                    if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
+                    if not votedPlayers[name] then
+                        table.insert(pending, name)
+                    end
+                end
+            end
+        elseif IsInGroup() then
+            local pName, pRealm = UnitName("player")
+            if pRealm and pRealm ~= "" then pName = pName .. "-" .. pRealm:gsub("%s+", "") end
+            if not votedPlayers[pName] then table.insert(pending, pName) end
+
+            for i = 1, GetNumSubgroupMembers() do
+                local name, realm = UnitName("party" .. i)
+                if name then
+                    if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
                     if not votedPlayers[name] then
                         table.insert(pending, name)
                     end
@@ -106,7 +118,7 @@ function UI_Monitor:ShowMonitorWindow()
         else
             -- Solo?
             local name, realm = UnitName("player")
-            if realm and realm ~= "" then name = name .. "-" .. realm end
+            if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
             if not votedPlayers[name] then table.insert(pending, name) end
         end
 

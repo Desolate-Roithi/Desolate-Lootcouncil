@@ -219,6 +219,12 @@ function DesolateLootcouncil:DetermineLootMaster()
         return nil
     end
 
+    if self.activeLootMaster and self.activeLootMaster ~= "" then
+        if self:IsUnitInRaid(self.activeLootMaster) or self.activeLootMaster == myName then
+            return self.activeLootMaster
+        end
+    end
+
     local configuredLM = self.db.profile.configuredLM
     if configuredLM and configuredLM ~= "" then
         if self:IsUnitInRaid(configuredLM) or configuredLM == myName then
@@ -236,7 +242,11 @@ function DesolateLootcouncil:DetermineLootMaster()
         if UnitIsGroupLeader("player") then return myName end
         for i = 1, GetNumSubgroupMembers() do
             local unit = "party" .. i
-            if UnitIsGroupLeader(unit) then return (UnitName(unit)) end
+            if UnitIsGroupLeader(unit) then 
+                local pName, pRealm = UnitName(unit)
+                if pRealm and pRealm ~= "" then return pName .. "-" .. pRealm:gsub("%s+", "") end
+                return pName
+            end
         end
     end
     return nil
@@ -246,7 +256,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
     local targetLM = self:DetermineLootMaster()
     local myName = UnitName("player")
-    self.amILM = (targetLM == myName)
+    self.amILM = (targetLM and Ambiguate(targetLM, "none") == myName) or false
     self:DLC_Log("Role Update: You are " .. (self.amILM and "Loot Master" or "Raider"))
 
     if self.amILM and IsInGroup() then
