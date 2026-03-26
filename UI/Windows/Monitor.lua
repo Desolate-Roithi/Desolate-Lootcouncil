@@ -65,7 +65,7 @@ function UI_Monitor:ShowMonitorWindow()
         local isClosed = SessionData and SessionData.closedItems and SessionData.closedItems[guid]
         local votes = SessionData and SessionData.sessionVotes and SessionData.sessionVotes[guid] or {}
 
-        local bids, rolls, tm, pass = 0, 0, 0, 0
+        local bids, rolls, os, tm, pass = 0, 0, 0, 0, 0
         local votedPlayers = {}
         for name, voteData in pairs(votes) do
             local vType = type(voteData) == "table" and voteData.type or voteData
@@ -74,16 +74,18 @@ function UI_Monitor:ShowMonitorWindow()
             elseif vType == 2 then
                 rolls = rolls + 1
             elseif vType == 3 then
-                tm = tm + 1
+                os = os + 1
             elseif vType == 4 then
+                tm = tm + 1
+            elseif vType == 5 then
                 pass = pass + 1
             end
             votedPlayers[name] = true
         end
 
         local countsText = string.format(
-            "|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r",
-            bids, rolls, tm, pass)
+            "|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cff00ffffOS:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r",
+            bids, rolls, os, tm, pass)
 
         if isClosed then
             return countsText .. " |cffff0000[Closed]|r", {}
@@ -164,11 +166,45 @@ function UI_Monitor:ShowMonitorWindow()
             group:SetFullWidth(true)
             scroll:AddChild(group)
 
-            -- Link (Bug 1: display as-is — don't overwrite with ID-based base link)
+            -- Link (Bug Fix: resolve via cache to ensure proper coloring/loading)
+            -- Item Icon (NEW)
+            ---@type AceGUIIcon
+            local itemIcon = AceGUI:Create("Icon")
+            itemIcon:SetImage(C_Item.GetItemIconByID(item.itemID) or 134400)
+            itemIcon:SetImageSize(24, 24)
+            itemIcon:SetRelativeWidth(0.05)
+            itemIcon:SetCallback("OnClick", function()
+                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                GameTooltip:SetHyperlink(item.link)
+                GameTooltip:Show()
+            end)
+            itemIcon:SetCallback("OnEnter", function()
+                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                GameTooltip:SetHyperlink(item.link)
+                GameTooltip:Show()
+            end)
+            itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+            group:AddChild(itemIcon)
+
             ---@type AceGUIInteractiveLabel
             local labelLink = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-            labelLink:SetText(link)
-            labelLink:SetRelativeWidth(0.40)
+            local _, properLink = C_Item.GetItemInfo(link)
+            if not properLink then
+                local itemObj = Item:CreateFromItemID(item.itemID)
+                if not itemObj:IsItemEmpty() then
+                    itemObj:ContinueOnItemLoad(function()
+                        if self.monitorFrame and (self.monitorFrame --[[@as any]]).frame:IsShown() then
+                            self:ShowMonitorWindow() -- Partial refresh
+                        end
+                    end)
+                end
+                labelLink:SetText("Loading...")
+            else
+                labelLink:SetText(properLink)
+                -- Update Icon too if it was missing
+                itemIcon:SetImage(C_Item.GetItemIconByID(item.itemID) or 134400)
+            end
+            labelLink:SetRelativeWidth(0.35) -- Reduced from 0.40 to accommodate icon (0.05)
             labelLink:SetCallback("OnEnter", function(widget)
                 GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
                 GameTooltip:SetHyperlink(item.link)
@@ -347,7 +383,9 @@ function UI_Monitor:ShowAwardWindow(itemData)
     local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
     ---@type AceGUILabel
     local header = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    header:SetText(itemData.link .. "|cffaaaaaa" .. catText .. "|r")
+    
+    local _, properLink = C_Item.GetItemInfo(itemData.link)
+    header:SetText((properLink or itemData.link) .. "|cffaaaaaa" .. catText .. "|r")
     header:SetFullWidth(true)
     header:SetJustifyH("CENTER")
     header:SetFontObject(GameFontNormalLarge)
@@ -390,7 +428,7 @@ function UI_Monitor:ShowAwardWindow(itemData)
             local vType = type(voteData) == "table" and voteData.type or voteData
             local vRoll = (type(voteData) == "table" and voteData.roll) or 0
 
-            if vType ~= 4 then
+            if vType ~= 5 then
                 local rank = GetPlayerRank(voter, itemData.category)
                 table.insert(voteList, { name = voter, type = vType, roll = vRoll, rank = rank })
             end
@@ -406,8 +444,8 @@ function UI_Monitor:ShowAwardWindow(itemData)
         end)
     end
 
-    local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cffeda55f", [4] = "|cffaaaaaa" }
-    local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "TM", [4] = "Pass" }
+    local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
+    local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
 
     if #voteList == 0 then
         ---@type AceGUILabel

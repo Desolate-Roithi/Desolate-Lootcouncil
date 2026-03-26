@@ -138,13 +138,28 @@ function UI_History:ShowHistoryWindow()
                 row:SetLayout("Flow")
                 row:SetFullWidth(true)
 
-                -- Icon
-                ---@type AceGUILabel
-                local icon = AceGUI:Create("Label") --[[@as AceGUILabel]]
-                icon:SetText(" ")
+                -- Icon (Interactive NEW)
+                ---@type AceGUIIcon
+                local icon = AceGUI:Create("Icon")
                 icon:SetImage(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-                icon:SetImageSize(16, 16)
-                icon:SetWidth(24)
+                icon:SetImageSize(24, 24)
+                icon:SetRelativeWidth(0.05)
+                icon:SetCallback("OnClick", function()
+                    if item.link then
+                        GameTooltip:SetOwner((icon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                        GameTooltip:SetHyperlink(item.link)
+                        GameTooltip:Show()
+                    end
+                end)
+                icon:SetCallback("OnEnter", function()
+                    if item.link then
+                        GameTooltip:SetOwner((icon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                        GameTooltip:SetHyperlink(item.link)
+                        GameTooltip:Show()
+                    end
+                end)
+                icon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+                row:AddChild(icon)
 
                 -- Link -> Winner
                 ---@type AceGUIInteractiveLabel
@@ -153,7 +168,7 @@ function UI_History:ShowHistoryWindow()
                 local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
 
                 text:SetText((item.link or "???") .. " -> |c" .. classColor .. (item.winner or "Unknown") .. "|r")
-                text:SetRelativeWidth(0.50)
+                text:SetRelativeWidth(0.45) -- Reduced from 0.50 to accommodate icon (0.05)
                 text:SetCallback("OnEnter", function(widget)
                     if item.link then
                         GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")

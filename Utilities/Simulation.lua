@@ -121,7 +121,7 @@ function Simulation:SimulateVote()
     -- Iterate active SIMS only
     for name, _ in pairs(self.activeSims) do
         for _, item in ipairs(session.bidding) do
-            local roll = math.random(1, 4) -- Random 1-4
+            local roll = math.random(1, 5) -- Random 1-5
             local payload = {
                 command = "VOTE",
                 data = {
@@ -142,7 +142,7 @@ end
 
 function Simulation:RunTest(count)
     if not DesolateLootcouncil:AmILootMaster() then
-        DesolateLootcouncil:DLC_Log("Error: You must be Loot Master to start a test.")
+        DesolateLootcouncil:DLC_Log("Error: You must be Loot Master to start a test.", true)
         return
     end
 

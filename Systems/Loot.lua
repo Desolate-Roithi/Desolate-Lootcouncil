@@ -276,20 +276,26 @@ function Loot:ClearLootBacklog()
     if session and session.loot then wipe(session.loot) end
     DesolateLootcouncil:DLC_Log("Loot backlog cleared (dedup store preserved).")
 end
-
 function Loot:AddManualItem(rawLink)
     local itemID = self:GetItemIDFromLink(rawLink)
     if itemID then
         local category = self:GetItemCategory(itemID)
         if category == "Junk/Pass" then category = self:CategorizeItem(rawLink) end
 
-        -- Preserve the rawLink fully if it is a valid hyperlink to retain ilvl scaling and tertiary stats
-        local isFullLink = type(rawLink) == "string" and rawLink:match("item:[%d:]+")
-        local link = isFullLink and rawLink or nil
+        -- 1. Try to get full info from the provided string (in case it's a full hyperlink)
+        local _, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(rawLink)
 
-        local _, cachedLink, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
-        
-        if not link then link = cachedLink or ("Item " .. itemID) end
+        -- 2. Fallback to ID if needed
+        if not link then
+            _, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
+        end
+
+        -- 3. If STILL no link (uncached), use the provided raw string as a placeholder
+        --    This will allow the UI to catch it and trigger a refresh.
+        if not link then
+            link = rawLink
+        end
+
         if not icon then icon = C_Item.GetItemIconByID(itemID) end
 
         local session = DesolateLootcouncil.db.profile.session
@@ -299,11 +305,10 @@ function Loot:AddManualItem(rawLink)
             category = category,
             sourceGUID = "Manual-" .. itemID .. "-" .. math.random(100),
             stackIndex = 1,
-            texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
-            isManual = true
+            texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark"
         })
         DesolateLootcouncil:DLC_Log("Manually added: " .. link, true)
-
+        
         local UI = DesolateLootcouncil:GetModule("UI_Loot")
         if UI then UI:ShowLootWindow(session.loot) end
     end

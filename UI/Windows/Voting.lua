@@ -128,7 +128,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     elseif not (self.votingFrame.frame and self.votingFrame.frame:IsShown()) then
         return -- Don't force pop up if the user manually hid it
     end
-    
+
     self.votingFrame:ReleaseChildren()
     self.timerLabels = {}
 
@@ -165,8 +165,15 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     self.votingFrame:AddChild(scroll)
     self.scrollContainer = scroll
 
-    local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "T-Mog", [4] = "Pass" }
-    local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cffeda55f", [4] = "|cffaaaaaa" }
+    local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "Offspec", [4] = "T-Mog", [5] = "Pass" }
+    local VOTE_COLOR = {
+        [1] = "|cff00ff00",
+        [2] = "|cffffd700",
+        [3] = "|cff00ffff",
+        [4] = "|cffeda55f",
+        [5] =
+        "|cffaaaaaa"
+    }
     ---@type Session
     local Session = DesolateLootcouncil:GetModule("Session")
     local closedItems = (Session and Session.closedItems) or {}
@@ -177,137 +184,174 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 
         -- Bug 3: Skip already-awarded items
         if not awardedGUIDs[guid] then
-        local currentVote = self.myVotes[guid]
-        local isClosed = closedItems[guid]
-        local remaining = (data.expiry or 0) - now
-        local isExpired = (remaining <= 0)
+            local currentVote = self.myVotes[guid]
+            local isClosed = closedItems[guid]
+            local remaining = (data.expiry or 0) - now
+            local isExpired = (remaining <= 0)
 
-        -- EXPIRATION TRIGGER:
-        -- If not closed/expired yet, schedule a forced refresh exactly when it happens.
-        if not isClosed and not isExpired and remaining > 0 then
-            local t = C_Timer.NewTimer(remaining, function()
-                self:ShowVotingWindow(nil, true)
+            -- EXPIRATION TRIGGER:
+            -- If not closed/expired yet, schedule a forced refresh exactly when it happens.
+            if not isClosed and not isExpired and remaining > 0 then
+                local t = C_Timer.NewTimer(remaining, function()
+                    self:ShowVotingWindow(nil, true)
+                end)
+                table.insert(self.expirationTimers, t)
+            end
+
+            -- Row
+            ---@type AceGUISimpleGroup
+            local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+            group:SetLayout("Flow")
+            group:SetFullWidth(true)
+            scroll:AddChild(group)
+
+            -- Item Icon (NEW)
+            ---@type AceGUIIcon
+            local itemIcon = AceGUI:Create("Icon")
+            itemIcon:SetImage(data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400)
+            itemIcon:SetImageSize(24, 24)
+            itemIcon:SetRelativeWidth(0.05)
+            itemIcon:SetCallback("OnClick", function()
+                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                GameTooltip:SetHyperlink(data.link)
+                GameTooltip:Show()
             end)
-            table.insert(self.expirationTimers, t)
-        end
+            itemIcon:SetCallback("OnEnter", function()
+                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                GameTooltip:SetHyperlink(data.link)
+                GameTooltip:Show()
+            end)
+            itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+            group:AddChild(itemIcon)
 
-        -- Row
-        ---@type AceGUISimpleGroup
-        local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-        group:SetLayout("Flow")
-        group:SetFullWidth(true)
-        scroll:AddChild(group)
+            -- Link (Bug Fix: resolve via cache to ensure proper coloring/loading)
+            ---@type AceGUIInteractiveLabel
+            local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+            local _, properLink = C_Item.GetItemInfo(data.link)
+            if not properLink then
+                local itemObj = Item:CreateFromItemID(data.itemID)
+                if not itemObj:IsItemEmpty() then
+                    itemObj:ContinueOnItemLoad(function()
+                        self:ShowVotingWindow(nil, true) -- Refresh
+                    end)
+                end
+                itemLabel:SetText("Loading...")
+            else
+                itemLabel:SetText(properLink)
+                -- Update Icon too if it was missing
+                itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
+            end
+            itemLabel:SetRelativeWidth(0.25) -- Reduced from 0.30 to accommodate icon (0.05)
+            itemLabel:SetCallback("OnEnter", function(widget)
+                GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
+                GameTooltip:SetHyperlink(data.link)
+                GameTooltip:Show()
+            end)
+            itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+            group:AddChild(itemLabel)
 
-        -- Link
-        ---@type AceGUIInteractiveLabel
-        local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-        -- Bug 1: display data.link as-is (the full drop link with bonus IDs)
-        -- Never overwrite from an itemID-based lookup which loses affix/ilvl data
-        itemLabel:SetText(data.link)
-        itemLabel:SetRelativeWidth(0.35)
-        itemLabel:SetCallback("OnEnter", function(widget)
-            GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
-            GameTooltip:SetHyperlink(data.link)
-            GameTooltip:Show()
-        end)
-        itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-        group:AddChild(itemLabel)
+            -- Timer Label (Bug Fix: Shrink to prevent wrapping)
+            ---@type AceGUILabel
+            local timerLbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
+            timerLbl:SetText("...")
+            timerLbl:SetRelativeWidth(0.06)
+            group:AddChild(timerLbl)
+            self.timerLabels[guid] = { label = timerLbl, expiry = data.expiry }
 
-        -- Timer Label
-        ---@type AceGUILabel
-        local timerLbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        timerLbl:SetText("...")
-        timerLbl:SetRelativeWidth(0.15)
-        group:AddChild(timerLbl)
-        self.timerLabels[guid] = { label = timerLbl, expiry = data.expiry }
+            -- Actions (Bug Fix: Expand to handle 5 buttons)
+            ---@type AceGUISimpleGroup
+            local actionGroup = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+            actionGroup:SetLayout("Flow")
+            actionGroup:SetRelativeWidth(0.64)
+            group:AddChild(actionGroup)
 
-        -- Actions
-        ---@type AceGUISimpleGroup
-        local actionGroup = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-        actionGroup:SetLayout("Flow")
-        actionGroup:SetRelativeWidth(0.50)
-        group:AddChild(actionGroup)
+            if isClosed or isExpired then
+                -- 1. PRIORITY: Check Closed/Expired FIRST
+                -- Show what they voted (or Auto Pass), but DISABLE changes
+                local votedText = "You voted: |cffaaaaaaAuto Pass|r"
+                if currentVote then
+                    local vText = VOTE_TEXT[currentVote] or "?"
+                    local vColor = VOTE_COLOR[currentVote] or "|cffffffff"
+                    votedText = "You voted: " .. vColor .. vText .. "|r"
+                end
 
-        if isClosed or isExpired then
-            -- 1. PRIORITY: Check Closed/Expired FIRST
-            -- Show what they voted (or Auto Pass), but DISABLE changes
-            local votedText = "You voted: |cffaaaaaaAuto Pass|r"
-            if currentVote then
+                ---@type AceGUILabel
+                local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
+                res:SetText(votedText)
+                res:SetWidth(200)
+                actionGroup:AddChild(res)
+
+                ---@type AceGUIButton
+                local btn = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                btn:SetText("Closed")
+                btn:SetWidth(100)
+                btn:SetDisabled(true)
+                actionGroup:AddChild(btn)
+            elseif currentVote then
+                -- 2. If Open AND Voted -> Show Change Button
                 local vText = VOTE_TEXT[currentVote] or "?"
                 local vColor = VOTE_COLOR[currentVote] or "|cffffffff"
-                votedText = "You voted: " .. vColor .. vText .. "|r"
+
+                ---@type AceGUILabel
+                local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
+                res:SetText("Voted: " .. vColor .. vText .. "|r")
+                res:SetWidth(200)
+                actionGroup:AddChild(res)
+
+                ---@type AceGUIButton
+                local change = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                change:SetText("Change")
+                change:SetWidth(100)
+                change:SetCallback("OnClick", function()
+                    self.myVotes[guid] = nil
+                    if Session and Session.SendVote then Session:SendVote(guid, 0) end
+                    self:ShowVotingWindow(nil, true)
+                end)
+                actionGroup:AddChild(change)
+            else
+                -- 3. If Open AND No Vote -> Show Options
+                local function CastVote(val)
+                    self.myVotes[guid] = val
+                    if Session and Session.SendVote then Session:SendVote(guid, val) end
+                    self:ShowVotingWindow(nil, true)
+                end
+
+                local w = 85
+                ---@type AceGUIButton
+                local b1 = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                b1:SetText("Bid")
+                b1:SetWidth(w)
+                b1:SetCallback("OnClick", function() CastVote(1) end)
+                actionGroup:AddChild(b1)
+
+                ---@type AceGUIButton
+                local b2 = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                b2:SetText("Roll")
+                b2:SetWidth(w)
+                b2:SetCallback("OnClick", function() CastVote(2) end)
+                actionGroup:AddChild(b2)
+
+                ---@type AceGUIButton
+                local b3 = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                b3:SetText("Offspec")
+                b3:SetWidth(w)
+                b3:SetCallback("OnClick", function() CastVote(3) end)
+                actionGroup:AddChild(b3)
+
+                ---@type AceGUIButton
+                local b4 = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                b4:SetText("T-Mog")
+                b4:SetWidth(w)
+                b4:SetCallback("OnClick", function() CastVote(4) end)
+                actionGroup:AddChild(b4)
+
+                ---@type AceGUIButton
+                local b5 = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                b5:SetText("Pass")
+                b5:SetWidth(w)
+                b5:SetCallback("OnClick", function() CastVote(5) end)
+                actionGroup:AddChild(b5)
             end
-
-            ---@type AceGUILabel
-            local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            res:SetText(votedText)
-            res:SetWidth(200)
-            actionGroup:AddChild(res)
-
-            ---@type AceGUIButton
-            local btn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            btn:SetText("Closed")
-            btn:SetWidth(100)
-            btn:SetDisabled(true)
-            actionGroup:AddChild(btn)
-        elseif currentVote then
-            -- 2. If Open AND Voted -> Show Change Button
-            local vText = VOTE_TEXT[currentVote] or "?"
-            local vColor = VOTE_COLOR[currentVote] or "|cffffffff"
-
-            ---@type AceGUILabel
-            local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            res:SetText("Voted: " .. vColor .. vText .. "|r")
-            res:SetWidth(200)
-            actionGroup:AddChild(res)
-
-            ---@type AceGUIButton
-            local change = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            change:SetText("Change")
-            change:SetWidth(100)
-            change:SetCallback("OnClick", function()
-                self.myVotes[guid] = nil
-                if Session and Session.SendVote then Session:SendVote(guid, 0) end
-                self:ShowVotingWindow(nil, true)
-            end)
-            actionGroup:AddChild(change)
-        else
-            -- 3. If Open AND No Vote -> Show Options
-            local function CastVote(val)
-                self.myVotes[guid] = val
-                if Session and Session.SendVote then Session:SendVote(guid, val) end
-                self:ShowVotingWindow(nil, true)
-            end
-
-            local w = 75
-            ---@type AceGUIButton
-            local b1 = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            b1:SetText("Bid")
-            b1:SetWidth(w)
-            b1:SetCallback("OnClick", function() CastVote(1) end)
-            actionGroup:AddChild(b1)
-
-            ---@type AceGUIButton
-            local b2 = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            b2:SetText("Roll")
-            b2:SetWidth(w)
-            b2:SetCallback("OnClick", function() CastVote(2) end)
-            actionGroup:AddChild(b2)
-
-            ---@type AceGUIButton
-            local b3 = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            b3:SetText("T-Mog")
-            b3:SetWidth(w)
-            b3:SetCallback("OnClick", function() CastVote(3) end)
-            actionGroup:AddChild(b3)
-
-            ---@type AceGUIButton
-            local b4 = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            b4:SetText("Pass")
-            b4:SetWidth(w)
-            b4:SetCallback("OnClick", function() CastVote(4) end)
-            actionGroup:AddChild(b4)
-        end
         end -- end Bug 3 awarded filter
     end
 

@@ -66,20 +66,31 @@ function UI_TradeList:ShowTradeListWindow()
                 row:SetLayout("Flow")
                 row:SetFullWidth(true)
 
-                -- Icon
-                ---@type AceGUILabel
-                local icon = AceGUI:Create("Label") --[[@as AceGUILabel]]
-                icon:SetText(" ")
-                icon:SetImage(item.texture)
-                icon:SetImageSize(16, 16)
-                icon:SetWidth(24)
+                -- Icon (Interactive NEW)
+                ---@type AceGUIIcon
+                local icon = AceGUI:Create("Icon")
+                icon:SetImage(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+                icon:SetImageSize(24, 24)
+                icon:SetRelativeWidth(0.05)
+                icon:SetCallback("OnClick", function()
+                    GameTooltip:SetOwner((icon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                    GameTooltip:SetHyperlink(item.link)
+                    GameTooltip:Show()
+                end)
+                icon:SetCallback("OnEnter", function()
+                    GameTooltip:SetOwner((icon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                    GameTooltip:SetHyperlink(item.link)
+                    GameTooltip:Show()
+                end)
+                icon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+                row:AddChild(icon)
 
                 -- Link
                 ---@type AceGUIInteractiveLabel
                 local linkLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
                 -- Bug 1: preserve item.link as-is (the original awarded drop link with bonus IDs)
                 linkLabel:SetText(item.link)
-                linkLabel:SetRelativeWidth(0.45)
+                linkLabel:SetRelativeWidth(0.40) -- Reduced from 0.45 to accommodate icon (0.05)
                 linkLabel:SetCallback("OnEnter", function(widget)
                     GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
                     GameTooltip:SetHyperlink(item.link)

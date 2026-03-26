@@ -56,7 +56,7 @@ function Debug:SimulateComm(arg)
         self:SimulateVoting()
     else
         DesolateLootcouncil.activeAddonUsers[arg] = true
-        DesolateLootcouncil:DLC_Log("Simulated PONG from " .. arg)
+        DesolateLootcouncil:DLC_Log("Simulated PONG from " .. arg, true)
     end
 end
 
@@ -69,7 +69,7 @@ function Debug:SimulateVoting()
     local bidding = session and session.bidding
 
     if not bidding or #bidding == 0 then
-        DesolateLootcouncil:DLC_Log("No active session items found.")
+        DesolateLootcouncil:DLC_Log("No active session items found.", true)
         return
     end
 
@@ -81,7 +81,7 @@ function Debug:SimulateVoting()
             -- Skip myself (I vote manually)
             if name ~= myName then
                 for _, item in ipairs(bidding) do
-                    local roll = math.random(1, 4) -- Random 1-4
+                    local roll = math.random(1, 5) -- Random 1-5
                     local payload = {
                         command = "VOTE",
                         data = {
@@ -100,7 +100,7 @@ function Debug:SimulateVoting()
             end
         end
     end
-    DesolateLootcouncil:DLC_Log("Simulated random votes for " .. votedCount .. " users.")
+    DesolateLootcouncil:DLC_Log("Simulated random votes for " .. votedCount .. " users.", true)
 end
 
 function Debug:DumpKeys()
@@ -132,7 +132,7 @@ function Debug:DumpKeys()
         DesolateLootcouncil:DLC_Log("No Alts table.")
     end
 
-    DesolateLootcouncil:DLC_Log("--- END DUMP ---")
+    DesolateLootcouncil:DLC_Log("--- END DUMP ---", true)
 end
 
 -- Expose globally if needed solely for quick access, but not strictly required

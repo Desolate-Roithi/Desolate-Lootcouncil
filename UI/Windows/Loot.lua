@@ -170,12 +170,34 @@ function UI_Loot:ShowLootWindow(lootTable)
             group:SetFullWidth(true)
             scroll:AddChild(group) -- [FIX] Attach first, populate second
 
+            -- Item Icon (NEW)
+            ---@type AceGUIIcon
+            local itemIcon = AceGUI:Create("Icon")
+            itemIcon:SetImage(data.texture or C_Item.GetItemIconByID(data.itemID) or 134400)
+            itemIcon:SetImageSize(24, 24)
+            itemIcon:SetRelativeWidth(0.08)
+            itemIcon:SetCallback("OnClick", function()
+                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
+                GameTooltip:Show()
+            end)
+            itemIcon:SetCallback("OnEnter", function()
+                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+                if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
+                GameTooltip:Show()
+            end)
+            itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+            group:AddChild(itemIcon)
+
             -- Item Link (Interactive Logic)
             ---@type AceGUIInteractiveLabel
             local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
 
-            local itemName = C_Item.GetItemInfo(data.itemID)
-            if not itemName then
+            -- Bug Fix: Ensure we always try to get the full formatted name/link from the cache
+            -- if data.link is a raw "item:ID" string, it needs formatting.
+            local _, properLink = C_Item.GetItemInfo(data.link or data.itemID)
+            
+            if not properLink then
                 -- Trigger load and refresh once cached
                 local itemObj = Item:CreateFromItemID(data.itemID)
                 if not itemObj:IsItemEmpty() then
@@ -187,11 +209,13 @@ function UI_Loot:ShowLootWindow(lootTable)
                 end
                 itemLabel:SetText("Loading...")
             else
-                -- Bug 1: always display data.link as-is (full drop link with bonus IDs/affixes)
-                itemLabel:SetText(data.link)
+                -- If we found a proper hyperlink, use it. Otherwise fallback to data.link.
+                itemLabel:SetText(properLink or data.link)
+                -- Update Icon too if it was missing
+                itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
             end
 
-            itemLabel:SetRelativeWidth(0.55) -- User requested 0.55
+            itemLabel:SetRelativeWidth(0.47) -- Reduced from 0.55 to accommodate icon (0.08)
             itemLabel:SetCallback("OnClick", function()
                 GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
                 if link then GameTooltip:SetHyperlink(link) else GameTooltip:SetItemByID(data.itemID) end
