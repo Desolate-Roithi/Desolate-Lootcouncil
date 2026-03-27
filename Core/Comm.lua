@@ -12,6 +12,7 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 function Comm:OnEnable()
     -- Register the communication prefix
     self:RegisterComm("DLC_COMM", "OnCommReceived")
+    self:RegisterEvent("GROUP_ROSTER_UPDATE", "PruneRosterData")
     self.playerVersions = {}
     self.playerEnchantingSkill = {}
 
@@ -149,10 +150,11 @@ end
 
 function Comm:SendVersionCheck()
     -- Broadcast VERSION_REQ
-    self.playerVersions = {}        -- Reset locally on new check
-    self.playerEnchantingSkill = {} -- Reset skills too
+    -- [FIX] Do not reset playerVersions/playerEnchantingSkill here.
+    -- This prevents players from "disappearing" if they fail to respond to a single ping.
+    -- New responses will overwrite existing data.
 
-    -- Explicitly add Self
+    -- Explicitly update Self
     local myName = UnitName("player")
     self.playerVersions[myName] = DesolateLootcouncil.version
     local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
@@ -175,4 +177,25 @@ function Comm:SendSyncAutopass(isActive)
     self:SendComm("SYNC_AUTOPASS", isActive)
     local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
     DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
+end
+
+function Comm:PruneRosterData()
+    local toRemove = {}
+    for name in pairs(self.playerVersions) do
+        if not DesolateLootcouncil:IsUnitInRaid(name) then
+            table.insert(toRemove, name)
+        end
+    end
+    
+    if #toRemove > 0 then
+        for _, name in ipairs(toRemove) do
+            self.playerVersions[name] = nil
+            self.playerEnchantingSkill[name] = nil
+            if DesolateLootcouncil.activeAddonUsers then
+                DesolateLootcouncil.activeAddonUsers[name] = nil
+            end
+        end
+        -- Notify UI that data has changed (pruned)
+        self:SendMessage("DLC_VERSION_UPDATE")
+    end
 end

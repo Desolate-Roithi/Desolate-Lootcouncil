@@ -2,6 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI : AceModule, AceConsole-3.0, AceEvent-3.0, AceTimer-3.0
+---@field updateTimer any
 ---@field ShowLootWindow fun(self: UI, lootTable: table|nil)
 ---@field ShowVotingWindow fun(self: UI, lootTable: table|nil, isRefresh: boolean?)
 ---@field ShowMonitorWindow fun(self: UI)
@@ -30,8 +31,15 @@ local UI = DesolateLootcouncil:NewModule("UI", "AceConsole-3.0", "AceEvent-3.0",
 function UI:OnEnable()
     -- Forward messages if needed, or register core UI events
     self:RegisterMessage("DLC_VERSION_UPDATE", function()
-        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-        if Monitor then Monitor:UpdateDisenchanters() end
+        -- [STEADY] Batch updates to every 5 minutes to keep list stable.
+        -- Players won't change professions mid-raid, so frequent updates are unnecessary.
+        if self.updateTimer then return end -- Already scheduled
+
+        self.updateTimer = self:ScheduleTimer(function()
+            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+            if Monitor then Monitor:UpdateDisenchanters() end
+            self.updateTimer = nil
+        end, 300) -- 5 minute steady interval
     end)
 end
 
