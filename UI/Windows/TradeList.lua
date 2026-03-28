@@ -6,6 +6,10 @@ local UI_TradeList = DesolateLootcouncil:NewModule("UI_TradeList")
 local AceGUI = LibStub("AceGUI-3.0")
 
 function UI_TradeList:ShowTradeListWindow()
+    if not DesolateLootcouncil:AmILootMaster() then
+        if self.tradeListFrame then self.tradeListFrame:Hide() end
+        return
+    end
     if not self.tradeListFrame then
         ---@type AceGUIFrame
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]

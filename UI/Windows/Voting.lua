@@ -122,8 +122,12 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     if not isRefresh then
         self.votingFrame:Show()
         -- Ensure window is maximized if it was previously collapsed
-        if self.votingFrame.frame and self.votingFrame.frame.isCollapsed then
-            DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.votingFrame)
+        local frame = (self.votingFrame --[[@as any]]).frame
+        if frame then
+            frame.startCollapsed = nil -- Cancel initial hook timer
+            if frame.isCollapsed then
+                DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.votingFrame)
+            end
         end
     elseif not (self.votingFrame.frame and self.votingFrame.frame:IsShown()) then
         return -- Don't force pop up if the user manually hid it
@@ -316,7 +320,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
                     self:ShowVotingWindow(nil, true)
                 end
 
-                local w = 85
+                local w = 80
                 ---@type AceGUIButton
                 local b1 = AceGUI:Create("Button") --[[@as AceGUIButton]]
                 b1:SetText("Bid")

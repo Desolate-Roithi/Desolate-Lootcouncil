@@ -176,7 +176,7 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
             ---@type UI_Monitor
             local MonitorUI = self:GetModule("UI_Monitor") --[[@as UI_Monitor]]
             if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
-                MonitorUI:ShowMonitorWindow()
+                MonitorUI:ShowMonitorWindow(true)
             end
 
             ---@type UI_Voting

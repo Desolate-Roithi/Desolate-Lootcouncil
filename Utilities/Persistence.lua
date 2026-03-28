@@ -226,7 +226,8 @@ function Persistence:ApplyCollapseHook(widget, windowName)
     -- Apply initial collapsed state if requested
     if frame.startCollapsed then
         C_Timer.After(0.1, function()
-            if frame.startCollapsed then
+            -- Safety: If frame property was manually cleared or already toggled, abort.
+            if frame.startCollapsed and not frame.isCollapsed then
                 self:ToggleWindowCollapse(widget)
                 frame.startCollapsed = nil
             end

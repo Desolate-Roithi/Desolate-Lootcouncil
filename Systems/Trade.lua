@@ -113,7 +113,7 @@ function Trade:HandleTradeSuccess()
             -- Bug 2 fix: refresh the actual trade list window
             ---@type UI_TradeList
             local UI = DesolateLootcouncil:GetModule("UI_TradeList") --[[@as UI_TradeList]]
-            if UI and UI.ShowTradeListWindow then
+            if UI and UI.ShowTradeListWindow and DesolateLootcouncil:AmILootMaster() then
                 UI:ShowTradeListWindow()
             end
         end
