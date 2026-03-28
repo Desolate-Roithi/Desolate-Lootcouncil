@@ -8,7 +8,7 @@ local addonName, addonTable = ...
 -- so whichever version loads SECOND will correctly detect the first and abort.
 do
     local existingAddon = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil", true)
-    if existingAddon then
+    if existingAddon and not _G.DLC_TEST_MODE then
         local other = (addonName == "Desolate_Lootcouncil-Dev") and "Production" or "Dev"
         print(string.format(
             "|cffff0000[Desolate Lootcouncil]|r %s ('%s') is already loaded. Aborting '%s' to prevent DB corruption.",
@@ -35,8 +35,10 @@ end
 ---@field Persistence Persistence
 ---@field Logger table
 ---@field sessionAutopassActive boolean
+---@field clientLootList table?
 DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "AceConsole-3.0", "AceEvent-3.0",
     "AceComm-3.0", "AceSerializer-3.0", "AceTimer-3.0")
+-- Set global for easier access across files
 _G.DesolateLootcouncil = DesolateLootcouncil
 DesolateLootcouncil.version = C_AddOns and C_AddOns.GetAddOnMetadata("Desolate_Lootcouncil", "Version") or "1.0.0"
 
@@ -60,8 +62,9 @@ local defaults = {
             lootedMobs = {},
             isOpen = false
         },
-        minLootQuality    = 3,  -- Default to Rare
-        enableAutoLoot    = true, -- Auto-pass on loot rolls (ON by default) -- Consolidated Logic (LM=Acquire, Raider=Pass)
+        minLootQuality    = 3,    -- Default to Rare
+        enableAutoLoot    = true, -- Auto-pass on loot rolls (ON by default)
+        -- Consolidated Logic (LM=Acquire, Raider=Pass)
         DecayConfig       = {
             enabled = true,
             defaultPenalty = 1,     -- Configurable (0-3)
@@ -144,8 +147,11 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
                 if not list then return end
                 for _, item in ipairs(list) do
                     if item.itemID then
-                        local _, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(item.itemID)
-                        if link and (item.link == nil or string.find(item.link, "^Item %d+") or string.find(item.link, "Item %[%d+%]")) then
+                        local ok, _, link, _, _, _, _, _, _, _, icon = pcall(C_Item.GetItemInfo, item.itemID)
+                        if not ok or not link then link, icon = "", 0 end
+                        local isPlaceholder = item.link == nil or string.find(item.link, "^Item %d+") or
+                            string.find(item.link, "Item %[%d+%] ")
+                        if link and (isPlaceholder) then
                             item.link = link
                             repaired = true
                         end
@@ -162,7 +168,7 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
             repairList(session.awarded)
 
             -- If items were successfully repaired, trigger UI refreshes
-            if DesolateLootcouncil.db.profile.session.awarded then
+            if repaired then
                 self:DLC_Log("Item Cache Engine repaired uncached session items.")
             end
 
@@ -193,7 +199,8 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
 
             ---@type UI_History
             local HistoryUI = self:GetModule("UI_History") --[[@as UI_History]]
-            if HistoryUI and HistoryUI.historyFrame and HistoryUI.historyFrame.frame and HistoryUI.historyFrame.frame:IsShown() then
+            if HistoryUI and HistoryUI.historyFrame and HistoryUI.historyFrame.frame and
+                HistoryUI.historyFrame.frame:IsShown() then
                 HistoryUI:ShowHistoryWindow()
             end
         end

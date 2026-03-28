@@ -4,6 +4,8 @@ if AT.abortLoad then return end
 ---@class Comm : AceModule, AceComm-3.0, AceSerializer-3.0, AceEvent-3.0
 ---@field playerVersions table<string, string>
 ---@field playerEnchantingSkill table<string, number>
+---@field frame any
+---@field RefreshWindow fun(self: any)
 local Comm = DesolateLootcouncil:NewModule("Comm", "AceComm-3.0", "AceSerializer-3.0", "AceEvent-3.0")
 
 ---@type DesolateLootcouncil
@@ -35,7 +37,7 @@ function Comm:SendComm(command, data, target)
     end
 end
 
-function Comm:OnCommReceived(prefix, message, distribution, sender)
+function Comm:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_COMM" then return end
     if sender == UnitName("player") then return end -- Ignore self
 

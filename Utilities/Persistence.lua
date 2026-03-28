@@ -38,7 +38,7 @@ function Persistence:SaveFramePosition(frame, windowName)
         h = target.savedHeight
     end
 
-    local point, relativeTo, relativePoint, xOfs, yOfs = target:GetPoint()
+    local point, _relativeTo, relativePoint, xOfs, yOfs = target:GetPoint()
     local width = target:GetWidth()
 
     db.positions[windowName] = {
@@ -103,14 +103,20 @@ function Persistence:ToggleWindowCollapse(widget)
         -- Helper to detect if an element is part of the header area
         local function IsInHeader(obj)
             -- Check explicit references first
-            if obj == widget.titletext or obj == widget.titlebg or obj == widget.statusIcon or obj.isTitleOverlay then return true end
+            if obj == widget.titletext or obj == widget.titlebg or obj == widget.statusIcon or
+                obj.isTitleOverlay then
+                return true
+            end
 
             -- Check all anchor points
             for i = 1, obj:GetNumPoints() do
-                local point, relativeTo, relativePoint, x, y = obj:GetPoint(i)
+                local _, relativeTo, relativePoint, _x, y = obj:GetPoint(i)
 
                 -- Keep elements anchored TO our protected parts
-                if relativeTo == widget.titletext or relativeTo == widget.titlebg or relativeTo == widget.statusIcon then return true end
+                if relativeTo == widget.titletext or relativeTo == widget.titlebg or
+                    relativeTo == widget.statusIcon then
+                    return true
+                end
 
                 -- Central Header ornaments (anchored to TOP and within title bar height)
                 -- We EXCLUDE TOPLEFT/TOPRIGHT to hide side rails

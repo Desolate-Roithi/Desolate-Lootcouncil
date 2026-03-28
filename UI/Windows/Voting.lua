@@ -94,9 +94,9 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 
     -- Sync Persistence
     ---@type Session
-    local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
-    if Session and Session.myLocalVotes then
-        self.myVotes = Session.myLocalVotes
+    local SessionModule = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
+    if SessionModule and SessionModule.myLocalVotes then
+        self.myVotes = SessionModule.myLocalVotes
     end
 
     -- New Session Data
@@ -143,9 +143,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     -- 1. Ticker (Visual Only)
     self.votingTicker = C_Timer.NewTicker(0.5, function()
         local now = GetServerTime()
-        ---@type Session
-        local Session = DesolateLootcouncil:GetModule("Session")
-        local closedItems = (Session and Session.closedItems) or {}
+        local closedItems = (SessionModule and SessionModule.closedItems) or {}
         for guid, info in pairs(self.timerLabels) do
             if info.label and info.label.frame and info.label.SetText then
                 local remaining = (info.expiry or 0) - now
@@ -166,6 +164,13 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     scroll:SetLayout("List")
     scroll:SetFullWidth(true)
     scroll:SetFullHeight(true)
+
+    -- [NEW] Preserve Scroll Status on Refresh
+    if not self.scrollStatus or not isRefresh then
+        self.scrollStatus = { scrollvalue = 0 }
+    end
+    scroll:SetStatusTable(self.scrollStatus)
+
     self.votingFrame:AddChild(scroll)
     self.scrollContainer = scroll
 
@@ -178,9 +183,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         [5] =
         "|cffaaaaaa"
     }
-    ---@type Session
-    local Session = DesolateLootcouncil:GetModule("Session")
-    local closedItems = (Session and Session.closedItems) or {}
+    local closedItems = (SessionModule and SessionModule.closedItems) or {}
     local now = GetServerTime()
 
     for _, data in ipairs(items) do
@@ -308,7 +311,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
                 change:SetWidth(100)
                 change:SetCallback("OnClick", function()
                     self.myVotes[guid] = nil
-                    if Session and Session.SendVote then Session:SendVote(guid, 0) end
+                    if SessionModule and SessionModule.SendVote then SessionModule:SendVote(guid, 0) end
                     self:ShowVotingWindow(nil, true)
                 end)
                 actionGroup:AddChild(change)
@@ -316,7 +319,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
                 -- 3. If Open AND No Vote -> Show Options
                 local function CastVote(val)
                     self.myVotes[guid] = val
-                    if Session and Session.SendVote then Session:SendVote(guid, val) end
+                    if SessionModule and SessionModule.SendVote then SessionModule:SendVote(guid, val) end
                     self:ShowVotingWindow(nil, true)
                 end
 

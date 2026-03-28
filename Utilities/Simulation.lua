@@ -171,10 +171,20 @@ function Simulation:RunTest(count)
 
         table.insert(items, {
             link = link,
+            itemID = tonumber(link:match("item:(%d+)")),
             texture = icon,
+            category = "Rest",
+            sourceGUID = "TestGUID" .. i,
             quantity = 1,
             isTest = true
         })
+    end
+
+    ---@type Session
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session and Session.StartSession then
+        Session:StartSession(items)
+        DesolateLootcouncil:DLC_Log("Test Session started with " .. #items .. " items.", true)
     end
 end
 

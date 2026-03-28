@@ -8,6 +8,8 @@ local Trade = DesolateLootcouncil:NewModule("Trade", "AceEvent-3.0", "AceConsole
 ---@field db table
 ---@field GetModule fun(self: any, name: string): any
 ---@field DLC_Log fun(self: any, msg: string, force?: boolean)
+---@field AmILootMaster fun(self: any): boolean
+---@field AmIRaidAssistOrLM fun(self: any): boolean
 
 ---@type DLC_Ref_Trade
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Trade]]
@@ -18,7 +20,7 @@ function Trade:OnEnable()
     DesolateLootcouncil:DLC_Log("Systems/Trade Loaded")
 end
 
-function Trade:OnUIInfo(event, msgID, msg)
+function Trade:OnUIInfo(_event, _msgID, msg)
     if msg == ERR_TRADE_COMPLETE then
         self:HandleTradeSuccess()
     end
@@ -84,7 +86,7 @@ function Trade:StageAllItems(pendingItems, targetName)
     end
 end
 
-function Trade:CHAT_MSG_SYSTEM(event, message)
+function Trade:CHAT_MSG_SYSTEM(_event, message)
     if message == ERR_TRADE_COMPLETE then
         self:HandleTradeSuccess()
     end

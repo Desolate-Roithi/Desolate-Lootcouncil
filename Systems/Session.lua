@@ -15,6 +15,8 @@ local Session = DesolateLootcouncil:NewModule("Session", "AceEvent-3.0", "AceCom
 ---@field AmIRaidAssistOrLM fun(self: any): boolean
 ---@field activeLootMaster string
 ---@field amILM boolean
+---@field sessionAutopassActive boolean?
+---@field clientLootList table?
 
 ---@type DLC_Ref_Session
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Session]]
@@ -115,7 +117,7 @@ function Session:PerformRestore(state, now, expiry)
         end
 
         DesolateLootcouncil:DLC_Log("Restored active session (" ..
-        #self.clientLootList .. " items, LM: " .. (state.activeLM or "?") .. ").")
+            #self.clientLootList .. " items, LM: " .. (state.activeLM or "?") .. ").")
 
         ---@type UI_Voting
         local UI = DesolateLootcouncil:GetModule("UI_Voting")
@@ -386,7 +388,7 @@ function Session:RemoveSessionItem(guid)
     DesolateLootcouncil:DLC_Log("Removed item from session and pending trades.")
 end
 
-function Session:OnCommReceived(prefix, message, distribution, sender)
+function Session:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_Loot" then return end
 
     local success, payload = self:Deserialize(message)
