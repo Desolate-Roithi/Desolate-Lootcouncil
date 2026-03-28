@@ -125,7 +125,7 @@ function Session:PerformRestore(state, now, expiry)
             if DesolateLootcouncil:AmIRaidAssistOrLM() then
                 ---@type UI_Monitor
                 local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-                if Monitor then Monitor:ShowMonitorWindow() end
+                if Monitor then Monitor:ShowMonitorWindow(true) end
             end
         end
     else
@@ -373,7 +373,7 @@ function Session:RemoveSessionItem(guid)
     ---@type UI_Monitor
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
     if Monitor and Monitor.ShowMonitorWindow and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-        Monitor:ShowMonitorWindow()
+        Monitor:ShowMonitorWindow(true)
     end
 
     -- 5. Refresh Trade List (if open)
@@ -451,7 +451,7 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
                 ---@type UI_Monitor
                 local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
                 if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                    Monitor:ShowMonitorWindow()
+                    Monitor:ShowMonitorWindow(true)
                 end
             end
         end
@@ -472,7 +472,7 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
                 ---@type UI_Monitor
                 local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
                 if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                    Monitor:ShowMonitorWindow()
+                    Monitor:ShowMonitorWindow(true)
                 end
             end
         end
@@ -535,7 +535,7 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
 
             ---@type UI_Monitor
             local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-            if Monitor then Monitor:ShowMonitorWindow() end
+            if Monitor then Monitor:ShowMonitorWindow(true) end
 
             self:SaveSessionState()
 
@@ -551,7 +551,7 @@ function Session:OnCommReceived(prefix, message, distribution, sender)
                 ---@type UI_Monitor
                 local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
                 if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                    Monitor:ShowMonitorWindow()
+                    Monitor:ShowMonitorWindow(true)
                 end
             end
         end

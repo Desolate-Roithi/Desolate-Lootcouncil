@@ -29,7 +29,7 @@ local function GetLinkedMain(name)
     return nil
 end
 
-function UI_Monitor:ShowMonitorWindow()
+function UI_Monitor:ShowMonitorWindow(isRefresh)
     if not self.monitorFrame then
         ---@type AceGUIFrame
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
@@ -54,7 +54,20 @@ function UI_Monitor:ShowMonitorWindow()
         DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Monitor")
     end
 
-    self.monitorFrame:Show()
+    if not isRefresh then
+        self.monitorFrame:Show()
+        -- Ensure window is maximized if it was previously collapsed
+        local frame = (self.monitorFrame --[[@as any]]).frame
+        if frame then
+            frame.startCollapsed = nil -- Cancel initial hook timer
+            if frame.isCollapsed then
+                DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.monitorFrame)
+            end
+        end
+    elseif not (self.monitorFrame.frame and self.monitorFrame.frame:IsShown()) then
+        return -- Don't force pop up if the user manually hid it
+    end
+
     self.monitorFrame:ReleaseChildren()
 
     -- Helper: Vote Counts
@@ -278,8 +291,8 @@ function UI_Monitor:ShowMonitorWindow()
         end)
         mFrame.btnTrades = btn
     end
-    -- Bug 2: Only show footer buttons when not collapsed
-    if not isCollapsed then mFrame.btnTrades:Show() else mFrame.btnTrades:Hide() end
+    -- Bug 2: Only show footer buttons when not collapsed AND LM only for trades
+    if not isCollapsed and isLM then mFrame.btnTrades:Show() else mFrame.btnTrades:Hide() end
 
     if not mFrame.btnEnd then
         local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
