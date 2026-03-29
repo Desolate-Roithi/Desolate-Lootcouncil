@@ -180,10 +180,10 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         [2] = "|cffffd700",
         [3] = "|cff00ffff",
         [4] = "|cffeda55f",
-        [5] =
-        "|cffaaaaaa"
+        [5] = "|cffaaaaaa"
     }
     local closedItems = (SessionModule and SessionModule.closedItems) or {}
+    local outbound = (SessionModule and SessionModule.outboundVotes) or {}
     local now = GetServerTime()
 
     for _, data in ipairs(items) do
@@ -315,8 +315,26 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
                     self:ShowVotingWindow(nil, true)
                 end)
                 actionGroup:AddChild(change)
+            elseif outbound[guid] then
+                -- 3. If Open AND Outbound (Pending ACK) -> Show Syncing Status
+                local v = outbound[guid]
+                local vText = VOTE_TEXT[v.type] or "?"
+                local vColor = VOTE_COLOR[v.type] or "|cffffffff"
+
+                ---@type AceGUILabel
+                local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
+                res:SetText("Voted: " .. vColor .. vText .. "|r")
+                res:SetWidth(200)
+                actionGroup:AddChild(res)
+
+                ---@type AceGUIButton
+                local syncBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
+                syncBtn:SetText("Syncing...")
+                syncBtn:SetWidth(100)
+                syncBtn:SetDisabled(true)
+                actionGroup:AddChild(syncBtn)
             else
-                -- 3. If Open AND No Vote -> Show Options
+                -- 4. If Open AND No Vote -> Show Options
                 local function CastVote(val)
                     self.myVotes[guid] = val
                     if SessionModule and SessionModule.SendVote then SessionModule:SendVote(guid, val) end

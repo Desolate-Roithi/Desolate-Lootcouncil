@@ -32,6 +32,28 @@ function Session:OnEnable()
     -- Attempt Rehydration
     C_Timer.After(1, function() self:RestoreSession() end)
     DesolateLootcouncil:DLC_Log("Systems/Session Loaded")
+
+    self.outboundVotes = {}
+    self.needsSync = false
+    self:ScheduleRepeatingTimer("OnTimerTick", 1.5)
+end
+
+function Session:OnTimerTick()
+    -- 1. LM Side: Throttled Sync
+    if self.needsSync and DesolateLootcouncil:AmILootMaster() then
+        self:SendSyncVotes()
+        self.needsSync = false
+    end
+
+    -- 2. Raider Side: Retry Logic
+    local now = GetServerTime()
+    for guid, voteData in pairs(self.outboundVotes) do
+        if now - voteData.sentAt > 5 then
+            DesolateLootcouncil:DLC_Log("Vote lost? Retrying for item: " .. string.sub(guid, -8))
+            voteData.sentAt = now -- Reset timer
+            self:SendVote(guid, voteData.type, true) -- Pass 'isRetry' flag
+        end
+    end
 end
 
 function Session:SaveSessionState()
@@ -505,6 +527,16 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
                 end
             end
         end
+    elseif payload.command == "VOTE_ACK" then
+        local guid = payload.data and payload.data.guid
+        if guid and self.outboundVotes[guid] then
+            self.outboundVotes[guid] = nil
+            DesolateLootcouncil:DLC_Log("Vote confirmed by Loot Master.")
+            -- Refresh UI to remove "Syncing..." status
+            ---@type UI_Voting
+            local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+            if Voting then Voting:ShowVotingWindow(nil, true) end
+        end
     elseif payload.command == "VOTE" then
         if DesolateLootcouncil:AmILootMaster() then
             local data = payload.data
@@ -542,12 +574,25 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
             self:SaveSessionState()
 
             if DesolateLootcouncil:AmILootMaster() then
-                self:SendSyncVotes()
+                -- Send ACK back to the voter immediately
+                local ackPayload = { command = "VOTE_ACK", data = { guid = data.guid } }
+                self:SendCommMessage("DLC_Loot", self:Serialize(ackPayload), "WHISPER", sender)
+                -- Flag for throttled broadcast
+                self.needsSync = true
             end
         end
     elseif payload.command == "SYNC_VOTES" then
         if payload.data and type(payload.data) == "table" then
             self.sessionVotes = payload.data
+
+            -- Raider confirmation: If our vote is in the sync, we can clear outbound
+            local myName = UnitName("player")
+            for guid, _ in pairs(self.outboundVotes) do
+                if self.sessionVotes[guid] and self.sessionVotes[guid][myName] then
+                    self.outboundVotes[guid] = nil
+                end
+            end
+
             -- Update UI if open
             if DesolateLootcouncil:AmIRaidAssistOrLM() then
                 ---@type UI_Monitor
@@ -584,7 +629,7 @@ function Session:SendSyncVotes()
     end
 end
 
-function Session:SendVote(itemGUID, voteType)
+function Session:SendVote(itemGUID, voteType, isRetry)
     local payload = {
         command = "VOTE",
         data = { guid = itemGUID, vote = voteType }
@@ -595,8 +640,13 @@ function Session:SendVote(itemGUID, voteType)
     self.myLocalVotes = self.myLocalVotes or {}
     if voteType == 0 then
         self.myLocalVotes[itemGUID] = nil
+        self.outboundVotes[itemGUID] = nil
     else
         self.myLocalVotes[itemGUID] = voteType
+        -- Track for confirmation
+        if not isRetry then
+            self.outboundVotes[itemGUID] = { type = voteType, sentAt = GetServerTime() }
+        end
     end
     self:SaveSessionState()
 
@@ -605,6 +655,11 @@ function Session:SendVote(itemGUID, voteType)
     else
         DesolateLootcouncil:DLC_Log("Error: Could not determine Loot Master to vote.")
     end
+
+    -- Trigger UI refresh to show "Syncing..."
+    ---@type UI_Voting
+    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+    if Voting then Voting:ShowVotingWindow(nil, true) end
 end
 
 function Session:EndSession()

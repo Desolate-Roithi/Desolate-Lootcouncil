@@ -17,6 +17,7 @@ function Comm:OnEnable()
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "PruneRosterData")
     self.playerVersions = {}
     self.playerEnchantingSkill = {}
+    self.lastVersionCheck = 0
 
     DesolateLootcouncil:DLC_Log("Systems/Comm Loaded")
 end
@@ -59,21 +60,9 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
         }
         self:SendComm("VERSION_RESP", responseData, sender)
 
-        -- If the requester asked for Version, the LM broadcasts the current Autopass setting to them
-        if DesolateLootcouncil:AmILootMaster() then
-            if DesolateLootcouncil.sessionAutopassActive ~= nil then
-                self:SendComm("SYNC_AUTOPASS", DesolateLootcouncil.sessionAutopassActive, sender)
-            end
-
-            local db = DesolateLootcouncil.db.profile
-            if db.PriorityLists then
-                local syncData = {}
-                for _, list in ipairs(db.PriorityLists) do
-                    syncData[list.name] = list.items or {}
-                end
-                self:SendComm("IM_SYNC", syncData, sender)
-            end
-        end
+        -- [OPTIMIZATION] Avoid Individual Whispers for bulk data on every ping.
+        -- We only reply with version. SYNC_AUTOPASS and IM_SYNC are now broadcast 
+        -- independently when they change or when a session starts.
 
         -- Track sender too if they sent version
         if data and data.version then
@@ -151,17 +140,19 @@ function Comm:UpdatePlayerInfo(sender, version, skill)
 end
 
 function Comm:SendVersionCheck()
-    -- Broadcast VERSION_REQ
-    -- [FIX] Do not reset playerVersions/playerEnchantingSkill here.
-    -- This prevents players from "disappearing" if they fail to respond to a single ping.
-    -- New responses will overwrite existing data.
+    -- Throttling to prevent broadcast storms
+    local now = GetServerTime()
+    if now - self.lastVersionCheck < 10 then 
+        DesolateLootcouncil:DLC_Log("Version check throttled (10s cooldown).")
+        return 
+    end
+    self.lastVersionCheck = now
 
     -- Explicitly update Self
     local myName = UnitName("player")
     self.playerVersions[myName] = DesolateLootcouncil.version
     local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
     self.playerEnchantingSkill[myName] = mySkill
-
 
     self:SendComm("VERSION_REQ", { version = DesolateLootcouncil.version })
 end
