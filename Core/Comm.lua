@@ -11,6 +11,10 @@ local Comm = DesolateLootcouncil:NewModule("Comm", "AceComm-3.0", "AceSerializer
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 
+-- Seconds between allowed version check broadcasts. Also returned to callers so
+-- UI can display an accurate countdown without duplicating this magic number.
+local VERSION_CHECK_COOLDOWN = 10
+
 function Comm:OnEnable()
     -- Register the communication prefix
     self:RegisterComm("DLC_COMM", "OnCommReceived")
@@ -142,7 +146,7 @@ end
 function Comm:SendVersionCheck()
     -- Throttling to prevent broadcast storms. Returns false if still on cooldown.
     local now = GetServerTime()
-    local remaining = 10 - (now - self.lastVersionCheck)
+    local remaining = VERSION_CHECK_COOLDOWN - (now - self.lastVersionCheck)
     if remaining > 0 then
         DesolateLootcouncil:DLC_Log(string.format("Version check throttled — %.0fs cooldown remaining.", remaining))
         return false, remaining  -- Caller can show a "wait N seconds" message
@@ -157,6 +161,13 @@ function Comm:SendVersionCheck()
 
     self:SendComm("VERSION_REQ", { version = DesolateLootcouncil.version })
     return true
+end
+
+--- Returns how many seconds remain in the version check cooldown (0 if ready).
+--- Safe to call at any time with no side effects.
+function Comm:GetVersionCheckRemaining()
+    local remaining = VERSION_CHECK_COOLDOWN - (GetServerTime() - self.lastVersionCheck)
+    return remaining > 0 and remaining or 0
 end
 
 function Comm:GetActiveUserCount()

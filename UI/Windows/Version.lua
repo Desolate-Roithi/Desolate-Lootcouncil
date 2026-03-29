@@ -255,11 +255,10 @@ function UI_Version:UpdateVersionList(isTest)
     btnRefresh:SetText("Refresh / Ping")
     btnRefresh:SetWidth(150)
 
-    -- Point 4 fix: Check cooldown state at creation time so re-opening the window
-    -- during an active cooldown correctly shows the disabled state.
+    -- Check cooldown at creation time: re-opening during an active cooldown shows disabled state.
     local C = DesolateLootcouncil:GetModule("Comm") --[[@as Comm]]
-    if C and C.lastVersionCheck then
-        local remaining = 10 - (GetServerTime() - C.lastVersionCheck)
+    if C then
+        local remaining = C:GetVersionCheckRemaining()
         if remaining > 0 then
             btnRefresh:SetText(string.format("Wait %.0fs", remaining))
             btnRefresh:SetDisabled(true)

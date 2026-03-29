@@ -90,13 +90,25 @@ function Session:SendSessionHeartbeat()
                 category   = item.category
             })
         end
+        -- Snapshot closedItems for the heartbeat, capped at 30 entries.
+        -- The live self.closedItems is untouched; items beyond this cap are
+        -- already awarded and irrelevant to any late-joiner entering now.
+        local MAX_CLOSED_IN_HEARTBEAT = 30
+        local closedSnapshot = {}
+        local closedCount = 0
+        for guid, val in pairs(self.closedItems or {}) do
+            if closedCount >= MAX_CLOSED_IN_HEARTBEAT then break end
+            closedSnapshot[guid] = val
+            closedCount = closedCount + 1
+        end
+
         local payload = {
             command     = "START_SESSION",
             data        = payloadData,
             duration    = 300,
             endTime     = self.sessionExpiry or (GetServerTime() + 300),
             isHeartbeat = true,
-            closedItems = self.closedItems or {}  -- Always send; late-joiners need this
+            closedItems = closedSnapshot,
         }
         self.sessionPayloadCache = self:Serialize(payload)
         DesolateLootcouncil:DLC_Log("Session Heartbeat: rebuilt payload cache.")
