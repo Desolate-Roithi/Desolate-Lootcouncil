@@ -134,21 +134,46 @@ function UI_Loot:ShowLootWindow(lootTable)
     self.lootFrame.statusIcon:Show()
     if self.lootFrame.statusTooltip then self.lootFrame.statusTooltip:Show() end
 
-    -- 2. Clear Session Button (Top)
+    -- 2. Top Button Row: Clear + Refresh
+    ---@type AceGUISimpleGroup
+    local topRow = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+    topRow:SetLayout("Flow")
+    topRow:SetFullWidth(true)
+
     ---@type AceGUIButton
     local clearBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
     clearBtn:SetText("Clear Session")
-    clearBtn:SetFullWidth(true)
+    clearBtn:SetRelativeWidth(0.5)
     clearBtn:SetHeight(25)
     clearBtn:SetCallback("OnClick", function()
         ---@type Loot
-        local Loot = DesolateLootcouncil:GetModule("Loot") --[[@as Loot]]
-        if Loot and Loot.ClearLootBacklog then
-            Loot:ClearLootBacklog()
-            self:ShowLootWindow(nil) -- Refresh to empty
+        local L = DesolateLootcouncil:GetModule("Loot") --[[@as Loot]]
+        if L and L.ClearLootBacklog then
+            L:ClearLootBacklog()
+            self:ShowLootWindow(nil)
         end
     end)
-    self.lootFrame:AddChild(clearBtn)
+
+    ---@type AceGUIButton
+    local refreshBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
+    refreshBtn:SetText("Refresh Loot")
+    refreshBtn:SetRelativeWidth(0.5)
+    refreshBtn:SetHeight(25)
+    refreshBtn:SetCallback("OnClick", function()
+        ---@type Loot
+        local L = DesolateLootcouncil:GetModule("Loot") --[[@as Loot]]
+        if L and L.OnLootOpened then
+            -- Re-scan any currently open loot window (missed packages etc.)
+            L:OnLootOpened()
+            -- Also refresh the UI with the updated loot list
+            local session = DesolateLootcouncil.db.profile.session
+            self:ShowLootWindow(session.loot)
+        end
+    end)
+
+    topRow:AddChild(clearBtn)
+    topRow:AddChild(refreshBtn)
+    self.lootFrame:AddChild(topRow)
 
     -- 3. ScrollFrame (Middle)
     ---@type AceGUIScrollFrame
@@ -236,7 +261,6 @@ function UI_Loot:ShowLootWindow(lootTable)
 
             -- Dynamic Categories
             local catList = {}
-            local Priority = DesolateLootcouncil:GetModule("Priority")
             local listIndexMap = {} -- Map Name -> Index for SetItemCategory
 
             -- Re-fetch names *and* map them to indices cause SetItemCategory needs Index?
@@ -248,9 +272,9 @@ function UI_Loot:ShowLootWindow(lootTable)
 
             local db = DesolateLootcouncil.db.profile
             if db.PriorityLists then
-                for i, list in ipairs(db.PriorityLists) do
+                for idx, list in ipairs(db.PriorityLists) do
                     catList[list.name] = list.name
-                    listIndexMap[list.name] = i
+                    listIndexMap[list.name] = idx
                 end
             end
 
@@ -302,17 +326,17 @@ function UI_Loot:ShowLootWindow(lootTable)
 
     -- 4. Create Manual Start Button (Pinned to Footer)
     if not self.btnStart then
-        local parent = (self.lootFrame --[[@as any]]).frame
+        local containerFrame = (self.lootFrame --[[@as any]]).frame
 
         ---@type Button
-        local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        local btn = CreateFrame("Button", nil, containerFrame, "UIPanelButtonTemplate")
         btn:SetText("Start Bidding")
 
         -- Keep the FrameLevel fix
         btn:SetFrameLevel(parent:GetFrameLevel() + 10)
 
         -- FIX 1: Alignment (Move UP to match Close button)
-        btn:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 15, 16)
+        btn:SetPoint("BOTTOMLEFT", containerFrame, "BOTTOMLEFT", 15, 16)
 
         -- FIX 2: Width
         btn:SetWidth(200)

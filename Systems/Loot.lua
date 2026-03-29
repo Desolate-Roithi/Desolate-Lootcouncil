@@ -46,6 +46,7 @@ function Loot:OnEnable()
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
     self:RegisterEvent("LOOT_CLOSED", "OnLootClosed")
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
+    self:RegisterEvent("CHAT_MSG_LOOT", "OnLootMessage")
 
     DesolateLootcouncil:DLC_Log("Systems/Loot Loaded")
 
@@ -248,8 +249,30 @@ function Loot:OnLootOpened()
     end
 end
 
-function Loot:OnLootClosed()
-    -- No-op
+function Loot:OnLootMessage(event, msg)
+    if not DesolateLootcouncil:AmILootMaster() then return end
+
+    -- Catch "You receive loot: [Item Link]"
+    local link = string.match(msg, "|c%x+|Hitem:.-|h%[.-%]|h|r")
+    if link and (string.find(msg, "You receive loot") or string.find(msg, "Ihr erhaltet Beute")) then
+        local itemID = C_Item.GetItemInfoInstant(link)
+        if itemID then
+            local category = self:CategorizeItem(link)
+            local quality = select(3, C_Item.GetItemInfoInstant(link)) or 0
+            local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
+            
+            -- Session Items check logic to avoid double adding
+            local guid = "Roll-" .. itemID .. "-" .. GetServerTime()
+            
+            if quality >= minQuality or category ~= "Junk/Pass" then
+                if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
+                    DesolateLootcouncil:DLC_Log("AUTO-ADDED from roll win: " .. link)
+                    local UI = DesolateLootcouncil:GetModule("UI_Loot")
+                    if UI then UI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
+                end
+            end
+        end
+    end
 end
 
 function Loot:AddSessionItem(link, itemGUID, texture, quantity, category, itemID)

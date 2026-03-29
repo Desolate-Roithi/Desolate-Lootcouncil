@@ -256,9 +256,8 @@ function UI_Version:UpdateVersionList(isTest)
     btnRefresh:SetWidth(150)
 
     -- Check cooldown at creation time: re-opening during an active cooldown shows disabled state.
-    local C = DesolateLootcouncil:GetModule("Comm") --[[@as Comm]]
-    if C then
-        local remaining = C:GetVersionCheckRemaining()
+    if Comm then
+        local remaining = Comm:GetVersionCheckRemaining()
         if remaining > 0 then
             btnRefresh:SetText(string.format("Wait %.0fs", remaining))
             btnRefresh:SetDisabled(true)
@@ -272,10 +271,9 @@ function UI_Version:UpdateVersionList(isTest)
     end
 
     btnRefresh:SetCallback("OnClick", function()
-        local CommModule = DesolateLootcouncil:GetModule("Comm") --[[@as Comm]]
-        if not CommModule then return end
+        if not Comm then return end
 
-        local ok, cooldownRemaining = CommModule:SendVersionCheck()
+        local ok, cooldownRemaining = Comm:SendVersionCheck()
         if not ok then
             -- Throttled: show how long the user must wait
             local msg = string.format("Wait %.0fs", cooldownRemaining or 10)

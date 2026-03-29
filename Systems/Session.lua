@@ -367,6 +367,10 @@ function Session:SendStopSession()
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     else
         self:SendCommMessage("DLC_Loot", serialized, channel)
+        -- Bug 4: Double-pulse for reliability in busy raids
+        C_Timer.After(0.5, function()
+            self:SendCommMessage("DLC_Loot", serialized, channel)
+        end)
     end
 
     -- 2. Local Cleanup (LM Side)

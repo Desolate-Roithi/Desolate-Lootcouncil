@@ -68,9 +68,9 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
         -- We only reply with version. SYNC_AUTOPASS and IM_SYNC are now broadcast 
         -- independently when they change or when a session starts.
 
-        -- Track sender too if they sent version
+        -- Track sender too if they sent version and skill
         if data and data.version then
-            self:UpdatePlayerInfo(sender, data.version, 0)
+            self:UpdatePlayerInfo(sender, data.version, data.enchantingSkill or 0)
         end
     elseif command == "VERSION_RESP" then
         -- Store sender's version and enchanting skill
@@ -144,22 +144,25 @@ function Comm:UpdatePlayerInfo(sender, version, skill)
 end
 
 function Comm:SendVersionCheck()
-    -- Throttling to prevent broadcast storms. Returns false if still on cooldown.
-    local now = GetServerTime()
-    local remaining = VERSION_CHECK_COOLDOWN - (now - self.lastVersionCheck)
-    if remaining > 0 then
-        DesolateLootcouncil:DLC_Log(string.format("Version check throttled — %.0fs cooldown remaining.", remaining))
-        return false, remaining  -- Caller can show a "wait N seconds" message
-    end
-    self.lastVersionCheck = now
-
-    -- Explicitly update self
+    -- 1. Explicitly update self (Always refresh local state even if throttled)
     local myName = UnitName("player")
     self.playerVersions[myName] = DesolateLootcouncil.version
     local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
     self.playerEnchantingSkill[myName] = mySkill
 
-    self:SendComm("VERSION_REQ", { version = DesolateLootcouncil.version })
+    -- 2. Throttling for Broadcast
+    local now = GetServerTime()
+    local remaining = self:GetVersionCheckRemaining()
+    if remaining > 0 then
+        DesolateLootcouncil:DLC_Log(string.format("Version broadcast throttled — %.0fs cooldown remaining.", remaining))
+        return false, remaining
+    end
+    self.lastVersionCheck = now
+
+    self:SendComm("VERSION_REQ", {
+        version = DesolateLootcouncil.version,
+        enchantingSkill = mySkill
+    })
     return true
 end
 
