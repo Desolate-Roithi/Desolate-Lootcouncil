@@ -35,15 +35,13 @@ function Session:OnEnable()
 
     self.outboundVotes = {}
     self.needsSync = false
+    self.lastHeartbeat = 0
+    self.lastFullSync = 0
     self:ScheduleRepeatingTimer("OnTimerTick", 1.5)
 end
 
 function Session:OnTimerTick()
-    -- 1. LM Side: Throttled Sync
-    if self.needsSync and DesolateLootcouncil:AmILootMaster() then
-        self:SendSyncVotes()
-        self.needsSync = false
-    end
+    -- 1. LM Side: Throttled Sync logic moved to section 3 below for consolidated timing
 
     -- 2. Raider Side: Retry Logic
     local now = GetServerTime()
@@ -52,6 +50,44 @@ function Session:OnTimerTick()
             DesolateLootcouncil:DLC_Log("Vote lost? Retrying for item: " .. string.sub(guid, -8))
             voteData.sentAt = now -- Reset timer
             self:SendVote(guid, voteData.type, true) -- Pass 'isRetry' flag
+        end
+    end
+
+    -- 3. Session Heartbeat & Full Sync (Late Joiners & Consistency)
+    if DesolateLootcouncil:AmILootMaster() and self.clientLootList and #self.clientLootList > 0 then
+        -- 3a. Batch Sync (on change or every 15s)
+        if self.needsSync or (now - self.lastFullSync > 15) then
+            self:SendSyncVotes()
+            self.needsSync = false
+            self.lastFullSync = now
+        end
+
+        -- 3b. Heartbeat (every 45s - ensure items are known)
+        if now - self.lastHeartbeat > 45 then
+            self.lastHeartbeat = now
+            DesolateLootcouncil:DLC_Log("Broadcasting Session Heartbeat for late-joiners.")
+            -- Re-broadcast items (START_SESSION payload)
+            local payloadData = {}
+            for _, item in ipairs(self.clientLootList) do
+                table.insert(payloadData, {
+                    link = item.link,
+                    texture = item.texture,
+                    itemID = item.itemID,
+                    sourceGUID = item.sourceGUID,
+                    category = item.category
+                })
+            end
+            local payload = {
+                command = "START_SESSION",
+                data = payloadData,
+                duration = 300, -- Default fallback
+                endTime = self.sessionExpiry or (now + 300)
+            }
+            local serialized = self:Serialize(payload)
+            local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+            if channel then
+                self:SendCommMessage("DLC_Loot", serialized, channel)
+            end
         end
     end
 end
@@ -260,10 +296,21 @@ function Session:StartSession(lootTable)
 
     DesolateLootcouncil:DLC_Log("Broadcasting Bidding Session to " .. channel .. " (" .. itemCount .. " items)...")
 
-    -- Re-broadcast Autopass State to ensure all raiders have it active
+    -- Re-broadcast Item Manager & Autopass State to ensure all raiders have it active
     local Comm = DesolateLootcouncil:GetModule("Comm")
-    if Comm and Comm.SendSyncAutopass and DesolateLootcouncil.sessionAutopassActive ~= nil then
-        Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+    if Comm then
+        if DesolateLootcouncil.sessionAutopassActive ~= nil then
+            Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+        end
+
+        local db = DesolateLootcouncil.db.profile
+        if db.PriorityLists then
+            local syncData = {}
+            for _, list in ipairs(db.PriorityLists) do
+                syncData[list.name] = list.items or {}
+            end
+            Comm:SendComm("IM_SYNC", syncData) -- Broadcast
+        end
     end
 
     -- Open Monitor Window for LM
@@ -333,6 +380,7 @@ function Session:SendCloseItem(itemGUID)
     end
 
     DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(itemGUID, -8))
+    self.needsSync = true -- Trigger batched sync update
 end
 
 function Session:SendRemoveItem(guid)
@@ -369,6 +417,7 @@ end
 function Session:RemoveSessionItem(guid)
     -- 1. Tell clients to REMOVE the item (not just close)
     self:SendRemoveItem(guid)
+    self.needsSync = true -- Trigger batched sync update
 
     -- 2. Remove from local Bidding storage (Monitor List)
     local session = DesolateLootcouncil.db.profile.session
@@ -583,7 +632,8 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
         end
     elseif payload.command == "SYNC_VOTES" then
         if payload.data and type(payload.data) == "table" then
-            self.sessionVotes = payload.data
+            self.sessionVotes = payload.data.votes or payload.data -- Compatibility
+            self.closedItems = payload.data.closed or self.closedItems or {}
 
             -- Raider confirmation: If our vote is in the sync, we can clear outbound
             local myName = UnitName("player")
@@ -621,7 +671,10 @@ function Session:SendSyncLM(targetLM)
 end
 
 function Session:SendSyncVotes()
-    local payload = { command = "SYNC_VOTES", data = self.sessionVotes }
+    local payload = {
+        command = "SYNC_VOTES",
+        data = { votes = self.sessionVotes, closed = self.closedItems }
+    }
     local serialized = self:Serialize(payload)
     local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
     if channel then
