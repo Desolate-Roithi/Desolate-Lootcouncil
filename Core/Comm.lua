@@ -140,21 +140,23 @@ function Comm:UpdatePlayerInfo(sender, version, skill)
 end
 
 function Comm:SendVersionCheck()
-    -- Throttling to prevent broadcast storms
+    -- Throttling to prevent broadcast storms. Returns false if still on cooldown.
     local now = GetServerTime()
-    if now - self.lastVersionCheck < 10 then 
-        DesolateLootcouncil:DLC_Log("Version check throttled (10s cooldown).")
-        return 
+    local remaining = 10 - (now - self.lastVersionCheck)
+    if remaining > 0 then
+        DesolateLootcouncil:DLC_Log(string.format("Version check throttled — %.0fs cooldown remaining.", remaining))
+        return false, remaining  -- Caller can show a "wait N seconds" message
     end
     self.lastVersionCheck = now
 
-    -- Explicitly update Self
+    -- Explicitly update self
     local myName = UnitName("player")
     self.playerVersions[myName] = DesolateLootcouncil.version
     local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
     self.playerEnchantingSkill[myName] = mySkill
 
     self:SendComm("VERSION_REQ", { version = DesolateLootcouncil.version })
+    return true
 end
 
 function Comm:GetActiveUserCount()

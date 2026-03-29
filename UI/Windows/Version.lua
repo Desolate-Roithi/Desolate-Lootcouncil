@@ -257,11 +257,36 @@ function UI_Version:UpdateVersionList(isTest)
     btnRefresh:SetCallback("OnClick", function()
         ---@type Comm
         local C = DesolateLootcouncil:GetModule("Comm")
-        if C then C:SendVersionCheck() end
-        -- Bug 5: delay refresh so responses can arrive before we re-render
+        if not C then return end
+
+        local ok, cooldownRemaining = C:SendVersionCheck()
+        if not ok then
+            -- Throttled: show how long the user must wait
+            local msg = string.format("Wait %.0fs", cooldownRemaining or 10)
+            btnRefresh:SetText(msg)
+            btnRefresh:SetDisabled(true)
+            C_Timer.After(cooldownRemaining or 10, function()
+                if self.versionFrame then
+                    btnRefresh:SetText("Refresh / Ping")
+                    btnRefresh:SetDisabled(false)
+                end
+            end)
+            return
+        end
+
+        -- Sent OK: disable button for 10s so it can't be double-clicked
+        btnRefresh:SetDisabled(true)
+        btnRefresh:SetText("Pinging...")
+        -- Delay refresh so responses can arrive before we re-render
         C_Timer.After(1.5, function()
             if self.versionFrame then
                 self:UpdateVersionList(isTest)
+            end
+        end)
+        C_Timer.After(10, function()
+            if self.versionFrame then
+                btnRefresh:SetText("Refresh / Ping")
+                btnRefresh:SetDisabled(false)
             end
         end)
     end)

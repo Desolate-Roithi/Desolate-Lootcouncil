@@ -37,6 +37,8 @@ function Session:OnEnable()
     self.needsSync = false
     self.lastHeartbeat = 0
     self.lastFullSync = 0
+    self.pendingAcks = {}          -- guid -> { senderName -> true }; batched into SYNC_VOTES
+    self.sessionPayloadCache = nil -- Pre-serialized START_SESSION string for heartbeat
     self:ScheduleRepeatingTimer("OnTimerTick", 1.5)
 end
 
@@ -53,42 +55,56 @@ function Session:OnTimerTick()
         end
     end
 
-    -- 3. Session Heartbeat & Full Sync (Late Joiners & Consistency)
+    -- 3. Session Heartbeat & Full Sync (Late Joiners & Consistency) — LM only
     if DesolateLootcouncil:AmILootMaster() and self.clientLootList and #self.clientLootList > 0 then
-        -- 3a. Batch Sync (on change or every 15s)
-        if self.needsSync or (now - self.lastFullSync > 15) then
+        -- 3a. Batch Vote Sync (on change, or maintenance every 15s)
+        local hasPendingAcks = next(self.pendingAcks) ~= nil
+        if self.needsSync or hasPendingAcks or (now - self.lastFullSync > 15) then
             self:SendSyncVotes()
             self.needsSync = false
+            self.pendingAcks = {}
             self.lastFullSync = now
         end
 
-        -- 3b. Heartbeat (every 45s - ensure items are known)
+        -- 3b. Item-list Heartbeat (every 45s — late joiners & reloaders)
+        -- Uses the pre-serialized cache; rebuild only when items change.
         if now - self.lastHeartbeat > 45 then
             self.lastHeartbeat = now
-            DesolateLootcouncil:DLC_Log("Broadcasting Session Heartbeat for late-joiners.")
-            -- Re-broadcast items (START_SESSION payload)
-            local payloadData = {}
-            for _, item in ipairs(self.clientLootList) do
-                table.insert(payloadData, {
-                    link = item.link,
-                    texture = item.texture,
-                    itemID = item.itemID,
-                    sourceGUID = item.sourceGUID,
-                    category = item.category
-                })
-            end
-            local payload = {
-                command = "START_SESSION",
-                data = payloadData,
-                duration = 300, -- Default fallback
-                endTime = self.sessionExpiry or (now + 300)
-            }
-            local serialized = self:Serialize(payload)
-            local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
-            if channel then
-                self:SendCommMessage("DLC_Loot", serialized, channel)
-            end
+            self:SendSessionHeartbeat()
         end
+    end
+end
+
+-- Build (or reuse) the cached START_SESSION serialization and broadcast it.
+-- isHeartbeat=true signals receivers NOT to rebuild their full UI.
+function Session:SendSessionHeartbeat()
+    if not self.sessionPayloadCache then
+        local payloadData = {}
+        for _, item in ipairs(self.clientLootList or {}) do
+            table.insert(payloadData, {
+                link       = item.link,
+                texture    = item.texture,
+                itemID     = item.itemID,
+                sourceGUID = item.sourceGUID,
+                category   = item.category
+            })
+        end
+        local payload = {
+            command     = "START_SESSION",
+            data        = payloadData,
+            duration    = 300,
+            endTime     = self.sessionExpiry or (GetServerTime() + 300),
+            isHeartbeat = true   -- Receivers must NOT rebuild UI if they already have the list
+        }
+        self.sessionPayloadCache = self:Serialize(payload)
+        DesolateLootcouncil:DLC_Log("Session Heartbeat: rebuilt payload cache.")
+    else
+        DesolateLootcouncil:DLC_Log("Session Heartbeat: using cached payload.")
+    end
+
+    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    if channel then
+        self:SendCommMessage("DLC_Loot", self.sessionPayloadCache, channel)
     end
 end
 
@@ -244,6 +260,9 @@ function Session:StartSession(lootTable)
         item.expiry = endTime -- Per-item expiry (Absolute)
         table.insert(session.bidding, item)
     end
+
+    -- Invalidate heartbeat cache; the item list just changed.
+    self.sessionPayloadCache = nil
 
     DesolateLootcouncil:DLC_Log("Loot moved to Bidding Storage. Collection cleared.")
 
@@ -417,7 +436,8 @@ end
 function Session:RemoveSessionItem(guid)
     -- 1. Tell clients to REMOVE the item (not just close)
     self:SendRemoveItem(guid)
-    self.needsSync = true -- Trigger batched sync update
+    self.needsSync = true          -- Trigger batched sync update
+    self.sessionPayloadCache = nil -- Invalidate heartbeat cache; item list changed
 
     -- 2. Remove from local Bidding storage (Monitor List)
     local session = DesolateLootcouncil.db.profile.session
@@ -472,14 +492,40 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
         local count = newItems and #newItems or 0
         local duration = payload.duration or 300
         local expiry = payload.endTime or (GetServerTime() + duration)
+        local isHeartbeat = payload.isHeartbeat == true
 
         self.clientLootList = self.clientLootList or {}
         self.myLocalVotes = self.myLocalVotes or {}
 
+        if isHeartbeat and #self.clientLootList > 0 then
+            -- Already hydrated; just refresh expiry and update Monitor silently.
+            self.sessionExpiry = expiry
+            if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+                ---@type UI_Monitor
+                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+                if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+                    Monitor:ShowMonitorWindow(true)
+                end
+            end
+            self:SaveSessionState()
+            return
+        end
+
+        -- Full session start (or late-joiner receiving heartbeat for the first time)
         if newItems then
             for _, item in ipairs(newItems) do
                 item.expiry = expiry
-                table.insert(self.clientLootList, item)
+                -- Avoid duplicates when reconnecting mid-session
+                local alreadyHave = false
+                for _, existing in ipairs(self.clientLootList) do
+                    if (existing.sourceGUID or existing.link) == (item.sourceGUID or item.link) then
+                        alreadyHave = true
+                        break
+                    end
+                end
+                if not alreadyHave then
+                    table.insert(self.clientLootList, item)
+                end
             end
         end
 
@@ -623,22 +669,27 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
             self:SaveSessionState()
 
             if DesolateLootcouncil:AmILootMaster() then
-                -- Send ACK back to the voter immediately
-                local ackPayload = { command = "VOTE_ACK", data = { guid = data.guid } }
-                self:SendCommMessage("DLC_Loot", self:Serialize(ackPayload), "WHISPER", sender)
-                -- Flag for throttled broadcast
+                -- Queue ACK into the batched SYNC_VOTES that fires within 1.5s.
+                -- This eliminates individual per-voter whispers from the LM entirely.
+                self.pendingAcks[data.guid] = self.pendingAcks[data.guid] or {}
+                self.pendingAcks[data.guid][sender] = true
                 self.needsSync = true
             end
         end
     elseif payload.command == "SYNC_VOTES" then
         if payload.data and type(payload.data) == "table" then
             self.sessionVotes = payload.data.votes or payload.data -- Compatibility
-            self.closedItems = payload.data.closed or self.closedItems or {}
+            self.closedItems  = payload.data.closed or self.closedItems or {}
 
-            -- Raider confirmation: If our vote is in the sync, we can clear outbound
+            -- Raider: confirm outbound votes via two paths:
+            -- a) explicit confirmedVoters list in this sync, OR
+            -- b) our name already appears in sessionVotes[guid]
             local myName = UnitName("player")
+            local confirmed = payload.data.confirmedVoters or {}
             for guid, _ in pairs(self.outboundVotes) do
-                if self.sessionVotes[guid] and self.sessionVotes[guid][myName] then
+                local inConfirmed = confirmed[guid] and confirmed[guid][myName]
+                local inVotes     = self.sessionVotes[guid] and self.sessionVotes[guid][myName]
+                if inConfirmed or inVotes then
                     self.outboundVotes[guid] = nil
                 end
             end
@@ -673,7 +724,11 @@ end
 function Session:SendSyncVotes()
     local payload = {
         command = "SYNC_VOTES",
-        data = { votes = self.sessionVotes, closed = self.closedItems }
+        data = {
+            votes           = self.sessionVotes,
+            closed          = self.closedItems,
+            confirmedVoters = self.pendingAcks  -- Carries batched ACKs for all voters
+        }
     }
     local serialized = self:Serialize(payload)
     local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
