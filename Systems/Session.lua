@@ -76,7 +76,8 @@ function Session:OnTimerTick()
 end
 
 -- Build (or reuse) the cached START_SESSION serialization and broadcast it.
--- isHeartbeat=true signals receivers NOT to rebuild their full UI.
+-- isHeartbeat=true signals receivers NOT to rebuild their full UI if already hydrated,
+-- but closedItems is always included so late-joiners get correct state immediately.
 function Session:SendSessionHeartbeat()
     if not self.sessionPayloadCache then
         local payloadData = {}
@@ -94,7 +95,8 @@ function Session:SendSessionHeartbeat()
             data        = payloadData,
             duration    = 300,
             endTime     = self.sessionExpiry or (GetServerTime() + 300),
-            isHeartbeat = true   -- Receivers must NOT rebuild UI if they already have the list
+            isHeartbeat = true,
+            closedItems = self.closedItems or {}  -- Always send; late-joiners need this
         }
         self.sessionPayloadCache = self:Serialize(payload)
         DesolateLootcouncil:DLC_Log("Session Heartbeat: rebuilt payload cache.")
@@ -399,7 +401,8 @@ function Session:SendCloseItem(itemGUID)
     end
 
     DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(itemGUID, -8))
-    self.needsSync = true -- Trigger batched sync update
+    self.needsSync = true          -- Trigger batched sync update
+    self.sessionPayloadCache = nil -- Invalidate heartbeat cache; closed state changed
 end
 
 function Session:SendRemoveItem(guid)
@@ -498,8 +501,15 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
         self.myLocalVotes = self.myLocalVotes or {}
 
         if isHeartbeat and #self.clientLootList > 0 then
-            -- Already hydrated; just refresh expiry and update Monitor silently.
+            -- Already hydrated; refresh expiry and closed state, update Monitor silently.
             self.sessionExpiry = expiry
+            -- Merge closed items from heartbeat — prevents stale "Open" display
+            if payload.closedItems then
+                self.closedItems = self.closedItems or {}
+                for guid, v in pairs(payload.closedItems) do
+                    self.closedItems[guid] = v
+                end
+            end
             if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
                 ---@type UI_Monitor
                 local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
@@ -540,6 +550,14 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
             ---@type UI_Monitor
             local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
             if Monitor then Monitor:ShowMonitorWindow() end
+        end
+
+        -- Apply closed state from heartbeat for late-joiners
+        if payload.closedItems then
+            self.closedItems = self.closedItems or {}
+            for guid, v in pairs(payload.closedItems) do
+                self.closedItems[guid] = v
+            end
         end
 
         self.sessionExpiry = expiry

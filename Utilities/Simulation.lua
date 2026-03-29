@@ -161,7 +161,7 @@ function Simulation:RunTest(count)
     local items = {}
     for i = 1, numItems do
         local link = dummyItems[math.random(#dummyItems)]
-        local name, _, quality, _, _, _, _, _, _, icon = C_Item.GetItemInfo(link)
+        local name, _, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(link)
         if not name then
             -- Fallback if item info not cached
             name = "Test Item " .. i

@@ -172,7 +172,7 @@ function UI_ItemManager:RefreshWindow()
         local list = db.PriorityLists[self.viewListKey]
         if list and list.items then
             for itemID, _ in pairs(list.items) do
-                local name, itemLink, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture =
+                local name, itemLink, _, _, _, _, _, _, _, itemTexture =
                     C_Item.GetItemInfo(itemID)
 
                 if not itemLink then

@@ -237,7 +237,6 @@ function UI_Loot:ShowLootWindow(lootTable)
             -- Dynamic Categories
             local catList = {}
             local Priority = DesolateLootcouncil:GetModule("Priority")
-            local prioNames = Priority and Priority:GetPriorityListNames() or {}
             local listIndexMap = {} -- Map Name -> Index for SetItemCategory
 
             -- Re-fetch names *and* map them to indices cause SetItemCategory needs Index?

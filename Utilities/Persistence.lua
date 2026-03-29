@@ -38,7 +38,7 @@ function Persistence:SaveFramePosition(frame, windowName)
         h = target.savedHeight
     end
 
-    local point, _relativeTo, relativePoint, xOfs, yOfs = target:GetPoint()
+    local point, _, relativePoint, xOfs, yOfs = target:GetPoint()
     local width = target:GetWidth()
 
     db.positions[windowName] = {
@@ -110,7 +110,7 @@ function Persistence:ToggleWindowCollapse(widget)
 
             -- Check all anchor points
             for i = 1, obj:GetNumPoints() do
-                local _, relativeTo, relativePoint, _x, y = obj:GetPoint(i)
+                local _, relativeTo, relativePoint, _, y = obj:GetPoint(i)
 
                 -- Keep elements anchored TO our protected parts
                 if relativeTo == widget.titletext or relativeTo == widget.titlebg or

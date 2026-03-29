@@ -480,7 +480,7 @@ function UI_Monitor:ShowAwardWindow(itemData)
             lblName:SetRelativeWidth(0.30)
             row:AddChild(lblName)
 
-            local rankText = ""
+            local rankText
             if v.type == 1 then
                 rankText = (v.rank == 999) and "|cff9d9d9dUnranked|r" or ("#" .. v.rank)
                 if v.rank <= 5 then rankText = "|cffffd700" .. rankText .. "|r" end

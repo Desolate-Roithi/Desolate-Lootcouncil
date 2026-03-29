@@ -254,12 +254,29 @@ function UI_Version:UpdateVersionList(isTest)
     local btnRefresh = AceGUI:Create("Button") --[[@as AceGUIButton]]
     btnRefresh:SetText("Refresh / Ping")
     btnRefresh:SetWidth(150)
-    btnRefresh:SetCallback("OnClick", function()
-        ---@type Comm
-        local C = DesolateLootcouncil:GetModule("Comm")
-        if not C then return end
 
-        local ok, cooldownRemaining = C:SendVersionCheck()
+    -- Point 4 fix: Check cooldown state at creation time so re-opening the window
+    -- during an active cooldown correctly shows the disabled state.
+    local C = DesolateLootcouncil:GetModule("Comm") --[[@as Comm]]
+    if C and C.lastVersionCheck then
+        local remaining = 10 - (GetServerTime() - C.lastVersionCheck)
+        if remaining > 0 then
+            btnRefresh:SetText(string.format("Wait %.0fs", remaining))
+            btnRefresh:SetDisabled(true)
+            C_Timer.After(remaining, function()
+                if self.versionFrame then
+                    btnRefresh:SetText("Refresh / Ping")
+                    btnRefresh:SetDisabled(false)
+                end
+            end)
+        end
+    end
+
+    btnRefresh:SetCallback("OnClick", function()
+        local CommModule = DesolateLootcouncil:GetModule("Comm") --[[@as Comm]]
+        if not CommModule then return end
+
+        local ok, cooldownRemaining = CommModule:SendVersionCheck()
         if not ok then
             -- Throttled: show how long the user must wait
             local msg = string.format("Wait %.0fs", cooldownRemaining or 10)

@@ -96,7 +96,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
                 self:SetFrameStrata("TOOLTIP")
 
                 -- Calculate Drag Offset (Where did we grab the row?)
-                local cx, cy = GetCursorPosition()
+                local _, cy = GetCursorPosition()
                 local scale = self:GetEffectiveScale()
                 local _, center = self:GetCenter()
                 if center then
@@ -117,7 +117,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
                 self:ClearAllPoints()
 
                 -- Use Cursor Position + Offset for reliable "Center" target
-                local cursorX, cursorY = GetCursorPosition()
+                local _, cursorY = GetCursorPosition()
                 local scale = self:GetEffectiveScale()
 
                 -- Apply offset to get back to the visual center of the row (in raw pixels)

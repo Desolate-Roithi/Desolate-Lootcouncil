@@ -5,7 +5,6 @@ if AT.abortLoad then return end
 local ItemSettings = DesolateLootcouncil:NewModule("ItemSettings")
 
 function ItemSettings:GetItemOptions()
-    local db = DesolateLootcouncil.db.profile
 
     local args = {
         desc = {

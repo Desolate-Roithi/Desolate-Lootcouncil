@@ -5,6 +5,22 @@ if AT.abortLoad then return end
 local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting")
 local AceGUI = LibStub("AceGUI-3.0")
 
+-- File-scope constants: defined once, shared across all calls to ShowVotingWindow.
+local VOTE_TEXT  = { [1] = "Bid", [2] = "Roll", [3] = "Offspec", [4] = "T-Mog", [5] = "Pass" }
+local VOTE_COLOR = {
+    [1] = "|cff00ff00", [2] = "|cffffd700",
+    [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa"
+}
+
+-- Module-level tooltip helper: one function shared by all item rows.
+-- Takes the widget and item link directly — no per-item closure needed.
+local function ShowItemTooltip(widget, link)
+    if not link then return end
+    GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
+    GameTooltip:SetHyperlink(link)
+    GameTooltip:Show()
+end
+
 ---@class (partial) DLC_Ref_UIVoting : AceAddon
 ---@field db table
 ---@field RestoreFramePosition fun(self: DLC_Ref_UIVoting, frame: any, windowName: string)
@@ -174,11 +190,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     self.votingFrame:AddChild(scroll)
     self.scrollContainer = scroll
 
-    local VOTE_TEXT  = { [1] = "Bid", [2] = "Roll", [3] = "Offspec", [4] = "T-Mog", [5] = "Pass" }
-    local VOTE_COLOR = {
-        [1] = "|cff00ff00", [2] = "|cffffd700",
-        [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa"
-    }
+    -- VOTE_TEXT / VOTE_COLOR are file-scope constants (no per-call allocation).
     local closedItems = (SessionModule and SessionModule.closedItems) or {}
     local outbound    = (SessionModule and SessionModule.outboundVotes) or {}
     local now = GetServerTime()
@@ -203,7 +215,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
             self:CreateItemRow(
                 scroll, data, guid,
                 currentVote, isClosed, isExpired, isPending,
-                VOTE_TEXT, VOTE_COLOR, SessionModule
+                SessionModule
             )
         end
     end
@@ -220,16 +232,14 @@ end
 
 --- Private helper: renders one full item row into the scroll container.
 ---@param scroll AceGUIScrollFrame
----@param data table           item data (link, texture, itemID, expiry, sourceGUID …)
----@param guid string          item identifier
----@param currentVote number?  local vote value (1-5), or nil
----@param isClosed boolean     item is closed by LM
----@param isExpired boolean    item timer ran out
----@param isPending boolean    vote sent but not yet ACK'd
----@param VOTE_TEXT table      localised vote labels
----@param VOTE_COLOR table     colour codes per vote type
----@param SessionModule any    Session module reference for callbacks
-function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isExpired, isPending, VOTE_TEXT, VOTE_COLOR, SessionModule)
+---@param data table          item data (link, texture, itemID, expiry, sourceGUID …)
+---@param guid string         item identifier
+---@param currentVote number? local vote value (1-5), or nil
+---@param isClosed boolean    item is closed by LM
+---@param isExpired boolean   item timer ran out
+---@param isPending boolean   vote sent but not yet ACK'd
+---@param SessionModule any   Session module reference for callbacks
+function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isExpired, isPending, SessionModule)
     ---@type AceGUISimpleGroup
     local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
     group:SetLayout("Flow")
@@ -242,13 +252,8 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
     itemIcon:SetImage(data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400)
     itemIcon:SetImageSize(24, 24)
     itemIcon:SetRelativeWidth(0.05)
-    local function ShowTooltip(w)
-        GameTooltip:SetOwner((w --[[@as any]]).frame, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(data.link)
-        GameTooltip:Show()
-    end
-    itemIcon:SetCallback("OnClick",  function() ShowTooltip(itemIcon) end)
-    itemIcon:SetCallback("OnEnter",  function() ShowTooltip(itemIcon) end)
+    itemIcon:SetCallback("OnClick",  function() ShowItemTooltip(itemIcon, data.link) end)
+    itemIcon:SetCallback("OnEnter",  function() ShowItemTooltip(itemIcon, data.link) end)
     itemIcon:SetCallback("OnLeave",  function() GameTooltip:Hide() end)
     group:AddChild(itemIcon)
 
@@ -267,7 +272,7 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
         itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
     end
     itemLabel:SetRelativeWidth(0.25)
-    itemLabel:SetCallback("OnEnter", function(w) ShowTooltip(w) end)
+    itemLabel:SetCallback("OnEnter", function(w) ShowItemTooltip(w, data.link) end)
     itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
     group:AddChild(itemLabel)
 
