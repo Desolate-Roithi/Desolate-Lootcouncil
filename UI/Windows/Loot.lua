@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_Loot : AceModule, AceConsole-3.0
-local UI_Loot = DesolateLootcouncil:NewModule("UI_Loot", "AceConsole-3.0")
+local UI_Loot = DesolateLootcouncil:NewModule("UI_Loot", "AceConsole-3.0", "AceTimer-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
 ---@class (partial) UI_Loot : AceModule
@@ -156,20 +156,51 @@ function UI_Loot:ShowLootWindow(lootTable)
 
     ---@type AceGUIButton
     local refreshBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    refreshBtn:SetText("Refresh Loot")
+    refreshBtn:SetText("Check Connections")
     refreshBtn:SetRelativeWidth(0.5)
     refreshBtn:SetHeight(25)
+    
+    local Comm = DesolateLootcouncil:GetModule("Comm")
+    
+    -- Function to update the status icon color/tooltip in-place
+    local function UpdateTopIndicator()
+        if not self.lootFrame or not self.lootFrame.statusIcon then return end
+        local activeC = DesolateLootcouncil:GetActiveUserCount()
+        local totalC = GetNumGroupMembers()
+        if totalC == 0 then totalC = 1; activeC = 1 end
+        
+        local ra, ga, ba = 1, 0, 0
+        if activeC >= totalC then ra, ga, ba = 0, 1, 0
+        elseif activeC > 1 then ra, ga, ba = 1, 1, 0 end
+        
+        self.lootFrame.statusIcon:SetVertexColor(ra, ga, ba)
+    end
+
     refreshBtn:SetCallback("OnClick", function()
-        ---@type Loot
-        local L = DesolateLootcouncil:GetModule("Loot") --[[@as Loot]]
-        if L and L.OnLootOpened then
-            -- Re-scan any currently open loot window (missed packages etc.)
-            L:OnLootOpened()
-            -- Also refresh the UI with the updated loot list
-            local session = DesolateLootcouncil.db.profile.session
-            self:ShowLootWindow(session.loot)
+        if Comm and Comm.SendVersionCheck then
+            local success = Comm:SendVersionCheck()
+            if success then
+                DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
+                UpdateTopIndicator()
+            end
         end
     end)
+
+    -- Timer for button text cooldown
+    self:ScheduleRepeatingTimer(function()
+        if not (self.lootFrame --[[@as any]]).frame:IsShown() then return end
+        if Comm and Comm.GetVersionCheckRemaining then
+            local rem = Comm:GetVersionCheckRemaining()
+            if rem > 0 then
+                refreshBtn:SetText(string.format("Refresh (%.0fs)", rem))
+                refreshBtn:SetDisabled(true)
+            else
+                refreshBtn:SetText("Refresh Connections")
+                refreshBtn:SetDisabled(false)
+            end
+        end
+        UpdateTopIndicator() -- Keep icon updated
+    end, 1)
 
     topRow:AddChild(clearBtn)
     topRow:AddChild(refreshBtn)
