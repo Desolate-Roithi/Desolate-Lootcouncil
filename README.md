@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.6.0-Beta  
-**Last Updated:** 2026-03-27  
+**Latest Version:** v0.7.0-Beta  
+**Last Updated:** 2026-03-30  
 **Compatibility:** WoW 12.0.1 (Midnight)  
 
 
@@ -47,6 +47,27 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 
 ## 📝 Recent Changes
 
+### v0.7.0-Beta
+* **Decay System Overhaul**: Replaced the Priority Decay algorithm with a mathematically sound Bottom-To-Top Bubble-Down algorithm. Priority penalties now correctly push absent players below present players without gap collision.
+* **Monitor Stabilization**: Resolved an AceGUI frame recycling bug that caused the Session Monitor to immediately hide itself during rapid UI window instantiation loops (`/dlc test`).
+
+### v0.6.5-Beta
+* **Trade UI Bugfix**: Fixed invalid `STATIC_POPUP_SHOW` API event registration that blocked Trade Window confirmations from capturing items securely.
+* **Voting Integrity**: Item GUID generators now use precise `GetTime()` timestamps instead of weak random boundaries to prevent identical loot drops from colliding and vanishing from the UI.
+
+### v0.6.4-Beta
+* **Voting Scroll Retention**: The Voting window no longer resets scroll position to the top when refreshing during an active session; depth is perfectly preserved on re-render.
+
+### v0.6.3-Beta
+* **Disenchant Stability**: Disenchanter list is now much smoother. Reduced visual flickering during ping intervals by caching skill data persistently and cleaning up roster tracking.
+
+### v0.6.2-Beta
+* **Chat Log Reduction**: Substantially cleaned up chat log formatting. Downgraded standard mechanical system logs (like background packet parsing) to Debug-only visibility. Added silence conditions while running solo.
+
+### v0.6.1-Beta
+* **Item Icons Polish**: Resolved anchoring bugs in History/Trade UI and fixed invisible frame artifacts that were overlapping tooltip interactables after the broader 0.6.0 icon rollout.
+* **Rollback Stability**: Ensured backward compatibility following a partial reversion logic pass.
+
 ### v0.6.0-Beta
 * **Item Icons Everywhere:** Integrated 24x24 interactive icons across Voting, Loot Collector, Session Monitor, History, and Trade List windows. Icons feature full tooltips on hover/click for rapid identification.
 * **Offspec Voting:** Introduced a new "Offspec" vote category. It sits in priority between Transmog and Roll (Bid > Roll > Offspec > T-Mog > Pass).
@@ -58,85 +79,3 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
     * Resolved "Cannot anchor to itself" Lua error in Trade List and History.
     * Fixed item name resolution (placeholder "Item...") using asynchronous `ContinueOnItemLoad` refresh.
     * Corrected Offspec count tracking in the Monitor summary index.
- 
-### v0.5.0-Beta
-* **Efficiency & Sync Update:** Implemented the `IM_SYNC` protocol, allowing officers to sync Item Manager assignments across the raid.
-* **Smart Cache Refresh:** Integrated `ContinueOnItemLoad` across all windows, ensuring UI components (Loot, Monitor, IM) re-render immediately once item data is retrieved from the server.
-* **Attendance UX:** Enhanced the Roster system to provide clear, actionable reasons for player rejection (e.g., stale sessions or alt-resolution conflicts).
-* **Auto-Pass Transparency:** Added detailed logging to explain exactly why an auto-pass was blocked (e.g., missing addon users in zone).
-* **New Commands:** Added `/dlc im` for direct access to the Item Manager.
-
-### v0.4.6-Beta
-* **Raid Reliability Fixes:** Resolved an issue where autopass packets were dropping under high server load.
-* **UI Stability:** Fixed a critical bug where the Loot Vote window could become stuck or unclickable.
-* **LFR Integration:** Added initial support for LFR autopassing to reduce manual effort in personal loot scenarios.
-* **Spam Reduction:** Further reduced chat logging for routine synchronization events.
-* **Session UX:** The Loot Vote window no longer pops up if the session has already expired.
-* **Manual Add Fix:** Corrected an issue where manually adding items (via ID) would sometimes record the wrong item level.
-
-### v0.4.5-Beta
-* **Stability & Conflict Guards:** Implemented a global load guard to prevent Dev and Prod versions of the addon from loading simultaneously and corrupting the shared database.
-* **DB Sentinel:** Added a persistent sentinel value to the database configuration to prevent AceDB-3.0 from wiping profiles during the `PLAYER_LOGOUT` sequence.
-* **Linter Optimization:** Conducted a massive cleanup phase, reducing linter warnings by 72% and optimizing the `.luacheckrc` for the WoW 12.0.1 environment.
-* **Micro-Fixes:** Resolved shadowing and unused variable issues in the Monitor and Debug modules.
-
-### v0.4.4-Beta
-* **Item Caching Engine:** Automatically repairs uncached items when `C_Item.GetItemInfo()` resolves, preventing windows from getting stuck displaying `"Item [ID]"` by forcing a global UI redraw across all active frames.
-* **Voting Window Suppression:** The Voting window no longer aggressively auto-opens when an item is removed (`REMOVE_ITEM`) or voting closes (`CLOSE_ITEM`) if you had manually closed it.
-
-### v0.4.3-Beta
-* **Assist Monitor Access:** Raid Assistants can now manually open the Session Monitor using the `/dlc monitor` slash command.
-* **Trade List Persistence:** Removing a pending item from the Session Monitor now fully deletes it from the permanent `session.awarded` queue.
-* **Trade Success Catching:** Trade completion logic now securely catches both `CHAT_MSG_SYSTEM` and `UI_INFO_MESSAGE` events, ensuring trades mark themselves as delivered regardless of chat configurations.
-
-### v0.4.2-Beta
-* **Session Restoration:** Improved login logic; sessions now persist for up to 12 hours. LMs are prompted to close stale or ungrouped sessions on login.
-* **Assist Synchronization:** Added real-time vote syncing. Assistants can now view roll progress in the Session Monitor.
-* **UI Monitor:** The "Award" button is replaced with "View Rolls" for non-LMs to prevent accidental distribution while ensuring transparency.
-* **Micro-Fixes:** Corrected an off-by-one error in player counting for auto-pass and added a 0.5s safety delay to trade completion logic.
-* **Sidebar:** The disenchanter sidebar now automatically hides when the Monitor window is collapsed.
-
-### v0.4.1-Beta
-* **Item Caching:** Fixed display issues where items would show as "ID" instead of names. Windows now automatically refresh as soon as item data is cached (ContinueOnItemLoad).
-* **Item Manager:** Added `/dlc im` slash command and a "Sync Raid" button for officers to share item-to-list categorizations with the raid.
-* **Roster:** Improved attendance logs with descriptive rejection reasons (alt resolution) and actionable stale-session alerts.
-* **Auto-Pass:** Added detailed logging when auto-pass is blocked to explain exactly how many raid members are missing the addon.
-
-### v0.4.0-Beta
-* **Loot Display:** Items now show the correct dropped ilvl and affixes in all windows (Loot, Vote, Trade, Monitor).
-* **Trading:** All pending items for a player are now staged in a single trade window; awarded items are removed from the pending list automatically.
-* **Vote Window:** Already-awarded items are filtered out of the Loot Vote window.
-* **Loot Window:** Restricted to the Loot Master only (or Raid Assist for read-only view).
-* **Autopass:** Enabled by default; only passes on managed items; only triggers when all in-zone online raid members have the addon.
-* **History:** Loot History is now broadcast to all raiders on each award and auto-refreshes when open. Accessible from Settings → General.
-* **Monitor Collapse:** Footer buttons and disenchanter sidebar correctly hide when the window is minimised.
-* **Version Window:** Refresh/Ping button now waits 1.5 s for responses before re-rendering.
-* **Session Persistence:** Loot Master identity is saved across /reload.
-* **Stability:** Fixed `db.callbacks:Register` crash on login (`RegisterCallback` API correction).
-
-### v0.3.5-Beta
-* **LFR Safety:** Restricted the Loot Collector window from opening automatically during LFR sessions.
-
-### v0.3.4-Beta
-* **Performance:** Optimized attendance checks to ignore 5-man dungeon groups, reducing overhead.
-* **Profession Logic:** The Disenchanter/Enchanting window now only displays for raid-member enchanters.
-* **Cache Improvements:** Refined the item-name caching logic to handle rapid multi-item drops more reliably.
-
-### v0.3.3-Beta
-* **Fixes:** corrected disenchanters overview to only display characters with the Enchanting profession and accurately show the latest expansion's skill level.
-* **Communication:** improved data handling for profession skill levels in addon messages.
-
-### v0.3.2-Beta
-* **Automation:** Set up CurseForge automation with GitHub Actions and optimized `.pkgmeta`.
-* **Architecture:** Restructured XML embeds, moving all library and script imports to specialized XML files (`Libs/Libs.xml` and `Desolate_Lootcouncil.xml`).
-* **Cleanup:** Cleaned up the `.toc` file, leaving only metadata and the main XML entry point.
-
-### v0.3.1-Beta
-* **Stability:** Fixed critical bugs involving collapsed windows and "Auto Pass" errors during active sessions.
-* **UI:** Added "Pending Voters" tooltips and polished layout clipping in the Vote window.
-* **Tests:** Fully updated the persistence mocks in the automated test suite.
-
-### v0.3.0-Beta
-* **Refactor:** Migrated to a "Hub-and-Spoke" architecture for better performance.
-* **Linking:** Standardized Alt-to-Main resolution across all modules.
-* **Testing:** Introduced a Python-based test runner with 15 core integration tests.
