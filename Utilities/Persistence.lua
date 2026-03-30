@@ -32,22 +32,25 @@ function Persistence:SaveFramePosition(frame, windowName)
         target = frame.frame
     end
 
-    local h = target:GetHeight()
+    local h = target:GetHeight() or 0
     -- If collapsed, save the height it was BEFORE collapsing
     if target.isCollapsed and target.savedHeight then
         h = target.savedHeight
     end
 
     local point, _, relativePoint, xOfs, yOfs = target:GetPoint()
-    local width = target:GetWidth()
+    local width = target:GetWidth() or 0
+    
+    if not point then return end -- If anchor was already lost, abort saving entirely to preserve old state
 
     db.positions[windowName] = {
         point = point,
         relativePoint = relativePoint,
         x = xOfs,
         y = yOfs,
-        width = width,
-        height = h,
+        -- Sanity check: Do not save collapsed/0-dimension artifacts that occur during OnHide UI disposal
+        width = (width >= 50) and width or nil,
+        height = (h >= 30) and h or nil,
         isCollapsed = target.isCollapsed or false
     }
 end
@@ -70,18 +73,20 @@ function Persistence:RestoreFramePosition(frame, windowName)
         end
 
         target:ClearAllPoints()
-        target:SetPoint(config.point or "CENTER", UIParent, config.relativePoint or "CENTER", config.x or 0,
-            config.y or 0)
+        target:SetPoint(config.point or default.point or "CENTER", UIParent, config.relativePoint or default.relativePoint or "CENTER", config.x or 0, config.y or 0)
 
-        -- Force size application
-        if config.width then
-            if frame.SetWidth then frame:SetWidth(config.width) end
-            target:SetWidth(config.width)
-        end
-        if config.height then
-            if frame.SetHeight then frame:SetHeight(config.height) end
-            target:SetHeight(config.height)
-        end
+        -- Force size application safely (preventing 0-dimension UI bugs)
+        local safeWidth = config.width or default.width or 400
+        local safeHeight = config.height or default.height or 300
+        
+        if safeWidth < 50 then safeWidth = default.width or 400 end
+        if safeHeight < 30 then safeHeight = default.height or 300 end
+
+        if frame.SetWidth then frame:SetWidth(safeWidth) end
+        target:SetWidth(safeWidth)
+
+        if frame.SetHeight then frame:SetHeight(safeHeight) end
+        target:SetHeight(safeHeight)
 
         -- Store the collapsed state to apply AFTER the window is fully initialized
         if config.isCollapsed then

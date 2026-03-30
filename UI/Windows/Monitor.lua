@@ -38,7 +38,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         frame:SetWidth(650)
         frame:SetHeight(400)
         frame:SetCallback("OnClose", function(widget)
-            self.userClosedMonitor = true  -- B3: Track user-intent close vs system close
+            self.userClosedMonitor = true -- B3: Track user-intent close vs system close
             widget:Hide()
         end)
         self.monitorFrame = frame
@@ -409,7 +409,7 @@ function UI_Monitor:ShowAwardWindow(itemData)
     local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
     ---@type AceGUILabel
     local header = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    
+
     local _, properLink = C_Item.GetItemInfo(itemData.link)
     header:SetText((properLink or itemData.link) .. "|cffaaaaaa" .. catText .. "|r")
     header:SetFullWidth(true)
@@ -470,7 +470,8 @@ function UI_Monitor:ShowAwardWindow(itemData)
         end)
     end
 
-    local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
+    local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] =
+    "|cffaaaaaa" }
     local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
 
     if #voteList == 0 then

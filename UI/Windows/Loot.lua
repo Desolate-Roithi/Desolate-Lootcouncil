@@ -428,8 +428,6 @@ function UI_Loot:ShowLootWindow(lootTable)
         ---@type Session
         local Session = DesolateLootcouncil:GetModule('Session') --[[@as Session]]
         Session:StartSession(lootTable)
-        lootFrame:Hide()
-        startBtn:Hide()
     end)
 
     -- Ensure visibility
