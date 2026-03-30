@@ -17,18 +17,28 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 function Trade:OnEnable()
     self:RegisterEvent("TRADE_SHOW", "OnTradeShow")
     self:RegisterEvent("UI_INFO_MESSAGE", "OnUIInfo")
-    -- Bug 5: Auto-accept trade confirmation popups (Soulbound etc)
-    self:RegisterEvent("STATIC_POPUP_SHOW", "OnStaticPopup")
-    
+
+    -- StaticPopup_Show is a Lua function, NOT a game event — RegisterEvent does not work here.
+    -- hooksecurefunc is the only correct mechanism. Taint risk is negligible:
+    -- trade confirmation popups (TRADE_BOP, CONFIRM_LOT_BIND) only fire outside combat,
+    -- and our hook is fully guarded by self.currentTrade so it is a no-op for all other popups.
+    hooksecurefunc("StaticPopup_Show", function(name)
+        if not self.currentTrade then return end
+        self:OnStaticPopup(name)
+    end)
+
     DesolateLootcouncil:DLC_Log("Systems/Trade Loaded")
 end
 
-function Trade:OnStaticPopup(event, name, text)
-    if not self.currentTrade then return end
+function Trade:OnStaticPopup(name)
     -- Check for trade-related confirmation dialogs
     if name == "CONFIRM_LOT_BIND" or name == "TRADE_POTENTIALLY_SOUBOUND_ITEM" or name == "TRADE_BOP" then
-        StaticPopup_OnClick(StaticPopup_FindVisible(name), 1) -- Click "Accept"
-        DesolateLootcouncil:DLC_Log("Bypassed Blizzard trade confirmation: " .. name)
+        -- Find the visible popup and click "Accept" (button 1)
+        local popup = StaticPopup_FindVisible(name)
+        if popup then
+            StaticPopup_OnClick(popup, 1)
+            DesolateLootcouncil:DLC_Log("Bypassed Blizzard trade confirmation: " .. name)
+        end
     end
 end
 

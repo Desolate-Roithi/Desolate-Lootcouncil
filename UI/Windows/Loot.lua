@@ -41,18 +41,15 @@ function UI_Loot:CreateLootFrame()
     frame:SetLayout("Flow")
     frame:SetWidth(400)
     frame:SetHeight(500)
-    frame:SetCallback("OnClose", function(widget)
-        widget:Hide()
-        if self.btnStart then self.btnStart:Hide() end
-    end)
 
     self.lootFrame = frame
 
     -- [NEW] Position Persistence
-    DesolateLootcouncil:RestoreFramePosition(frame, "Loot")
+    DesolateLootcouncil.Persistence:RestoreFramePosition(frame, "Loot")
     local function SavePos(f)
-        DesolateLootcouncil:SaveFramePosition(f, "Loot")
+        DesolateLootcouncil.Persistence:SaveFramePosition(f, "Loot")
     end
+
     local rawFrame = (frame --[[@as any]]).frame
     rawFrame:HookScript("OnDragStop", function(f)
         f:StopMovingOrSizing()
@@ -60,9 +57,32 @@ function UI_Loot:CreateLootFrame()
     end)
     rawFrame:HookScript("OnHide", function() SavePos(frame) end)
     DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Loot")
+
+    -- Clean up handle on frame hide
+    frame:SetCallback("OnClose", function(widget)
+        if self.refreshTimer then
+            self:CancelTimer(self.refreshTimer)
+            self.refreshTimer = nil
+        end
+        -- Problem 6: Fix "Ghost Dot" on reused frames (Use widget instead of self.lootFrame to avoid nil error)
+        if widget.statusIcon then widget.statusIcon:Hide() end
+        if widget.statusTooltip then widget.statusTooltip:Hide() end
+
+        widget:Hide()
+        if self.btnStart then self.btnStart:Hide() end
+        AceGUI:Release(widget)
+        self.lootFrame = nil
+        self.btnStart = nil
+    end)
 end
 
 function UI_Loot:ShowLootWindow(lootTable)
+    -- Clean up existing timer to avoid overwriting pooled buttons (Problem 4)
+    if self.refreshTimer then
+        self:CancelTimer(self.refreshTimer)
+        self.refreshTimer = nil
+    end
+
     if not DesolateLootcouncil:AmILootMaster() then
         if self.lootFrame then self.lootFrame:Hide() end
         self:Print("Error: Only the Loot Master can open the Loot Window.")
@@ -79,30 +99,32 @@ function UI_Loot:ShowLootWindow(lootTable)
         self:CreateLootFrame()
     end
 
-    self.lootFrame:Show()
-    self.lootFrame:ReleaseChildren() -- Clear previous items
+    -- PROBLEM 14: ALWAYS call :Show() to ensure the window reappears if hidden from previous use!
+    local lootFrame = self.lootFrame
+    lootFrame:Show()
+    lootFrame:ReleaseChildren() -- Clear previous items
 
     -- 1. Hide the default Status Bar background
-    if (self.lootFrame --[[@as any]]).statusbg then
-        (self.lootFrame --[[@as any]]).statusbg:Hide()
+    if (lootFrame --[[@as any]]).statusbg then
+        (lootFrame --[[@as any]]).statusbg:Hide()
     end
 
     -- 1.5 Addon Status Indicator Light (Top Right)
-    local parent = (self.lootFrame --[[@as any]]).frame
-    if not self.lootFrame.statusIcon then
+    local parent = (lootFrame --[[@as any]]).frame
+    if not lootFrame.statusIcon then
         local icon = parent:CreateTexture(nil, "OVERLAY")
         icon:SetSize(12, 12)
         icon:SetPoint("TOP", parent, "TOP", 78, -2) -- Move to corner
         icon:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
         icon:SetDrawLayer("OVERLAY", 7)             -- Force on top
-        self.lootFrame.statusIcon = icon
+        lootFrame.statusIcon = icon
 
         -- Tooltip Frame (Invisible Hit Rect)
         local ttFrame = CreateFrame("Button", nil, parent)
         ttFrame:SetAllPoints(icon)
         ttFrame:SetFrameLevel(parent:GetFrameLevel() + 20) -- Ensure above collapse-handle button
         ttFrame.isTitleOverlay = true                      -- Protect from collapse-hider logic
-        self.lootFrame.statusTooltip = ttFrame
+        lootFrame.statusTooltip = ttFrame
 
         ttFrame:SetScript("OnEnter", function()
             GameTooltip:SetOwner(ttFrame, "ANCHOR_BOTTOMLEFT")
@@ -156,11 +178,21 @@ function UI_Loot:ShowLootWindow(lootTable)
 
     ---@type AceGUIButton
     local refreshBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    refreshBtn:SetText("Check Connections")
+    
+    -- Initial text and state (Problem 5: Avoid flickering "Check Connections")
+    local Comm = DesolateLootcouncil:GetModule("Comm")
+    local startRem = (Comm and Comm.GetVersionCheckRemaining) and Comm:GetVersionCheckRemaining() or 0
+    if startRem > 0 then
+        refreshBtn:SetText(string.format("Refresh (%.0fs)", startRem))
+        refreshBtn:SetDisabled(true)
+    else
+        refreshBtn:SetText("Refresh Connections")
+        refreshBtn:SetDisabled(false)
+    end
     refreshBtn:SetRelativeWidth(0.5)
     refreshBtn:SetHeight(25)
     
-    local Comm = DesolateLootcouncil:GetModule("Comm")
+    -- (Comm is already declared above; no second declaration needed)
     
     -- Function to update the status icon color/tooltip in-place
     local function UpdateTopIndicator()
@@ -187,7 +219,7 @@ function UI_Loot:ShowLootWindow(lootTable)
     end)
 
     -- Timer for button text cooldown
-    self:ScheduleRepeatingTimer(function()
+    self.refreshTimer = self:ScheduleRepeatingTimer(function()
         if not (self.lootFrame --[[@as any]]).frame:IsShown() then return end
         if Comm and Comm.GetVersionCheckRemaining then
             local rem = Comm:GetVersionCheckRemaining()
@@ -271,7 +303,7 @@ function UI_Loot:ShowLootWindow(lootTable)
                 itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
             end
 
-            itemLabel:SetRelativeWidth(0.47) -- Reduced from 0.55 to accommodate icon (0.08)
+            itemLabel:SetRelativeWidth(0.42) -- Adjusted to prevent button truncation
             itemLabel:SetCallback("OnClick", function()
                 GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
                 if link then GameTooltip:SetHyperlink(link) else GameTooltip:SetItemByID(data.itemID) end
@@ -288,7 +320,7 @@ function UI_Loot:ShowLootWindow(lootTable)
             -- Category Dropdown
             ---@type AceGUIDropdown
             local catDropdown = AceGUI:Create("Dropdown") --[[@as AceGUIDropdown]]
-            catDropdown:SetRelativeWidth(0.30) -- User requested 0.30 (reduced)
+            catDropdown:SetRelativeWidth(0.32) -- Increased slightly for balance
 
             -- Dynamic Categories
             local catList = {}
@@ -321,6 +353,9 @@ function UI_Loot:ShowLootWindow(lootTable)
                 -- If nothing saved, fall back to Session category
                 savedCat = data.category or "Junk/Pass"
             end
+
+            -- PROBLEM 12: Sync the calculated category back to the session data so the broadcast isn't empty!
+            data.category = savedCat
             catDropdown:SetValue(savedCat)
 
             catDropdown:SetCallback("OnValueChanged", function(_, _, value)
@@ -342,10 +377,19 @@ function UI_Loot:ShowLootWindow(lootTable)
             ---@type AceGUIButton
             local removeBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
             removeBtn:SetText("X")
-            removeBtn:SetWidth(50) -- User requested 50 (increased)
+            removeBtn:SetRelativeWidth(0.15) -- Switched to relative width to prevent truncation (...)
             removeBtn:SetCallback("OnClick", function()
-                table.remove(lootTable, i)
-                DesolateLootcouncil:DLC_Log("Removed " .. link .. " from session.")
+                -- B5: Use sourceGUID to find the item, not the stale closure index 'i'.
+                -- After a ContinueOnItemLoad refresh, 'i' may no longer point to this item.
+                local guid = data.sourceGUID or data.link
+                for idx = #lootTable, 1, -1 do
+                    local entry = lootTable[idx]
+                    if (entry.sourceGUID or entry.link) == guid then
+                        table.remove(lootTable, idx)
+                        break
+                    end
+                end
+                DesolateLootcouncil:DLC_Log("Removed " .. (link or "item") .. " from session.")
                 self:ShowLootWindow(lootTable) -- Refresh
             end)
 
@@ -356,15 +400,18 @@ function UI_Loot:ShowLootWindow(lootTable)
     end
 
     -- 4. Create Manual Start Button (Pinned to Footer)
+    -- Safety Check: If no items or window was closed during load, stop here.
+    if count == 0 or not self.lootFrame then return end
+
     if not self.btnStart then
-        local containerFrame = (self.lootFrame --[[@as any]]).frame
+        local containerFrame = (lootFrame --[[@as any]]).frame
 
         ---@type Button
         local btn = CreateFrame("Button", nil, containerFrame, "UIPanelButtonTemplate")
         btn:SetText("Start Bidding")
 
         -- Keep the FrameLevel fix
-        btn:SetFrameLevel(parent:GetFrameLevel() + 10)
+        btn:SetFrameLevel(containerFrame:GetFrameLevel() + 10)
 
         -- FIX 1: Alignment (Move UP to match Close button)
         btn:SetPoint("BOTTOMLEFT", containerFrame, "BOTTOMLEFT", 15, 16)
@@ -381,28 +428,28 @@ function UI_Loot:ShowLootWindow(lootTable)
         ---@type Session
         local Session = DesolateLootcouncil:GetModule('Session') --[[@as Session]]
         Session:StartSession(lootTable)
-        self.lootFrame:Hide()
+        lootFrame:Hide()
         startBtn:Hide()
     end)
 
     -- Ensure visibility
-    startBtn:SetFrameLevel((self.lootFrame --[[@as any]]).frame:GetFrameLevel() + 10)
+    startBtn:SetFrameLevel((lootFrame --[[@as any]]).frame:GetFrameLevel() + 10)
     startBtn:Show()
 
     -- 5. Update Resize Logic
     local function LayoutScroll()
-        local windowHeight = (self.lootFrame --[[@as any]]).frame:GetHeight()
+        local windowHeight = (lootFrame --[[@as any]]).frame:GetHeight()
         -- Title(30) + ClearBtn(25) + Footer(45) = ~100
         local scrollHeight = windowHeight - 100
 
         if scrollHeight < 50 then scrollHeight = 50 end
 
         scroll:SetHeight(scrollHeight)
-        self.lootFrame:DoLayout()
+        lootFrame:DoLayout()
     end
 
     LayoutScroll()
-    self.lootFrame:SetCallback("OnResize", LayoutScroll)
+    lootFrame:SetCallback("OnResize", LayoutScroll)
 
     DesolateLootcouncil:DLC_Log(string.format("Loot Window Populated with %d items", count))
 end

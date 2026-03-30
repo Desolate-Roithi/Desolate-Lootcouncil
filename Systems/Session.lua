@@ -347,6 +347,7 @@ function Session:StartSession(lootTable)
     end
 
     -- Open Monitor Window for LM
+    -- Note: Do NOT wrap in pcall — silent failure is worse than a visible error here.
     ---@type UI_Monitor
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
     if Monitor then Monitor:ShowMonitorWindow() end
@@ -354,7 +355,7 @@ function Session:StartSession(lootTable)
     -- Trigger Refresh if Voting Window is open (for overlapping sessions)
     ---@type UI_Voting
     local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-    if Voting then Voting:ShowVotingWindow(session.bidding) end
+    if Voting then Voting:ShowVotingWindow(cleanList) end
 end
 
 function Session:SendStopSession()
@@ -375,7 +376,9 @@ function Session:SendStopSession()
 
     -- 2. Local Cleanup (LM Side)
     self.sessionVotes = {}
-    self.closedItems = {}
+    self.closedItems  = {}
+    self.clientLootList = {}  -- B9: Clear so heartbeat timer stops on dead session
+    self.sessionPayloadCache = nil
     -- Clear the Bidding storage so Monitor empties
     wipe(DesolateLootcouncil.db.profile.session.bidding)
 
@@ -736,6 +739,13 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
                     Monitor:ShowMonitorWindow(true)
                 end
             end
+
+            -- PROBLEM 13: Refresh Voting UI to clear "Syncing..." status
+            ---@type UI_Voting
+            local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+            if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() then
+                Voting:ShowVotingWindow(nil, true)
+            end
         end
     elseif payload.command == "SYNC_LM" then
         local lm = payload.data and payload.data.lm
@@ -768,6 +778,9 @@ function Session:SendSyncVotes()
     local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
     if channel then
         self:SendCommMessage("DLC_Loot", serialized, channel)
+    else
+        -- Solo / Simulation: Confirmation MUST be sent even locally!
+        self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     end
 end
 
@@ -805,8 +818,10 @@ function Session:SendVote(itemGUID, voteType, isRetry)
 end
 
 function Session:EndSession()
-    self.clientLootList = {}
-    self.sessionVotes = {}
+    self.clientLootList      = {}
+    self.sessionVotes        = {}
+    self.closedItems         = {}
+    self.sessionPayloadCache = nil  -- B10: Invalidate cache; session is dead
     wipe(DesolateLootcouncil.db.profile.session.activeState)
 
     ---@type UI_Voting

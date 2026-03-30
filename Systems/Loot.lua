@@ -44,7 +44,6 @@ function Loot:OnEnable()
     self.sessionItems = {} -- Transient duplicate check
 
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
-    self:RegisterEvent("LOOT_CLOSED", "OnLootClosed")
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
     self:RegisterEvent("CHAT_MSG_LOOT", "OnLootMessage")
 
@@ -326,7 +325,7 @@ function Loot:AddManualItem(rawLink)
             link = link,
             itemID = itemID,
             category = category,
-            sourceGUID = "Manual-" .. itemID .. "-" .. math.random(100),
+            sourceGUID = "Manual-" .. itemID .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
             stackIndex = 1,
             texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark"
         })
@@ -439,7 +438,7 @@ function Loot:ReawardItem(index)
         itemID = awardedItem.itemID,
         texture = awardedItem.texture,
         category = "Re-awarded",
-        sourceGUID = "Reaward-" .. (awardedItem.itemID or 0) .. "-" .. math.random(100),
+        sourceGUID = "Reaward-" .. (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
         stackIndex = 1
     })
 

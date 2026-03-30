@@ -169,12 +169,13 @@ function Simulation:RunTest(count)
             icon = 134400 -- Question Mark
         end
 
+        local uniqueID = "TestGUID_" .. string.format("%.3f", GetTime()) .. "_" .. i
         table.insert(items, {
             link = link,
             itemID = tonumber(link:match("item:(%d+)")),
             texture = icon,
             category = "Rest",
-            sourceGUID = "TestGUID" .. i,
+            sourceGUID = uniqueID,
             quantity = 1,
             isTest = true
         })

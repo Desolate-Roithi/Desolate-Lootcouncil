@@ -37,13 +37,16 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         frame:SetLayout("Flow")
         frame:SetWidth(650)
         frame:SetHeight(400)
-        frame:SetCallback("OnClose", function(widget) widget:Hide() end)
+        frame:SetCallback("OnClose", function(widget)
+            self.userClosedMonitor = true  -- B3: Track user-intent close vs system close
+            widget:Hide()
+        end)
         self.monitorFrame = frame
 
         -- [NEW] Position Persistence
-        DesolateLootcouncil:RestoreFramePosition(frame, "Monitor")
+        DesolateLootcouncil.Persistence:RestoreFramePosition(frame, "Monitor")
         local function SavePos(f)
-            DesolateLootcouncil:SaveFramePosition(f, "Monitor")
+            DesolateLootcouncil.Persistence:SaveFramePosition(f, "Monitor")
         end
         local rawFrame = (frame --[[@as any]]).frame
         rawFrame:SetScript("OnDragStop", function(f)
@@ -55,6 +58,8 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
     end
 
     if not isRefresh then
+        -- B3: Clear the user-close flag when a new session explicitly opens the window
+        self.userClosedMonitor = false
         self.monitorFrame:Show()
         -- Ensure window is maximized if it was previously collapsed
         local frame = (self.monitorFrame --[[@as any]]).frame
@@ -64,8 +69,10 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
                 DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.monitorFrame)
             end
         end
+    elseif self.userClosedMonitor then
+        return -- Respect user's explicit close during refresh cycles
     elseif not (self.monitorFrame.frame and self.monitorFrame.frame:IsShown()) then
-        return -- Don't force pop up if the user manually hid it
+        return -- Window hidden by system but not yet re-opened by new session
     end
 
     self.monitorFrame:ReleaseChildren()
@@ -351,6 +358,9 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         end
     end
     self:UpdateDisenchanters()
+
+    -- PROBLEM 15: ALWAYS call :Show() to ensure the window reappears (for both LMs and Assistants!)
+    if self.monitorFrame then self.monitorFrame:Show() end
 end
 
 function UI_Monitor:UpdateDisenchanters()
@@ -367,6 +377,9 @@ function UI_Monitor:ShowAwardWindow(itemData)
         return
     end
 
+    -- B15: Hoist isLM to function scope — it's stable and was re-declared 3 times below
+    local isLM = DesolateLootcouncil:AmILootMaster()
+
     if not self.awardFrame then
         ---@type AceGUIFrame
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
@@ -378,9 +391,9 @@ function UI_Monitor:ShowAwardWindow(itemData)
         self.awardFrame = frame
 
         -- [NEW] Position Persistence
-        DesolateLootcouncil:RestoreFramePosition(frame, "Award")
+        DesolateLootcouncil.Persistence:RestoreFramePosition(frame, "Award")
         local function SavePos(f)
-            DesolateLootcouncil:SaveFramePosition(f, "Award")
+            DesolateLootcouncil.Persistence:SaveFramePosition(f, "Award")
         end
         local rawFrame = (frame --[[@as any]]).frame
         rawFrame:SetScript("OnDragStop", function(f)
@@ -514,7 +527,6 @@ function UI_Monitor:ShowAwardWindow(itemData)
                     Loot:AwardItem(itemData.sourceGUID, v.name, voteDesc)
                 end
             end)
-            local isLM = DesolateLootcouncil:AmILootMaster()
             if isLM then row:AddChild(btnGive) end
         end
     end
@@ -548,8 +560,9 @@ function UI_Monitor:ShowAwardWindow(itemData)
         end
         table.sort(disenchanters, function(a, b) return a.skill > b.skill end)
     end
-    -- [DEBUG]
-    DesolateLootcouncil:DLC_Log("Monitor: Disenchanters found: " .. #disenchanters)
+    if DesolateLootcouncil.db.profile.debugMode then
+        DesolateLootcouncil:DLC_Log("Monitor: Disenchanters found: " .. #disenchanters)
+    end
 
     if #disenchanters > 0 then
         ---@type AceGUILabel
@@ -590,7 +603,6 @@ function UI_Monitor:ShowAwardWindow(itemData)
                     Loot:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
                 end
             end)
-            local isLM = DesolateLootcouncil:AmILootMaster()
             if isLM then row:AddChild(btnGive) end
         end
     end
