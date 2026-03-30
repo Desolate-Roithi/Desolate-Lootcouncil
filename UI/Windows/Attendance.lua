@@ -242,56 +242,42 @@ function UI_Attendance:ApplyDecayAndEndSession()
             local currentList = listObj.players -- Array of strings (names)
             DLC:DLC_Log("Processing List Category: [" .. listName .. "] with " .. #currentList .. " entries.")
 
-            local tempList = {}
-
-            -- Populate tempList with object {name, priority, isAbsent}
-            for i, name in ipairs(currentList) do
-                local isAbsent = tempAbsent[name] or false
-                local prio = i
-                if isAbsent then
-                    prio = prio + currentDecayAmount
-                end
-
-                table.insert(tempList, {
-                    name = name,
-                    priority = prio,
-                    isAbsent = isAbsent
-                })
-            end
-
-            -- 5. Sort based on new priorities
-            table.sort(tempList, function(a, b)
-                -- 1. Primary Sort: Penalty-Adjusted Priority (Lower is better)
-                if a.priority ~= b.priority then
-                    return a.priority < b.priority
-                end
-
-                -- 2. Secondary Sort: Attendance (Present beats Absent if priorities match)
-                if a.isAbsent ~= b.isAbsent then
-                    return not a.isAbsent
-                end
-
-                -- 3. Tertiary Sort: Alphabetical (Stability)
-                return a.name < b.name
-            end)
-
-            if #tempList > 0 then
-                DLC:DLC_Log(" >> Sort Winner Rank 1: " .. tempList[1].name .. " (Prio: " .. tempList[1].priority .. ")")
-            end
-
-            -- 4. Normalize (Renumber 1..N) and Flatten
+            -- [FIX]: Bottom-to-Top Bubble Down Algorithm.
+            -- Processing from bottom to top prevents lower absent players from jumping around unpredictably
+            -- when higher absent players change the array size.
             local newList = {}
-            for _, entry in ipairs(tempList) do
-                table.insert(newList, entry.name)
+            for _, name in ipairs(currentList) do
+                table.insert(newList, name)
+            end
+
+            -- Iterate backwards
+            for i = #newList, 1, -1 do
+                local name = newList[i]
+                if tempAbsent[name] then
+                    local targetIdx = i + currentDecayAmount
+                    
+                    -- Remove the absent player, shrinking the array by 1
+                    table.remove(newList, i)
+                    
+                    -- Cap the target index to the new array's maximum possible append location
+                    if targetIdx > #newList + 1 then
+                        targetIdx = #newList + 1
+                    end
+                    
+                    -- Insert the absent player at their decayed rank
+                    table.insert(newList, targetIdx, name)
+                end
+            end
+
+            if #newList > 0 then
+                DLC:DLC_Log(" >> Sort Winner Rank 1: " .. newList[1])
             end
 
             -- Final Standings Log
             DLC:DLC_Log(" --- Final Standings for [" .. listName .. "] ---")
             for k = 1, math.min(5, #newList) do
-                -- We need to find the priority from tempList logic.
-                -- Wait, 'newList' is just names. 'tempList' still exists and is sorted.
-                -- tempList[k] corresponds to the player at Rank k.
-                DLC:DLC_Log("#" .. k .. ": " .. tempList[k].name .. " (Prio " .. tempList[k].priority .. ")")
+                local stateStr = tempAbsent[newList[k]] and "(Absent)" or "(Present)"
+                DLC:DLC_Log("#" .. k .. ": " .. newList[k] .. " " .. stateStr)
             end
 
             -- Update the DB list in place
