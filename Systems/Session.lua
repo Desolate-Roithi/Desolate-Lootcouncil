@@ -501,6 +501,264 @@ function Session:RemoveSessionItem(guid)
     DesolateLootcouncil:DLC_Log("Removed item from session and pending trades.")
 end
 
+function Session:HandleStartSession(payload)
+    local newItems = payload.data
+    local count = newItems and #newItems or 0
+    local duration = payload.duration or 300
+    local expiry = payload.endTime or (GetServerTime() + duration)
+    local isHeartbeat = payload.isHeartbeat == true
+
+    self.clientLootList = self.clientLootList or {}
+    self.myLocalVotes = self.myLocalVotes or {}
+
+    if isHeartbeat and #self.clientLootList > 0 then
+        -- Already hydrated; refresh expiry and closed state, update Monitor silently.
+        self.sessionExpiry = expiry
+        -- Merge closed items from heartbeat — prevents stale "Open" display
+        if payload.closedItems then
+            self.closedItems = self.closedItems or {}
+            for guid, v in pairs(payload.closedItems) do
+                self.closedItems[guid] = v
+            end
+        end
+        if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+            ---@type UI_Monitor
+            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+            if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+                Monitor:ShowMonitorWindow(true)
+            end
+        end
+        self:SaveSessionState()
+        return
+    end
+
+    -- Full session start (or late-joiner receiving heartbeat for the first time)
+    if newItems then
+        for _, item in ipairs(newItems) do
+            item.expiry = expiry
+            -- Avoid duplicates when reconnecting mid-session
+            local alreadyHave = false
+            for _, existing in ipairs(self.clientLootList) do
+                if (existing.sourceGUID or existing.link) == (item.sourceGUID or item.link) then
+                    alreadyHave = true
+                    break
+                end
+            end
+            if not alreadyHave then
+                table.insert(self.clientLootList, item)
+            end
+        end
+    end
+
+    DesolateLootcouncil:DLC_Log("Added " .. count .. " items to the session.")
+
+    ---@type UI_Voting
+    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+    if Voting then Voting:ShowVotingWindow(self.clientLootList) end
+
+    -- Bug 5: Re-sync Monitor for Assistants on Start Session
+    if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+        ---@type UI_Monitor
+        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+        if Monitor then Monitor:ShowMonitorWindow() end
+    end
+
+    -- Apply closed state from heartbeat for late-joiners
+    if payload.closedItems then
+        self.closedItems = self.closedItems or {}
+        for guid, v in pairs(payload.closedItems) do
+            self.closedItems[guid] = v
+        end
+    end
+
+    self.sessionExpiry = expiry
+    self:SaveSessionState()
+end
+
+function Session:HandleRemoveItem(payload)
+    local guid = payload.data and payload.data.guid
+    if guid and self.clientLootList then
+        for i, item in ipairs(self.clientLootList) do
+            if (item.sourceGUID or item.link) == guid then
+                table.remove(self.clientLootList, i)
+                break
+            end
+        end
+
+        ---@type UI_Voting
+        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+        if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() then
+            if Voting.RemoveVotingItem then
+                Voting:RemoveVotingItem(guid)
+            else
+                Voting:ShowVotingWindow(self.clientLootList, true)
+            end
+        end
+
+        if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+            ---@type UI_Monitor
+            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+            if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+                Monitor:ShowMonitorWindow(true)
+            end
+        end
+    end
+end
+
+function Session:HandleCloseItem(payload)
+    local guid = payload.data and payload.data.guid
+    if guid then
+        self.closedItems = self.closedItems or {}
+        self.closedItems[guid] = true
+        DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(guid, -8))
+
+        ---@type UI_Voting
+        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+        if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() and Voting.ShowVotingWindow then
+            Voting:ShowVotingWindow(nil, true)
+        end
+
+        if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+            ---@type UI_Monitor
+            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+            if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+                Monitor:ShowMonitorWindow(true)
+            end
+        end
+    end
+end
+
+function Session:HandleHistoryUpdate(payload)
+    -- Bug 4: All players (not just LM) store the history entry
+    local data = payload.data
+    if data and data.link then
+        local session = DesolateLootcouncil.db.profile.session
+        if not session.awarded then session.awarded = {} end
+
+        -- Avoid duplicate entries (LM already stored it locally)
+        if not DesolateLootcouncil:AmILootMaster() then
+            table.insert(session.awarded, {
+                link        = data.link,
+                texture     = data.texture,
+                itemID      = data.itemID,
+                winner      = data.winner,
+                winnerClass = data.winnerClass,
+                voteType    = data.voteType,
+                timestamp   = data.timestamp,
+                traded      = false
+            })
+
+            -- Auto-refresh History window if open
+            local UI_H = DesolateLootcouncil:GetModule("UI_History")
+            if UI_H and UI_H.historyFrame and UI_H.historyFrame.frame and UI_H.historyFrame.frame:IsShown() then
+                UI_H:ShowHistoryWindow()
+            end
+        end
+    end
+end
+
+function Session:HandleVoteAck(payload)
+    local guid = payload.data and payload.data.guid
+    if guid and self.outboundVotes[guid] then
+        self.outboundVotes[guid] = nil
+        DesolateLootcouncil:DLC_Log("Vote confirmed by Loot Master.")
+        -- Refresh UI to remove "Syncing..." status
+        ---@type UI_Voting
+        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+        if Voting then Voting:ShowVotingWindow(nil, true) end
+    end
+end
+
+function Session:HandleVote(payload, sender)
+    if DesolateLootcouncil:AmILootMaster() then
+        local data = payload.data
+        self.sessionVotes = self.sessionVotes or {}
+        self.sessionVotes[data.guid] = self.sessionVotes[data.guid] or {}
+
+        if data.vote == 0 then
+            self.sessionVotes[data.guid][sender] = nil
+            DesolateLootcouncil:DLC_Log("Vote retracted by " .. sender)
+        else
+            local serverRoll = math.random(1, 100)
+            self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll }
+
+            if DesolateLootcouncil:AmILootMaster() then
+                local voteCount = 0
+                for _ in pairs(self.sessionVotes[data.guid]) do voteCount = voteCount + 1 end
+
+                local totalMembers = GetNumGroupMembers()
+                if totalMembers == 0 then totalMembers = 1 end
+
+                ---@type Simulation
+                local Sim = DesolateLootcouncil:GetModule("Simulation")
+                if Sim then totalMembers = totalMembers + Sim:GetCount() end
+
+                if voteCount >= totalMembers then
+                    self:SendCloseItem(data.guid)
+                end
+            end
+        end
+
+        ---@type UI_Monitor
+        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+        if Monitor then Monitor:ShowMonitorWindow(true) end
+
+        self:SaveSessionState()
+
+        if DesolateLootcouncil:AmILootMaster() then
+            -- Queue ACK into the batched SYNC_VOTES that fires within 1.5s.
+            -- This eliminates individual per-voter whispers from the LM entirely.
+            self.pendingAcks[data.guid] = self.pendingAcks[data.guid] or {}
+            self.pendingAcks[data.guid][sender] = true
+            self.needsSync = true
+        end
+    end
+end
+
+function Session:HandleSyncVotes(payload)
+    if payload.data and type(payload.data) == "table" then
+        self.sessionVotes = payload.data.votes or payload.data -- Compatibility
+        self.closedItems  = payload.data.closed or self.closedItems or {}
+
+        -- Raider: confirm outbound votes via two paths:
+        -- a) explicit confirmedVoters list in this sync, OR
+        -- b) our name already appears in sessionVotes[guid]
+        local myName = UnitName("player")
+        local confirmed = payload.data.confirmedVoters or {}
+        for guid, _ in pairs(self.outboundVotes) do
+            local inConfirmed = confirmed[guid] and confirmed[guid][myName]
+            local inVotes     = self.sessionVotes[guid] and self.sessionVotes[guid][myName]
+            if inConfirmed or inVotes then
+                self.outboundVotes[guid] = nil
+            end
+        end
+
+        -- Update UI if open
+        if DesolateLootcouncil:AmIRaidAssistOrLM() then
+            ---@type UI_Monitor
+            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+            if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+                Monitor:ShowMonitorWindow(true)
+            end
+        end
+
+        -- PROBLEM 13: Refresh Voting UI to clear "Syncing..." status
+        ---@type UI_Voting
+        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+        if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() then
+            Voting:ShowVotingWindow(nil, true)
+        end
+    end
+end
+
+function Session:HandleSyncLM(payload)
+    local lm = payload.data and payload.data.lm
+    if lm then
+        DesolateLootcouncil.activeLootMaster = lm
+        DesolateLootcouncil.amILM = (lm == UnitName("player"))
+    end
+end
+
 function Session:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_Loot" then return end
 
@@ -510,249 +768,23 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
     ---@cast payload DistributionPayload
 
     if payload.command == "START_SESSION" then
-        local newItems = payload.data
-        local count = newItems and #newItems or 0
-        local duration = payload.duration or 300
-        local expiry = payload.endTime or (GetServerTime() + duration)
-        local isHeartbeat = payload.isHeartbeat == true
-
-        self.clientLootList = self.clientLootList or {}
-        self.myLocalVotes = self.myLocalVotes or {}
-
-        if isHeartbeat and #self.clientLootList > 0 then
-            -- Already hydrated; refresh expiry and closed state, update Monitor silently.
-            self.sessionExpiry = expiry
-            -- Merge closed items from heartbeat — prevents stale "Open" display
-            if payload.closedItems then
-                self.closedItems = self.closedItems or {}
-                for guid, v in pairs(payload.closedItems) do
-                    self.closedItems[guid] = v
-                end
-            end
-            if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
-                ---@type UI_Monitor
-                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-                if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                    Monitor:ShowMonitorWindow(true)
-                end
-            end
-            self:SaveSessionState()
-            return
-        end
-
-        -- Full session start (or late-joiner receiving heartbeat for the first time)
-        if newItems then
-            for _, item in ipairs(newItems) do
-                item.expiry = expiry
-                -- Avoid duplicates when reconnecting mid-session
-                local alreadyHave = false
-                for _, existing in ipairs(self.clientLootList) do
-                    if (existing.sourceGUID or existing.link) == (item.sourceGUID or item.link) then
-                        alreadyHave = true
-                        break
-                    end
-                end
-                if not alreadyHave then
-                    table.insert(self.clientLootList, item)
-                end
-            end
-        end
-
-        DesolateLootcouncil:DLC_Log("Added " .. count .. " items to the session.")
-
-        ---@type UI_Voting
-        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-        if Voting then Voting:ShowVotingWindow(self.clientLootList) end
-
-        -- Bug 5: Re-sync Monitor for Assistants on Start Session
-        if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
-            ---@type UI_Monitor
-            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-            if Monitor then Monitor:ShowMonitorWindow() end
-        end
-
-        -- Apply closed state from heartbeat for late-joiners
-        if payload.closedItems then
-            self.closedItems = self.closedItems or {}
-            for guid, v in pairs(payload.closedItems) do
-                self.closedItems[guid] = v
-            end
-        end
-
-        self.sessionExpiry = expiry
-        self:SaveSessionState()
+        self:HandleStartSession(payload)
     elseif payload.command == "STOP_SESSION" then
         self:EndSession()
     elseif payload.command == "REMOVE_ITEM" then
-        local guid = payload.data and payload.data.guid
-        if guid and self.clientLootList then
-            for i, item in ipairs(self.clientLootList) do
-                if (item.sourceGUID or item.link) == guid then
-                    table.remove(self.clientLootList, i)
-                    break
-                end
-            end
-
-            ---@type UI_Voting
-            local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-            if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() then
-                if Voting.RemoveVotingItem then
-                    Voting:RemoveVotingItem(guid)
-                else
-                    Voting:ShowVotingWindow(self.clientLootList, true)
-                end
-            end
-
-            if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
-                ---@type UI_Monitor
-                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-                if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                    Monitor:ShowMonitorWindow(true)
-                end
-            end
-        end
+        self:HandleRemoveItem(payload)
     elseif payload.command == "CLOSE_ITEM" then
-        local guid = payload.data and payload.data.guid
-        if guid then
-            self.closedItems = self.closedItems or {}
-            self.closedItems[guid] = true
-            DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(guid, -8))
-
-            ---@type UI_Voting
-            local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-            if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() and Voting.ShowVotingWindow then
-                Voting:ShowVotingWindow(nil, true)
-            end
-
-            if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
-                ---@type UI_Monitor
-                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-                if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                    Monitor:ShowMonitorWindow(true)
-                end
-            end
-        end
+        self:HandleCloseItem(payload)
     elseif payload.command == "HISTORY_UPDATE" then
-        -- Bug 4: All players (not just LM) store the history entry
-        local data = payload.data
-        if data and data.link then
-            local session = DesolateLootcouncil.db.profile.session
-            if not session.awarded then session.awarded = {} end
-
-            -- Avoid duplicate entries (LM already stored it locally)
-            if not DesolateLootcouncil:AmILootMaster() then
-                table.insert(session.awarded, {
-                    link        = data.link,
-                    texture     = data.texture,
-                    itemID      = data.itemID,
-                    winner      = data.winner,
-                    winnerClass = data.winnerClass,
-                    voteType    = data.voteType,
-                    timestamp   = data.timestamp,
-                    traded      = false
-                })
-
-                -- Auto-refresh History window if open
-                local UI_H = DesolateLootcouncil:GetModule("UI_History")
-                if UI_H and UI_H.historyFrame and UI_H.historyFrame.frame and UI_H.historyFrame.frame:IsShown() then
-                    UI_H:ShowHistoryWindow()
-                end
-            end
-        end
+        self:HandleHistoryUpdate(payload)
     elseif payload.command == "VOTE_ACK" then
-        local guid = payload.data and payload.data.guid
-        if guid and self.outboundVotes[guid] then
-            self.outboundVotes[guid] = nil
-            DesolateLootcouncil:DLC_Log("Vote confirmed by Loot Master.")
-            -- Refresh UI to remove "Syncing..." status
-            ---@type UI_Voting
-            local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-            if Voting then Voting:ShowVotingWindow(nil, true) end
-        end
+        self:HandleVoteAck(payload)
     elseif payload.command == "VOTE" then
-        if DesolateLootcouncil:AmILootMaster() then
-            local data = payload.data
-            self.sessionVotes = self.sessionVotes or {}
-            self.sessionVotes[data.guid] = self.sessionVotes[data.guid] or {}
-
-            if data.vote == 0 then
-                self.sessionVotes[data.guid][sender] = nil
-                DesolateLootcouncil:DLC_Log("Vote retracted by " .. sender)
-            else
-                local serverRoll = math.random(1, 100)
-                self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll }
-
-                if DesolateLootcouncil:AmILootMaster() then
-                    local voteCount = 0
-                    for _ in pairs(self.sessionVotes[data.guid]) do voteCount = voteCount + 1 end
-
-                    local totalMembers = GetNumGroupMembers()
-                    if totalMembers == 0 then totalMembers = 1 end
-
-                    ---@type Simulation
-                    local Sim = DesolateLootcouncil:GetModule("Simulation")
-                    if Sim then totalMembers = totalMembers + Sim:GetCount() end
-
-                    if voteCount >= totalMembers then
-                        self:SendCloseItem(data.guid)
-                    end
-                end
-            end
-
-            ---@type UI_Monitor
-            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-            if Monitor then Monitor:ShowMonitorWindow(true) end
-
-            self:SaveSessionState()
-
-            if DesolateLootcouncil:AmILootMaster() then
-                -- Queue ACK into the batched SYNC_VOTES that fires within 1.5s.
-                -- This eliminates individual per-voter whispers from the LM entirely.
-                self.pendingAcks[data.guid] = self.pendingAcks[data.guid] or {}
-                self.pendingAcks[data.guid][sender] = true
-                self.needsSync = true
-            end
-        end
+        self:HandleVote(payload, sender)
     elseif payload.command == "SYNC_VOTES" then
-        if payload.data and type(payload.data) == "table" then
-            self.sessionVotes = payload.data.votes or payload.data -- Compatibility
-            self.closedItems  = payload.data.closed or self.closedItems or {}
-
-            -- Raider: confirm outbound votes via two paths:
-            -- a) explicit confirmedVoters list in this sync, OR
-            -- b) our name already appears in sessionVotes[guid]
-            local myName = UnitName("player")
-            local confirmed = payload.data.confirmedVoters or {}
-            for guid, _ in pairs(self.outboundVotes) do
-                local inConfirmed = confirmed[guid] and confirmed[guid][myName]
-                local inVotes     = self.sessionVotes[guid] and self.sessionVotes[guid][myName]
-                if inConfirmed or inVotes then
-                    self.outboundVotes[guid] = nil
-                end
-            end
-
-            -- Update UI if open
-            if DesolateLootcouncil:AmIRaidAssistOrLM() then
-                ---@type UI_Monitor
-                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-                if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                    Monitor:ShowMonitorWindow(true)
-                end
-            end
-
-            -- PROBLEM 13: Refresh Voting UI to clear "Syncing..." status
-            ---@type UI_Voting
-            local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-            if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() then
-                Voting:ShowVotingWindow(nil, true)
-            end
-        end
+        self:HandleSyncVotes(payload)
     elseif payload.command == "SYNC_LM" then
-        local lm = payload.data and payload.data.lm
-        if lm then
-            DesolateLootcouncil.activeLootMaster = lm
-            DesolateLootcouncil.amILM = (lm == UnitName("player"))
-        end
+        self:HandleSyncLM(payload)
     end
 end
 

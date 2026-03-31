@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.7.0-Beta  
-**Last Updated:** 2026-03-30  
+**Latest Version:** v0.7.1-Beta  
+**Last Updated:** 2026-03-31  
 **Compatibility:** WoW 12.0.1 (Midnight)  
 
 
@@ -46,6 +46,12 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.7.1-Beta
+* **Core UI Structural Refactor**: Successfully modularized monolithic functions across all primary UI windows (`Attendance`, `ItemManager`, `Monitor`, `PrioritySettings`).
+* **Arrow Code Elimination**: Eliminated deep layout nesting, significantly reducing complexity and potential for scope-related bugs.
+* **Encapsulated Configuration**: Configuration and profile management logic now reside in discrete, dedicated methods, improving AceConfig integration stability.
+* **Refactor Verified**: Full unit test suite (`Priority`, `Roster`, `Comm`) confirms 0% regression and 100% functional parity with 0.7.0.
 
 ### v0.7.0-Beta
 * **Decay System Overhaul**: Replaced the Priority Decay algorithm with a mathematically sound Bottom-To-Top Bubble-Down algorithm. Priority penalties now correctly push absent players below present players without gap collision.

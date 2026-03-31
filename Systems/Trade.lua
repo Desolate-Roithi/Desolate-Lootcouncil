@@ -115,33 +115,39 @@ function Trade:CHAT_MSG_SYSTEM(_event, message)
 end
 
 function Trade:HandleTradeSuccess()
-    if self.currentTrade then
-        local session = DesolateLootcouncil.db.profile.session
-        local changed = false
+    if not self.currentTrade then
+        self:ClearPending()
+        return
+    end
 
-        for _, pending in ipairs(self.currentTrade) do
-            if session and session.awarded then
-                for _, award in ipairs(session.awarded) do
-                    if award.link == pending.link and award.winner == pending.winner and not award.traded then
-                        award.traded = true
-                        changed = true
-                        DesolateLootcouncil:DLC_Log(string.format("Trade complete. %s marked as delivered to %s.",
-                            pending.link, pending.winner))
-                        break
-                    end
-                end
-            end
-        end
+    local session = DesolateLootcouncil.db.profile.session
+    if not session or not session.awarded then
+        self:ClearPending()
+        return
+    end
 
-        if changed then
-            -- Bug 2 fix: refresh the actual trade list window
-            ---@type UI_TradeList
-            local UI = DesolateLootcouncil:GetModule("UI_TradeList") --[[@as UI_TradeList]]
-            if UI and UI.ShowTradeListWindow and DesolateLootcouncil:AmILootMaster() then
-                UI:ShowTradeListWindow()
+    local changed = false
+
+    for _, pending in ipairs(self.currentTrade) do
+        for _, award in ipairs(session.awarded) do
+            if award.link == pending.link and award.winner == pending.winner and not award.traded then
+                award.traded = true
+                changed = true
+                DesolateLootcouncil:DLC_Log(string.format("Trade complete. %s marked as delivered to %s.", pending.link, pending.winner))
+                break
             end
         end
     end
+
+    if changed then
+        -- Bug 2 fix: refresh the actual trade list window
+        ---@type UI_TradeList
+        local UI = DesolateLootcouncil:GetModule("UI_TradeList") --[[@as UI_TradeList]]
+        if UI and UI.ShowTradeListWindow and DesolateLootcouncil:AmILootMaster() then
+            UI:ShowTradeListWindow()
+        end
+    end
+
     self:ClearPending()
 end
 

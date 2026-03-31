@@ -77,90 +77,160 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
 
     self.monitorFrame:ReleaseChildren()
 
-    -- Helper: Vote Counts
-    -- Helper: Vote Info
-    local function GetVoteInfo(guid)
-        local SessionData = DesolateLootcouncil:GetModule("Session")
-        ---@type boolean
-        local isClosed = SessionData and SessionData.closedItems and SessionData.closedItems[guid]
-        local votes = SessionData and SessionData.sessionVotes and SessionData.sessionVotes[guid] or {}
+function UI_Monitor:GetVoteInfo(guid)
+    local SessionData = DesolateLootcouncil:GetModule("Session")
+    local isClosed = SessionData and SessionData.closedItems and SessionData.closedItems[guid]
+    local votes = SessionData and SessionData.sessionVotes and SessionData.sessionVotes[guid] or {}
 
-        local bids, rolls, os, tm, pass = 0, 0, 0, 0, 0
-        local votedPlayers = {}
-        for name, voteData in pairs(votes) do
-            local vType = type(voteData) == "table" and voteData.type or voteData
-            if vType == 1 then
-                bids = bids + 1
-            elseif vType == 2 then
-                rolls = rolls + 1
-            elseif vType == 3 then
-                os = os + 1
-            elseif vType == 4 then
-                tm = tm + 1
-            elseif vType == 5 then
-                pass = pass + 1
+    local bids, rolls, os, tm, pass = 0, 0, 0, 0, 0
+    local votedPlayers = {}
+    for name, voteData in pairs(votes) do
+        local vType = type(voteData) == "table" and voteData.type or voteData
+        if vType == 1 then bids = bids + 1
+        elseif vType == 2 then rolls = rolls + 1
+        elseif vType == 3 then os = os + 1
+        elseif vType == 4 then tm = tm + 1
+        elseif vType == 5 then pass = pass + 1 end
+        votedPlayers[name] = true
+    end
+
+    local countsText = string.format("|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cff00ffffOS:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r", bids, rolls, os, tm, pass)
+
+    if isClosed then return countsText .. " |cffff0000[Closed]|r", {} end
+
+    local pending = {}
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, realm = UnitName("raid" .. i)
+            if name then
+                if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
+                if not votedPlayers[name] then table.insert(pending, name) end
             end
-            votedPlayers[name] = true
         end
+    elseif IsInGroup() then
+        local pName, pRealm = UnitName("player")
+        if pRealm and pRealm ~= "" then pName = pName .. "-" .. pRealm:gsub("%s+", "") end
+        if not votedPlayers[pName] then table.insert(pending, pName) end
 
-        local countsText = string.format(
-            "|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cff00ffffOS:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r",
-            bids, rolls, os, tm, pass)
-
-        if isClosed then
-            return countsText .. " |cffff0000[Closed]|r", {}
+        for i = 1, GetNumSubgroupMembers() do
+            local name, realm = UnitName("party" .. i)
+            if name then
+                if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
+                if not votedPlayers[name] then table.insert(pending, name) end
+            end
         end
-
-        -- Calculate Pending
-        local pending = {}
-        if IsInRaid() then
-            for i = 1, GetNumGroupMembers() do
-                local name, realm = UnitName("raid" .. i)
-                if name then
-                    if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
-                    if not votedPlayers[name] then
-                        table.insert(pending, name)
-                    end
-                end
-            end
-        elseif IsInGroup() then
-            local pName, pRealm = UnitName("player")
-            if pRealm and pRealm ~= "" then pName = pName .. "-" .. pRealm:gsub("%s+", "") end
-            if not votedPlayers[pName] then table.insert(pending, pName) end
-
-            for i = 1, GetNumSubgroupMembers() do
-                local name, realm = UnitName("party" .. i)
-                if name then
-                    if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
-                    if not votedPlayers[name] then
-                        table.insert(pending, name)
-                    end
-                end
-            end
-        else
-            -- Solo?
-            local name, realm = UnitName("player")
+    else
+        local name, realm = UnitName("player")
+        if name then
             if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
             if not votedPlayers[name] then table.insert(pending, name) end
         end
-
-        -- Handle Simulation if module exists
-        local Sim = DesolateLootcouncil:GetModule("Simulation")
-        if Sim and Sim.GetPendingVoters then
-            local simPending = Sim:GetPendingVoters(guid)
-            if simPending then
-                for _, sName in ipairs(simPending) do
-                    table.insert(pending, sName)
-                end
-            end
-        end
-
-        if #pending > 0 then
-            countsText = countsText .. " |cffaaaaaa(Pending: " .. #pending .. ")|r"
-        end
-
-        return countsText, pending
     end
+
+    local Sim = DesolateLootcouncil:GetModule("Simulation")
+    if Sim and Sim.GetPendingVoters then
+        local simPending = Sim:GetPendingVoters(guid)
+        if simPending then
+            for _, sName in ipairs(simPending) do table.insert(pending, sName) end
+        end
+    end
+
+    if #pending > 0 then countsText = countsText .. " |cffaaaaaa(Pending: " .. #pending .. ")|r" end
+    return countsText, pending
+end
+
+function UI_Monitor:BuildItemRow(scroll, item, isLM)
+    local link = item.link
+    local guid = item.sourceGUID or link
+
+    local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+    group:SetLayout("Flow")
+    group:SetFullWidth(true)
+    scroll:AddChild(group)
+
+    local itemIcon = AceGUI:Create("Icon")
+    itemIcon:SetImage(C_Item.GetItemIconByID(item.itemID) or 134400)
+    itemIcon:SetImageSize(24, 24)
+    itemIcon:SetRelativeWidth(0.05)
+    itemIcon:SetCallback("OnClick", function()
+        GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+        GameTooltip:SetHyperlink(item.link)
+        GameTooltip:Show()
+    end)
+    itemIcon:SetCallback("OnEnter", function()
+        GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+        GameTooltip:SetHyperlink(item.link)
+        GameTooltip:Show()
+    end)
+    itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+    group:AddChild(itemIcon)
+
+    local labelLink = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+    local _, properLink = C_Item.GetItemInfo(link)
+    if not properLink then
+        local itemObj = Item:CreateFromItemID(item.itemID)
+        if not itemObj:IsItemEmpty() then
+            itemObj:ContinueOnItemLoad(function()
+                if self.monitorFrame and (self.monitorFrame --[[@as any]]).frame:IsShown() then
+                    self:ShowMonitorWindow()
+                end
+            end)
+        end
+        labelLink:SetText("Loading...")
+    else
+        labelLink:SetText(properLink)
+        itemIcon:SetImage(C_Item.GetItemIconByID(item.itemID) or 134400)
+    end
+    labelLink:SetRelativeWidth(0.35)
+    labelLink:SetCallback("OnEnter", function(widget)
+        GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
+        GameTooltip:SetHyperlink(item.link)
+        GameTooltip:Show()
+    end)
+    labelLink:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+    group:AddChild(labelLink)
+
+    local countsText, pendingList = self:GetVoteInfo(guid)
+
+    local labelCounts = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+    labelCounts:SetText(countsText)
+    labelCounts:SetRelativeWidth(0.35)
+
+    if #pendingList > 0 then
+        labelCounts:SetCallback("OnEnter", function(widget)
+            GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine("Still Pending Response:", 1, 1, 1)
+            for _, name in ipairs(pendingList) do
+                GameTooltip:AddLine("- " .. name, 0.7, 0.7, 0.7)
+            end
+            GameTooltip:Show()
+        end)
+        labelCounts:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+    end
+    group:AddChild(labelCounts)
+
+    local btnAward = AceGUI:Create("Button") --[[@as AceGUIButton]]
+    btnAward:SetText(isLM and "Award" or "View Rolls")
+    btnAward:SetRelativeWidth(0.15)
+    btnAward:SetCallback("OnClick", function()
+        self:ShowAwardWindow(item)
+    end)
+    group:AddChild(btnAward)
+
+    local btnRemove = AceGUI:Create("Button") --[[@as AceGUIButton]]
+    btnRemove:SetText("X")
+    btnRemove:SetRelativeWidth(0.10)
+    btnRemove:SetCallback("OnClick", function()
+        C_Timer.After(0.05, function()
+            local Session = DesolateLootcouncil:GetModule("Session")
+            if Session and Session.RemoveSessionItem then
+                Session:RemoveSessionItem(guid)
+            end
+        end)
+    end)
+    if isLM then group:AddChild(btnRemove) end
+end
 
     local session = DesolateLootcouncil.db.profile.session
     local isLM = DesolateLootcouncil:AmILootMaster()
@@ -177,108 +247,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
 
     if items then
         for _, item in ipairs(items) do
-            local link = item.link
-            local guid = item.sourceGUID or link
-
-            ---@type AceGUISimpleGroup
-            local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-            group:SetLayout("Flow")
-            group:SetFullWidth(true)
-            scroll:AddChild(group)
-
-            -- Link (Bug Fix: resolve via cache to ensure proper coloring/loading)
-            -- Item Icon (NEW)
-            ---@type AceGUIIcon
-            local itemIcon = AceGUI:Create("Icon")
-            itemIcon:SetImage(C_Item.GetItemIconByID(item.itemID) or 134400)
-            itemIcon:SetImageSize(24, 24)
-            itemIcon:SetRelativeWidth(0.05)
-            itemIcon:SetCallback("OnClick", function()
-                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
-                GameTooltip:SetHyperlink(item.link)
-                GameTooltip:Show()
-            end)
-            itemIcon:SetCallback("OnEnter", function()
-                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
-                GameTooltip:SetHyperlink(item.link)
-                GameTooltip:Show()
-            end)
-            itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-            group:AddChild(itemIcon)
-
-            ---@type AceGUIInteractiveLabel
-            local labelLink = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-            local _, properLink = C_Item.GetItemInfo(link)
-            if not properLink then
-                local itemObj = Item:CreateFromItemID(item.itemID)
-                if not itemObj:IsItemEmpty() then
-                    itemObj:ContinueOnItemLoad(function()
-                        if self.monitorFrame and (self.monitorFrame --[[@as any]]).frame:IsShown() then
-                            self:ShowMonitorWindow() -- Partial refresh
-                        end
-                    end)
-                end
-                labelLink:SetText("Loading...")
-            else
-                labelLink:SetText(properLink)
-                -- Update Icon too if it was missing
-                itemIcon:SetImage(C_Item.GetItemIconByID(item.itemID) or 134400)
-            end
-            labelLink:SetRelativeWidth(0.35) -- Reduced from 0.40 to accommodate icon (0.05)
-            labelLink:SetCallback("OnEnter", function(widget)
-                GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
-                GameTooltip:SetHyperlink(item.link)
-                GameTooltip:Show()
-            end)
-            labelLink:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-            group:AddChild(labelLink)
-
-            -- Counts & Pending Info
-            local countsText, pendingList = GetVoteInfo(guid)
-
-            ---@type AceGUIInteractiveLabel
-            local labelCounts = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-            labelCounts:SetText(countsText)
-            labelCounts:SetRelativeWidth(0.35)
-
-            if #pendingList > 0 then
-                labelCounts:SetCallback("OnEnter", function(widget)
-                    GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
-                    GameTooltip:ClearLines()
-                    GameTooltip:AddLine("Still Pending Response:", 1, 1, 1)
-                    for _, name in ipairs(pendingList) do
-                        GameTooltip:AddLine("- " .. name, 0.7, 0.7, 0.7)
-                    end
-                    GameTooltip:Show()
-                end)
-                labelCounts:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-            end
-            group:AddChild(labelCounts)
-
-            -- Award Button (Bug 3: LM-only name change)
-            ---@type AceGUIButton
-            local btnAward = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            btnAward:SetText(isLM and "Award" or "View Rolls")
-            btnAward:SetRelativeWidth(0.15)
-            btnAward:SetCallback("OnClick", function()
-                self:ShowAwardWindow(item)
-            end)
-            group:AddChild(btnAward)
-
-            -- Remove Button (Bug 3: LM-only)
-            ---@type AceGUIButton
-            local btnRemove = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            btnRemove:SetText("X")
-            btnRemove:SetRelativeWidth(0.10)
-            btnRemove:SetCallback("OnClick", function()
-                C_Timer.After(0.05, function()
-                    local Session = DesolateLootcouncil:GetModule("Session")
-                    if Session and Session.RemoveSessionItem then
-                        Session:RemoveSessionItem(guid)
-                    end
-                end)
-            end)
-            if isLM then group:AddChild(btnRemove) end
+            self:BuildItemRow(scroll, item, isLM)
         end
     end
 
@@ -369,6 +338,82 @@ function UI_Monitor:UpdateDisenchanters()
     if Sidebar then
         Sidebar:UpdateDisenchanters(self.deFrame)
     end
+end
+function UI_Monitor:CreateVoteRow(scroll, v, isLM, itemData)
+    local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
+    local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
+
+    local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+    row:SetLayout("Flow")
+    row:SetFullWidth(true)
+    scroll:AddChild(row)
+
+    local lblName = AceGUI:Create("Label") --[[@as AceGUILabel]]
+    lblName:SetText(v.name)
+    lblName:SetRelativeWidth(0.30)
+    row:AddChild(lblName)
+
+    local rankText
+    if v.type == 1 then
+        rankText = (v.rank == 999) and "|cff9d9d9dUnranked|r" or ("#" .. v.rank)
+        if v.rank <= 5 then rankText = "|cffffd700" .. rankText .. "|r" end
+    else
+        rankText = "Roll: " .. v.roll
+    end
+
+    local lblRank = AceGUI:Create("Label") --[[@as AceGUILabel]]
+    lblRank:SetText(rankText)
+    lblRank:SetRelativeWidth(0.20)
+    row:AddChild(lblRank)
+
+    local lblResp = AceGUI:Create("Label") --[[@as AceGUILabel]]
+    local color = VOTE_COLOR[v.type] or ""
+    local txt = VOTE_TEXT[v.type] or "?"
+    lblResp:SetText(color .. txt .. "|r")
+    lblResp:SetRelativeWidth(0.25)
+    row:AddChild(lblResp)
+
+    local btnGive = AceGUI:Create("Button") --[[@as AceGUIButton]]
+    btnGive:SetText("Give")
+    btnGive:SetRelativeWidth(0.25)
+    btnGive:SetCallback("OnClick", function()
+        self.awardFrame:Hide()
+        local Loot = DesolateLootcouncil:GetModule("Loot")
+        if Loot and Loot.AwardItem then
+            local voteDesc = VOTE_TEXT[v.type] or "Unknown"
+            Loot:AwardItem(itemData.sourceGUID, v.name, voteDesc)
+        end
+    end)
+    if isLM then row:AddChild(btnGive) end
+end
+
+function UI_Monitor:CreateDisenchanterRow(scroll, de, isLM, itemData)
+    local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+    row:SetLayout("Flow")
+    row:SetFullWidth(true)
+    scroll:AddChild(row)
+
+    local lblName = AceGUI:Create("Label") --[[@as AceGUILabel]]
+    lblName:SetText(de.name)
+    lblName:SetRelativeWidth(0.30)
+    row:AddChild(lblName)
+
+    local lblSkill = AceGUI:Create("Label") --[[@as AceGUILabel]]
+    lblSkill:SetText("Lvl " .. de.skill)
+    lblSkill:SetRelativeWidth(0.45)
+    row:AddChild(lblSkill)
+
+    local btnGive = AceGUI:Create("Button") --[[@as AceGUIButton]]
+    btnGive:SetText("Give")
+    btnGive:SetRelativeWidth(0.25)
+    btnGive:SetCallback("OnClick", function()
+        self.awardFrame:Hide()
+        local Loot = DesolateLootcouncil:GetModule("Loot")
+        if Loot and Loot.AwardItem then
+            Loot:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
+        end
+    end)
+    if isLM then row:AddChild(btnGive) end
 end
 
 function UI_Monitor:ShowAwardWindow(itemData)
@@ -470,65 +515,14 @@ function UI_Monitor:ShowAwardWindow(itemData)
         end)
     end
 
-    local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] =
-    "|cffaaaaaa" }
-    local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
-
     if #voteList == 0 then
-        ---@type AceGUILabel
         local lbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
         lbl:SetText("No active votes.")
         lbl:SetFullWidth(true)
         scroll:AddChild(lbl)
     else
         for _, v in ipairs(voteList) do
-            ---@type AceGUISimpleGroup
-            local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-            row:SetLayout("Flow")
-            row:SetFullWidth(true)
-            scroll:AddChild(row)
-
-            ---@type AceGUILabel
-            local lblName = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            lblName:SetText(v.name)
-            lblName:SetRelativeWidth(0.30)
-            row:AddChild(lblName)
-
-            local rankText
-            if v.type == 1 then
-                rankText = (v.rank == 999) and "|cff9d9d9dUnranked|r" or ("#" .. v.rank)
-                if v.rank <= 5 then rankText = "|cffffd700" .. rankText .. "|r" end
-            else
-                rankText = "Roll: " .. v.roll
-            end
-
-            ---@type AceGUILabel
-            local lblRank = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            lblRank:SetText(rankText)
-            lblRank:SetRelativeWidth(0.20)
-            row:AddChild(lblRank)
-
-            ---@type AceGUILabel
-            local lblResp = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            local color = VOTE_COLOR[v.type] or ""
-            local txt = VOTE_TEXT[v.type] or "?"
-            lblResp:SetText(color .. txt .. "|r")
-            lblResp:SetRelativeWidth(0.25)
-            row:AddChild(lblResp)
-
-            ---@type AceGUIButton
-            local btnGive = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            btnGive:SetText("Give")
-            btnGive:SetRelativeWidth(0.25)
-            btnGive:SetCallback("OnClick", function()
-                self.awardFrame:Hide()
-                local Loot = DesolateLootcouncil:GetModule("Loot")
-                if Loot and Loot.AwardItem then
-                    local voteDesc = VOTE_TEXT[v.type] or "Unknown"
-                    Loot:AwardItem(itemData.sourceGUID, v.name, voteDesc)
-                end
-            end)
-            if isLM then row:AddChild(btnGive) end
+            self:CreateVoteRow(scroll, v, isLM, itemData)
         end
     end
 
@@ -575,36 +569,7 @@ function UI_Monitor:ShowAwardWindow(itemData)
         scroll:AddChild(deHeader)
 
         for _, de in ipairs(disenchanters) do
-            ---@type AceGUISimpleGroup
-            local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-            row:SetLayout("Flow")
-            row:SetFullWidth(true)
-            scroll:AddChild(row)
-
-            ---@type AceGUILabel
-            local lblName = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            lblName:SetText(de.name)
-            lblName:SetRelativeWidth(0.30)
-            row:AddChild(lblName)
-
-            ---@type AceGUILabel
-            local lblSkill = AceGUI:Create("Label") --[[@as AceGUILabel]]
-            lblSkill:SetText("Lvl " .. de.skill)
-            lblSkill:SetRelativeWidth(0.45)
-            row:AddChild(lblSkill)
-
-            ---@type AceGUIButton
-            local btnGive = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            btnGive:SetText("Give")
-            btnGive:SetRelativeWidth(0.25)
-            btnGive:SetCallback("OnClick", function()
-                self.awardFrame:Hide()
-                local Loot = DesolateLootcouncil:GetModule("Loot")
-                if Loot and Loot.AwardItem then
-                    Loot:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
-                end
-            end)
-            if isLM then row:AddChild(btnGive) end
+            self:CreateDisenchanterRow(scroll, de, isLM, itemData)
         end
     end
 end

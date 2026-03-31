@@ -180,46 +180,50 @@ function UI_Attendance:ShowAttendanceWindow()
     self:UpdateAttendanceLists()
 end
 
+function UI_Attendance:CreateAttendedLabel(name)
+    local btn = AceGUI:Create("InteractiveLabel")
+    btn:SetText(name)
+    btn:SetColor(0.2, 1.0, 0.2) -- Greenish
+    btn:SetCallback("OnClick", function()
+        tempAttended[name] = nil
+        tempAbsent[name] = true
+        self:UpdateAttendanceLists()
+    end)
+    return btn
+end
+
+function UI_Attendance:CreateAbsentLabel(name)
+    local btn = AceGUI:Create("InteractiveLabel")
+    btn:SetText(name)
+    btn:SetColor(1.0, 0.4, 0.4) -- Reddish
+    btn:SetCallback("OnClick", function()
+        tempAbsent[name] = nil
+        tempAttended[name] = true
+        self:UpdateAttendanceLists()
+    end)
+    return btn
+end
+
 function UI_Attendance:UpdateAttendanceLists()
     if not self.attendanceFrame then return end
 
     self.scrollAttended:ReleaseChildren()
     self.scrollAbsent:ReleaseChildren()
 
-    -- Render Attended
     local listAttended = {}
     for k in pairs(tempAttended) do table.insert(listAttended, k) end
     table.sort(listAttended)
 
     for _, name in ipairs(listAttended) do
-        local btn = AceGUI:Create("InteractiveLabel")
-        btn:SetText(name)
-        btn:SetColor(0.2, 1.0, 0.2) -- Greenish
-        btn:SetCallback("OnClick", function()
-            -- Move to Absent
-            tempAttended[name] = nil
-            tempAbsent[name] = true
-            self:UpdateAttendanceLists()
-        end)
-        self.scrollAttended:AddChild(btn)
+        self.scrollAttended:AddChild(self:CreateAttendedLabel(name))
     end
 
-    -- Render Absent
     local listAbsent = {}
     for k in pairs(tempAbsent) do table.insert(listAbsent, k) end
     table.sort(listAbsent)
 
     for _, name in ipairs(listAbsent) do
-        local btn = AceGUI:Create("InteractiveLabel")
-        btn:SetText(name)
-        btn:SetColor(1.0, 0.4, 0.4) -- Reddish
-        btn:SetCallback("OnClick", function()
-            -- Move to Attended
-            tempAbsent[name] = nil
-            tempAttended[name] = true
-            self:UpdateAttendanceLists()
-        end)
-        self.scrollAbsent:AddChild(btn)
+        self.scrollAbsent:AddChild(self:CreateAbsentLabel(name))
     end
 end
 
@@ -328,6 +332,154 @@ function UI_Attendance:DeleteHistoryEntry(index)
     end
 end
 
+function UI_Attendance:GetSettingsGroupOptions(config)
+    return {
+        settingsHeader = {
+            type = "header",
+            name = "Settings",
+            order = 1,
+        },
+        enabled = {
+            type = "toggle",
+            name = "Enable Priority Decay",
+            desc = "If enabled, absent players will suffer priority decay.",
+            order = 2,
+            get = function() return config.enabled end,
+            set = function(_, val) config.enabled = val end,
+        },
+        defaultPenalty = {
+            type = "select",
+            name = "Default Penalty",
+            desc = "Amount of priority lost per missed raid.",
+            order = 3,
+            values = { [0] = "0", [1] = "1", [2] = "2", [3] = "3" },
+            get = function() return config.defaultPenalty end,
+            set = function(_, val) config.defaultPenalty = val end,
+        }
+    }
+end
+
+function UI_Attendance:GetSessionControlOptions(config)
+    return {
+        sessionHeader = {
+            type = "header",
+            name = "Session Control",
+            order = 10,
+        },
+        status = {
+            type = "description",
+            name = function()
+                if config.sessionActive then return "|cff00ff00Session Active|r"
+                else return "|cffff0000Session Inactive|r" end
+            end,
+            fontSize = "medium",
+            order = 11,
+        },
+        controlBtn = {
+            type = "execute",
+            name = function() return config.sessionActive and "End Session" or "Start Session" end,
+            desc = function()
+                return config.sessionActive and
+                    "Open the Attendance Review window to process decay and end the session." or
+                    "Start a new raid session."
+            end,
+            func = function()
+                local Roster = DesolateLootcouncil:GetModule("Roster")
+                if not Roster then return end
+
+                if config.sessionActive then
+                    if self.ShowAttendanceWindow then
+                        self:ShowAttendanceWindow()
+                        LibStub("AceConfigDialog-3.0"):Close("DesolateLootcouncil")
+                    end
+                else
+                    if Roster.StartRaidSession then
+                        Roster:StartRaidSession()
+                        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+                    else
+                        DesolateLootcouncil:DLC_Log("Error: StartRaidSession not found in Session module.", true)
+                    end
+                end
+            end,
+            order = 12,
+        }
+    }
+end
+
+function UI_Attendance:GetRaidHistoryOptions(config, db)
+    return {
+        historyHeader = {
+            type = "header",
+            name = "Raid History",
+            order = 20,
+        },
+        historyList = {
+            type = "select",
+            name = "Select Session",
+            desc = "View details of current or past raid sessions.",
+            order = 21,
+            values = function()
+                local history = db.AttendanceHistory or {}
+                local list = {}
+
+                if config.sessionActive then
+                    local activeCount = 0
+                    for _ in pairs(config.currentAttendees) do activeCount = activeCount + 1 end
+                    list["CURRENT"] = string.format("|cff00ff00[ACTIVE]|r %s (%d Players)", date("%Y-%m-%d"), activeCount)
+                end
+
+                for i, entry in ipairs(history) do
+                    local count = 0
+                    if entry.attendees then
+                        for _ in pairs(entry.attendees) do count = count + 1 end
+                    end
+                    list[i] = string.format("%s - %s (%d Players)", entry.date or "N/A", entry.zone or "Unknown", count)
+                end
+                return list
+            end,
+            get = function() return self.selectedHistoryIndex end,
+            set = function(_, val) self.selectedHistoryIndex = val end,
+            width = "double",
+        },
+        deleteBtn = {
+            type = "execute",
+            name = "Delete Entry",
+            desc = "Permanently delete the selected history record.",
+            order = 23,
+            disabled = function() return not self.selectedHistoryIndex or self.selectedHistoryIndex == "CURRENT" end,
+            func = function() StaticPopup_Show("DLC_CONFIRM_DELETE_HISTORY") end,
+            width = "half",
+        },
+        historyDetails = {
+            type = "description",
+            name = function()
+                local idx = self.selectedHistoryIndex
+                if not idx then return "Select a session to view details." end
+                local attendees = {}
+
+                if idx == "CURRENT" then
+                    if config.currentAttendees then
+                        for name in pairs(config.currentAttendees) do table.insert(attendees, name) end
+                    end
+                else
+                    local history = db.AttendanceHistory or {}
+                    local entry = history[idx]
+                    if entry and entry.attendees then
+                        for name in pairs(entry.attendees) do table.insert(attendees, name) end
+                    else
+                        return "Error: History entry not found or empty."
+                    end
+                end
+
+                if #attendees == 0 then return "|cffffd700No attendees recorded.|r" end
+                table.sort(attendees)
+                return "|cffffd700Attendees (" .. #attendees .. "):|r\n" .. table.concat(attendees, ", ")
+            end,
+            order = 22,
+        }
+    }
+end
+
 function UI_Attendance:GetAttendanceOptions()
     local db = DesolateLootcouncil.db.profile
     local config = db.DecayConfig
@@ -336,172 +488,17 @@ function UI_Attendance:GetAttendanceOptions()
         type = "group",
         name = "Attendance & Decay",
         order = 4,
-        args = {
-            settingsHeader = {
-                type = "header",
-                name = "Settings",
-                order = 1,
-            },
-            enabled = {
-                type = "toggle",
-                name = "Enable Priority Decay",
-                desc = "If enabled, absent players will suffer priority decay.",
-                order = 2,
-                get = function() return config.enabled end,
-                set = function(_, val) config.enabled = val end,
-            },
-            defaultPenalty = {
-                type = "select",
-                name = "Default Penalty",
-                desc = "Amount of priority lost per missed raid.",
-                order = 3,
-                values = { [0] = "0", [1] = "1", [2] = "2", [3] = "3" },
-                get = function() return config.defaultPenalty end,
-                set = function(_, val) config.defaultPenalty = val end,
-            },
-            sessionHeader = {
-                type = "header",
-                name = "Session Control",
-                order = 10,
-            },
-            status = {
-                type = "description",
-                name = function()
-                    if config.sessionActive then
-                        return "|cff00ff00Session Active|r"
-                    else
-                        return "|cffff0000Session Inactive|r"
-                    end
-                end,
-                fontSize = "medium",
-                order = 11,
-            },
-            controlBtn = {
-                type = "execute",
-                name = function()
-                    return config.sessionActive and "End Session" or "Start Session"
-                end,
-                desc = function()
-                    return config.sessionActive and
-                        "Open the Attendance Review window to process decay and end the session." or
-                        "Start a new raid session."
-                end,
-                func = function()
-                    local Roster = DesolateLootcouncil:GetModule("Roster")
-                    if not Roster then return end
-
-                    if config.sessionActive then
-                        -- End Session -> Open Popup
-                        if self.ShowAttendanceWindow then
-                            self:ShowAttendanceWindow()
-                            -- Close Config to focus on Popup
-                            LibStub("AceConfigDialog-3.0"):Close("DesolateLootcouncil")
-                        end
-                    else
-                        -- Start Session
-                        if Roster.StartRaidSession then
-                            Roster:StartRaidSession()
-                            -- Refresh Config to update button/status
-                            LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-                        else
-                            DesolateLootcouncil:DLC_Log("Error: StartRaidSession not found in Session module.", true)
-                        end
-                    end
-                end,
-                order = 12,
-            },
-            historyHeader = {
-                type = "header",
-                name = "Raid History",
-                order = 20,
-            },
-            historyList = {
-                type = "select",
-                name = "Select Session",
-                desc = "View details of current or past raid sessions.",
-                order = 21,
-                values = function()
-                    local history = db.AttendanceHistory or {}
-                    local list = {}
-
-                    -- 1. [ACTIVE] Entry
-                    if config.sessionActive then
-                        local activeCount = 0
-                        for _ in pairs(config.currentAttendees) do activeCount = activeCount + 1 end
-                        list["CURRENT"] = string.format("|cff00ff00[ACTIVE]|r %s (%d Players)", date("%Y-%m-%d"),
-                            activeCount)
-                    end
-
-                    -- 2. History Entries (Newest First)
-                    -- Since AceConfig selection values must be Strings or Numbers, and keys are unordered in 'pairs',
-                    -- we rely on the implementation.
-                    -- Issue: "values" table keys are the 'value' passed to set/get.
-                    -- If we use index numbers, they persist.
-                    -- We will use the Index 1..N as the key.
-
-                    for i, entry in ipairs(history) do
-                        local count = 0
-                        if entry.attendees then
-                            for _ in pairs(entry.attendees) do count = count + 1 end
-                        end
-                        -- Format: YYYY-MM-DD - Zone (Count)
-                        list[i] = string.format("%s - %s (%d Players)", entry.date or "N/A", entry.zone or "Unknown",
-                            count)
-                    end
-                    return list
-                end,
-                get = function() return self.selectedHistoryIndex end,
-                set = function(_, val) self.selectedHistoryIndex = val end,
-                width = "double",
-            },
-            deleteBtn = {
-                type = "execute",
-                name = "Delete Entry",
-                desc = "Permanently delete the selected history record.",
-                order = 23,
-                disabled = function()
-                    return not self.selectedHistoryIndex or self.selectedHistoryIndex == "CURRENT"
-                end,
-                func = function()
-                    StaticPopup_Show("DLC_CONFIRM_DELETE_HISTORY")
-                end,
-                width = "half",
-            },
-            historyDetails = {
-                type = "description",
-                name = function()
-                    local idx = self.selectedHistoryIndex
-                    if not idx then return "Select a session to view details." end
-
-                    local attendees = {}
-
-                    -- Handle CURRENT vs HISTORY
-                    if idx == "CURRENT" then
-                        if config.currentAttendees then
-                            for name in pairs(config.currentAttendees) do
-                                table.insert(attendees, name)
-                            end
-                        end
-                    else
-                        local history = db.AttendanceHistory or {}
-                        local entry = history[idx]
-                        if entry and entry.attendees then
-                            for name in pairs(entry.attendees) do
-                                table.insert(attendees, name)
-                            end
-                        else
-                            return "Error: History entry not found or empty."
-                        end
-                    end
-
-                    if #attendees == 0 then return "|cffffd700No attendees recorded.|r" end
-                    table.sort(attendees)
-
-                    return "|cffffd700Attendees (" .. #attendees .. "):|r\n" .. table.concat(attendees, ", ")
-                end,
-                order = 22,
-            },
-        }
+        args = {}
     }
+
+    local settings = self:GetSettingsGroupOptions(config)
+    for k, v in pairs(settings) do options.args[k] = v end
+
+    local sessionCtrl = self:GetSessionControlOptions(config)
+    for k, v in pairs(sessionCtrl) do options.args[k] = v end
+
+    local history = self:GetRaidHistoryOptions(config, db)
+    for k, v in pairs(history) do options.args[k] = v end
+
     return options
 end

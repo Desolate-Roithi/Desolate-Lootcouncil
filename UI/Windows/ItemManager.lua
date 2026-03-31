@@ -45,52 +45,33 @@ function UI_ItemManager:ShowItemManagerWindow()
     self:RefreshWindow()
 end
 
-function UI_ItemManager:RefreshWindow()
-    if not self.frame then return end
-    self.frame:ReleaseChildren()
-
-    local db = DesolateLootcouncil.db.profile
-
-    -- 1. Management Header (Add Item)
-    ---@type AceGUISimpleGroup
+function UI_ItemManager:BuildHeaderGroup(db, listNames)
     local headerGroup = AceGUI:Create("SimpleGroup")
     headerGroup:SetLayout("Flow")
     headerGroup:SetFullWidth(true)
     self.frame:AddChild(headerGroup)
 
-    -- Input
-    ---@type AceGUIEditBox
     local input = AceGUI:Create("EditBox")
     input:SetLabel("Item Name/Link/ID")
     input:SetRelativeWidth(0.40)
-    input:DisableButton(true) -- Hide the internal "Okay" button
+    input:DisableButton(true)
     input:SetCallback("OnEnterPressed", function(widget, event, text)
         if text and text ~= "" and self.tempList then
             local Loot = DesolateLootcouncil:GetModule("Loot")
             if Loot then
                 Loot:AddItemToList(text, self.tempList)
-                input:SetText("")    -- Clear Input
-                self:RefreshWindow() -- Refresh List
+                input:SetText("")
+                self:RefreshWindow()
             end
         end
     end)
     headerGroup:AddChild(input)
 
-    -- Target List Dropdown
-    ---@type AceGUIDropdown
     local listDropdown = AceGUI:Create("Dropdown")
     listDropdown:SetLabel("Target List")
     listDropdown:SetRelativeWidth(0.25)
-
-    local listNames = {}
-    local Priority = DesolateLootcouncil:GetModule("Priority")
-    local pNames = Priority and Priority:GetPriorityListNames() or {}
-    for i, name in ipairs(pNames) do
-        listNames[i] = name
-    end
     listDropdown:SetList(listNames)
 
-    -- Default to saved temp list or first
     self.tempList = self.tempList or 1
     listDropdown:SetValue(self.tempList)
     listDropdown:SetCallback("OnValueChanged", function(widget, event, value)
@@ -98,27 +79,23 @@ function UI_ItemManager:RefreshWindow()
     end)
     headerGroup:AddChild(listDropdown)
 
-    -- Add Button
-    ---@type AceGUIButton
     local addBtn = AceGUI:Create("Button")
     addBtn:SetText("Add")
-    addBtn:SetRelativeWidth(0.15) -- Reduced from 0.20 to make room
+    addBtn:SetRelativeWidth(0.15)
     addBtn:SetCallback("OnClick", function()
         local text = input:GetText()
         if text and text ~= "" and self.tempList then
             local Loot = DesolateLootcouncil:GetModule("Loot")
             if Loot then
                 Loot:AddItemToList(text, self.tempList)
-                input:SetText("")    -- Clear Input
-                self:RefreshWindow() -- Refresh List
+                input:SetText("")
+                self:RefreshWindow()
             end
         end
     end)
     headerGroup:AddChild(addBtn)
 
-    -- Sync Button (Officer Only)
     if DesolateLootcouncil:AmIRaidAssistOrLM() then
-        ---@type AceGUIButton
         local syncBtn = AceGUI:Create("Button")
         syncBtn:SetText("Sync Raid")
         syncBtn:SetRelativeWidth(0.2)
@@ -135,17 +112,88 @@ function UI_ItemManager:RefreshWindow()
         end)
         headerGroup:AddChild(syncBtn)
     end
+end
 
+function UI_ItemManager:BuildItemRow(scroll, list, itemID)
+    local name, itemLink, _, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemID)
 
-    -- 2. Separator/Title
-    ---@type AceGUILabel
+    if not itemLink then
+        local itemObj = Item:CreateFromItemID(itemID)
+        if not itemObj:IsItemEmpty() then
+            itemObj:ContinueOnItemLoad(function()
+                if self.frame and (self.frame --[[@as any]]).frame:IsShown() then
+                    self:RefreshWindow()
+                end
+            end)
+        end
+        name = "Loading..."
+        itemTexture = C_Item.GetItemIconByID(itemID)
+    end
+
+    local row = AceGUI:Create("SimpleGroup")
+    row:SetLayout("Flow")
+    row:SetFullWidth(true)
+    scroll:AddChild(row)
+
+    local iconLabel = AceGUI:Create("InteractiveLabel")
+    iconLabel:SetImage(itemTexture)
+    iconLabel:SetImageSize(24, 24)
+    iconLabel:SetWidth(40)
+    iconLabel:SetCallback("OnEnter", function(widget)
+        GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
+        if itemLink then GameTooltip:SetHyperlink(itemLink) else GameTooltip:SetItemByID(itemID) end
+        GameTooltip:Show()
+    end)
+    iconLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+    row:AddChild(iconLabel)
+
+    local nameLabel = AceGUI:Create("InteractiveLabel")
+    nameLabel:SetText(itemLink or name)
+    nameLabel:SetRelativeWidth(0.70)
+    nameLabel:SetCallback("OnEnter", function(widget)
+        GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
+        if itemLink then GameTooltip:SetHyperlink(itemLink) else GameTooltip:SetItemByID(itemID) end
+        GameTooltip:Show()
+    end)
+    nameLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+    nameLabel:SetCallback("OnClick", function()
+        if itemLink then
+            local editBox = ChatEdit_ChooseBoxForSend()
+            ChatEdit_ActivateChat(editBox)
+            editBox:Insert(itemLink)
+        end
+    end)
+    row:AddChild(nameLabel)
+
+    local btnRemove = AceGUI:Create("Button")
+    btnRemove:SetText("Remove")
+    btnRemove:SetRelativeWidth(0.15)
+    btnRemove:SetHeight(24)
+    btnRemove:SetCallback("OnClick", function()
+        list.items[itemID] = nil
+        DesolateLootcouncil:DLC_Log("Removed item ID: " .. itemID)
+        self:RefreshWindow()
+    end)
+    row:AddChild(btnRemove)
+end
+
+function UI_ItemManager:RefreshWindow()
+    if not self.frame then return end
+    self.frame:ReleaseChildren()
+
+    local db = DesolateLootcouncil.db.profile
+    local listNames = {}
+    local Priority = DesolateLootcouncil:GetModule("Priority")
+    local pNames = Priority and Priority:GetPriorityListNames() or {}
+    for i, name in ipairs(pNames) do listNames[i] = name end
+
+    self:BuildHeaderGroup(db, listNames)
+
     local sep = AceGUI:Create("Heading")
     sep:SetText("Assigned Items")
     sep:SetFullWidth(true)
     self.frame:AddChild(sep)
 
-    -- 3. List Selector (View)
-    ---@type AceGUIDropdown
     local viewDropdown = AceGUI:Create("Dropdown")
     viewDropdown:SetLabel("Select List to View")
     viewDropdown:SetList(listNames)
@@ -158,92 +206,17 @@ function UI_ItemManager:RefreshWindow()
     viewDropdown:SetFullWidth(true)
     self.frame:AddChild(viewDropdown)
 
-
-    -- 4. Scroll Container
-    ---@type AceGUIScrollFrame
     local scroll = AceGUI:Create("ScrollFrame")
-    scroll:SetLayout("List") -- List layout stacks groups vertically
+    scroll:SetLayout("List")
     scroll:SetFullWidth(true)
     scroll:SetFullHeight(true)
     self.frame:AddChild(scroll)
 
-    -- 5. Render Items
     if db.PriorityLists and self.viewListKey then
         local list = db.PriorityLists[self.viewListKey]
         if list and list.items then
             for itemID, _ in pairs(list.items) do
-                local name, itemLink, _, _, _, _, _, _, _, itemTexture =
-                    C_Item.GetItemInfo(itemID)
-
-                if not itemLink then
-                    -- Item data not yet in client cache. Fire a load request and
-                    -- auto-refresh the window once it arrives — no manual re-open needed.
-                    local itemObj = Item:CreateFromItemID(itemID)
-                    if not itemObj:IsItemEmpty() then
-                        itemObj:ContinueOnItemLoad(function()
-                            -- Only refresh if our frame is still alive and shown.
-                            if self.frame and (self.frame --[[@as any]]).frame:IsShown() then
-                                self:RefreshWindow()
-                            end
-                        end)
-                    end
-                    name = "Loading..." -- friendlier than a raw ID
-                    itemTexture = C_Item.GetItemIconByID(itemID)
-                end
-
-                -- Row Group (Horizontal Flow)
-                ---@type AceGUISimpleGroup
-                local row = AceGUI:Create("SimpleGroup")
-                row:SetLayout("Flow")
-                row:SetFullWidth(true)
-                scroll:AddChild(row)
-
-                -- Icon (Interactive)
-                ---@type AceGUIInteractiveLabel
-                local iconLabel = AceGUI:Create("InteractiveLabel")
-                iconLabel:SetImage(itemTexture)
-                iconLabel:SetImageSize(24, 24)
-                iconLabel:SetWidth(40) -- Just enough for icon
-                iconLabel:SetCallback("OnEnter", function(widget)
-                    GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
-                    if itemLink then GameTooltip:SetHyperlink(itemLink) else GameTooltip:SetItemByID(itemID) end
-                    GameTooltip:Show()
-                end)
-                iconLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-                row:AddChild(iconLabel)
-
-                -- Name (Interactive)
-                ---@type AceGUIInteractiveLabel
-                local nameLabel = AceGUI:Create("InteractiveLabel")
-                nameLabel:SetText(itemLink or name)
-                nameLabel:SetRelativeWidth(0.70)
-                nameLabel:SetCallback("OnEnter", function(widget)
-                    GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
-                    if itemLink then GameTooltip:SetHyperlink(itemLink) else GameTooltip:SetItemByID(itemID) end
-                    GameTooltip:Show()
-                end)
-                nameLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-                nameLabel:SetCallback("OnClick", function()
-                    if itemLink then
-                        local editBox = ChatEdit_ChooseBoxForSend()
-                        ChatEdit_ActivateChat(editBox)
-                        editBox:Insert(itemLink)
-                    end
-                end)
-                row:AddChild(nameLabel)
-
-                -- Remove Button
-                ---@type AceGUIButton
-                local btnRemove = AceGUI:Create("Button")
-                btnRemove:SetText("Remove")
-                btnRemove:SetRelativeWidth(0.15)
-                btnRemove:SetHeight(24) -- Match icon roughly
-                btnRemove:SetCallback("OnClick", function()
-                    list.items[itemID] = nil
-                    DesolateLootcouncil:DLC_Log("Removed item ID: " .. itemID)
-                    self:RefreshWindow()
-                end)
-                row:AddChild(btnRemove)
+                self:BuildItemRow(scroll, list, itemID)
             end
         end
     end
