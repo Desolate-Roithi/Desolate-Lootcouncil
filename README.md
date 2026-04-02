@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.7.1-Beta  
-**Last Updated:** 2026-03-31  
+**Latest Version:** v0.7.3-Beta  
+**Last Updated:** 2026-04-02  
 **Compatibility:** WoW 12.0.1 (Midnight)  
 
 
@@ -46,6 +46,18 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.7.3-Beta
+* **Network Architecture Overhaul**: Optimized the entire communication engine by transitioning from whisper-based voting (which caused LM lag spikes) to a high-performance **RAID Channel Pub/Sub** model.
+* **Intelligent Heartbeats**: Replaced the constant 1.5s "Sync" pulse with a 30-second **Serialized Heartbeat**. This uses a pre-cached payload to resync the full item list and vote matrix to late-joiners and reloaders without overhead.
+* **UI Focus & Retention**: 
+    - **Newest on Top**: Both the Loot Backlog and Voting windows now display new additions at the top of the list for immediate visibility.
+    - **Scroll Stickiness**: Fixed the "Scroll Snap" bug; the windows now remember your exact scroll position during automated UI refreshes.
+* **Loot Collection Stability**: 
+    - **Duplicate Drop Fix**: Resolved a long-standing issue where identical items from the same boss were discarded. Keys now include slot indices (`sourceGUID-itemID-slot`).
+    - **Global Localization**: Switched to Blizzard global strings (`LOOT_ITEM_SELF`, etc.) to ensure LM loot detection works reliably on German, English, and other localized clients.
+    - **Reload Persistence**: The Boss Corpse deduplication store now resides in the database, preventing items from reappearing in the backlog after a UI reload.
+* **Network Throttling**: Enchanting skill data is now only broadcast once per session, and empty Skill 0 entries are dropped to reduce packet size.
 
 ### v0.7.1-Beta
 * **Core UI Structural Refactor**: Successfully modularized monolithic functions across all primary UI windows (`Attendance`, `ItemManager`, `Monitor`, `PrioritySettings`).

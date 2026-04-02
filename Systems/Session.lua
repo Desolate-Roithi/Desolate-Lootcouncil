@@ -34,68 +34,31 @@ function Session:OnEnable()
     DesolateLootcouncil:DLC_Log("Systems/Session Loaded")
 
     self.outboundVotes = {}
-    self.needsSync = false
     self.lastHeartbeat = 0
-    self.lastFullSync = 0
-    self.lastBatchSync = 0
-    self.pendingAcks = {}          -- guid -> { senderName -> true }; batched into SYNC_VOTES
-    self.sessionPayloadCache = nil -- Pre-serialized START_SESSION string for heartbeat
-    self:ScheduleRepeatingTimer("OnTimerTick", 1.5)
+    self.sessionPayloadCache = nil -- Pre-serialized LOOT_SESSION_START string for heartbeat
+    self:ScheduleRepeatingTimer("OnTimerTick", 1)
 end
 
 function Session:OnTimerTick()
-    -- 1. LM Side: Throttled Sync logic moved to section 3 below for consolidated timing
-
-    -- 2. Raider Side: Batch Send Votes
+    -- Approach B: No client polling/batching queues needed!
+    -- Session Heartbeat & Full Sync (Late Joiners & Consistency) — LM only
     local now = GetServerTime()
-    
-    if not DesolateLootcouncil:AmILootMaster() then
-        if now - self.lastBatchSync >= 3 then
-            local hasPendingVotes = false
-            local votesToSync = {}
-            
-            for guid, voteData in pairs(self.outboundVotes) do
-                votesToSync[guid] = voteData.type
-                hasPendingVotes = true
-            end
-            
-            if hasPendingVotes then
-                local target = DesolateLootcouncil:DetermineLootMaster()
-                if target and target ~= "Unknown" then
-                    local payload = {
-                        command = "VOTE_BATCH",
-                        data = votesToSync
-                    }
-                    local serialized = self:Serialize(payload)
-                    self:SendCommMessage("DLC_Loot", serialized, "WHISPER", target)
-                    self.lastBatchSync = now
-                    DesolateLootcouncil:DLC_Log("Sent batched votes to LM.")
-                end
-            end
-        end
-    end
-
-    -- 3. Session Heartbeat & Full Sync (Late Joiners & Consistency) — LM only
     if DesolateLootcouncil:AmILootMaster() and self.clientLootList and #self.clientLootList > 0 then
-        -- 3a. Batch Vote Sync (on change, or maintenance every 15s)
-        local hasPendingAcks = next(self.pendingAcks) ~= nil
-        if (self.needsSync and now - self.lastFullSync > 5.0) or hasPendingAcks or (now - self.lastFullSync > 15) then
-            self:SendSyncVotes()
-            self.needsSync = false
-            self.pendingAcks = {}
-            self.lastFullSync = now
-        end
-
-        -- 3b. Item-list Heartbeat (every 45s — late joiners & reloaders)
-        -- Uses the pre-serialized cache; rebuild only when items change.
-        if now - self.lastHeartbeat > 45 then
+        -- Item-list Heartbeat (every 30s — late joiners & reloaders)
+        if now - self.lastHeartbeat > 30 then
             self.lastHeartbeat = now
             self:SendSessionHeartbeat()
         end
     end
 end
 
--- Build (or reuse) the cached START_SESSION serialization and broadcast it.
+-- ==============================================================================
+-- LOOT SESSIONS vs RAID SESSIONS:
+-- "Raid Sessions" are overarching attendance/configuration tracking sessions managed by `Roster.lua`.
+-- "Loot Sessions" are short-lived voting events triggered per-item/boss by `Session.lua`.
+-- ==============================================================================
+
+-- Build (or reuse) the cached LOOT_SESSION_START serialization and broadcast it.
 -- isHeartbeat=true signals receivers NOT to rebuild their full UI if already hydrated,
 -- but closedItems is always included so late-joiners get correct state immediately.
 function Session:SendSessionHeartbeat()
@@ -113,22 +76,14 @@ function Session:SendSessionHeartbeat()
         -- Snapshot closedItems for the heartbeat, capped at 30 entries.
         -- The live self.closedItems is untouched; items beyond this cap are
         -- already awarded and irrelevant to any late-joiner entering now.
-        local MAX_CLOSED_IN_HEARTBEAT = 30
-        local closedSnapshot = {}
-        local closedCount = 0
-        for guid, val in pairs(self.closedItems or {}) do
-            if closedCount >= MAX_CLOSED_IN_HEARTBEAT then break end
-            closedSnapshot[guid] = val
-            closedCount = closedCount + 1
-        end
-
         local payload = {
-            command     = "START_SESSION",
+            command     = "LOOT_SESSION_START",
             data        = payloadData,
-            duration    = 300,
-            endTime     = self.sessionExpiry or (GetServerTime() + 300),
-            isHeartbeat = true,
-            closedItems = closedSnapshot,
+            duration    = self.sessionDuration or 300,
+            endTime     = self.sessionExpiry,
+            closedItems = self.closedItems,
+            votes       = self.sessionVotes,
+            isHeartbeat = true
         }
         self.sessionPayloadCache = self:Serialize(payload)
         DesolateLootcouncil:DLC_Log("Session Heartbeat: rebuilt payload cache.")
@@ -149,8 +104,8 @@ function Session:SaveSessionState()
         votes    = self.sessionVotes,
         myVotes  = self.myLocalVotes,
         closed   = self.closedItems,
-        expiry   = self.sessionExpiry,                     -- Absolute timestamp
-        activeLM = DesolateLootcouncil.activeLootMaster    -- Bug 6: persist LM identity
+        expiry   = self.sessionExpiry,                  -- Absolute timestamp
+        activeLM = DesolateLootcouncil.activeLootMaster -- Bug 6: persist LM identity
     }
 end
 
@@ -290,6 +245,9 @@ function Session:StartSession(lootTable)
     -- Copy clean list to persistent storage
     local duration = DesolateLootcouncil.db.profile.sessionDuration or 300
     local endTime = GetServerTime() + duration
+    self.sessionDuration = duration
+    self.sessionExpiry = endTime
+
     for _, item in ipairs(cleanList) do
         item.expiry = endTime -- Per-item expiry (Absolute)
         table.insert(session.bidding, item)
@@ -318,7 +276,7 @@ function Session:StartSession(lootTable)
 
     -- 4. Serialize
     local payload = {
-        command = "START_SESSION",
+        command = "LOOT_SESSION_START",
         data = payloadData,
         duration = duration,
         endTime = endTime
@@ -355,15 +313,7 @@ function Session:StartSession(lootTable)
         if DesolateLootcouncil.sessionAutopassActive ~= nil then
             Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
         end
-
-        local db = DesolateLootcouncil.db.profile
-        if db.PriorityLists then
-            local syncData = {}
-            for _, list in ipairs(db.PriorityLists) do
-                syncData[list.name] = list.items or {}
-            end
-            Comm:SendComm("IM_SYNC", syncData) -- Broadcast
-        end
+        -- IM_SYNC broadcast removed. Priority lists now strictly sync on manual button press.
     end
 
     -- Open Monitor Window for LM
@@ -379,8 +329,8 @@ function Session:StartSession(lootTable)
 end
 
 function Session:SendStopSession()
-    -- 1. Broadcast "STOP_SESSION"
-    local payload = { command = "STOP_SESSION" }
+    -- 1. Broadcast "LOOT_SESSION_END"
+    local payload = { command = "LOOT_SESSION_END" }
     local serialized = self:Serialize(payload)
 
     local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
@@ -395,9 +345,9 @@ function Session:SendStopSession()
     end
 
     -- 2. Local Cleanup (LM Side)
-    self.sessionVotes = {}
-    self.closedItems  = {}
-    self.clientLootList = {}  -- B9: Clear so heartbeat timer stops on dead session
+    self.sessionVotes        = {}
+    self.closedItems         = {}
+    self.clientLootList      = {} -- B9: Clear so heartbeat timer stops on dead session
     self.sessionPayloadCache = nil
     -- Clear the Bidding storage so Monitor empties
     wipe(DesolateLootcouncil.db.profile.session.bidding)
@@ -440,7 +390,6 @@ function Session:SendCloseItem(itemGUID)
     end
 
     DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(itemGUID, -8))
-    self.needsSync = true          -- Trigger batched sync update
     self.sessionPayloadCache = nil -- Invalidate heartbeat cache; closed state changed
 end
 
@@ -478,7 +427,6 @@ end
 function Session:RemoveSessionItem(guid)
     -- 1. Tell clients to REMOVE the item (not just close)
     self:SendRemoveItem(guid)
-    self.needsSync = true          -- Trigger batched sync update
     self.sessionPayloadCache = nil -- Invalidate heartbeat cache; item list changed
 
     -- 2. Remove from local Bidding storage (Monitor List)
@@ -541,7 +489,18 @@ function Session:HandleStartSession(payload)
                 self.closedItems[guid] = v
             end
         end
-        if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+
+        -- Merge active votes from heartbeat — ensures late-joiner Assistants stay synced
+        if payload.votes and DesolateLootcouncil:AmIRaidAssistOrLM() then
+            self.sessionVotes = self.sessionVotes or {}
+            for guid, players in pairs(payload.votes) do
+                self.sessionVotes[guid] = self.sessionVotes[guid] or {}
+                for player, voteData in pairs(players) do
+                    self.sessionVotes[guid][player] = voteData
+                end
+            end
+        end
+        if DesolateLootcouncil:AmIRaidAssistOrLM() then
             ---@type UI_Monitor
             local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
             if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
@@ -615,7 +574,7 @@ function Session:HandleRemoveItem(payload)
             end
         end
 
-        if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+        if DesolateLootcouncil:AmIRaidAssistOrLM() then
             ---@type UI_Monitor
             local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
             if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
@@ -638,7 +597,7 @@ function Session:HandleCloseItem(payload)
             Voting:ShowVotingWindow(nil, true)
         end
 
-        if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+        if DesolateLootcouncil:AmIRaidAssistOrLM() then
             ---@type UI_Monitor
             local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
             if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
@@ -677,21 +636,12 @@ function Session:HandleHistoryUpdate(payload)
     end
 end
 
-function Session:HandleVoteAck(payload)
-    local guid = payload.data and payload.data.guid
-    if guid and self.outboundVotes[guid] then
-        self.outboundVotes[guid] = nil
-        DesolateLootcouncil:DLC_Log("Vote confirmed by Loot Master.")
-        -- Refresh UI to remove "Syncing..." status
-        ---@type UI_Voting
-        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-        if Voting then Voting:ShowVotingWindow(nil, true) end
-    end
-end
-
 function Session:HandleVote(payload, sender)
-    if DesolateLootcouncil:AmILootMaster() then
+    -- Both LM and Assists track the incoming votes directly from the broadcast
+    if DesolateLootcouncil:AmIRaidAssistOrLM() then
         local data = payload.data
+        if not data or not data.guid then return end
+
         self.sessionVotes = self.sessionVotes or {}
         self.sessionVotes[data.guid] = self.sessionVotes[data.guid] or {}
 
@@ -699,9 +649,11 @@ function Session:HandleVote(payload, sender)
             self.sessionVotes[data.guid][sender] = nil
             DesolateLootcouncil:DLC_Log("Vote retracted by " .. sender)
         else
+            -- Ensure pass is correctly saved (5)
             local serverRoll = math.random(1, 100)
             self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll }
 
+            -- Only the actual LM is allowed to trigger auto-closes
             if DesolateLootcouncil:AmILootMaster() then
                 local voteCount = 0
                 for _ in pairs(self.sessionVotes[data.guid]) do voteCount = voteCount + 1 end
@@ -719,19 +671,15 @@ function Session:HandleVote(payload, sender)
             end
         end
 
-        ---@type UI_Monitor
-        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-        if Monitor then Monitor:ShowMonitorWindow(true) end
-
         self:SaveSessionState()
 
-        if DesolateLootcouncil:AmILootMaster() then
-            -- Queue ACK into the batched SYNC_VOTES that fires within 1.5s.
-            -- This eliminates individual per-voter whispers from the LM entirely.
-            self.pendingAcks[data.guid] = self.pendingAcks[data.guid] or {}
-            self.pendingAcks[data.guid][sender] = true
-            self.needsSync = true
+        -- Auto-update Monitor for tracking (Assist or LM)
+        ---@type UI_Monitor
+        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+        if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
+            Monitor:ShowMonitorWindow(true)
         end
+        self.sessionPayloadCache = nil -- Invalidate heartbeat cache; item list changed
     end
 end
 
@@ -743,8 +691,8 @@ function Session:HandleSyncVotes(payload)
         -- Raider: confirm outbound votes via two paths:
         -- a) explicit confirmedVoters list in this sync, OR
         -- b) our name already appears in sessionVotes[guid]
-        local myName = UnitName("player")
-        local confirmed = payload.data.confirmedVoters or {}
+        local myName      = UnitName("player")
+        local confirmed   = payload.data.confirmedVoters or {}
         for guid, _ in pairs(self.outboundVotes) do
             local inConfirmed = confirmed[guid] and confirmed[guid][myName]
             local inVotes     = self.sessionVotes[guid] and self.sessionVotes[guid][myName]
@@ -779,55 +727,26 @@ function Session:HandleSyncLM(payload)
     end
 end
 
-function Session:HandleVoteBatch(payload, sender)
-    if DesolateLootcouncil:AmILootMaster() then
-        local batch = payload.data
-        if type(batch) == "table" then
-            local ackItems = {}
-            for guid, vote in pairs(batch) do
-                self:HandleVote({ data = { guid = guid, vote = vote } }, sender)
-                ackItems[guid] = true
-            end
-            
-            -- Reply directly to stop raider "Syncing..." loop
-            local ackPayload = {
-                command = "VOTE_ACK_BATCH",
-                data = ackItems
-            }
-            local serialized = self:Serialize(ackPayload)
-            self:SendCommMessage("DLC_Loot", serialized, "WHISPER", sender)
-        end
-    end
-end
-
 function Session:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_Loot" then return end
 
     local success, payload = self:Deserialize(message)
-    if not success then return end
+    if not success or type(payload) ~= "table" then return end
 
-    ---@cast payload DistributionPayload
-
-    if payload.command == "START_SESSION" then
-        self:HandleStartSession(payload)
-    elseif payload.command == "STOP_SESSION" then
-        self:EndSession()
+    if payload.command == "VOTE" then
+        self:HandleVote(payload, sender)
+    elseif payload.command == "SYNC_VOTES" then
+        self:HandleSyncVotes(payload)
     elseif payload.command == "REMOVE_ITEM" then
         self:HandleRemoveItem(payload)
     elseif payload.command == "CLOSE_ITEM" then
         self:HandleCloseItem(payload)
+    elseif payload.command == "LOOT_SESSION_START" then
+        self:HandleStartSession(payload)
+    elseif payload.command == "LOOT_SESSION_END" then
+        self:EndSession()
     elseif payload.command == "HISTORY_UPDATE" then
         self:HandleHistoryUpdate(payload)
-    elseif payload.command == "VOTE_ACK" then
-        self:HandleVoteAck(payload)
-    elseif payload.command == "VOTE" then
-        self:HandleVote(payload, sender)
-    elseif payload.command == "VOTE_BATCH" then
-        self:HandleVoteBatch(payload, sender)
-    elseif payload.command == "VOTE_ACK_BATCH" then
-        self:HandleVoteAck(payload)
-    elseif payload.command == "SYNC_VOTES" then
-        self:HandleSyncVotes(payload)
     elseif payload.command == "SYNC_LM" then
         self:HandleSyncLM(payload)
     end
@@ -843,63 +762,45 @@ function Session:SendSyncLM(targetLM)
 end
 
 function Session:SendSyncVotes()
-    local payload = {
-        command = "SYNC_VOTES",
-        data = {
-            votes           = self.sessionVotes,
-            closed          = self.closedItems,
-            confirmedVoters = self.pendingAcks  -- Carries batched ACKs for all voters
-        }
-    }
-    local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
-    if channel then
-        self:SendCommMessage("DLC_Loot", serialized, channel)
-    else
-        -- Solo / Simulation: Confirmation MUST be sent even locally!
-        self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
-    end
+    -- This function is no longer required due to Approach B's pub/sub architecture.
+    -- Use SendSessionHeartbeat() for full state resync instead.
 end
 
 function Session:SendVote(itemGUID, voteType)
     self.myLocalVotes = self.myLocalVotes or {}
-    
-    if DesolateLootcouncil:AmILootMaster() then
-        if voteType == 0 then
-            self.myLocalVotes[itemGUID] = nil
-        else
-            self.myLocalVotes[itemGUID] = voteType
-        end
-        self.outboundVotes[itemGUID] = nil
-        self:SaveSessionState()
-        
-        self:HandleVote({
-            data = { guid = itemGUID, vote = voteType }
-        }, UnitName("player"))
-        
-        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-        if Voting then Voting:ShowVotingWindow(nil, true) end
-        return
-    end
 
     if voteType == 0 then
         self.myLocalVotes[itemGUID] = nil
-        self.outboundVotes[itemGUID] = { type = 0, sentAt = GetServerTime() }
     else
         self.myLocalVotes[itemGUID] = voteType
-        self.outboundVotes[itemGUID] = { type = voteType, sentAt = GetServerTime() }
     end
     self:SaveSessionState()
 
+    -- Instantly Fake the UI update for the raider
     local Voting = DesolateLootcouncil:GetModule("UI_Voting")
     if Voting then Voting:ShowVotingWindow(nil, true) end
+
+    -- Broadcast to RAID channel (Approach B)
+    local payload = {
+        command = "VOTE",
+        data = { guid = itemGUID, vote = voteType }
+    }
+
+    -- Local snap (Monitor/Voting UI consistency)
+    self:HandleVote(payload, UnitName("player"))
+
+    local serialized = self:Serialize(payload)
+    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    if channel then
+        self:SendCommMessage("DLC_Loot", serialized, channel)
+    end
 end
 
 function Session:EndSession()
     self.clientLootList      = {}
     self.sessionVotes        = {}
     self.closedItems         = {}
-    self.sessionPayloadCache = nil  -- B10: Invalidate cache; session is dead
+    self.sessionPayloadCache = nil -- B10: Invalidate cache; session is dead
     wipe(DesolateLootcouncil.db.profile.session.activeState)
 
     ---@type UI_Voting

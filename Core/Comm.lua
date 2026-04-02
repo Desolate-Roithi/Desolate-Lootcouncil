@@ -60,8 +60,12 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
         -- Reply with my version and enchanting skill
         local responseData = {
             version = DesolateLootcouncil.version,
-            enchantingSkill = DesolateLootcouncil:GetEnchantingSkillLevel()
         }
+        local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
+        if mySkill > 0 and not self.hasSentEnchantingResp then
+            self.hasSentEnchantingResp = true
+            responseData.enchantingSkill = mySkill
+        end
         self:SendComm("VERSION_RESP", responseData, sender)
 
         -- [OPTIMIZATION] Avoid Individual Whispers for bulk data on every ping.
@@ -85,7 +89,7 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
 
 
         self:UpdatePlayerInfo(sender, ver, skill)
-    elseif command == "SESSION_START" then
+    elseif command == "LOOT_SESSION_START" then
         -- Legacy/Active hook for starting loot session remotely
         ---@type Session
         local Session = DesolateLootcouncil:GetModule("Session")
@@ -94,7 +98,7 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
             local lootTable = data.data or data
             Session:StartSession(lootTable)
         end
-    elseif command == "SESSION_END" then
+    elseif command == "LOOT_SESSION_END" then
         ---@type Session
         local Session = DesolateLootcouncil:GetModule("Session")
         if Session and Session.EndSession then Session:EndSession() end
@@ -159,10 +163,15 @@ function Comm:SendVersionCheck()
     end
     self.lastVersionCheck = now
 
-    self:SendComm("VERSION_REQ", {
-        version = DesolateLootcouncil.version,
-        enchantingSkill = mySkill
-    })
+    local payloadData = {
+        version = DesolateLootcouncil.version
+    }
+    if mySkill > 0 and not self.hasSentEnchantingReq then
+        self.hasSentEnchantingReq = true
+        payloadData.enchantingSkill = mySkill
+    end
+
+    self:SendComm("VERSION_REQ", payloadData)
     return true
 end
 
@@ -204,6 +213,9 @@ function Comm:PruneRosterData()
                 DesolateLootcouncil.activeAddonUsers[name] = nil
             end
         end
+        -- Reset our broadcast flag so we announce again if we join a new group
+        self.hasSentEnchantingReq = false
+        self.hasSentEnchantingResp = false
         -- Notify UI that data has changed (pruned)
         self:SendMessage("DLC_VERSION_UPDATE")
     end

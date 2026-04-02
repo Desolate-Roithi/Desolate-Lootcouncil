@@ -243,11 +243,17 @@ function UI_Loot:ShowLootWindow(lootTable)
     local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
     scroll:SetLayout("List")
     scroll:SetFullWidth(true)
+    
+    -- [NEW] Persist Scroll Status
+    self.scrollStatus = self.scrollStatus or { scrollvalue = 0 }
+    scroll:SetStatusTable(self.scrollStatus)
+    
     self.lootFrame:AddChild(scroll)
 
     local count = 0
     if lootTable then
-        for i, data in ipairs(lootTable) do
+        for i = #lootTable, 1, -1 do
+            local data = lootTable[i]
             count = count + 1
             local link = data.link
 

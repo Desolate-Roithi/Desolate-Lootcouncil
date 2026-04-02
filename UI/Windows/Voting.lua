@@ -191,18 +191,17 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     self.scrollContainer = scroll
 
     -- VOTE_TEXT / VOTE_COLOR are file-scope constants (no per-call allocation).
-    local closedItems = (SessionModule and SessionModule.closedItems) or {}
-    local outbound    = (SessionModule and SessionModule.outboundVotes) or {}
     local now = GetServerTime()
 
-    for _, data in ipairs(items) do
+    for i = #items, 1, -1 do
+        local data = items[i]
         local guid = data.sourceGUID or data.link
         if not awardedGUIDs[guid] then
             local currentVote = self.myVotes[guid]
-            local isClosed    = closedItems[guid]
+            local isClosed    = (SessionModule and SessionModule.closedItems and SessionModule.closedItems[guid])
             local remaining   = (data.expiry or 0) - now
             local isExpired   = (remaining <= 0)
-            local isPending   = outbound[guid] ~= nil
+            local isPending   = (SessionModule and SessionModule.outboundVotes and SessionModule.outboundVotes[guid] ~= nil)
 
             -- Schedule a forced refresh exactly when the item expires
             if not isClosed and not isExpired and remaining > 0 then

@@ -41,7 +41,9 @@ function Loot:OnEnable()
         return
     end
 
-    self.sessionItems = {} -- Transient duplicate check
+    local session = DesolateLootcouncil.db.profile.session
+    self.sessionItems = session.sessionItems or {} -- Persisted duplicate check
+    session.sessionItems = self.sessionItems
 
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
@@ -230,7 +232,8 @@ function Loot:OnLootOpened()
                 if not isImportant and (quality or 0) < minQuality then
                     DesolateLootcouncil:DLC_Log("Skipped low quality item: " .. itemLink)
                 else
-                    local uniqueKey = sourceGUID .. "-" .. itemID
+                    -- FIX: Include slot index 'i' in uniqueKey to allow multiple identical items from one boss.
+                    local uniqueKey = sourceGUID .. "-" .. itemID .. "-" .. i
                     if self:AddSessionItem(itemLink, uniqueKey, texture, quantity, category, itemID) then
                         itemsChanged = true
                         session.lootedMobs[sourceGUID] = true
@@ -251,9 +254,29 @@ end
 function Loot:OnLootMessage(event, msg)
     if not DesolateLootcouncil:AmILootMaster() then return end
 
-    -- Catch "You receive loot: [Item Link]"
+    -- Catch "You receive loot: [Item Link]" or local equivalents using Global strings
     local link = string.match(msg, "|c%x+|Hitem:.-|h%[.-%]|h|r")
-    if link and (string.find(msg, "You receive loot") or string.find(msg, "Ihr erhaltet Beute")) then
+    if not link then return end
+
+    -- Extract pure patterns without link/name for robust locale matching
+    local lootPatterns = {
+        _G["LOOT_ITEM_SELF"],
+        _G["LOOT_ITEM_PUSHED_SELF"],
+        _G["LOOT_ITEM_SELF_MULTIPLE"],
+        _G["LOOT_ITEM_CREATED_SELF"]
+    }
+
+    local matched = false
+    for _, p in ipairs(lootPatterns) do
+        -- Escape magic characters and convert %s to a wildcard match
+        local cleanPattern = p:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%%s", ".+")
+        if string.find(msg, cleanPattern) then
+            matched = true
+            break
+        end
+    end
+
+    if matched then
         local itemID = C_Item.GetItemInfoInstant(link)
         if itemID then
             local category = self:CategorizeItem(link)
@@ -261,11 +284,12 @@ function Loot:OnLootMessage(event, msg)
             local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
             
             -- Session Items check logic to avoid double adding
+            -- We use a timestamp-based key for Roll/Push wins as they lack a sourceGUID
             local guid = "Roll-" .. itemID .. "-" .. GetServerTime()
             
             if quality >= minQuality or category ~= "Junk/Pass" then
                 if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
-                    DesolateLootcouncil:DLC_Log("AUTO-ADDED from roll win: " .. link)
+                    DesolateLootcouncil:DLC_Log("AUTO-ADDED from self-loot: " .. link)
                     local UI = DesolateLootcouncil:GetModule("UI_Loot")
                     if UI then UI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
                 end
@@ -286,6 +310,7 @@ function Loot:AddSessionItem(link, itemGUID, texture, quantity, category, itemID
         texture = texture
     })
     self.sessionItems[itemGUID] = true
+    session.sessionItems = self.sessionItems -- Ensure DB persistence
     return true
 end
 
@@ -418,8 +443,13 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
         table.remove(session.bidding, removeIndex)
         ---@type Session
         local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
-        if Session and Session.sessionVotes then
-            Session.sessionVotes[itemGUID] = nil
+        if Session then
+            if Session.sessionVotes then
+                Session.sessionVotes[itemGUID] = nil
+            end
+            if Session.closedItems then
+                Session.closedItems[itemGUID] = nil
+            end
         end
     end
 
@@ -493,7 +523,7 @@ function Loot:ReawardItem(index)
     local Session = DesolateLootcouncil:GetModule("Session")
     if Session and Session.SendCommMessage then
         local payload = {
-            command = "START_SESSION",
+            command = "LOOT_SESSION_START",
             data = { {
                 link = newItem.link,
                 texture = newItem.texture,

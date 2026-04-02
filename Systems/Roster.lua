@@ -50,6 +50,14 @@ function Roster:Printf(msg, ...)
     DesolateLootcouncil:DLC_Log(string.format(msg, ...), true)
 end
 
+-- ==============================================================================
+-- RAID SESSIONS vs LOOT SESSIONS:
+-- "Raid Sessions" (Tracked here) manage overarching group attendance and 
+-- priority decay metrics based on `currentSessionID`.
+-- "Loot Sessions" (Managed by `Session.lua`) are per-boss voting events 
+-- triggered to facilitate item distribution.
+-- ==============================================================================
+
 --- Starts a new tracking session
 function Roster:StartRaidSession()
     local config = DesolateLootcouncil.db.profile.DecayConfig
@@ -72,21 +80,7 @@ function Roster:StartRaidSession()
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
 
     if DesolateLootcouncil:AmILootMaster() then
-        -- Sync Item Manager before prompting autopass
-        local db = DesolateLootcouncil.db.profile
-        if db.PriorityLists then
-            local syncData = {}
-            for _, list in ipairs(db.PriorityLists) do
-                syncData[list.name] = list.items or {}
-            end
-            local Comm = DesolateLootcouncil:GetModule("Comm")
-            if Comm and Comm.SendComm then
-                Comm:SendComm("IM_SYNC", syncData)
-                if config.sessionActive then -- This condition was added based on the patch, assuming 'sessionActive' refers to 'config.sessionActive'
-                    DesolateLootcouncil:DLC_Log("Item Manager synced with raid.", true)
-                end
-            end
-        end
+        -- Priority list propagation is now manual only via the Item Manager UI button.
 
         StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
             text =
