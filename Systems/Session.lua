@@ -37,6 +37,7 @@ function Session:OnEnable()
     self.needsSync = false
     self.lastHeartbeat = 0
     self.lastFullSync = 0
+    self.lastBatchSync = 0
     self.pendingAcks = {}          -- guid -> { senderName -> true }; batched into SYNC_VOTES
     self.sessionPayloadCache = nil -- Pre-serialized START_SESSION string for heartbeat
     self:ScheduleRepeatingTimer("OnTimerTick", 1.5)
@@ -45,13 +46,32 @@ end
 function Session:OnTimerTick()
     -- 1. LM Side: Throttled Sync logic moved to section 3 below for consolidated timing
 
-    -- 2. Raider Side: Retry Logic
+    -- 2. Raider Side: Batch Send Votes
     local now = GetServerTime()
-    for guid, voteData in pairs(self.outboundVotes) do
-        if now - voteData.sentAt > 5 then
-            DesolateLootcouncil:DLC_Log("Vote lost? Retrying for item: " .. string.sub(guid, -8))
-            voteData.sentAt = now -- Reset timer
-            self:SendVote(guid, voteData.type, true) -- Pass 'isRetry' flag
+    
+    if not DesolateLootcouncil:AmILootMaster() then
+        if now - self.lastBatchSync >= 3 then
+            local hasPendingVotes = false
+            local votesToSync = {}
+            
+            for guid, voteData in pairs(self.outboundVotes) do
+                votesToSync[guid] = voteData.type
+                hasPendingVotes = true
+            end
+            
+            if hasPendingVotes then
+                local target = DesolateLootcouncil:DetermineLootMaster()
+                if target and target ~= "Unknown" then
+                    local payload = {
+                        command = "VOTE_BATCH",
+                        data = votesToSync
+                    }
+                    local serialized = self:Serialize(payload)
+                    self:SendCommMessage("DLC_Loot", serialized, "WHISPER", target)
+                    self.lastBatchSync = now
+                    DesolateLootcouncil:DLC_Log("Sent batched votes to LM.")
+                end
+            end
         end
     end
 
@@ -59,7 +79,7 @@ function Session:OnTimerTick()
     if DesolateLootcouncil:AmILootMaster() and self.clientLootList and #self.clientLootList > 0 then
         -- 3a. Batch Vote Sync (on change, or maintenance every 15s)
         local hasPendingAcks = next(self.pendingAcks) ~= nil
-        if self.needsSync or hasPendingAcks or (now - self.lastFullSync > 15) then
+        if (self.needsSync and now - self.lastFullSync > 5.0) or hasPendingAcks or (now - self.lastFullSync > 15) then
             self:SendSyncVotes()
             self.needsSync = false
             self.pendingAcks = {}
@@ -556,8 +576,8 @@ function Session:HandleStartSession(payload)
     local Voting = DesolateLootcouncil:GetModule("UI_Voting")
     if Voting then Voting:ShowVotingWindow(self.clientLootList) end
 
-    -- Bug 5: Re-sync Monitor for Assistants on Start Session
-    if DesolateLootcouncil:AmIRaidAssistOrLM() and not DesolateLootcouncil:AmILootMaster() then
+    -- Restricted auto-pop to LM only
+    if DesolateLootcouncil:AmILootMaster() then
         ---@type UI_Monitor
         local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
         if Monitor then Monitor:ShowMonitorWindow() end
@@ -759,6 +779,27 @@ function Session:HandleSyncLM(payload)
     end
 end
 
+function Session:HandleVoteBatch(payload, sender)
+    if DesolateLootcouncil:AmILootMaster() then
+        local batch = payload.data
+        if type(batch) == "table" then
+            local ackItems = {}
+            for guid, vote in pairs(batch) do
+                self:HandleVote({ data = { guid = guid, vote = vote } }, sender)
+                ackItems[guid] = true
+            end
+            
+            -- Reply directly to stop raider "Syncing..." loop
+            local ackPayload = {
+                command = "VOTE_ACK_BATCH",
+                data = ackItems
+            }
+            local serialized = self:Serialize(ackPayload)
+            self:SendCommMessage("DLC_Loot", serialized, "WHISPER", sender)
+        end
+    end
+end
+
 function Session:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_Loot" then return end
 
@@ -781,6 +822,10 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
         self:HandleVoteAck(payload)
     elseif payload.command == "VOTE" then
         self:HandleVote(payload, sender)
+    elseif payload.command == "VOTE_BATCH" then
+        self:HandleVoteBatch(payload, sender)
+    elseif payload.command == "VOTE_ACK_BATCH" then
+        self:HandleVoteAck(payload)
     elseif payload.command == "SYNC_VOTES" then
         self:HandleSyncVotes(payload)
     elseif payload.command == "SYNC_LM" then
@@ -816,35 +861,36 @@ function Session:SendSyncVotes()
     end
 end
 
-function Session:SendVote(itemGUID, voteType, isRetry)
-    local payload = {
-        command = "VOTE",
-        data = { guid = itemGUID, vote = voteType }
-    }
-    local serialized = self:Serialize(payload)
-    local target = DesolateLootcouncil:DetermineLootMaster()
-
+function Session:SendVote(itemGUID, voteType)
     self.myLocalVotes = self.myLocalVotes or {}
+    
+    if DesolateLootcouncil:AmILootMaster() then
+        if voteType == 0 then
+            self.myLocalVotes[itemGUID] = nil
+        else
+            self.myLocalVotes[itemGUID] = voteType
+        end
+        self.outboundVotes[itemGUID] = nil
+        self:SaveSessionState()
+        
+        self:HandleVote({
+            data = { guid = itemGUID, vote = voteType }
+        }, UnitName("player"))
+        
+        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+        if Voting then Voting:ShowVotingWindow(nil, true) end
+        return
+    end
+
     if voteType == 0 then
         self.myLocalVotes[itemGUID] = nil
-        self.outboundVotes[itemGUID] = nil
+        self.outboundVotes[itemGUID] = { type = 0, sentAt = GetServerTime() }
     else
         self.myLocalVotes[itemGUID] = voteType
-        -- Track for confirmation
-        if not isRetry then
-            self.outboundVotes[itemGUID] = { type = voteType, sentAt = GetServerTime() }
-        end
+        self.outboundVotes[itemGUID] = { type = voteType, sentAt = GetServerTime() }
     end
     self:SaveSessionState()
 
-    if target and target ~= "Unknown" then
-        self:SendCommMessage("DLC_Loot", serialized, "WHISPER", target)
-    else
-        DesolateLootcouncil:DLC_Log("Error: Could not determine Loot Master to vote.")
-    end
-
-    -- Trigger UI refresh to show "Syncing..."
-    ---@type UI_Voting
     local Voting = DesolateLootcouncil:GetModule("UI_Voting")
     if Voting then Voting:ShowVotingWindow(nil, true) end
 end
