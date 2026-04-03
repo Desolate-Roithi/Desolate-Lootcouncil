@@ -62,7 +62,7 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
             version = DesolateLootcouncil.version,
         }
         local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
-        if mySkill > 0 and not self.hasSentEnchantingResp then
+        if (mySkill or 0) > 0 and not self.hasSentEnchantingResp then
             self.hasSentEnchantingResp = true
             responseData.enchantingSkill = mySkill
         end
@@ -166,7 +166,7 @@ function Comm:SendVersionCheck()
     local payloadData = {
         version = DesolateLootcouncil.version
     }
-    if mySkill > 0 and not self.hasSentEnchantingReq then
+    if (mySkill or 0) > 0 and not self.hasSentEnchantingReq then
         self.hasSentEnchantingReq = true
         payloadData.enchantingSkill = mySkill
     end
