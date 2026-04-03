@@ -293,6 +293,7 @@ function DesolateLootcouncil:AmIRaidAssistOrLM()
             end
         end
     end
+    -- [FIND_1] Ensure raiders (rank 0) never return true if they reach here
     return false
 end
 

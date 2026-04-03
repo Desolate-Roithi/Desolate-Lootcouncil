@@ -329,6 +329,7 @@ function Session:StartSession(lootTable)
 end
 
 function Session:SendStopSession()
+    DesolateLootcouncil:DLC_Log("[DEBUG] SendStopSession Trace Start")
     -- 1. Broadcast "LOOT_SESSION_END"
     local payload = { command = "LOOT_SESSION_END" }
     local serialized = self:Serialize(payload)

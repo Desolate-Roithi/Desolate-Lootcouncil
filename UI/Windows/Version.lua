@@ -21,7 +21,8 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 -- Helper: Parse version string "1.0.0" into number 100 for comparison
 -- Helper: Parse "1.0.0-Beta" -> 1, 0, 0, "Beta"
 local function ParseSemVer(v)
-    if not v then return 0, 0, 0, "" end
+    if not v or v == "" then return 0, 0, 0, "" end
+    -- Handle cases where version might be nil-ish or malformed
     local major, minor, patch, suffix = v:match("(%d+)%.(%d+)%.(%d+)%-?(.*)")
     if not major then return 0, 0, 0, "" end
     return tonumber(major), tonumber(minor), tonumber(patch), (suffix or "")
@@ -60,6 +61,7 @@ function UI_Version:ShowVersionWindow(isTest)
             AceGUI:Release(widget)
             self.versionFrame = nil
             self.scrollFrame = nil
+            self.initialPingSent = nil -- Reset for next open
         end)
         frame:SetLayout("Fill")
         frame:SetWidth(300)
@@ -91,10 +93,28 @@ function UI_Version:ShowVersionWindow(isTest)
     self:UpdateVersionList(isTest)
 end
 
+function UI_Version:OnEnable()
+    self:RegisterMessage("DLC_VERSION_UPDATE", function()
+        if self.versionFrame and self.versionFrame:IsShown() then
+            self:UpdateVersionList()
+        end
+    end)
+end
+
 function UI_Version:UpdateVersionList(isTest)
     if not self.scrollFrame then return end
     self.scrollFrame:ReleaseChildren()
     local scroll = self.scrollFrame --[[@as AceGUIScrollFrame]]
+
+    -- [FIND_2] Perform initial ping if window is just opening and not on cooldown
+    local Comm = DesolateLootcouncil:GetModule("Comm") --[[@as Comm]]
+    if not self.initialPingSent and Comm then
+        local remaining = Comm:GetVersionCheckRemaining()
+        if remaining <= 0 then
+            Comm:SendVersionCheck()
+            self.initialPingSent = true
+        end
+    end
 
     -- 3. Gather Data
     local roster = {}
