@@ -217,15 +217,18 @@ function Priority:SyncMissingPlayers()
 
     for _, listObj in ipairs(db.PriorityLists) do
         local currentList = listObj.players
-        local currentSet = {}
-        for _, name in ipairs(currentList) do
-            currentSet[name] = true
+
+        -- 1. Add Missing (O(N+M) using Scored Sets)
+        local currentScoredSet = {}
+        for _, pName in ipairs(currentList) do
+            local score = DesolateLootcouncil:GetScoreName(pName)
+            if score then currentScoredSet[score] = true end
         end
 
-        -- 1. Add Missing
         local missing = {}
         for name, data in pairs(db.MainRoster) do
-            if not currentSet[name] then
+            local nameScore = DesolateLootcouncil:GetScoreName(name)
+            if nameScore and not currentScoredSet[nameScore] then
                 table.insert(missing, { name = name, addedAt = data.addedAt or 0 })
             end
         end
@@ -235,16 +238,22 @@ function Priority:SyncMissingPlayers()
         for _, player in ipairs(missing) do
             table.insert(currentList, player.name)
             addedCount = addedCount + 1
-            self:LogPriorityChange(string.format("Synced %s to bottom of %s list.", player.name, listObj.name))
+            self:LogPriorityChange(string.format("Synced %s to bottom of %s list.", 
+                DesolateLootcouncil:GetDisplayName(player.name), listObj.name))
         end
 
-        -- 2. Remove Stale
+        -- 2. Remove Stale (O(1) lookups using ScoreMap)
+        local RosterSys = DesolateLootcouncil:GetModule("Roster")
         for i = #currentList, 1, -1 do
-            local name = currentList[i]
-            if not db.MainRoster[name] then
+            local pName = currentList[i]
+            local pScore = DesolateLootcouncil:GetScoreName(pName)
+            local existsInRoster = pScore and RosterSys.scoreMap and RosterSys.scoreMap[pScore]
+
+            if not existsInRoster then
                 table.remove(currentList, i)
                 removedCount = removedCount + 1
-                self:LogPriorityChange(string.format("Removed %s from %s list (Not in Roster).", name, listObj.name))
+                self:LogPriorityChange(string.format("Removed %s from %s list (Not in Roster).", 
+                    DesolateLootcouncil:GetDisplayName(pName), listObj.name))
             end
         end
     end
@@ -283,7 +292,7 @@ function Priority:MovePlayerToBottom(listName, playerName)
 
     -- Find player (targetName)
     for i, name in ipairs(players) do
-        if name == targetName then
+        if DesolateLootcouncil:SmartCompare(name, targetName) then
             foundIndex = i
             break
         end
@@ -293,9 +302,11 @@ function Priority:MovePlayerToBottom(listName, playerName)
         table.remove(players, foundIndex)
         table.insert(players, targetName)
 
-        local msg = string.format("Priority Update: %s moved to bottom of %s (Item Awarded).", targetName, listName)
+        local msg = string.format("Priority Update: %s moved to bottom of %s (Item Awarded).", 
+            DesolateLootcouncil:GetDisplayName(targetName), listName)
         DesolateLootcouncil:DLC_Log(msg, true)
-        self:LogPriorityChange(string.format("Awarded item to %s (%s). Priority Reset.", targetName, listName))
+        self:LogPriorityChange(string.format("Awarded item to %s (%s). Priority Reset.", 
+            DesolateLootcouncil:GetDisplayName(targetName), listName))
 
         -- Structured Logging
         if not db.PriorityLog then db.PriorityLog = {} end
@@ -337,23 +348,24 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
     local targetMain = DesolateLootcouncil:GetModule("Roster"):GetMain(playerName)
 
     for i, p in ipairs(players) do
-        local entryMain = DesolateLootcouncil:GetModule("Roster"):GetMain(p)
-        if entryMain == targetMain then
+        if DesolateLootcouncil:SmartCompare(p, targetMain) then
             currentIdx = i
             break
         end
     end
 
     if not currentIdx then
-        DesolateLootcouncil:DLC_Log(string.format("Warning: Could not find %s (Main: %s) in %s.", playerName, targetMain,
+        DesolateLootcouncil:DLC_Log(string.format("Warning: Could not find %s (Main: %s) in %s.", 
+            DesolateLootcouncil:GetDisplayName(playerName), 
+            DesolateLootcouncil:GetDisplayName(targetMain),
             listName))
     end
 
     if currentIdx then
         -- 1. Conditional Logic: Skip if already at correct position
         if currentIdx == index then
-            DesolateLootcouncil:DLC_Log(string.format("%s is already at the correct position (%d).", playerName, index),
-                true)
+            DesolateLootcouncil:DLC_Log(string.format("%s is already at the correct position (%d).", 
+                DesolateLootcouncil:GetDisplayName(playerName), index), true)
             return
         end
 
@@ -376,7 +388,7 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
         local lName = tostring(listName or "Unknown List")
 
         local logMsg = string.format("Reverting %s to position %d from position %d in %s.",
-            pName, sIndex, cIndex, lName)
+            DesolateLootcouncil:GetDisplayName(pName), sIndex, cIndex, lName)
         DesolateLootcouncil:DLC_Log(logMsg, true)
         self:LogPriorityChange(logMsg)
 

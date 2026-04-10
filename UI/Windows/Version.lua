@@ -181,7 +181,7 @@ function UI_Version:UpdateVersionList(isTest)
 
         -- Map existing data
         for _, entry in ipairs(roster) do
-            if entry.name == UnitName("player") then
+            if DesolateLootcouncil:SmartCompare(entry.name, "player") then
                 -- Already set
             else
                 -- Fix: Use direct table access as GetPlayerVersion is missing
@@ -231,7 +231,7 @@ function UI_Version:UpdateVersionList(isTest)
         ---@type AceGUILabel
         local nameLabel = AceGUI:Create("Label") --[[@as AceGUILabel]]
         local color = entry.class and RAID_CLASS_COLORS[entry.class] or { r = 1, g = 1, b = 1 }
-        nameLabel:SetText(entry.name)
+        nameLabel:SetText(DesolateLootcouncil:GetDisplayName(entry.name))
         if RAID_CLASS_COLORS[entry.class] then
             nameLabel:SetColor(color.r, color.g, color.b)
         else

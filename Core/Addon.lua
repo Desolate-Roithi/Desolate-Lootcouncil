@@ -262,8 +262,7 @@ end
 function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
     local targetLM = self:DetermineLootMaster()
-    local myName = UnitName("player")
-    self.amILM = (targetLM and Ambiguate(targetLM, "none") == myName) or false
+    self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
     self:DLC_Log("Role Update: You are " .. (self.amILM and "Loot Master" or "Raider"))
 
     if self.amILM and IsInGroup() then
@@ -284,12 +283,10 @@ function DesolateLootcouncil:AmIRaidAssistOrLM()
     if self.amILM then return true end
     if IsInRaid() then
         -- Check own rank: 0=member, 1=assist, 2=leader
-        local myName = UnitName("player")
         for i = 1, GetNumGroupMembers() do
             local name, rank = GetRaidRosterInfo(i)
             if name and rank >= 1 then
-                local shortName = Ambiguate(name, "none")
-                if shortName == myName then return true end
+                if self:SmartCompare(name, "player") then return true end
             end
         end
     end
@@ -370,6 +367,96 @@ function DesolateLootcouncil:IsUnitInRaid(unitName)
         return UnitInParty(unitName) ~= nil or UnitIsUnit(unitName, "player")
     end
     return UnitIsUnit(unitName, "player")
+end
+
+--- Returns a consistent Name-Realm string for a unit.
+--- If no realm is present, appends the local realm.
+---@param unit string
+---@return string
+function DesolateLootcouncil:GetFullName(unit)
+    local name, realm = UnitName(unit)
+    if not name then return nil end
+    if not realm or realm == "" then realm = GetRealmName() end
+    return name .. "-" .. realm:gsub("%s+", "")
+end
+
+--- Normalizes a "Name" or "Name-Realm" string to "Name-Realm".
+---@param name string
+---@return string
+function DesolateLootcouncil:NormalizeName(name)
+    if not name or name == "" then return name end
+    if string.find(name, "-") then return name:gsub("%s+", "") end
+    return name .. "-" .. GetRealmName():gsub("%s+", "")
+end
+
+--- Returns a canonical lowercase "Name-Realm" string for internal logic.
+---@param name string|nil
+---@return string|nil
+function DesolateLootcouncil:GetScoreName(name)
+    if not name or name == "" then return nil end
+    
+    -- Local cache for common 'player' lookup to avoid UnitName calls in loops
+    if name == "player" then
+        if not self._playerScore then
+            local pName, pRealm = UnitName("player")
+            pRealm = (pRealm and pRealm ~= "") and pRealm or GetRealmName()
+            self._playerScore = string.lower(pName .. "-" .. pRealm):gsub("%s+", "")
+        end
+        return self._playerScore
+    end
+
+    local lowName = string.lower(name)
+    if not string.find(lowName, "-") then
+        local realm = string.lower(GetRealmName()):gsub("%s+", "")
+        lowName = lowName .. "-" .. realm
+    end
+    -- Also remove any spaces from the realm part if it was already there
+    return lowName:gsub("%s+", "")
+end
+
+--- Specialized fast path for normalizing unit tokens (raid1, target, etc)
+--- avoiding mid-level GetFullName overhead.
+---@param unit string
+---@return string|nil
+function DesolateLootcouncil:GetUnitScore(unit)
+    if not unit then return nil end
+    if unit == "player" then return self:GetScoreName("player") end
+    
+    local name, realm = UnitName(unit)
+    if not name then return nil end
+    
+    realm = (realm and realm ~= "") and realm or GetRealmName()
+    return string.lower(name .. "-" .. realm):gsub("%s+", "")
+end
+
+--- Returns the name exactly as it appears in the Roster, or simplified for UI.
+---@param name string|nil
+---@return string|nil
+function DesolateLootcouncil:GetDisplayName(name)
+    if not name or name == "" then return nil end
+    local Roster = self:GetModule("Roster")
+    local main = Roster and Roster:GetMain(name) or name
+    
+    local profile = self.db.profile
+    -- 1. Check if the Main is in the MainRoster (to get the exact casing/format)
+    if profile.MainRoster then
+        for rosterName, _ in pairs(profile.MainRoster) do
+            if self:SmartCompare(rosterName, main) then
+                return rosterName
+            end
+        end
+    end
+
+    -- 2. Fallback: Ambiguate the input
+    return Ambiguate(name, "none")
+end
+
+--- Efficiently compares two names for case-insensitive and realm-aware equivalence.
+---@param n1 string|nil
+---@param n2 string|nil
+---@return boolean
+function DesolateLootcouncil:SmartCompare(n1, n2)
+    return self:GetScoreName(n1) == self:GetScoreName(n2)
 end
 
 function DesolateLootcouncil:GetOptions()

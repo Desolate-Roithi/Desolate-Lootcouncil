@@ -180,7 +180,7 @@ function Loot:OnStartLootRoll(event, rollID)
 
     local itemID = C_Item.GetItemInfoInstant(link)
     if not itemID then return end
-    
+
     local dbCat = self:GetItemCategory(itemID)
     -- If not officially registered in Item Manager, explicitly ignore it for Autopass
     if dbCat == "Junk/Pass" then return end
@@ -282,11 +282,11 @@ function Loot:OnLootMessage(event, msg)
             local category = self:CategorizeItem(link)
             local quality = select(3, C_Item.GetItemInfoInstant(link)) or 0
             local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
-            
+
             -- Session Items check logic to avoid double adding
             -- We use a timestamp-based key for Roll/Push wins as they lack a sourceGUID
             local guid = "Roll-" .. itemID .. "-" .. GetServerTime()
-            
+
             if quality >= minQuality or category ~= "Junk/Pass" then
                 if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
                     DesolateLootcouncil:DLC_Log("AUTO-ADDED from self-loot: " .. link)
@@ -323,6 +323,7 @@ function Loot:ClearLootBacklog()
     if session and session.loot then wipe(session.loot) end
     DesolateLootcouncil:DLC_Log("Loot backlog cleared (dedup store preserved).")
 end
+
 function Loot:AddManualItem(rawLink)
     local itemID = self:GetItemIDFromLink(rawLink)
     if itemID then
@@ -355,7 +356,7 @@ function Loot:AddManualItem(rawLink)
             texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark"
         })
         DesolateLootcouncil:DLC_Log("Manually added: " .. link, true)
-        
+
         local UI = DesolateLootcouncil:GetModule("UI_Loot")
         if UI then UI:ShowLootWindow(session.loot) end
     end
@@ -377,8 +378,8 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
 
     if not itemData then return end
 
-    local link = itemData.link
-    local msg = string.format("Winner of %s is %s! (%s)", link, winnerName, voteType)
+    local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName)
+    local msg = string.format("Winner of %s is %s! (%s)", itemData.link, winnerDisplay, voteType)
 
     if IsInRaid() then
         if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then
@@ -390,8 +391,10 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
         DesolateLootcouncil:DLC_Log(msg)
     end
 
-    if winnerName ~= UnitName("player") then
-        C_ChatInfo.SendChatMessage("You have been awarded " .. link .. "! Trade me.", "WHISPER", nil, winnerName)
+    local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
+
+    if not isSelf then
+        C_ChatInfo.SendChatMessage("You have been awarded " .. itemData.link .. "! Trade me.", "WHISPER", nil, winnerName)
     end
 
     local origIndex
@@ -407,19 +410,19 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
         local _, winnerClass = UnitClassBase(winnerName)
         ---@type Session
         local Session = DesolateLootcouncil:GetModule("Session")
-
+ 
         local entry = {
-            link        = itemData.link,
-            texture     = itemData.texture,
-            itemID      = itemData.itemID,
-            winner      = winnerName,
-            winnerClass = winnerClass,
-            voteType    = voteType,
-            timestamp   = GetServerTime(),
+            link          = itemData.link,
+            texture       = itemData.texture,
+            itemID        = itemData.itemID,
+            winner        = winnerName,
+            winnerClass   = winnerClass,
+            voteType      = voteType,
+            timestamp     = GetServerTime(),
             originalIndex = origIndex,
             fullItemData  = itemData,
-            votes       = Session and Session.sessionVotes and DeepCopy(Session.sessionVotes[itemGUID]) or {},
-            traded      = (winnerName == UnitName("player"))
+            votes         = Session and Session.sessionVotes and DeepCopy(Session.sessionVotes[itemGUID]) or {},
+            traded        = isSelf
         }
         table.insert(session.awarded, entry)
 
@@ -468,7 +471,8 @@ function Loot:ReawardItem(index)
         itemID = awardedItem.itemID,
         texture = awardedItem.texture,
         category = "Re-awarded",
-        sourceGUID = "Reaward-" .. (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
+        sourceGUID = "Reaward-" ..
+            (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
         stackIndex = 1
     })
 
@@ -532,7 +536,8 @@ function Loot:ReawardItem(index)
                 category = newItem.category
             } },
             duration = 300,
-            endTime = GetServerTime() + 300
+            endTime = GetServerTime() + 300,
+            votes = { [newItem.sourceGUID] = DeepCopy(awardedItem.votes or {}) }
         }
         local serialized = Session:Serialize(payload)
         local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")

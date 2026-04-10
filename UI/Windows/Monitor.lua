@@ -8,26 +8,10 @@ local AceGUI = LibStub("AceGUI-3.0")
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
 
--- [NEW] Helper: Resolve Alt to Main (Exact + Realm-Smart)
-local function GetLinkedMain(name)
-    local db = DesolateLootcouncil.db.profile
-    if not db.playerRoster or not db.playerRoster.alts then return nil end
-    local alts = db.playerRoster.alts
+-- [REMOVED] Redundant GetLinkedMain. Use DesolateLootcouncil:GetModule("Roster"):GetMain(name) instead.
 
-    -- 1. Exact Match (The Happy Path)
-    if alts[name] then
-        return alts[name]
-    end
-
-    -- 2. Realm Fallback (If name has no realm, try appending current)
-    if not string.find(name, "-") then
-        local myRealm = GetRealmName()
-        local tryName = name .. "-" .. myRealm
-        if alts[tryName] then return alts[tryName] end
-    end
-
-    return nil
-end
+local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
+local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
 
 function UI_Monitor:ShowMonitorWindow(isRefresh)
     if not self.monitorFrame then
@@ -91,7 +75,9 @@ function UI_Monitor:GetVoteInfo(guid)
         elseif vType == 3 then os = os + 1
         elseif vType == 4 then tm = tm + 1
         elseif vType == 5 then pass = pass + 1 end
-        votedPlayers[name] = true
+        -- Use normalized name for lookup consistency
+        local score = DesolateLootcouncil:GetScoreName(name)
+        if score then votedPlayers[score] = true end
     end
 
     local countsText = string.format("|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cff00ffffOS:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r", bids, rolls, os, tm, pass)
@@ -101,37 +87,31 @@ function UI_Monitor:GetVoteInfo(guid)
     local pending = {}
     if IsInRaid() then
         for i = 1, GetNumGroupMembers() do
-            local name, realm = UnitName("raid" .. i)
-            if name then
-                if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
-                if not votedPlayers[name] then table.insert(pending, name) end
-            end
+            local fullName = DesolateLootcouncil:GetFullName("raid" .. i)
+            local score = DesolateLootcouncil:GetScoreName(fullName)
+            if score and not votedPlayers[score] then table.insert(pending, DesolateLootcouncil:GetDisplayName(fullName)) end
         end
     elseif IsInGroup() then
-        local pName, pRealm = UnitName("player")
-        if pRealm and pRealm ~= "" then pName = pName .. "-" .. pRealm:gsub("%s+", "") end
-        if not votedPlayers[pName] then table.insert(pending, pName) end
+        local myFullName = DesolateLootcouncil:GetFullName("player")
+        local myScore = DesolateLootcouncil:GetScoreName(myFullName)
+        if myScore and not votedPlayers[myScore] then table.insert(pending, DesolateLootcouncil:GetDisplayName(myFullName)) end
 
         for i = 1, GetNumSubgroupMembers() do
-            local name, realm = UnitName("party" .. i)
-            if name then
-                if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
-                if not votedPlayers[name] then table.insert(pending, name) end
-            end
+            local fullName = DesolateLootcouncil:GetFullName("party" .. i)
+            local score = DesolateLootcouncil:GetScoreName(fullName)
+            if score and not votedPlayers[score] then table.insert(pending, DesolateLootcouncil:GetDisplayName(fullName)) end
         end
     else
-        local name, realm = UnitName("player")
-        if name then
-            if realm and realm ~= "" then name = name .. "-" .. realm:gsub("%s+", "") end
-            if not votedPlayers[name] then table.insert(pending, name) end
-        end
+        local myFullName = DesolateLootcouncil:GetFullName("player")
+        local myScore = DesolateLootcouncil:GetScoreName(myFullName)
+        if myScore and not votedPlayers[myScore] then table.insert(pending, DesolateLootcouncil:GetDisplayName(myFullName)) end
     end
 
     local Sim = DesolateLootcouncil:GetModule("Simulation")
     if Sim and Sim.GetPendingVoters then
         local simPending = Sim:GetPendingVoters(guid)
         if simPending then
-            for _, sName in ipairs(simPending) do table.insert(pending, sName) end
+            for _, sName in ipairs(simPending) do table.insert(pending, DesolateLootcouncil:GetDisplayName(sName)) end
         end
     end
 
@@ -340,16 +320,13 @@ function UI_Monitor:UpdateDisenchanters()
     end
 end
 function UI_Monitor:CreateVoteRow(scroll, v, isLM, itemData)
-    local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
-    local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
-
     local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
     row:SetLayout("Flow")
     row:SetFullWidth(true)
     scroll:AddChild(row)
 
     local lblName = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    lblName:SetText(v.name)
+    lblName:SetText(DesolateLootcouncil:GetDisplayName(v.name))
     lblName:SetRelativeWidth(0.30)
     row:AddChild(lblName)
 
@@ -394,7 +371,7 @@ function UI_Monitor:CreateDisenchanterRow(scroll, de, isLM, itemData)
     scroll:AddChild(row)
 
     local lblName = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    lblName:SetText(de.name)
+    lblName:SetText(DesolateLootcouncil:GetDisplayName(de.name))
     lblName:SetRelativeWidth(0.30)
     row:AddChild(lblName)
 
@@ -463,7 +440,8 @@ function UI_Monitor:ShowAwardWindow(itemData)
     self.awardFrame:AddChild(header)
 
     local Session = DesolateLootcouncil:GetModule("Session")
-    local votes = Session and Session.sessionVotes and Session.sessionVotes[itemData.sourceGUID]
+    local guid = itemData.sourceGUID or itemData.link
+    local votes = Session and Session.sessionVotes and Session.sessionVotes[guid]
 
     ---@type AceGUIScrollFrame
     local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
@@ -477,16 +455,14 @@ function UI_Monitor:ShowAwardWindow(itemData)
         if not db.PriorityLists then return 999 end
 
         -- Resolve Alt -> Main
-        local searchName = playerName
-        local linkedMain = GetLinkedMain(playerName)
-        if linkedMain then
-            searchName = linkedMain
-        end
+        local Roster = DesolateLootcouncil:GetModule("Roster")
+        local searchName = Roster and Roster:GetMain(playerName) or playerName
+        local searchScore = DesolateLootcouncil:GetScoreName(searchName)
 
         for _, list in ipairs(db.PriorityLists) do
             if list.name == category then
                 for rank, pName in ipairs(list.players) do
-                    if pName == searchName then return rank end
+                    if DesolateLootcouncil:GetScoreName(pName) == searchScore then return rank end
                 end
             end
         end
@@ -534,14 +510,12 @@ function UI_Monitor:ShowAwardWindow(itemData)
         for name, skill in pairs(Comm.playerEnchantingSkill) do
             if skill > 0 then
                 local inGroup = false
-                local myName, myRealm = UnitName("player")
-                myRealm = myRealm and myRealm:gsub("%s+", "") or GetRealmName():gsub("%s+", "")
-                local fullName = myName .. "-" .. myRealm
-                if name == myName or name == fullName then
+                if DesolateLootcouncil:SmartCompare(name, "player") then
                     inGroup = true
                 elseif UnitInRaid(name) or UnitInParty(name) then
                     inGroup = true
                 else
+                    -- Fallback: Blizzard API might expect the short name for local-realm players
                     local shortName = Ambiguate(name, "none")
                     if UnitInRaid(shortName) or UnitInParty(shortName) then
                         inGroup = true

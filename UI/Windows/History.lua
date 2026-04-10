@@ -166,7 +166,7 @@ function UI_History:ShowHistoryWindow()
                 local class = item.winnerClass
                 local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
 
-                text:SetText((item.link or "???") .. " -> |c" .. classColor .. (item.winner or "Unknown") .. "|r")
+                text:SetText((item.link or "???") .. " -> |c" .. classColor .. DesolateLootcouncil:GetDisplayName(item.winner or "Unknown") .. "|r")
                 text:SetRelativeWidth(0.45) -- Reduced from 0.50 to accommodate icon (0.05)
                 text:SetCallback("OnEnter", function(widget)
                     if item.link then

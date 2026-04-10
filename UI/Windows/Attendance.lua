@@ -182,7 +182,7 @@ end
 
 function UI_Attendance:CreateAttendedLabel(name)
     local btn = AceGUI:Create("InteractiveLabel")
-    btn:SetText(name)
+    btn:SetText(DesolateLootcouncil:GetDisplayName(name))
     btn:SetColor(0.2, 1.0, 0.2) -- Greenish
     btn:SetCallback("OnClick", function()
         tempAttended[name] = nil
@@ -194,7 +194,7 @@ end
 
 function UI_Attendance:CreateAbsentLabel(name)
     local btn = AceGUI:Create("InteractiveLabel")
-    btn:SetText(name)
+    btn:SetText(DesolateLootcouncil:GetDisplayName(name))
     btn:SetColor(1.0, 0.4, 0.4) -- Reddish
     btn:SetCallback("OnClick", function()
         tempAbsent[name] = nil
@@ -274,14 +274,14 @@ function UI_Attendance:ApplyDecayAndEndSession()
             end
 
             if #newList > 0 then
-                DLC:DLC_Log(" >> Sort Winner Rank 1: " .. newList[1])
+                DLC:DLC_Log(" >> Sort Winner Rank 1: " .. DesolateLootcouncil:GetDisplayName(newList[1]))
             end
 
             -- Final Standings Log
             DLC:DLC_Log(" --- Final Standings for [" .. listName .. "] ---")
             for k = 1, math.min(5, #newList) do
                 local stateStr = tempAbsent[newList[k]] and "(Absent)" or "(Present)"
-                DLC:DLC_Log("#" .. k .. ": " .. newList[k] .. " " .. stateStr)
+                DLC:DLC_Log("#" .. k .. ": " .. DesolateLootcouncil:GetDisplayName(newList[k]) .. " " .. stateStr)
             end
 
             -- Update the DB list in place
@@ -459,13 +459,17 @@ function UI_Attendance:GetRaidHistoryOptions(config, db)
 
                 if idx == "CURRENT" then
                     if config.currentAttendees then
-                        for name in pairs(config.currentAttendees) do table.insert(attendees, name) end
+                        for name in pairs(config.currentAttendees) do 
+                            table.insert(attendees, DesolateLootcouncil:GetDisplayName(name)) 
+                        end
                     end
                 else
                     local history = db.AttendanceHistory or {}
                     local entry = history[idx]
                     if entry and entry.attendees then
-                        for name in pairs(entry.attendees) do table.insert(attendees, name) end
+                        for name in pairs(entry.attendees) do 
+                            table.insert(attendees, DesolateLootcouncil:GetDisplayName(name)) 
+                        end
                     else
                         return "Error: History entry not found or empty."
                     end

@@ -121,10 +121,10 @@ function Session:RestoreSession()
 
         if state.activeLM and state.activeLM ~= "" then
             DesolateLootcouncil.activeLootMaster = state.activeLM
-            DesolateLootcouncil.amILM = (state.activeLM == UnitName("player"))
+            DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(state.activeLM, "player")
         end
 
-        local isLM = (state.activeLM == UnitName("player"))
+        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player")
 
         if not isLM and isExpiredOver12h then
             DesolateLootcouncil:DLC_Log("Session > 12h old. Auto-closing for non-LM.")
@@ -176,11 +176,11 @@ function Session:PerformRestore(state, now, expiry)
 
         if state.activeLM and state.activeLM ~= "" then
             DesolateLootcouncil.activeLootMaster = state.activeLM
-            DesolateLootcouncil.amILM = (state.activeLM == UnitName("player"))
+            DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(state.activeLM, "player")
         end
 
         DesolateLootcouncil:DLC_Log("Restored active session (" ..
-            #self.clientLootList .. " items, LM: " .. (state.activeLM or "?") .. ").")
+            #self.clientLootList .. " items, LM: " .. DesolateLootcouncil:GetDisplayName(state.activeLM or "?") .. ").")
 
         ---@type UI_Voting
         local UI = DesolateLootcouncil:GetModule("UI_Voting")
@@ -648,10 +648,10 @@ function Session:HandleVote(payload, sender)
 
         if data.vote == 0 then
             self.sessionVotes[data.guid][sender] = nil
-            DesolateLootcouncil:DLC_Log("Vote retracted by " .. sender)
+            DesolateLootcouncil:DLC_Log("Vote retracted by " .. DesolateLootcouncil:GetDisplayName(sender))
         else
-            -- Ensure pass is correctly saved (5)
-            local serverRoll = math.random(1, 100)
+            -- Use authoritative roll from sender if available, or fallback to local generation
+            local serverRoll = data.roll or math.random(1, 100)
             self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll }
 
             -- Only the actual LM is allowed to trigger auto-closes
@@ -689,15 +689,31 @@ function Session:HandleSyncVotes(payload)
         self.sessionVotes = payload.data.votes or payload.data -- Compatibility
         self.closedItems  = payload.data.closed or self.closedItems or {}
 
-        -- Raider: confirm outbound votes via two paths:
-        -- a) explicit confirmedVoters list in this sync, OR
-        -- b) our name already appears in sessionVotes[guid]
-        local myName      = UnitName("player")
-        local confirmed   = payload.data.confirmedVoters or {}
+        local myScore = DesolateLootcouncil:GetScoreName("player")
+        local confirmed = payload.data.confirmedVoters or {}
+
         for guid, _ in pairs(self.outboundVotes) do
-            local inConfirmed = confirmed[guid] and confirmed[guid][myName]
-            local inVotes     = self.sessionVotes[guid] and self.sessionVotes[guid][myName]
-            if inConfirmed or inVotes then
+            local foundInVotes = false
+            if self.sessionVotes[guid] then
+                for voterName in pairs(self.sessionVotes[guid]) do
+                    if DesolateLootcouncil:GetScoreName(voterName) == myScore then
+                        foundInVotes = true
+                        break
+                    end
+                end
+            end
+
+            local foundInConfirmed = false
+            if not foundInVotes and confirmed[guid] then
+                for voterName in pairs(confirmed[guid]) do
+                    if DesolateLootcouncil:GetScoreName(voterName) == myScore then
+                        foundInConfirmed = true
+                        break
+                    end
+                end
+            end
+
+            if foundInConfirmed or foundInVotes then
                 self.outboundVotes[guid] = nil
             end
         end
@@ -724,7 +740,7 @@ function Session:HandleSyncLM(payload)
     local lm = payload.data and payload.data.lm
     if lm then
         DesolateLootcouncil.activeLootMaster = lm
-        DesolateLootcouncil.amILM = (lm == UnitName("player"))
+        DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(lm, "player")
     end
 end
 
@@ -735,7 +751,8 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
     if not success or type(payload) ~= "table" then return end
 
     if payload.command == "VOTE" then
-        self:HandleVote(payload, sender)
+        local normalizedSender = DesolateLootcouncil:NormalizeName(sender)
+        self:HandleVote(payload, normalizedSender)
     elseif payload.command == "SYNC_VOTES" then
         self:HandleSyncVotes(payload)
     elseif payload.command == "REMOVE_ITEM" then
@@ -782,13 +799,16 @@ function Session:SendVote(itemGUID, voteType)
     if Voting then Voting:ShowVotingWindow(nil, true) end
 
     -- Broadcast to RAID channel (Approach B)
+    local roll = math.random(1, 100)
     local payload = {
         command = "VOTE",
-        data = { guid = itemGUID, vote = voteType }
+        data = { guid = itemGUID, vote = voteType, roll = roll }
     }
 
     -- Local snap (Monitor/Voting UI consistency)
-    self:HandleVote(payload, UnitName("player"))
+    -- Normalize local name to ensure consistency with network distribution
+    local myName = DesolateLootcouncil:GetFullName("player")
+    self:HandleVote(payload, myName)
 
     local serialized = self:Serialize(payload)
     local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")

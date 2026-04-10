@@ -44,7 +44,7 @@ end
 
 function Comm:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_COMM" then return end
-    if sender == UnitName("player") then return end -- Ignore self
+    if DesolateLootcouncil:SmartCompare(sender, "player") then return end -- Ignore self
 
     local success, command, data = self:Deserialize(message)
     if not success then return end

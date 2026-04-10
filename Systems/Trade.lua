@@ -60,7 +60,7 @@ function Trade:OnTradeShow()
     -- Build list of all untraded items for this player
     local pendingItems = {}
     for _, award in ipairs(session.awarded) do
-        if award.winner == tradeTargetName and not award.traded then
+        if DesolateLootcouncil:SmartCompare(award.winner, tradeTargetName) and not award.traded then
             table.insert(pendingItems, award)
         end
     end
@@ -91,14 +91,16 @@ function Trade:StageAllItems(pendingItems, targetName)
                         winner = award.winner,
                         guid   = award.sourceGUID
                     })
-                    DesolateLootcouncil:DLC_Log(string.format("Staged %s for %s.", award.link, targetName))
+                    DesolateLootcouncil:DLC_Log(string.format("Staged %s for %s.", award.link, 
+                        DesolateLootcouncil:GetDisplayName(targetName)))
                     staged = true
                 end
             end
         end
 
         if not staged then
-            DesolateLootcouncil:DLC_Log(string.format("Could not find %s in bags for %s.", award.link, targetName))
+            DesolateLootcouncil:DLC_Log(string.format("Could not find %s in bags for %s.", award.link, 
+                DesolateLootcouncil:GetDisplayName(targetName)))
         end
     end
 
@@ -129,11 +131,13 @@ function Trade:HandleTradeSuccess()
     local changed = false
 
     for _, pending in ipairs(self.currentTrade) do
+        local winnerScore = DesolateLootcouncil:GetScoreName(pending.winner)
         for _, award in ipairs(session.awarded) do
-            if award.link == pending.link and award.winner == pending.winner and not award.traded then
+            if award.link == pending.link and DesolateLootcouncil:GetScoreName(award.winner) == winnerScore and not award.traded then
                 award.traded = true
                 changed = true
-                DesolateLootcouncil:DLC_Log(string.format("Trade complete. %s marked as delivered to %s.", pending.link, pending.winner))
+                DesolateLootcouncil:DLC_Log(string.format("Trade complete. %s marked as delivered to %s.", 
+                    pending.link, DesolateLootcouncil:GetDisplayName(pending.winner)))
                 break
             end
         end

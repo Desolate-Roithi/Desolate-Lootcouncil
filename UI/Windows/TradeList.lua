@@ -47,13 +47,16 @@ function UI_TradeList:ShowTradeListWindow()
 
     -- Smart Trade Helper
     local function GetUnitIDForName(playerName)
+        local targetScore = DesolateLootcouncil:GetScoreName(playerName)
+        if not targetScore then return nil end
+
         for i = 1, 40 do
             local unit = "raid" .. i
-            if GetUnitName(unit, true) == playerName then return unit end
+            if DesolateLootcouncil:GetUnitScore(unit) == targetScore then return unit end
         end
         for i = 1, 4 do
             local unit = "party" .. i
-            if GetUnitName(unit, true) == playerName then return unit end
+            if DesolateLootcouncil:GetUnitScore(unit) == targetScore then return unit end
         end
         return nil
     end
@@ -106,7 +109,7 @@ function UI_TradeList:ShowTradeListWindow()
                 local winnerLabel = AceGUI:Create("Label") --[[@as AceGUILabel]]
                 local class = item.winnerClass
                 local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
-                winnerLabel:SetText("|c" .. classColor .. item.winner .. "|r")
+                winnerLabel:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(item.winner) .. "|r")
                 winnerLabel:SetRelativeWidth(0.20)
 
                 -- Trade Button
@@ -122,17 +125,18 @@ function UI_TradeList:ShowTradeListWindow()
                         return
                     end
                     -- 2. Check if player already targets them manually
-                    if UnitName("target") == item.winner then
+                    local winnerScore = DesolateLootcouncil:GetScoreName(item.winner)
+                    if DesolateLootcouncil:GetUnitScore("target") == winnerScore then
                         if CheckInteractDistance("target", 2) then
                             InitiateTrade("target")
                         else
-                            DesolateLootcouncil:DLC_Log(item.winner .. " is out of trade range.")
+                            DesolateLootcouncil:DLC_Log(DesolateLootcouncil:GetDisplayName(item.winner) .. " is out of trade range.")
                         end
                         return
                     end
                     -- 3. Failure: Ask user to target manually
                     DesolateLootcouncil:DLC_Log("Could not auto-target " ..
-                        item.winner .. ". Please target them manually and click Trade again.", true)
+                        DesolateLootcouncil:GetDisplayName(item.winner) .. ". Please target them manually and click Trade again.", true)
                 end)
 
                 -- Remove Button

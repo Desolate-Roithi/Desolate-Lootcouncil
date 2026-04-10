@@ -56,20 +56,12 @@ function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
 
     if Comm and Comm.playerEnchantingSkill then
         for name, skill in pairs(Comm.playerEnchantingSkill) do
-            if skill then
+            if skill > 0 then
                 local inGroup = false
-                local myName, myRealm = UnitName("player")
-                myRealm = myRealm and myRealm:gsub("%s+", "") or GetRealmName():gsub("%s+", "")
-                local fullName = myName .. "-" .. myRealm
-                if name == myName or name == fullName then
+                if DesolateLootcouncil:SmartCompare(name, "player") then
                     inGroup = true
                 elseif UnitInRaid(name) or UnitInParty(name) then
                     inGroup = true
-                else
-                    local shortName = Ambiguate(name, "none")
-                    if UnitInRaid(shortName) or UnitInParty(shortName) then
-                        inGroup = true
-                    end
                 end
 
                 if inGroup then
@@ -88,7 +80,7 @@ function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
         sidebarFrame:Show()
         local listString = ""
         for _, de in ipairs(disenchanters) do
-            listString = listString .. string.format("%s (|cff00ff00%d|r)\n", de.name, de.skill)
+            listString = listString .. string.format("%s (|cff00ff00%d|r)\n", DesolateLootcouncil:GetDisplayName(de.name), de.skill)
         end
         sidebarFrame.content:SetText(listString)
     end
