@@ -274,8 +274,9 @@ function Priority:MovePlayerToBottom(listName, playerName)
     local db = DesolateLootcouncil.db.profile
     if not db.PriorityLists then return end
 
-    -- Smart Lookup: Check if Alt
-    local targetName = DesolateLootcouncil:GetModule("Roster"):GetMain(playerName)
+    -- Smart Lookup: Check if Alt (nil-guarded; Roster may not be enabled at cold load)
+    local RosterSys = DesolateLootcouncil:GetModule("Roster")
+    local targetName = RosterSys and RosterSys:GetMain(playerName) or playerName
 
     local targetList = nil
     for _, list in ipairs(db.PriorityLists) do
@@ -343,9 +344,10 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
     end
 
     local players = targetList.players
-    -- Find current (Alt-Aware)
+    -- Find current (Alt-Aware, nil-guarded)
     local currentIdx = nil
-    local targetMain = DesolateLootcouncil:GetModule("Roster"):GetMain(playerName)
+    local RosterSys = DesolateLootcouncil:GetModule("Roster")
+    local targetMain = RosterSys and RosterSys:GetMain(playerName) or playerName
 
     for i, p in ipairs(players) do
         if DesolateLootcouncil:SmartCompare(p, targetMain) then

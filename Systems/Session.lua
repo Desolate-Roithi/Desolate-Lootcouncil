@@ -37,6 +37,28 @@ function Session:OnEnable()
     self.lastHeartbeat = 0
     self.sessionPayloadCache = nil -- Pre-serialized LOOT_SESSION_START string for heartbeat
     self:ScheduleRepeatingTimer("OnTimerTick", 1)
+
+    -- Define session-restore popup once at module load.
+    -- OnCancel reads self.pendingRestore set by RestoreSession to avoid capturing
+    -- ephemeral local variables inside a repeated closure allocation.
+    StaticPopupDialogs["DLC_CLOSE_SESSION"] = {
+        text = "A previous Loot Session is still active. Do you want to close it?",
+        button1 = "Yes (Close Session)",
+        button2 = "No (Keep Active)",
+        OnAccept = function()
+            Session:SendStopSession()
+        end,
+        OnCancel = function()
+            local p = Session.pendingRestore
+            if p then
+                Session:PerformRestore(p.state, p.now, p.expiry)
+                Session.pendingRestore = nil
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
 end
 
 function Session:OnTimerTick()
@@ -142,20 +164,8 @@ function Session:RestoreSession()
             local notInGroup = not IsInGroup()
 
             if isExpiredOver12h or (inactiveFor1h and notInGroup) then
-                StaticPopupDialogs["DLC_CLOSE_SESSION"] = {
-                    text = "A previous Loot Session is still active. Do you want to close it?",
-                    button1 = "Yes (Close Session)",
-                    button2 = "No (Keep Active)",
-                    OnAccept = function()
-                        self:SendStopSession()
-                    end,
-                    OnCancel = function()
-                        self:PerformRestore(state, now, expiry)
-                    end,
-                    timeout = 0,
-                    whileDead = true,
-                    hideOnEscape = true,
-                }
+                -- Store restore context so the module-level popup handler can read it.
+                self.pendingRestore = { state = state, now = now, expiry = expiry }
                 StaticPopup_Show("DLC_CLOSE_SESSION")
                 return
             end

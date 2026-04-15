@@ -23,6 +23,24 @@ function Roster:OnEnable()
     self.scoreMap = {} -- Transient cache for O(1) Smart Recognition
     self:UpdateScoreMap()
 
+    -- Define autopass popup once at module load to avoid repeated table allocation.
+    StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
+        text = "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
+        button1 = "Enable",
+        button2 = "No",
+        OnAccept = function()
+            local Comm = DesolateLootcouncil:GetModule("Comm")
+            if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
+        end,
+        OnCancel = function()
+            local Comm = DesolateLootcouncil:GetModule("Comm")
+            if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+
     DesolateLootcouncil:DLC_Log("Systems/Roster Loaded")
 end
 
@@ -114,23 +132,6 @@ function Roster:StartRaidSession()
     if DesolateLootcouncil:AmILootMaster() then
         -- Priority list propagation is now manual only via the Item Manager UI button.
 
-        StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
-            text =
-            "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
-            button1 = "Enable",
-            button2 = "No",
-            OnAccept = function()
-                local Comm = DesolateLootcouncil:GetModule("Comm")
-                if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
-            end,
-            OnCancel = function()
-                local Comm = DesolateLootcouncil:GetModule("Comm")
-                if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
-            end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-        }
         StaticPopup_Show("DLC_ENABLE_AUTOPASS")
     end
 end
