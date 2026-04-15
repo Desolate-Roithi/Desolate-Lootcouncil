@@ -493,25 +493,46 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if UI then UI:ShowMonitorWindow() end
 end
 
+--- Copies the original votes back onto the new item GUID so the Monitor
+--- and award window reflect the previous voting state after a re-award.
+--- Note: Reaward generates a NEW sourceGUID ("Reaward-..."), so votes are
+--- keyed to the new GUID — the old key is intentionally abandoned.
+---@param session table
+---@param awardedItem table   the history entry being reverted
+function Loot:_RestoreVotesForReaward(session, awardedItem)
+    if not awardedItem.votes then return end
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if not Session then return end
+
+    if not Session.sessionVotes then Session.sessionVotes = {} end
+    local newGUID = session.bidding[#session.bidding].sourceGUID
+    Session.sessionVotes[newGUID] = DeepCopy(awardedItem.votes)
+
+    local vCount = 0
+    for _ in pairs(awardedItem.votes) do vCount = vCount + 1 end
+    DesolateLootcouncil:DLC_Log("Restored " .. vCount .. " votes for re-awarded item.")
+end
+
 function Loot:ReawardItem(index)
     local session = DesolateLootcouncil.db.profile.session
     if not session.awarded or not session.awarded[index] then return end
 
     local awardedItem = session.awarded[index]
-    -- Restore to Bidding
+
+    -- 1. Push item back onto the live bidding list (generate a new GUID to avoid
+    --    conflicts with the original loot-bag entry, which may have already been consumed)
     table.insert(session.bidding, awardedItem.fullItemData or {
-        link = awardedItem.link,
-        itemID = awardedItem.itemID,
-        texture = awardedItem.texture,
-        category = "Re-awarded",
+        link       = awardedItem.link,
+        itemID     = awardedItem.itemID,
+        texture    = awardedItem.texture,
+        category   = "Re-awarded",
         sourceGUID = "Reaward-" ..
             (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
-        stackIndex = 1
+        stackIndex = 1,
     })
 
-    -- Revert Priority
+    -- 2. Restore priority position so the original winner isn't penalised
     if awardedItem.originalIndex and awardedItem.winner then
-        ---@type Priority
         local Priority = DesolateLootcouncil:GetModule("Priority") --[[@as Priority]]
         if Priority and Priority.RestorePlayerPosition then
             local cat = awardedItem.fullItemData and awardedItem.fullItemData.category
@@ -521,56 +542,29 @@ function Loot:ReawardItem(index)
         end
     end
 
-    -- [FIX] Restore Votes to Session
-    if awardedItem.votes then
-        local Session = DesolateLootcouncil:GetModule("Session")
-        if Session then
-            if not Session.sessionVotes then Session.sessionVotes = {} end
-            -- Map by GUID (which we generated on restore or original)
-            -- Ideally we use the ORIGINAL sourceGUID if possible, but Reaward generates a new one.
-            -- Wait, if we generate a NEW GUID, the old votes won't map!
-            -- We must use the OLD GUID if we want votes to match, OR we update the votes key.
-            -- The Reaward logic below generates a NEW GUID: "Reaward-..."
-            -- Let's use that NEW GUID for the vote key.
+    -- 3. Re-attach the original votes to the new GUID
+    self:_RestoreVotesForReaward(session, awardedItem)
 
-            -- Update bidding item to use the Reaward GUID
-            local newGUID = session.bidding[#session.bidding].sourceGUID
-
-            Session.sessionVotes[newGUID] = DeepCopy(awardedItem.votes)
-            local vCount = 0
-            for _ in pairs(awardedItem.votes) do vCount = vCount + 1 end
-            DesolateLootcouncil:DLC_Log("Restored " .. vCount .. " votes for re-awarded item.")
-        end
-    end
-
+    -- 4. Remove the history entry and log
     table.remove(session.awarded, index)
     DesolateLootcouncil:DLC_Log("Re-awarded item: " .. (awardedItem.link or "???"))
 
+    -- 5. Broadcast the restored item so assistants see it in their Monitor
     local newItem = session.bidding[#session.bidding]
-
-    -- Refresh UIs
-    local History = DesolateLootcouncil:GetModule("UI_History")
-    if History then History:ShowHistoryWindow() end
-
-    -- Open Monitor to show it's back
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor then Monitor:ShowMonitorWindow() end
-
-    -- Broadcast the restored item to the raid so assistants see it again (Follow-up Fix)
     local Session = DesolateLootcouncil:GetModule("Session")
     if Session and Session.SendCommMessage then
         local payload = {
-            command = "LOOT_SESSION_START",
-            data = { {
-                link = newItem.link,
-                texture = newItem.texture,
-                itemID = newItem.itemID,
+            command  = "LOOT_SESSION_START",
+            data     = { {
+                link       = newItem.link,
+                texture    = newItem.texture,
+                itemID     = newItem.itemID,
                 sourceGUID = newItem.sourceGUID,
-                category = newItem.category
+                category   = newItem.category,
             } },
             duration = 300,
-            endTime = GetServerTime() + 300,
-            votes = { [newItem.sourceGUID] = DeepCopy(awardedItem.votes or {}) }
+            endTime  = GetServerTime() + 300,
+            votes    = { [newItem.sourceGUID] = DeepCopy(awardedItem.votes or {}) },
         }
         local serialized = Session:Serialize(payload)
         local channel = DesolateLootcouncil:GetBroadcastChannel()
@@ -578,6 +572,12 @@ function Loot:ReawardItem(index)
             Session:SendCommMessage("DLC_Loot", serialized, channel)
         end
     end
+
+    -- 6. Refresh windows
+    local History = DesolateLootcouncil:GetModule("UI_History")
+    if History then History:ShowHistoryWindow() end
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+    if Monitor then Monitor:ShowMonitorWindow() end
 
     DesolateLootcouncil:Print("Item reverted to bidding session.")
 end

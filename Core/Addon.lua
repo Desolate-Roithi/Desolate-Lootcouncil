@@ -469,11 +469,15 @@ end
 --- Returns the highest expansion skill level learned.
 ---@return number|nil
 function DesolateLootcouncil:GetEnchantingSkillLevel()
+    -- Resolve the locale-appropriate profession name at runtime.
+    -- Spell 7411 is the Enchanting skill spell, available in all locales.
+    local ENCHANTING_NAME = C_Spell.GetSpellName(7411) or "Enchanting"
+
     local prof1, prof2 = GetProfessions()
     local function IsEnchanting(id)
         if not id then return false end
         local name = GetProfessionInfo(id)
-        return name == "Enchanting" or name == "Verzauberkunst"
+        return name == ENCHANTING_NAME
     end
 
     if not IsEnchanting(prof1) and not IsEnchanting(prof2) then
@@ -497,7 +501,7 @@ function DesolateLootcouncil:GetEnchantingSkillLevel()
         local function GetLegacyRank(id)
             if not id then return 0 end
             local name, _, rank = GetProfessionInfo(id)
-            if name == "Enchanting" or name == "Verzauberkunst" then return rank end
+            if name == ENCHANTING_NAME then return rank end
             return 0
         end
         highestRank = math.max(GetLegacyRank(prof1), GetLegacyRank(prof2))
