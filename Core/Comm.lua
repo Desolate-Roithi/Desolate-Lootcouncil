@@ -62,8 +62,7 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
             version = DesolateLootcouncil.version,
         }
         local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
-        if (mySkill or 0) > 0 and not self.hasSentEnchantingResp then
-            self.hasSentEnchantingResp = true
+        if (mySkill or 0) > 0 then
             responseData.enchantingSkill = mySkill
         end
         self:SendComm("VERSION_RESP", responseData, sender)
@@ -136,7 +135,9 @@ end
 
 function Comm:UpdatePlayerInfo(sender, version, skill)
     self.playerVersions[sender] = version
-    self.playerEnchantingSkill[sender] = skill
+    if skill ~= nil then
+        self.playerEnchantingSkill[sender] = skill
+    end
 
     -- Sync to Global for Debug module
 
@@ -166,8 +167,7 @@ function Comm:SendVersionCheck()
     local payloadData = {
         version = DesolateLootcouncil.version
     }
-    if (mySkill or 0) > 0 and not self.hasSentEnchantingReq then
-        self.hasSentEnchantingReq = true
+    if (mySkill or 0) > 0 then
         payloadData.enchantingSkill = mySkill
     end
 
@@ -200,7 +200,7 @@ end
 function Comm:PruneRosterData()
     local toRemove = {}
     for name in pairs(self.playerVersions) do
-        if not DesolateLootcouncil:IsUnitInRaid(name) then
+        if not DesolateLootcouncil:IsUnitInRaid(name) and not DesolateLootcouncil:SmartCompare(name, "player") then
             table.insert(toRemove, name)
         end
     end
@@ -213,10 +213,30 @@ function Comm:PruneRosterData()
                 DesolateLootcouncil.activeAddonUsers[name] = nil
             end
         end
-        -- Reset our broadcast flag so we announce again if we join a new group
-        self.hasSentEnchantingReq = false
-        self.hasSentEnchantingResp = false
         -- Notify UI that data has changed (pruned)
         self:SendMessage("DLC_VERSION_UPDATE")
+    end
+
+    -- Handshake: Batch detection of new members to prevent outgoing Whisper spam disconnects for the LM
+    if DesolateLootcouncil:AmILootMaster() then
+        local prefix = IsInRaid() and "raid" or (IsInGroup() and "party")
+        if prefix then
+            local unrecordedFound = false
+            for i = 1, GetNumGroupMembers() do
+                local name = GetUnitName(prefix..i, true)
+                if name and not self.playerVersions[name] and not DesolateLootcouncil:SmartCompare(name, "player") then
+                    unrecordedFound = true
+                    break
+                end
+            end
+
+            if unrecordedFound and not self.rosterSyncTimer then
+                -- Wait 5 seconds for raid forming to settle, then broadcast ONE raid-wide Request
+                self.rosterSyncTimer = self:ScheduleTimer(function()
+                    self.rosterSyncTimer = nil
+                    self:SendVersionCheck()
+                end, 5)
+            end
+        end
     end
 end
