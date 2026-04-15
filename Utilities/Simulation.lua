@@ -34,7 +34,7 @@ function Simulation:OnEnable()
     DesolateLootcouncil:DLC_Log("Utilities/Simulation Loaded")
 end
 
-function Simulation:Add(name)
+function Simulation:Add(name, enchantingSkill)
     if not name or name == "" then return end
 
     if self.activeSims[name] then
@@ -56,7 +56,15 @@ function Simulation:Add(name)
         end
     end
 
-    DesolateLootcouncil:DLC_Log("Simulated Player Added: " .. name, true)
+    local Comm = DesolateLootcouncil:GetModule("Comm")
+    if Comm then
+        local version = DesolateLootcouncil.version .. "-SIM"
+        local skill = tonumber(enchantingSkill)
+        Comm:UpdatePlayerInfo(name, version, skill)
+    end
+
+    local skillMsg = enchantingSkill and (" with Enchanting " .. enchantingSkill) or ""
+    DesolateLootcouncil:DLC_Log("Simulated Player Added: " .. name .. skillMsg, true)
 end
 
 function Simulation:Remove(name)
@@ -195,7 +203,7 @@ function Simulation:HandleSlashCommand(input)
     local cmd = args[1]
 
     if cmd == "add" then
-        if args[2] then self:Add(args[2]) end
+        if args[2] then self:Add(args[2], args[3]) end
     elseif cmd == "remove" then
         if args[2] then self:Remove(args[2]) end
     elseif cmd == "clear" then
@@ -211,7 +219,7 @@ function Simulation:HandleSlashCommand(input)
         end
     else
         DesolateLootcouncil:DLC_Log(
-            "Sim Usage: /dlc sim [add <name> | remove <name> | clear | vote | list]", true)
+            "Sim Usage: /dlc sim [add <name> <optional:enchantingSkill> | remove <name> | clear | vote | list]", true)
     end
 end
 
