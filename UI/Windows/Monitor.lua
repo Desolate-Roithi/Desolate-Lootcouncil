@@ -33,11 +33,11 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
             DesolateLootcouncil.Persistence:SaveFramePosition(f, "Monitor")
         end
         local rawFrame = (frame --[[@as any]]).frame
-        rawFrame:SetScript("OnDragStop", function(f)
+        rawFrame:HookScript("OnDragStop", function(f)
             f:StopMovingOrSizing()
             SavePos(frame)
         end)
-        rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
         DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Monitor")
     end
 
@@ -418,11 +418,11 @@ function UI_Monitor:ShowAwardWindow(itemData)
             DesolateLootcouncil.Persistence:SaveFramePosition(f, "Award")
         end
         local rawFrame = (frame --[[@as any]]).frame
-        rawFrame:SetScript("OnDragStop", function(f)
+        rawFrame:HookScript("OnDragStop", function(f)
             f:StopMovingOrSizing()
             SavePos(frame)
         end)
-        rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
         DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Award")
     end
     self.awardFrame:Show()

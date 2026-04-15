@@ -52,7 +52,7 @@ function Loot:OnEnable()
     DesolateLootcouncil:DLC_Log("Systems/Loot Loaded")
 
     -- Restore UI if session exists — only for the Loot Master (Bug 4)
-    local session = DesolateLootcouncil.db.profile.session
+    -- (reuse 'session' declared above — no second local needed)
     if session.loot and #session.loot > 0 and DesolateLootcouncil:AmILootMaster() then
         self:ScheduleTimer(function()
             ---@type UI_Loot

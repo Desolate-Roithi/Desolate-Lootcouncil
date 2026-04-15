@@ -415,17 +415,17 @@ end
 ---------------------------------------------------------------------------
 
 function Roster:ZONE_CHANGED_NEW_AREA()
-    local name, type = GetInstanceInfo()
+    local name, instanceType = GetInstanceInfo()
     local config = DesolateLootcouncil.db.profile.DecayConfig
 
-    if type == "raid" then
+    if instanceType == "raid" then
         if not config.sessionActive then
             self:Printf("Entered Raid Instance (%s). Starting Session...", name)
             self:StartRaidSession()
         end
         -- Auto-ping the LM to sync Autopass and IM configs if joining late
         DesolateLootcouncil:SendVersionCheck()
-    elseif type ~= "raid" and config.sessionActive then
+    elseif instanceType ~= "raid" and config.sessionActive then
         DesolateLootcouncil:DLC_Log(string.format("DEBUG: Left Raid (%s). Session is still ACTIVE.", name))
     end
 end
