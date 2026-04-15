@@ -176,6 +176,18 @@ function Loot:OnStartLootRoll(event, rollID)
 
     if IsPartyLFG() or HasLFGRestrictions() then return end
 
+    if isLM then
+        local now = GetTime()
+        if not self.lastAutopassSync or (now - self.lastAutopassSync) > 30 then
+            self.lastAutopassSync = now
+            local Comm = DesolateLootcouncil:GetModule("Comm")
+            if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
+                Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+            end
+        end
+    end
+
+    -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
     if not DesolateLootcouncil.sessionAutopassActive then return end
 
     local itemID = C_Item.GetItemInfoInstant(link)

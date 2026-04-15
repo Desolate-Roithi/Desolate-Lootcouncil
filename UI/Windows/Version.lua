@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_Version : AceModule
-local UI_Version = DesolateLootcouncil:NewModule("UI_Version", "AceEvent-3.0")
+local UI_Version = DesolateLootcouncil:NewModule("UI_Version", "AceEvent-3.0", "AceTimer-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
 ---@class (partial) DLC_Ref_Version
@@ -58,6 +58,10 @@ function UI_Version:ShowVersionWindow(isTest)
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
         frame:SetTitle("Desolate Loot Council - Versions")
         frame:SetCallback("OnClose", function(widget)
+            if self.refreshTimer then
+                self:CancelTimer(self.refreshTimer)
+                self.refreshTimer = nil
+            end
             AceGUI:Release(widget)
             self.versionFrame = nil
             self.scrollFrame = nil
@@ -102,6 +106,11 @@ function UI_Version:OnEnable()
 end
 
 function UI_Version:UpdateVersionList(isTest)
+    if self.refreshTimer then
+        self:CancelTimer(self.refreshTimer)
+        self.refreshTimer = nil
+    end
+
     if not self.scrollFrame then return end
     self.scrollFrame:ReleaseChildren()
     local scroll = self.scrollFrame --[[@as AceGUIScrollFrame]]
@@ -275,52 +284,38 @@ function UI_Version:UpdateVersionList(isTest)
     btnRefresh:SetText("Refresh / Ping")
     btnRefresh:SetWidth(150)
 
-    -- Check cooldown at creation time: re-opening during an active cooldown shows disabled state.
-    if Comm then
-        local remaining = Comm:GetVersionCheckRemaining()
-        if remaining > 0 then
-            btnRefresh:SetText(string.format("Wait %.0fs", remaining))
-            btnRefresh:SetDisabled(true)
-            C_Timer.After(remaining, function()
-                if self.versionFrame then
-                    btnRefresh:SetText("Refresh / Ping")
-                    btnRefresh:SetDisabled(false)
-                end
-            end)
+    -- Repeating timer to handle button state and countdown text
+    self.refreshTimer = self:ScheduleRepeatingTimer(function()
+        if not self.versionFrame or not self.versionFrame:IsShown() then return end
+        if Comm and Comm.GetVersionCheckRemaining then
+            local remaining = Comm:GetVersionCheckRemaining()
+            if remaining > 0 then
+                btnRefresh:SetText(string.format("Wait %.0fs", remaining))
+                btnRefresh:SetDisabled(true)
+            else
+                btnRefresh:SetText("Refresh / Ping")
+                btnRefresh:SetDisabled(false)
+            end
         end
-    end
+    end, 1)
 
     btnRefresh:SetCallback("OnClick", function()
         if not Comm then return end
 
-        local ok, cooldownRemaining = Comm:SendVersionCheck()
+        local ok, _ = Comm:SendVersionCheck()
         if not ok then
-            -- Throttled: show how long the user must wait
-            local msg = string.format("Wait %.0fs", cooldownRemaining or 10)
-            btnRefresh:SetText(msg)
-            btnRefresh:SetDisabled(true)
-            C_Timer.After(cooldownRemaining or 10, function()
-                if self.versionFrame then
-                    btnRefresh:SetText("Refresh / Ping")
-                    btnRefresh:SetDisabled(false)
-                end
-            end)
+            -- Throttled: UI will update via repeating timer
             return
         end
 
-        -- Sent OK: disable button for 10s so it can't be double-clicked
+        -- Sent OK: disable button immediately
         btnRefresh:SetDisabled(true)
         btnRefresh:SetText("Pinging...")
-        -- Delay refresh so responses can arrive before we re-render
+        
+        -- Delay refresh so responses can arrive before we re-render list
         C_Timer.After(1.5, function()
             if self.versionFrame then
                 self:UpdateVersionList(isTest)
-            end
-        end)
-        C_Timer.After(10, function()
-            if self.versionFrame then
-                btnRefresh:SetText("Refresh / Ping")
-                btnRefresh:SetDisabled(false)
             end
         end)
     end)

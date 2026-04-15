@@ -213,6 +213,8 @@ function UI_Loot:ShowLootWindow(lootTable)
             local success = Comm:SendVersionCheck()
             if success then
                 DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
+                refreshBtn:SetDisabled(true)
+                refreshBtn:SetText("Pinging...")
                 UpdateTopIndicator()
             end
         end

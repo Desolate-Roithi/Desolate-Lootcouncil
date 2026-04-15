@@ -83,7 +83,8 @@ function Session:SendSessionHeartbeat()
             endTime     = self.sessionExpiry,
             closedItems = self.closedItems,
             votes       = self.sessionVotes,
-            isHeartbeat = true
+            isHeartbeat = true,
+            autopassActive = DesolateLootcouncil.sessionAutopassActive
         }
         self.sessionPayloadCache = self:Serialize(payload)
         DesolateLootcouncil:DLC_Log("Session Heartbeat: rebuilt payload cache.")
@@ -279,7 +280,8 @@ function Session:StartSession(lootTable)
         command = "LOOT_SESSION_START",
         data = payloadData,
         duration = duration,
-        endTime = endTime
+        endTime = endTime,
+        autopassActive = DesolateLootcouncil.sessionAutopassActive
     }
     local serialized = self:Serialize(payload)
 
@@ -476,6 +478,10 @@ function Session:HandleStartSession(payload)
     local duration = payload.duration or 300
     local expiry = payload.endTime or (GetServerTime() + duration)
     local isHeartbeat = payload.isHeartbeat == true
+
+    if payload.autopassActive ~= nil then
+        DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
+    end
 
     self.clientLootList = self.clientLootList or {}
     self.myLocalVotes = self.myLocalVotes or {}

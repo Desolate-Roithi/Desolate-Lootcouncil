@@ -155,7 +155,7 @@ function Comm:SendVersionCheck()
     self.playerEnchantingSkill[myName] = mySkill
 
     -- 2. Throttling for Broadcast
-    local now = GetServerTime()
+    local now = GetTime()
     local remaining = self:GetVersionCheckRemaining()
     if remaining > 0 then
         DesolateLootcouncil:DLC_Log(string.format("Version broadcast throttled — %.0fs cooldown remaining.", remaining))
@@ -178,7 +178,7 @@ end
 --- Returns how many seconds remain in the version check cooldown (0 if ready).
 --- Safe to call at any time with no side effects.
 function Comm:GetVersionCheckRemaining()
-    local remaining = VERSION_CHECK_COOLDOWN - (GetServerTime() - self.lastVersionCheck)
+    local remaining = VERSION_CHECK_COOLDOWN - (GetTime() - self.lastVersionCheck)
     return remaining > 0 and remaining or 0
 end
 
