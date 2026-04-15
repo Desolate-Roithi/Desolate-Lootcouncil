@@ -505,3 +505,11 @@ function DesolateLootcouncil:GetEnchantingSkillLevel()
 
     return highestRank
 end
+
+--- Returns the appropriate broadcast channel for the current group state.
+--- @return string|nil  "RAID", "PARTY", or nil when not in a group.
+function DesolateLootcouncil:GetBroadcastChannel()
+    if IsInRaid() then return "RAID" end
+    if IsInGroup() then return "PARTY" end
+    return nil
+end

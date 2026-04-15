@@ -114,7 +114,7 @@ function Session:SendSessionHeartbeat()
         DesolateLootcouncil:DLC_Log("Session Heartbeat: using cached payload.")
     end
 
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if channel then
         self:SendCommMessage("DLC_Loot", self.sessionPayloadCache, channel)
     end
@@ -298,7 +298,7 @@ function Session:StartSession(lootTable)
     DesolateLootcouncil:DLC_Log("Sent packet size: " .. #serialized .. " bytes")
 
     -- 5. Broadcasting
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
 
     if not channel then
         channel = "WHISPER"
@@ -346,7 +346,7 @@ function Session:SendStopSession()
     local payload = { command = "LOOT_SESSION_END" }
     local serialized = self:Serialize(payload)
 
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if not channel then
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     else
@@ -384,7 +384,7 @@ function Session:SendCloseItem(itemGUID)
     -- 1. Broadcast to Raid
     local payload = { command = "CLOSE_ITEM", data = { guid = itemGUID } }
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if not channel then
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     else
@@ -409,7 +409,7 @@ end
 function Session:SendRemoveItem(guid)
     local payload = { command = "REMOVE_ITEM", data = { guid = guid } }
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if not channel then
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     else
@@ -431,7 +431,7 @@ function Session:SendHistoryUpdate(entry)
     }
     local payload = { command = "HISTORY_UPDATE", data = safeEntry }
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if channel then
         self:SendCommMessage("DLC_Loot", serialized, channel)
     end
@@ -789,7 +789,7 @@ end
 function Session:SendSyncLM(targetLM)
     local payload = { command = "SYNC_LM", data = { lm = targetLM } }
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if channel then
         self:SendCommMessage("DLC_Loot", serialized, channel)
     end
@@ -827,7 +827,7 @@ function Session:SendVote(itemGUID, voteType)
     self:HandleVote(payload, myName)
 
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if channel then
         self:SendCommMessage("DLC_Loot", serialized, channel)
     end
