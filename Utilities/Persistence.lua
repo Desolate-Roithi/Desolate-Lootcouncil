@@ -202,6 +202,11 @@ function Persistence:ToggleWindowCollapse(widget)
         end
 
         frame.isCollapsed = false
+
+        -- Re-layout any module that stored a layout callback (e.g. Monitor scroll frame sizing)
+        if widget.layoutMonitor then
+            C_Timer.After(0, widget.layoutMonitor)
+        end
     end
 end
 

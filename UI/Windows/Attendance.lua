@@ -67,11 +67,11 @@ function UI_Attendance:ShowAttendanceWindow()
         DesolateLootcouncil:SaveFramePosition(f, "Attendance")
     end
     local rawFrame = (frame --[[@as any]]).frame
-    rawFrame:SetScript("OnDragStop", function(f)
+    rawFrame:HookScript("OnDragStop", function(f)
         f:StopMovingOrSizing()
         SavePos(frame)
     end)
-    rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+    rawFrame:HookScript("OnHide", function() SavePos(frame) end)
     if DesolateLootcouncil.Persistence then
         DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Attendance")
     end

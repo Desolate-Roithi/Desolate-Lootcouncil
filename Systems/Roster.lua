@@ -23,6 +23,24 @@ function Roster:OnEnable()
     self.scoreMap = {} -- Transient cache for O(1) Smart Recognition
     self:UpdateScoreMap()
 
+    -- Define autopass popup once at module load to avoid repeated table allocation.
+    StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
+        text = "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
+        button1 = "Enable",
+        button2 = "No",
+        OnAccept = function()
+            local Comm = DesolateLootcouncil:GetModule("Comm")
+            if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
+        end,
+        OnCancel = function()
+            local Comm = DesolateLootcouncil:GetModule("Comm")
+            if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+
     DesolateLootcouncil:DLC_Log("Systems/Roster Loaded")
 end
 
@@ -114,23 +132,6 @@ function Roster:StartRaidSession()
     if DesolateLootcouncil:AmILootMaster() then
         -- Priority list propagation is now manual only via the Item Manager UI button.
 
-        StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
-            text =
-            "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
-            button1 = "Enable",
-            button2 = "No",
-            OnAccept = function()
-                local Comm = DesolateLootcouncil:GetModule("Comm")
-                if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
-            end,
-            OnCancel = function()
-                local Comm = DesolateLootcouncil:GetModule("Comm")
-                if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
-            end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-        }
         StaticPopup_Show("DLC_ENABLE_AUTOPASS")
     end
 end
@@ -415,18 +416,23 @@ end
 ---------------------------------------------------------------------------
 
 function Roster:ZONE_CHANGED_NEW_AREA()
-    local name, type = GetInstanceInfo()
+    local name, instanceType = GetInstanceInfo()
     local config = DesolateLootcouncil.db.profile.DecayConfig
 
-    if type == "raid" then
+    if instanceType == "raid" then
         if not config.sessionActive then
             self:Printf("Entered Raid Instance (%s). Starting Session...", name)
             self:StartRaidSession()
+        else
+            -- Ensure Autopass is synced/reset for the new raid environment if it was stale
+            DesolateLootcouncil.sessionAutopassActive = nil
         end
         -- Auto-ping the LM to sync Autopass and IM configs if joining late
         DesolateLootcouncil:SendVersionCheck()
-    elseif type ~= "raid" and config.sessionActive then
+    elseif instanceType ~= "raid" and config.sessionActive then
         DesolateLootcouncil:DLC_Log(string.format("DEBUG: Left Raid (%s). Session is still ACTIVE.", name))
+        -- Cleanup Autopass on exit to prevent LFR bleed
+        DesolateLootcouncil.sessionAutopassActive = nil
     end
 end
 

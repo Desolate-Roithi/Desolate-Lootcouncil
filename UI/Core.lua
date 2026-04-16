@@ -31,15 +31,14 @@ local UI = DesolateLootcouncil:NewModule("UI", "AceConsole-3.0", "AceEvent-3.0",
 function UI:OnEnable()
     -- Forward messages if needed, or register core UI events
     self:RegisterMessage("DLC_VERSION_UPDATE", function()
-        -- [STEADY] Batch updates to every 5 minutes to keep list stable.
-        -- Players won't change professions mid-raid, so frequent updates are unnecessary.
+        -- [STEADY] Batch updates to 2 seconds to keep list responsive but un-spammed.
         if self.updateTimer then return end -- Already scheduled
 
         self.updateTimer = self:ScheduleTimer(function()
             local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
             if Monitor then Monitor:UpdateDisenchanters() end
             self.updateTimer = nil
-        end, 300) -- 5 minute steady interval
+        end, 2) -- 2 second debounce
     end)
 end
 

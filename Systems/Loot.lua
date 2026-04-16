@@ -52,7 +52,7 @@ function Loot:OnEnable()
     DesolateLootcouncil:DLC_Log("Systems/Loot Loaded")
 
     -- Restore UI if session exists — only for the Loot Master (Bug 4)
-    local session = DesolateLootcouncil.db.profile.session
+    -- (reuse 'session' declared above — no second local needed)
     if session.loot and #session.loot > 0 and DesolateLootcouncil:AmILootMaster() then
         self:ScheduleTimer(function()
             ---@type UI_Loot
@@ -174,7 +174,10 @@ function Loot:OnStartLootRoll(event, rollID)
     local isLM = DesolateLootcouncil:AmILootMaster()
     local link = GetLootRollItemLink(rollID)
 
-    if IsPartyLFG() or HasLFGRestrictions() then return end
+    -- Disable entirely if we are in LFR (Match-made groups)
+    if HasLFGRestrictions() then
+        return
+    end
 
     if isLM then
         local now = GetTime()
@@ -376,6 +379,85 @@ end
 
 -- --- Awarding --- --
 
+--- Announces the award result to the group and whispers the winner.
+---@param itemData table
+---@param winnerName string
+---@param voteType string
+function Loot:_BroadcastAward(itemData, winnerName, voteType)
+    local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName)
+    local msg = string.format("Winner of %s is %s! (%s)", itemData.link, winnerDisplay, voteType)
+
+    if IsInRaid() then
+        if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then
+            C_ChatInfo.SendChatMessage(msg, "RAID_WARNING")
+        else
+            C_ChatInfo.SendChatMessage(msg, "RAID")
+        end
+    else
+        DesolateLootcouncil:DLC_Log(msg)
+    end
+
+    local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
+    if not isSelf then
+        C_ChatInfo.SendChatMessage("You have been awarded " .. itemData.link .. "! Trade me.", "WHISPER", nil, winnerName)
+    end
+end
+
+--- Appends an award entry to session history and notifies peers.
+---@param session table   profile.session table
+---@param itemData table
+---@param itemGUID string
+---@param winnerName string
+---@param voteType string
+---@param origIndex number|nil   pre-award priority index (for re-award restoration)
+---@return boolean isSelf
+function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
+    if not session.awarded then return false end
+
+    local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
+    local _, winnerClass = UnitClassBase(winnerName)
+    local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
+
+    local entry = {
+        link          = itemData.link,
+        texture       = itemData.texture,
+        itemID        = itemData.itemID,
+        winner        = winnerName,
+        winnerClass   = winnerClass,
+        voteType      = voteType,
+        timestamp     = GetServerTime(),
+        originalIndex = origIndex,
+        fullItemData  = itemData,
+        votes         = Session and Session.sessionVotes and DeepCopy(Session.sessionVotes[itemGUID]) or {},
+        traded        = isSelf,
+    }
+    table.insert(session.awarded, entry)
+
+    if Session and Session.SendHistoryUpdate then Session:SendHistoryUpdate(entry) end
+
+    local UI_H = DesolateLootcouncil:GetModule("UI_History")
+    if UI_H and UI_H.historyFrame and UI_H.historyFrame.frame and UI_H.historyFrame.frame:IsShown() then
+        UI_H:ShowHistoryWindow()
+    end
+
+    if Session and Session.SendRemoveItem then Session:SendRemoveItem(itemGUID) end
+
+    return isSelf
+end
+
+--- Removes the awarded item from the live bidding list and wipes its vote/close state.
+---@param session table
+---@param itemGUID string
+---@param removeIndex number
+function Loot:_CleanupAwardedItem(session, itemGUID, removeIndex)
+    table.remove(session.bidding, removeIndex)
+    local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
+    if Session then
+        if Session.sessionVotes then Session.sessionVotes[itemGUID] = nil end
+        if Session.closedItems then Session.closedItems[itemGUID] = nil end
+    end
+end
+
 function Loot:AwardItem(itemGUID, winnerName, voteType)
     local session = DesolateLootcouncil.db.profile.session
     local itemData, removeIndex
@@ -387,89 +469,57 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             end
         end
     end
-
     if not itemData then return end
 
-    local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName)
-    local msg = string.format("Winner of %s is %s! (%s)", itemData.link, winnerDisplay, voteType)
+    -- 1. Announce to raid / whisper winner
+    self:_BroadcastAward(itemData, winnerName, voteType)
 
-    if IsInRaid() then
-        if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then
-            SendChatMessage(msg, "RAID_WARNING")
-        else
-            SendChatMessage(msg, "RAID")
-        end
-    else
-        DesolateLootcouncil:DLC_Log(msg)
-    end
-
-    local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
-
-    if not isSelf then
-        C_ChatInfo.SendChatMessage("You have been awarded " .. itemData.link .. "! Trade me.", "WHISPER", nil, winnerName)
-    end
-
+    -- 2. Move priority (Bid only)
     local origIndex
     if voteType == "Bid" or voteType == "1" then
-        ---@type Priority
         local Priority = DesolateLootcouncil:GetModule("Priority") --[[@as Priority]]
         if Priority and Priority.MovePlayerToBottom then
             origIndex = Priority:MovePlayerToBottom(itemData.category, winnerName)
         end
     end
 
-    if session.awarded then
-        local _, winnerClass = UnitClassBase(winnerName)
-        ---@type Session
-        local Session = DesolateLootcouncil:GetModule("Session")
- 
-        local entry = {
-            link          = itemData.link,
-            texture       = itemData.texture,
-            itemID        = itemData.itemID,
-            winner        = winnerName,
-            winnerClass   = winnerClass,
-            voteType      = voteType,
-            timestamp     = GetServerTime(),
-            originalIndex = origIndex,
-            fullItemData  = itemData,
-            votes         = Session and Session.sessionVotes and DeepCopy(Session.sessionVotes[itemGUID]) or {},
-            traded        = isSelf
-        }
-        table.insert(session.awarded, entry)
+    -- 3. Record in history and broadcast update
+    self:_RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
 
-        -- Bug 4: Broadcast to all raiders so everyone has history, not just LM
-        if Session and Session.SendHistoryUpdate then
-            Session:SendHistoryUpdate(entry)
-        end
-
-        -- Bug 4: Auto-refresh History window if it's open
-        local UI_H = DesolateLootcouncil:GetModule("UI_History")
-        if UI_H and UI_H.historyFrame and UI_H.historyFrame.frame and UI_H.historyFrame.frame:IsShown() then
-            UI_H:ShowHistoryWindow()
-        end
-
-        if Session and Session.SendRemoveItem then
-            Session:SendRemoveItem(itemGUID)
-        end
-    end
-
+    -- 4. Remove from live session
     if removeIndex then
-        table.remove(session.bidding, removeIndex)
-        ---@type Session
-        local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
-        if Session then
-            if Session.sessionVotes then
-                Session.sessionVotes[itemGUID] = nil
-            end
-            if Session.closedItems then
-                Session.closedItems[itemGUID] = nil
-            end
-        end
+        self:_CleanupAwardedItem(session, itemGUID, removeIndex)
     end
 
+    -- 5. Refresh monitor
     local UI = DesolateLootcouncil:GetModule("UI_Monitor")
     if UI then UI:ShowMonitorWindow() end
+
+    -- 6. Refresh Voting
+    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+    if Voting and Voting.RemoveVotingItem then
+        Voting:RemoveVotingItem(itemGUID)
+    end
+end
+
+--- Copies the original votes back onto the new item GUID so the Monitor
+--- and award window reflect the previous voting state after a re-award.
+--- Note: Reaward generates a NEW sourceGUID ("Reaward-..."), so votes are
+--- keyed to the new GUID — the old key is intentionally abandoned.
+---@param session table
+---@param awardedItem table   the history entry being reverted
+function Loot:_RestoreVotesForReaward(session, awardedItem)
+    if not awardedItem.votes then return end
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if not Session then return end
+
+    if not Session.sessionVotes then Session.sessionVotes = {} end
+    local newGUID = session.bidding[#session.bidding].sourceGUID
+    Session.sessionVotes[newGUID] = DeepCopy(awardedItem.votes)
+
+    local vCount = 0
+    for _ in pairs(awardedItem.votes) do vCount = vCount + 1 end
+    DesolateLootcouncil:DLC_Log("Restored " .. vCount .. " votes for re-awarded item.")
 end
 
 function Loot:ReawardItem(index)
@@ -477,20 +527,21 @@ function Loot:ReawardItem(index)
     if not session.awarded or not session.awarded[index] then return end
 
     local awardedItem = session.awarded[index]
-    -- Restore to Bidding
+
+    -- 1. Push item back onto the live bidding list (generate a new GUID to avoid
+    --    conflicts with the original loot-bag entry, which may have already been consumed)
     table.insert(session.bidding, awardedItem.fullItemData or {
-        link = awardedItem.link,
-        itemID = awardedItem.itemID,
-        texture = awardedItem.texture,
-        category = "Re-awarded",
+        link       = awardedItem.link,
+        itemID     = awardedItem.itemID,
+        texture    = awardedItem.texture,
+        category   = "Re-awarded",
         sourceGUID = "Reaward-" ..
             (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
-        stackIndex = 1
+        stackIndex = 1,
     })
 
-    -- Revert Priority
+    -- 2. Restore priority position so the original winner isn't penalised
     if awardedItem.originalIndex and awardedItem.winner then
-        ---@type Priority
         local Priority = DesolateLootcouncil:GetModule("Priority") --[[@as Priority]]
         if Priority and Priority.RestorePlayerPosition then
             local cat = awardedItem.fullItemData and awardedItem.fullItemData.category
@@ -500,63 +551,42 @@ function Loot:ReawardItem(index)
         end
     end
 
-    -- [FIX] Restore Votes to Session
-    if awardedItem.votes then
-        local Session = DesolateLootcouncil:GetModule("Session")
-        if Session then
-            if not Session.sessionVotes then Session.sessionVotes = {} end
-            -- Map by GUID (which we generated on restore or original)
-            -- Ideally we use the ORIGINAL sourceGUID if possible, but Reaward generates a new one.
-            -- Wait, if we generate a NEW GUID, the old votes won't map!
-            -- We must use the OLD GUID if we want votes to match, OR we update the votes key.
-            -- The Reaward logic below generates a NEW GUID: "Reaward-..."
-            -- Let's use that NEW GUID for the vote key.
+    -- 3. Re-attach the original votes to the new GUID
+    self:_RestoreVotesForReaward(session, awardedItem)
 
-            -- Update bidding item to use the Reaward GUID
-            local newGUID = session.bidding[#session.bidding].sourceGUID
-
-            Session.sessionVotes[newGUID] = DeepCopy(awardedItem.votes)
-            local vCount = 0
-            for _ in pairs(awardedItem.votes) do vCount = vCount + 1 end
-            DesolateLootcouncil:DLC_Log("Restored " .. vCount .. " votes for re-awarded item.")
-        end
-    end
-
+    -- 4. Remove the history entry and log
     table.remove(session.awarded, index)
     DesolateLootcouncil:DLC_Log("Re-awarded item: " .. (awardedItem.link or "???"))
 
+    -- 5. Broadcast the restored item so assistants see it in their Monitor
     local newItem = session.bidding[#session.bidding]
-
-    -- Refresh UIs
-    local History = DesolateLootcouncil:GetModule("UI_History")
-    if History then History:ShowHistoryWindow() end
-
-    -- Open Monitor to show it's back
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor then Monitor:ShowMonitorWindow() end
-
-    -- Broadcast the restored item to the raid so assistants see it again (Follow-up Fix)
     local Session = DesolateLootcouncil:GetModule("Session")
     if Session and Session.SendCommMessage then
         local payload = {
-            command = "LOOT_SESSION_START",
-            data = { {
-                link = newItem.link,
-                texture = newItem.texture,
-                itemID = newItem.itemID,
+            command  = "LOOT_SESSION_START",
+            data     = { {
+                link       = newItem.link,
+                texture    = newItem.texture,
+                itemID     = newItem.itemID,
                 sourceGUID = newItem.sourceGUID,
-                category = newItem.category
+                category   = newItem.category,
             } },
             duration = 300,
-            endTime = GetServerTime() + 300,
-            votes = { [newItem.sourceGUID] = DeepCopy(awardedItem.votes or {}) }
+            endTime  = GetServerTime() + 300,
+            votes    = { [newItem.sourceGUID] = DeepCopy(awardedItem.votes or {}) },
         }
         local serialized = Session:Serialize(payload)
-        local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+        local channel = DesolateLootcouncil:GetBroadcastChannel()
         if channel then
             Session:SendCommMessage("DLC_Loot", serialized, channel)
         end
     end
+
+    -- 6. Refresh windows
+    local History = DesolateLootcouncil:GetModule("UI_History")
+    if History then History:ShowHistoryWindow() end
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
+    if Monitor then Monitor:ShowMonitorWindow() end
 
     DesolateLootcouncil:Print("Item reverted to bidding session.")
 end

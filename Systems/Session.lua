@@ -37,6 +37,28 @@ function Session:OnEnable()
     self.lastHeartbeat = 0
     self.sessionPayloadCache = nil -- Pre-serialized LOOT_SESSION_START string for heartbeat
     self:ScheduleRepeatingTimer("OnTimerTick", 1)
+
+    -- Define session-restore popup once at module load.
+    -- OnCancel reads self.pendingRestore set by RestoreSession to avoid capturing
+    -- ephemeral local variables inside a repeated closure allocation.
+    StaticPopupDialogs["DLC_CLOSE_SESSION"] = {
+        text = "A previous Loot Session is still active. Do you want to close it?",
+        button1 = "Yes (Close Session)",
+        button2 = "No (Keep Active)",
+        OnAccept = function()
+            Session:SendStopSession()
+        end,
+        OnCancel = function()
+            local p = Session.pendingRestore
+            if p then
+                Session:PerformRestore(p.state, p.now, p.expiry)
+                Session.pendingRestore = nil
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
 end
 
 function Session:OnTimerTick()
@@ -92,7 +114,7 @@ function Session:SendSessionHeartbeat()
         DesolateLootcouncil:DLC_Log("Session Heartbeat: using cached payload.")
     end
 
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if channel then
         self:SendCommMessage("DLC_Loot", self.sessionPayloadCache, channel)
     end
@@ -142,20 +164,8 @@ function Session:RestoreSession()
             local notInGroup = not IsInGroup()
 
             if isExpiredOver12h or (inactiveFor1h and notInGroup) then
-                StaticPopupDialogs["DLC_CLOSE_SESSION"] = {
-                    text = "A previous Loot Session is still active. Do you want to close it?",
-                    button1 = "Yes (Close Session)",
-                    button2 = "No (Keep Active)",
-                    OnAccept = function()
-                        self:SendStopSession()
-                    end,
-                    OnCancel = function()
-                        self:PerformRestore(state, now, expiry)
-                    end,
-                    timeout = 0,
-                    whileDead = true,
-                    hideOnEscape = true,
-                }
+                -- Store restore context so the module-level popup handler can read it.
+                self.pendingRestore = { state = state, now = now, expiry = expiry }
                 StaticPopup_Show("DLC_CLOSE_SESSION")
                 return
             end
@@ -206,6 +216,11 @@ end
 
 function Session:StartSession(lootTable)
     if not DesolateLootcouncil:AmILootMaster() then return end
+
+    local Loot = DesolateLootcouncil:GetModule("Loot")
+    if Loot and Loot.ScanDisenchanters then
+        Loot:ScanDisenchanters()
+    end
 
     if not lootTable or #lootTable == 0 then
         DesolateLootcouncil:DLC_Log("No items to distribute!")
@@ -288,7 +303,7 @@ function Session:StartSession(lootTable)
     DesolateLootcouncil:DLC_Log("Sent packet size: " .. #serialized .. " bytes")
 
     -- 5. Broadcasting
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
 
     if not channel then
         channel = "WHISPER"
@@ -331,12 +346,11 @@ function Session:StartSession(lootTable)
 end
 
 function Session:SendStopSession()
-    DesolateLootcouncil:DLC_Log("[DEBUG] SendStopSession Trace Start")
     -- 1. Broadcast "LOOT_SESSION_END"
     local payload = { command = "LOOT_SESSION_END" }
     local serialized = self:Serialize(payload)
 
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if not channel then
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     else
@@ -374,7 +388,7 @@ function Session:SendCloseItem(itemGUID)
     -- 1. Broadcast to Raid
     local payload = { command = "CLOSE_ITEM", data = { guid = itemGUID } }
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if not channel then
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     else
@@ -399,7 +413,7 @@ end
 function Session:SendRemoveItem(guid)
     local payload = { command = "REMOVE_ITEM", data = { guid = guid } }
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if not channel then
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     else
@@ -421,7 +435,7 @@ function Session:SendHistoryUpdate(entry)
     }
     local payload = { command = "HISTORY_UPDATE", data = safeEntry }
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if channel then
         self:SendCommMessage("DLC_Loot", serialized, channel)
     end
@@ -779,7 +793,7 @@ end
 function Session:SendSyncLM(targetLM)
     local payload = { command = "SYNC_LM", data = { lm = targetLM } }
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if channel then
         self:SendCommMessage("DLC_Loot", serialized, channel)
     end
@@ -817,7 +831,7 @@ function Session:SendVote(itemGUID, voteType)
     self:HandleVote(payload, myName)
 
     local serialized = self:Serialize(payload)
-    local channel = IsInRaid() and "RAID" or (IsInGroup() and "PARTY")
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
     if channel then
         self:SendCommMessage("DLC_Loot", serialized, channel)
     end

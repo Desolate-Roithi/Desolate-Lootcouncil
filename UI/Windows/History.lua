@@ -23,11 +23,11 @@ function UI_History:ShowHistoryWindow()
             DesolateLootcouncil:SaveFramePosition(f, "History")
         end
         local rawFrame = (frame --[[@as any]]).frame
-        rawFrame:SetScript("OnDragStop", function(f)
+        rawFrame:HookScript("OnDragStop", function(f)
             f:StopMovingOrSizing()
             SavePos(frame)
         end)
-        rawFrame:SetScript("OnHide", function() SavePos(frame) end)
+        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
         DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "History")
     end
 

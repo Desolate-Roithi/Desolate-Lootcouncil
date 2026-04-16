@@ -58,10 +58,14 @@ function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
         for name, skill in pairs(Comm.playerEnchantingSkill) do
             if skill > 0 then
                 local inGroup = false
-                if DesolateLootcouncil:SmartCompare(name, "player") then
+                if DesolateLootcouncil:IsUnitInRaid(name) then
                     inGroup = true
-                elseif UnitInRaid(name) or UnitInParty(name) then
-                    inGroup = true
+                else
+                    -- Fallback: Blizzard API may require the short name for local-realm players
+                    local shortName = Ambiguate(name, "none")
+                    if UnitInRaid(shortName) or UnitInParty(shortName) then
+                        inGroup = true
+                    end
                 end
 
                 if inGroup then
