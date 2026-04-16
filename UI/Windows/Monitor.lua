@@ -514,9 +514,7 @@ function UI_Monitor:ShowAwardWindow(itemData)
         for name, skill in pairs(Comm.playerEnchantingSkill) do
             if skill > 0 then
                 local inGroup = false
-                if DesolateLootcouncil:SmartCompare(name, "player") then
-                    inGroup = true
-                elseif UnitInRaid(name) or UnitInParty(name) then
+                if DesolateLootcouncil:IsUnitInRaid(name) then
                     inGroup = true
                 else
                     -- Fallback: Blizzard API might expect the short name for local-realm players
