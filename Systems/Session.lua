@@ -217,6 +217,11 @@ end
 function Session:StartSession(lootTable)
     if not DesolateLootcouncil:AmILootMaster() then return end
 
+    local Loot = DesolateLootcouncil:GetModule("Loot")
+    if Loot and Loot.ScanDisenchanters then
+        Loot:ScanDisenchanters()
+    end
+
     if not lootTable or #lootTable == 0 then
         DesolateLootcouncil:DLC_Log("No items to distribute!")
         return

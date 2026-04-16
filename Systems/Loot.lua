@@ -174,7 +174,10 @@ function Loot:OnStartLootRoll(event, rollID)
     local isLM = DesolateLootcouncil:AmILootMaster()
     local link = GetLootRollItemLink(rollID)
 
-    if IsPartyLFG() or HasLFGRestrictions() then return end
+    -- Disable entirely if we are in LFR (Match-made groups)
+    if HasLFGRestrictions() then
+        return
+    end
 
     if isLM then
         local now = GetTime()
@@ -451,7 +454,7 @@ function Loot:_CleanupAwardedItem(session, itemGUID, removeIndex)
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
     if Session then
         if Session.sessionVotes then Session.sessionVotes[itemGUID] = nil end
-        if Session.closedItems  then Session.closedItems[itemGUID]  = nil end
+        if Session.closedItems then Session.closedItems[itemGUID] = nil end
     end
 end
 
@@ -491,6 +494,12 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     -- 5. Refresh monitor
     local UI = DesolateLootcouncil:GetModule("UI_Monitor")
     if UI then UI:ShowMonitorWindow() end
+
+    -- 6. Refresh Voting
+    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
+    if Voting and Voting.RemoveVotingItem then
+        Voting:RemoveVotingItem(itemGUID)
+    end
 end
 
 --- Copies the original votes back onto the new item GUID so the Monitor

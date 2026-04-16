@@ -221,8 +221,8 @@ function DesolateLootcouncil:DetermineLootMaster()
     local myName = UnitName("player")
     if not IsInGroup() then return myName end
 
-    -- Disable entirely if we are in LFR
-    if IsPartyLFG() or HasLFGRestrictions() then
+    -- Disable entirely if we are in LFR (Match-made groups)
+    if HasLFGRestrictions() then
         return nil
     end
 

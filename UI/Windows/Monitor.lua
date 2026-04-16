@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_Monitor : AceModule
-local UI_Monitor = DesolateLootcouncil:NewModule("UI_Monitor", "AceEvent-3.0")
+local UI_Monitor = DesolateLootcouncil:NewModule("UI_Monitor", "AceEvent-3.0", "AceTimer-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
 ---@type DesolateLootcouncil
@@ -12,54 +12,6 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 
 local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
 local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
-
-function UI_Monitor:ShowMonitorWindow(isRefresh)
-    if not self.monitorFrame then
-        ---@type AceGUIFrame
-        local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle("Session Monitor")
-        frame:SetLayout("Flow")
-        frame:SetWidth(650)
-        frame:SetHeight(400)
-        frame:SetCallback("OnClose", function(widget)
-            self.userClosedMonitor = true -- B3: Track user-intent close vs system close
-            widget:Hide()
-        end)
-        self.monitorFrame = frame
-
-        -- [NEW] Position Persistence
-        DesolateLootcouncil.Persistence:RestoreFramePosition(frame, "Monitor")
-        local function SavePos(f)
-            DesolateLootcouncil.Persistence:SaveFramePosition(f, "Monitor")
-        end
-        local rawFrame = (frame --[[@as any]]).frame
-        rawFrame:HookScript("OnDragStop", function(f)
-            f:StopMovingOrSizing()
-            SavePos(frame)
-        end)
-        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Monitor")
-    end
-
-    if not isRefresh then
-        -- B3: Clear the user-close flag when a new session explicitly opens the window
-        self.userClosedMonitor = false
-        self.monitorFrame:Show()
-        -- Ensure window is maximized if it was previously collapsed
-        local frame = (self.monitorFrame --[[@as any]]).frame
-        if frame then
-            frame.startCollapsed = nil -- Cancel initial hook timer
-            if frame.isCollapsed then
-                DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.monitorFrame)
-            end
-        end
-    elseif self.userClosedMonitor then
-        return -- Respect user's explicit close during refresh cycles
-    elseif not (self.monitorFrame.frame and self.monitorFrame.frame:IsShown()) then
-        return -- Window hidden by system but not yet re-opened by new session
-    end
-
-    self.monitorFrame:ReleaseChildren()
 
 function UI_Monitor:GetVoteInfo(guid)
     local SessionData = DesolateLootcouncil:GetModule("Session")
@@ -212,6 +164,54 @@ function UI_Monitor:BuildItemRow(scroll, item, isLM)
     if isLM then group:AddChild(btnRemove) end
 end
 
+function UI_Monitor:ShowMonitorWindow(isRefresh)
+    if not self.monitorFrame then
+        ---@type AceGUIFrame
+        local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
+        frame:SetTitle("Session Monitor")
+        frame:SetLayout("Flow")
+        frame:SetWidth(650)
+        frame:SetHeight(400)
+        frame:SetCallback("OnClose", function(widget)
+            self.userClosedMonitor = true -- B3: Track user-intent close vs system close
+            widget:Hide()
+        end)
+        self.monitorFrame = frame
+
+        -- [NEW] Position Persistence
+        DesolateLootcouncil.Persistence:RestoreFramePosition(frame, "Monitor")
+        local function SavePos(f)
+            DesolateLootcouncil.Persistence:SaveFramePosition(f, "Monitor")
+        end
+        local rawFrame = (frame --[[@as any]]).frame
+        rawFrame:HookScript("OnDragStop", function(f)
+            f:StopMovingOrSizing()
+            SavePos(frame)
+        end)
+        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
+        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Monitor")
+    end
+
+    if not isRefresh then
+        -- B3: Clear the user-close flag when a new session explicitly opens the window
+        self.userClosedMonitor = false
+        self.monitorFrame:Show()
+        -- Ensure window is maximized if it was previously collapsed
+        local frame = (self.monitorFrame --[[@as any]]).frame
+        if frame then
+            frame.startCollapsed = nil -- Cancel initial hook timer
+            if frame.isCollapsed then
+                DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.monitorFrame)
+            end
+        end
+    elseif self.userClosedMonitor then
+        return -- Respect user's explicit close during refresh cycles
+    elseif not (self.monitorFrame.frame and self.monitorFrame.frame:IsShown()) then
+        return -- Window hidden by system but not yet re-opened by new session
+    end
+
+    self.monitorFrame:ReleaseChildren()
+
     local session = DesolateLootcouncil.db.profile.session
     local isLM = DesolateLootcouncil:AmILootMaster()
     local SessionInfo = DesolateLootcouncil:GetModule("Session")
@@ -284,20 +284,17 @@ end
         end
 
         self.monitorFrame:DoLayout()
-        -- Sync Sidebar Height
+        -- Sync Sidebar: only drive visibility from collapsed state;
+        -- UpdateDisenchanters owns the show/hide when data is present.
         if self.deFrame then
             self.deFrame:SetHeight(h)
-            if isCollapsedNow then self.deFrame:Hide() else self.deFrame:Show() end
+            if isCollapsedNow then self.deFrame:Hide() end
         end
     end
+    -- Store on self so Persistence.ToggleWindowCollapse can re-trigger it after expand.
+    self.layoutMonitor = LayoutMonitor
     LayoutMonitor()
     self.monitorFrame:SetCallback("OnResize", LayoutMonitor)
-
-    -- [NEW] Re-Scan Logic
-    local Loot = DesolateLootcouncil:GetModule("Loot")
-    if Loot and Loot.ScanDisenchanters then
-        Loot:ScanDisenchanters()
-    end
 
     -- [NEW] Disenchanter Sidebar (External Widget)
     if not self.deFrame then
@@ -310,6 +307,13 @@ end
 
     -- PROBLEM 15: ALWAYS call :Show() to ensure the window reappears (for both LMs and Assistants!)
     if self.monitorFrame then self.monitorFrame:Show() end
+end
+
+function UI_Monitor:OnEnable()
+    -- Refresh sidebar whenever a version-check response arrives (enchanting skill data)
+    self:RegisterMessage("DLC_VERSION_UPDATE", function()
+        self:UpdateDisenchanters()
+    end)
 end
 
 function UI_Monitor:UpdateDisenchanters()

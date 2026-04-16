@@ -423,11 +423,16 @@ function Roster:ZONE_CHANGED_NEW_AREA()
         if not config.sessionActive then
             self:Printf("Entered Raid Instance (%s). Starting Session...", name)
             self:StartRaidSession()
+        else
+            -- Ensure Autopass is synced/reset for the new raid environment if it was stale
+            DesolateLootcouncil.sessionAutopassActive = nil
         end
         -- Auto-ping the LM to sync Autopass and IM configs if joining late
         DesolateLootcouncil:SendVersionCheck()
     elseif instanceType ~= "raid" and config.sessionActive then
         DesolateLootcouncil:DLC_Log(string.format("DEBUG: Left Raid (%s). Session is still ACTIVE.", name))
+        -- Cleanup Autopass on exit to prevent LFR bleed
+        DesolateLootcouncil.sessionAutopassActive = nil
     end
 end
 
