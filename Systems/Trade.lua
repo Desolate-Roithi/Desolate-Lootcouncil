@@ -66,7 +66,13 @@ function Trade:OnTradeShow()
     end
 
     if #pendingItems > 0 then
-        self:StageAllItems(pendingItems, tradeTargetName)
+        -- Delay slightly to ensure the server is ready to accept item movements
+        C_Timer.After(0.2, function()
+            -- Ensure trade wasn't closed during the delay (prevents accidental self-equipping via UseContainerItem)
+            if TradeFrame and TradeFrame:IsShown() then
+                self:StageAllItems(pendingItems, tradeTargetName)
+            end
+        end)
     end
 end
 

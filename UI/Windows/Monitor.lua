@@ -288,7 +288,11 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         -- UpdateDisenchanters owns the show/hide when data is present.
         if self.deFrame then
             self.deFrame:SetHeight(h)
-            if isCollapsedNow then self.deFrame:Hide() end
+            if isCollapsedNow then 
+                self.deFrame:Hide() 
+            else
+                self:UpdateDisenchanters()
+            end
         end
     end
     -- Store on self so Persistence.ToggleWindowCollapse can re-trigger it after expand.
@@ -321,6 +325,12 @@ function UI_Monitor:UpdateDisenchanters()
     local Sidebar = DesolateLootcouncil:GetModule("UI_Sidebar")
     if Sidebar then
         Sidebar:UpdateDisenchanters(self.deFrame)
+    end
+    
+    -- Ensure the sidebar doesn't show up if the monitor is currently collapsed
+    local mFrame = self.monitorFrame and (self.monitorFrame --[[@as any]]).frame
+    if mFrame and mFrame.isCollapsed then
+        self.deFrame:Hide()
     end
 end
 function UI_Monitor:CreateVoteRow(scroll, v, isLM, itemData)

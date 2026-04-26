@@ -227,14 +227,14 @@ function DesolateLootcouncil:DetermineLootMaster()
     end
 
     if self.activeLootMaster and self.activeLootMaster ~= "" then
-        if self:IsUnitInRaid(self.activeLootMaster) or self.activeLootMaster == myName then
+        if self:IsUnitInRaid(self.activeLootMaster) or self:SmartCompare(self.activeLootMaster, "player") then
             return self.activeLootMaster
         end
     end
 
     local configuredLM = self.db.profile.configuredLM
     if configuredLM and configuredLM ~= "" then
-        if self:IsUnitInRaid(configuredLM) or configuredLM == myName then
+        if self:IsUnitInRaid(configuredLM) or self:SmartCompare(configuredLM, "player") then
             return configuredLM
         end
         self:DLC_Log("Configured LM (" .. configuredLM .. ") not found. Falling back to Group Leader.")

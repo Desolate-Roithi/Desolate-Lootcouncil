@@ -45,22 +45,29 @@ function Loot:OnEnable()
     self.sessionItems = session.sessionItems or {} -- Persisted duplicate check
     session.sessionItems = self.sessionItems
 
+    self.autoRolledItems = {}
+
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
     self:RegisterEvent("CHAT_MSG_LOOT", "OnLootMessage")
 
     DesolateLootcouncil:DLC_Log("Systems/Loot Loaded")
 
-    -- Restore UI if session exists — only for the Loot Master (Bug 4)
-    -- (reuse 'session' declared above — no second local needed)
-    if session.loot and #session.loot > 0 and DesolateLootcouncil:AmILootMaster() then
-        self:ScheduleTimer(function()
-            ---@type UI_Loot
-            local UI = DesolateLootcouncil:GetModule("UI_Loot")
-            if UI and UI.ShowLootWindow then
-                UI:ShowLootWindow(session.loot)
-            end
-        end, 1)
+    -- Clean up stale loot for players logging in the next day.
+    -- If they log in solo, wipe the backlog so it doesn't pop up erroneously.
+    if session.loot and #session.loot > 0 then
+        if not IsInGroup() and not DesolateLootcouncil.db.profile.debugMode then
+            wipe(session.loot)
+            DesolateLootcouncil:DLC_Log("Wiped stale loot backlog from previous session.")
+        elseif DesolateLootcouncil:AmILootMaster() then
+            self:ScheduleTimer(function()
+                ---@type UI_Loot
+                local UI = DesolateLootcouncil:GetModule("UI_Loot")
+                if UI and UI.ShowLootWindow then
+                    UI:ShowLootWindow(session.loot)
+                end
+            end, 1)
+        end
     end
 end
 
@@ -208,22 +215,33 @@ function Loot:OnStartLootRoll(event, rollID)
         end
 
         if canNeed then
-            RollOnLoot(rollID, 1)
+            self:DoAutoRoll(rollID, 1)
         elseif canGreed then
-            RollOnLoot(rollID, 2)
+            self:DoAutoRoll(rollID, 2)
         elseif canTransmog then
-            RollOnLoot(rollID, 4)
+            self:DoAutoRoll(rollID, 4)
         elseif canDisenchant then
-            RollOnLoot(rollID, 3)
+            self:DoAutoRoll(rollID, 3)
         end
     else
         -- Only pass natively
-        RollOnLoot(rollID, 0) -- Pass — LM handles distribution
+        self:DoAutoRoll(rollID, 0) -- Pass — LM handles distribution
     end
+end
+
+function Loot:DoAutoRoll(rollID, rollType)
+    self.autoRolledItems[rollID] = rollType
+
+    -- Delay execution slightly to ensure Blizzard UI handles START_LOOT_ROLL first
+    -- This matches the RCLootCouncil approach for auto roll/pass stability.
+    C_Timer.After(0.05, function()
+        RollOnLoot(rollID, rollType)
+    end)
 end
 
 function Loot:OnLootOpened()
     if not IsInRaid() and not DesolateLootcouncil.db.profile.debugMode then return end
+    if not DesolateLootcouncil:AmILootMaster() then return end
 
     local session = DesolateLootcouncil.db.profile.session
     local itemsChanged = false
