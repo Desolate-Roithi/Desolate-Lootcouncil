@@ -2,12 +2,9 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.7.3-Beta  
-**Last Updated:** 2026-04-02  
-**Compatibility:** WoW 12.0.1 (Midnight)  
-
-
-📄 [View Design Document](https://docs.google.com/document/d/1YSH8LIx4ka85DvqN9HsUKGpMZtdZnULBxX_Y53BeQN0/edit?usp=sharing)
+**Latest Version:** v0.7.8-Beta  
+**Last Updated:** 2026-04-26  
+**Compatibility:** WoW 12.0.5 (Midnight)  
 
 ## 🚀 Features
 
@@ -16,26 +13,27 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 * **Fairness:** Automatic Alt-to-Main linking ensures priority points and penalties apply to the account, not just the character.
 * **Control:** A unified Session Monitor to track live bids and an "Undo" system to revert mistaken awards.
 * **Security:** Server-side rolls for Transmog/Offspec to prevent client-side manipulation.
+* **Cross-Realm Support:** Robust name-realm handling for consistent tracking across connected realms.
 
 ### For Raiders
-* **Simple UI:** Clean buttons for Bid (Priority), Roll, Transmog, or Pass.
+* **Simple UI:** Clean buttons for Bid (Priority), Roll, Offspec, Transmog, or Pass.
+* **Autopass Automation:** Fully automated roll/pass logic based on item categories and session settings.
 * **Trade Helpers:** Automatic whispers when you win and a "Pending Queue" if you're out of range or offline during the award.
 * **Transparency:** Publicly accessible session history and priority logs.
-
-### For Developers
-* **Simulation:** Use `/dlc sim` to spawn virtual players and test voting logic solo.
-* **Testing:** Comprehensive unit/integration test suite included.
 
 ## 💻 Commands
 
 | Command | Description |
 | :--- | :--- |
 | `/dlc config` | Open configuration (Roster, Priority, Debug). |
-| `/dlc monitor` | **(LM)** Live session & award dashboard. |
+| `/dlc vote` | Re-open the Voting Window (if a session is active). |
+| `/dlc monitor` | **(LM/Assist)** Live session & award dashboard. |
 | `/dlc loot` | **(LM)** Inbox for new dropped items. |
 | `/dlc im` | Open Item Manager window. |
 | `/dlc trade` | **(LM)** Pending trades queue. |
 | `/dlc history` | View award logs and priority changes. |
+| `/dlc status` | View current LM, Autopass, and session status. |
+| `/dlc version` | Check addon versions across the raid. |
 | `/dlc sim` | **(Dev)** Manage simulated players and scenarios. |
 
 ## 🛠️ Installation
@@ -46,6 +44,30 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.7.8-Beta
+* **Loot Automation Stability**:
+    - Added a 0.05s delay to auto-roll/pass actions to ensure compatibility with Blizzard's internal UI state updates (RCLootCouncil parity).
+    - Restricted corpse scanning logic to the **Loot Master only**. This eliminates redundant network traffic and prevents raider backlog issues during large boss kills.
+    - Implemented a **Solo-Cleanup routine**: The addon now automatically wipes stale loot backlogs if you log in outside of a raid, ensuring the UI stays clean.
+* **Trade Management**:
+    - Introduced a 0.2s delay for trade item staging. This prevents race conditions with the WoW server that previously caused items to fail to move into the trade window.
+    - Added defensive guards to the Trade Frame to prevent accidental "self-equipping" of items during automated trade sessions.
+* **UI & Disenchanter Sidebar**:
+    - Fixed a visibility bug where the Disenchanter sidebar would "ghost" or fail to hide when the Session Monitor was collapsed or expanded.
+    - Optimized the sidebar refresh logic to correctly handle version-check data arrivals during active combat.
+
+### v0.7.5-Beta
+* **Communication & Synchronization**:
+    - **Heartbeat Autopass Sync**: Added the `sessionAutopass` state to the periodic heartbeat and `START_LOOT_ROLL` events to ensure late-joiners never miss the "Auto-Pass" signal.
+    - **Channel Safety**: Implemented a `GetBroadcastChannel` utility to safely route messages via `RAID` or `PARTY` depending on current group status.
+* **Loot Council Refactor**:
+    - **Re-award Restoration**: Completely reworked the `ReawardItem` function. It now correctly restores a player's original priority position and restores all previous voting data to the monitor.
+    - **Modular Awarding**: Split the massive `AwardItem` function into testable helper methods for broadcasting, recording, and cleanup.
+* **General UI Improvements**:
+    - Added a detailed `/dlc status` command to verify current LM, Autopass status, and session counts.
+    - Resolved a layout bug in the **Monitor UI** that caused the scroll frame to hide itself incorrectly when expanded from a collapsed state.
+    - Implemented `SmartCompare` for player names to handle 12.0.1 "Secret" (opaque) string returns safely.
 
 ### v0.7.3-Beta
 * **Network Architecture Overhaul**: Optimized the entire communication engine by transitioning from whisper-based voting (which caused LM lag spikes) to a high-performance **RAID Channel Pub/Sub** model.
@@ -68,32 +90,3 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ### v0.7.0-Beta
 * **Decay System Overhaul**: Replaced the Priority Decay algorithm with a mathematically sound Bottom-To-Top Bubble-Down algorithm. Priority penalties now correctly push absent players below present players without gap collision.
 * **Monitor Stabilization**: Resolved an AceGUI frame recycling bug that caused the Session Monitor to immediately hide itself during rapid UI window instantiation loops (`/dlc test`).
-
-### v0.6.5-Beta
-* **Trade UI Bugfix**: Fixed invalid `STATIC_POPUP_SHOW` API event registration that blocked Trade Window confirmations from capturing items securely.
-* **Voting Integrity**: Item GUID generators now use precise `GetTime()` timestamps instead of weak random boundaries to prevent identical loot drops from colliding and vanishing from the UI.
-
-### v0.6.4-Beta
-* **Voting Scroll Retention**: The Voting window no longer resets scroll position to the top when refreshing during an active session; depth is perfectly preserved on re-render.
-
-### v0.6.3-Beta
-* **Disenchant Stability**: Disenchanter list is now much smoother. Reduced visual flickering during ping intervals by caching skill data persistently and cleaning up roster tracking.
-
-### v0.6.2-Beta
-* **Chat Log Reduction**: Substantially cleaned up chat log formatting. Downgraded standard mechanical system logs (like background packet parsing) to Debug-only visibility. Added silence conditions while running solo.
-
-### v0.6.1-Beta
-* **Item Icons Polish**: Resolved anchoring bugs in History/Trade UI and fixed invisible frame artifacts that were overlapping tooltip interactables after the broader 0.6.0 icon rollout.
-* **Rollback Stability**: Ensured backward compatibility following a partial reversion logic pass.
-
-### v0.6.0-Beta
-* **Item Icons Everywhere:** Integrated 24x24 interactive icons across Voting, Loot Collector, Session Monitor, History, and Trade List windows. Icons feature full tooltips on hover/click for rapid identification.
-* **Offspec Voting:** Introduced a new "Offspec" vote category. It sits in priority between Transmog and Roll (Bid > Roll > Offspec > T-Mog > Pass).
-* **UI Modernization:** Redesigned the Voting window rows to support a 5-button layout + Icon on a single line, even in minimized states.
-* **LFR Safety:** Added automatic loot collection filtering for LFR/Looking For Raid. The Loot Collector now ignores LFR drops to prevent council interference in personal loot environments.
-* **Simulation Visibility:** Simulation (`/dlc sim`) and Debug logs now output to chat even when solo, ensuring feedback is visible during development and testing.
-* **Window Intelligence:** Minimized loot windows now automatically maximize when new loot is added to the session.
-* **Technical Fixes:** 
-    * Resolved "Cannot anchor to itself" Lua error in Trade List and History.
-    * Fixed item name resolution (placeholder "Item...") using asynchronous `ContinueOnItemLoad` refresh.
-    * Corrected Offspec count tracking in the Monitor summary index.
