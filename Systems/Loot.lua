@@ -54,9 +54,9 @@ function Loot:OnEnable()
     DesolateLootcouncil:DLC_Log("Systems/Loot Loaded")
 
     -- Clean up stale loot for players logging in the next day.
-    -- If they log in solo, wipe the backlog so it doesn't pop up erroneously.
+    -- If they log in outside of a raid, wipe the backlog so it doesn't pop up erroneously.
     if session.loot and #session.loot > 0 then
-        if not IsInGroup() and not DesolateLootcouncil.db.profile.debugMode then
+        if not IsInRaid() and not DesolateLootcouncil.db.profile.debugMode then
             wipe(session.loot)
             DesolateLootcouncil:DLC_Log("Wiped stale loot backlog from previous session.")
         elseif DesolateLootcouncil:AmILootMaster() then
@@ -230,6 +230,8 @@ function Loot:OnStartLootRoll(event, rollID)
 end
 
 function Loot:DoAutoRoll(rollID, rollType)
+    -- Tracking table for future use (e.g. preventing double-rolls).
+    -- Currently write-only, cleared on module enable.
     self.autoRolledItems[rollID] = rollType
 
     -- Delay execution slightly to ensure Blizzard UI handles START_LOOT_ROLL first

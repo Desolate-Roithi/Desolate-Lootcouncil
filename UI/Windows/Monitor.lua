@@ -327,7 +327,10 @@ function UI_Monitor:UpdateDisenchanters()
         Sidebar:UpdateDisenchanters(self.deFrame)
     end
     
-    -- Ensure the sidebar doesn't show up if the monitor is currently collapsed
+    -- Ensure the sidebar doesn't show up if the monitor is currently collapsed.
+    -- This defensive duplicate check is necessary to prevent direct callers (e.g. version checks)
+    -- from revealing the sidebar while the main monitor is hidden. The type cast to `any`
+    -- bypasses AceGUI's strict typing to access the underlying frame's custom `isCollapsed` state.
     local mFrame = self.monitorFrame and (self.monitorFrame --[[@as any]]).frame
     if mFrame and mFrame.isCollapsed then
         self.deFrame:Hide()
