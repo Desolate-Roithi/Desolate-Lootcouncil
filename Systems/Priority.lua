@@ -436,3 +436,37 @@ function Priority:GetReversionIndex(listName, origIndex, timestamp)
     end
     return simulated
 end
+
+--- Applies a received priority sync payload from the Loot Master.
+--- Only the player list and item list are overwritten; all other list
+--- fields (name, buttons) are preserved so local UI config is intact.
+---@param syncedLists table  Array of { name, players, items } from the LM
+function Priority:ReceivePrioritySync(syncedLists)
+    if not syncedLists or type(syncedLists) ~= "table" then return end
+    local db = DesolateLootcouncil.db.profile
+    if not db.PriorityLists then return end
+
+    local updated = 0
+    for _, incoming in ipairs(syncedLists) do
+        for _, localList in ipairs(db.PriorityLists) do
+            if localList.name == incoming.name then
+                -- Deep copy players
+                localList.players = {}
+                for i, p in ipairs(incoming.players or {}) do
+                    localList.players[i] = p
+                end
+                -- Deep copy items
+                localList.items = {}
+                for i, item in ipairs(incoming.items or {}) do
+                    localList.items[i] = item
+                end
+                updated = updated + 1
+                break
+            end
+        end
+    end
+
+    DesolateLootcouncil:DLC_Log(string.format(
+        "Priority Sync received from LM. Updated %d list(s).", updated), true)
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+end

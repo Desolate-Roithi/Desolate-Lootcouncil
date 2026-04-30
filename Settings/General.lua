@@ -88,7 +88,55 @@ function GeneralSettings:GetGeneralOptions()
                     local UI = DesolateLootcouncil:GetModule("UI_History")
                     if UI then UI:ShowHistoryWindow() end
                 end,
-            }
+            },
+            shareHeader = {
+                type = "header",
+                name = "Loot Master: Share Data",
+                order = 10,
+                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+            },
+            shareDesc = {
+                type = "description",
+                name = "Privately whisper Priority Lists and Roster to all Raid Assists. Regular members cannot read this data.",
+                order = 11,
+                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+            },
+            shareWithAssistsBtn = {
+                type = "execute",
+                name = "Share Priority & Roster with Assists",
+                desc = "Sends both Priority Lists and Roster to all current raid assists via private whisper.",
+                order = 12,
+                width = "full",
+                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+                confirm = true,
+                confirmText = "This will overwrite the Priority Lists and Roster on all assists' clients. Continue?",
+                func = function()
+                    local Comm = DesolateLootcouncil:GetModule("Comm")
+                    if not Comm then
+                        DesolateLootcouncil:Print("Comm module not available.")
+                        return
+                    end
+                    Comm:ShareDataWithAssists("PRIORITY")
+                    Comm:ShareDataWithAssists("ROSTER")
+                end,
+            },
+            autopassHeader = {
+                type = "header",
+                name = "Loot Master: Autopass Settings",
+                order = 20,
+                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+            },
+            repromptAutopass = {
+                type = "execute",
+                name = "Re-open Autopass Choice",
+                desc = "Opens the 'Enable Autopass' popup again to change the global setting for this session.",
+                order = 21,
+                width = "full",
+                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+                func = function()
+                    StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+                end,
+            },
         }
     }
 end

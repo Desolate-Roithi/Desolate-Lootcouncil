@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.7.8-Beta  
-**Last Updated:** 2026-04-26  
+**Latest Version:** v0.7.9-Beta  
+**Last Updated:** 2026-05-01  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
 ## 🚀 Features
@@ -44,6 +44,13 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.7.9-Beta
+* **Autopass Stability & Initialization**:
+    - **Initialization Fix**: Autopass state no longer reports as `nil` on cold-start; it now defaults to a deterministic `false` state until a session begins.
+    - **Persistence across Zones**: Resolved a critical issue where moving between wings in a raid (e.g., internal zone transitions) would reset the Autopass state. The LM is now intelligently re-prompted if the state becomes desynced mid-session.
+* **Trade Window Accuracy**:
+    - **Soulbound Guard**: Added a mandatory `isBound` check to the automated trade staging logic. This ensures that the addon correctly distinguishes between the fresh, tradeable drop and any soulbound copies the Loot Master may already have in their bags.
 
 ### v0.7.8-Beta
 * **Loot Automation Stability**:

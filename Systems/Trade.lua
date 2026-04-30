@@ -90,7 +90,7 @@ function Trade:StageAllItems(pendingItems, targetName)
             for slot = 1, numSlots do
                 if staged then break end
                 local info = C_Container.GetContainerItemInfo(bag, slot)
-                if info and info.itemID == targetItemID and not info.isLocked then
+                if info and info.itemID == targetItemID and not info.isLocked and not info.isBound then
                     C_Container.UseContainerItem(bag, slot)
                     table.insert(self.currentTrade, {
                         link   = award.link,

@@ -129,6 +129,26 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
         DesolateLootcouncil.sessionAutopassActive = data
         local status = data and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
         DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
+    elseif command == "SYNC_PRIORITY" then
+        -- Only accept from the current Loot Master (prevent spoofing)
+        if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
+            local Priority = DesolateLootcouncil:GetModule("Priority")
+            if Priority and Priority.ReceivePrioritySync then
+                Priority:ReceivePrioritySync(data)
+            end
+        else
+            DesolateLootcouncil:DLC_Log(string.format("SYNC_PRIORITY from non-LM '%s' ignored.", tostring(sender)))
+        end
+    elseif command == "SYNC_ROSTER" then
+        -- Only accept from the current Loot Master (prevent spoofing)
+        if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
+            local RosterSys = DesolateLootcouncil:GetModule("Roster")
+            if RosterSys and RosterSys.ReceiveRosterSync then
+                RosterSys:ReceiveRosterSync(data)
+            end
+        else
+            DesolateLootcouncil:DLC_Log(string.format("SYNC_ROSTER from non-LM '%s' ignored.", tostring(sender)))
+        end
     end
 end
 
@@ -195,6 +215,71 @@ function Comm:SendSyncAutopass(isActive)
     self:SendComm("SYNC_AUTOPASS", isActive)
     local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
     DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
+end
+
+--- Shares the given data type with all raid assistants and the raid leader
+--- via private whisper. Only call this as the Loot Master.
+---@param dataType string  "PRIORITY" or "ROSTER"
+function Comm:ShareDataWithAssists(dataType)
+    if not DesolateLootcouncil:AmILootMaster() then
+        DesolateLootcouncil:DLC_Log("ShareDataWithAssists: You are not the Loot Master.")
+        return
+    end
+
+    local command, payload
+    if dataType == "PRIORITY" then
+        command = "SYNC_PRIORITY"
+        local db = DesolateLootcouncil.db.profile
+        -- Build a compact copy: only name + players + items (no circular refs)
+        local lists = {}
+        for _, listObj in ipairs(db.PriorityLists or {}) do
+            local playersCopy = {}
+            for i, p in ipairs(listObj.players or {}) do playersCopy[i] = p end
+            local itemsCopy = {}
+            for i, item in ipairs(listObj.items or {}) do itemsCopy[i] = item end
+            table.insert(lists, { name = listObj.name, players = playersCopy, items = itemsCopy })
+        end
+        payload = lists
+    elseif dataType == "ROSTER" then
+        command = "SYNC_ROSTER"
+        local db = DesolateLootcouncil.db.profile
+        local mainsCopy = {}
+        for name, data in pairs(db.MainRoster or {}) do
+            mainsCopy[name] = { addedAt = data.addedAt or 0 }
+        end
+        local altsCopy = {}
+        for alt, main in pairs((db.playerRoster or {}).alts or {}) do
+            altsCopy[alt] = main
+        end
+        payload = { mains = mainsCopy, alts = altsCopy }
+    else
+        DesolateLootcouncil:DLC_Log("ShareDataWithAssists: Unknown dataType '" .. tostring(dataType) .. "'.")
+        return
+    end
+
+    -- Collect targets: only assists (rank 1) and leaders (rank 2)
+    local targets = {}
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, rank = GetRaidRosterInfo(i)
+            if name and rank >= 1 and not DesolateLootcouncil:SmartCompare(name, "player") then
+                table.insert(targets, name)
+            end
+        end
+    end
+
+    if #targets == 0 then
+        DesolateLootcouncil:DLC_Log("ShareDataWithAssists: No assists or leaders found to share with.", true)
+        return
+    end
+
+    for _, target in ipairs(targets) do
+        local serialized = self:Serialize(command, payload)
+        self:SendCommMessage("DLC_COMM", serialized, "WHISPER", target)
+    end
+
+    DesolateLootcouncil:DLC_Log(string.format(
+        "Shared %s data with %d assist(s).", dataType, #targets), true)
 end
 
 function Comm:PruneRosterData()

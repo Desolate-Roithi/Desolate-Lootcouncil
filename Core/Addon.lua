@@ -106,6 +106,12 @@ function DesolateLootcouncil:OnInitialize()
     -- 4. Initialize Simulated Group
     self.simulatedGroup = { [UnitName("player")] = true }
 
+    -- 5. Initialize Autopass state to a known-false default.
+    --    This ensures /dlc status always shows a valid boolean (never nil),
+    --    and the Loot.lua guard `if not sessionAutopassActive` behaves
+    --    predictably on first login before the LM answers the popup.
+    self.sessionAutopassActive = false
+
     -- 5. Register with AceConfig
     LibStub("AceConfig-3.0"):RegisterOptionsTable("DesolateLootcouncil", function() return self:GetOptions() end)
     self.optionsFrame = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("DesolateLootcouncil", "Desolate Loot Council")

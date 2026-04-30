@@ -424,15 +424,22 @@ function Roster:ZONE_CHANGED_NEW_AREA()
             self:Printf("Entered Raid Instance (%s). Starting Session...", name)
             self:StartRaidSession()
         else
-            -- Ensure Autopass is synced/reset for the new raid environment if it was stale
-            DesolateLootcouncil.sessionAutopassActive = nil
+            -- We are transitioning between areas inside the same raid instance
+            -- (e.g. wing changes, trash → boss, etc.).
+            -- DO NOT wipe sessionAutopassActive here — the LM answered the popup
+            -- on session start and the value must survive internal zone changes.
+            -- If the LM somehow never got the popup (e.g. session was persisted
+            -- across a /reload without an autopass answer), re-show it.
+            if DesolateLootcouncil:AmILootMaster() and not DesolateLootcouncil.sessionAutopassActive then
+                StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+            end
         end
         -- Auto-ping the LM to sync Autopass and IM configs if joining late
         DesolateLootcouncil:SendVersionCheck()
     elseif instanceType ~= "raid" and config.sessionActive then
         DesolateLootcouncil:DLC_Log(string.format("DEBUG: Left Raid (%s). Session is still ACTIVE.", name))
         -- Cleanup Autopass on exit to prevent LFR bleed
-        DesolateLootcouncil.sessionAutopassActive = nil
+        DesolateLootcouncil.sessionAutopassActive = false
     end
 end
 
@@ -456,4 +463,35 @@ function Roster:PLAYER_LOGIN()
                 delta / 3600), true)
         end
     end
+end
+
+--- Applies a received roster sync payload from the Loot Master.
+--- Fully replaces MainRoster and alt links, then rebuilds the scoreMap.
+---@param syncedRoster table  { mains = {[name]=data}, alts = {[alt]=main} }
+function Roster:ReceiveRosterSync(syncedRoster)
+    if not syncedRoster or type(syncedRoster) ~= "table" then return end
+    local db = DesolateLootcouncil.db.profile
+
+    -- Overwrite MainRoster
+    db.MainRoster = {}
+    for name, data in pairs(syncedRoster.mains or {}) do
+        db.MainRoster[name] = { addedAt = data.addedAt or 0 }
+    end
+
+    -- Overwrite alt links
+    if not db.playerRoster then db.playerRoster = { alts = {} } end
+    db.playerRoster.alts = {}
+    for alt, main in pairs(syncedRoster.alts or {}) do
+        db.playerRoster.alts[alt] = main
+    end
+
+    -- Rebuild cache
+    self:UpdateScoreMap()
+
+    local mainCount = 0
+    for _ in pairs(db.MainRoster) do mainCount = mainCount + 1 end
+    DesolateLootcouncil:DLC_Log(string.format(
+        "Roster Sync received from LM. %d mains applied.", mainCount), true)
+
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
