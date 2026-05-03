@@ -39,7 +39,7 @@ local DLC               = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil"
 -- ─────────────────────────────────────────────────────────────────────────────
 
 local LURA_ENCOUNTER_ID = 3183
-local COMM_PREFIX       = "DLC_LURA"
+
 
 -- Blizzard native raid-marker texture  (no custom assets needed)
 local MARKER_TEXTURE    = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_%d.blp"
@@ -55,15 +55,25 @@ local SYMBOL_MAP        = {
     square = 6,
     cross = 7,
     skull = 8,
+    -- NSRT/WeakAura FileDataID aliases
+    ["134635"]  = 6, -- Square
+    ["340528"]  = 7, -- Cross
+    ["351033"]  = 2, -- Circle
+    ["7242384"] = 4, -- Triangle
+    ["236903"]  = 3, -- Diamond
 }
 
--- The five Lura symbols for the picker (picker order left→right)
 local PICKER_SYMBOLS    = {
-    { label = "Star",    icon = 1 },
-    { label = "Circle",  icon = 2 },
-    { label = "Diamond", icon = 3 },
-    { label = "Square",  icon = 6 }, -- replaces the old "T"
-    { label = "Cross",   icon = 7 },
+    { label = "Square",   icon = 6 },
+    { label = "Cross",    icon = 7 },
+    { label = "Circle",   icon = 2 },
+    { label = "Triangle", icon = 4 },
+    { label = "Diamond",  icon = 3 },
+}
+
+local REVERSE_MAP = {
+    [1] = "Star", [2] = "Circle", [3] = "Diamond", [4] = "Triangle",
+    [5] = "Moon", [6] = "Square", [7] = "Cross", [8] = "Skull"
 }
 
 -- Explicit icon slot positions relative to display frame centre.
@@ -81,8 +91,8 @@ local SLOT_POS          = {
 local NUM_OFFSET        = 18
 local ICON_SIZE         = 44
 
--- Demo sequence shown in test mode:  Square → Star → Cross → Circle → Diamond
-local TEST_SEQUENCE     = { 6, 1, 7, 2, 3 }
+-- Demo sequence shown in test mode:  Square → Cross → Circle → Triangle → Diamond
+local TEST_SEQUENCE     = { 6, 7, 2, 4, 3 }
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Module state
@@ -92,7 +102,7 @@ local sequence          = {} -- current sequence: up to 5 icon indices
 local encounterActive   = false
 local testMode          = false
 
-local displayFrame           -- pentagon radial overlay
+local displayFrame           -- pentagon radial display
 local pickerFrame            -- RL/assist horizontal bar
 local settingsFrame          -- /dlc lura settings panel
 local iconSlots         = {} -- [i] = { icon, num, glow }  (display)
@@ -282,7 +292,7 @@ local function BuildPickerFrame()
     local GAP   = 5
     local PAD   = 10
     local LBL   = 16 -- height above button for order number
-    local LW    = #PICKER_SYMBOLS * (BTN + GAP) - GAP
+    local LW    = (#PICKER_SYMBOLS + 1) * (BTN + GAP) - GAP + 10 -- +1 slot for Clear button
     local FW    = PAD + LW + PAD
     local FH    = LBL + BTN + 36 -- label row + icon row + title + buttons
 
@@ -324,12 +334,16 @@ local function BuildPickerFrame()
         lbl:SetTextColor(0.9, 0.7, 1, 1)
         lbl:SetText("")
 
-        -- Button
-        local btn = CreateFrame("Button", nil, pickerFrame)
+        -- Button (Secure Macro)
+        local btn = CreateFrame("Button", nil, pickerFrame, "SecureActionButtonTemplate")
         btn:SetSize(BTN, BTN)
         btn:SetPoint("TOPLEFT", bx, -(16 + LBL))
         btn.iconIndex  = sym.icon
         btn.orderLabel = lbl
+
+        local word = REVERSE_MAP[sym.icon] or ""
+        btn:SetAttribute("type", "macro")
+        btn:SetAttribute("macrotext", "/ra {rt" .. sym.icon .. "} " .. word)
 
         local btnBg    = btn:CreateTexture(nil, "BACKGROUND")
         btnBg:SetAllPoints()
@@ -355,27 +369,37 @@ local function BuildPickerFrame()
             hl:Hide()
             GameTooltip:Hide()
         end)
-        btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        btn:SetScript("OnClick", function(self, button)
-            if button == "RightButton" then
-                wipe(sequence)
-                RefreshDisplay()
-                UI_LuraWidget:RefreshPickerSequenceSlots()
-                UI_LuraWidget:BroadcastSequence()
-                return
-            end
-
-            -- Left click: if full, auto-clear and start new sequence
-            if #sequence >= 5 then wipe(sequence) end
-            
-            table.insert(sequence, sym.icon)
-            RefreshDisplay()
-            UI_LuraWidget:RefreshPickerSequenceSlots()
-            UI_LuraWidget:BroadcastSequence()
-        end)
-
+        -- No OnClick script needed; macrotext handles the broadcast natively!
+        
         pickerButtons[i] = btn
     end
+
+    -- The explicit "Clear" Button at the end of the row
+    local cx = PAD + (#PICKER_SYMBOLS) * (BTN + GAP) + 10
+    local btnClear = CreateFrame("Button", nil, pickerFrame, "SecureActionButtonTemplate")
+    btnClear:SetSize(BTN, BTN)
+    btnClear:SetPoint("TOPLEFT", cx, -(16 + LBL))
+    
+    btnClear:SetAttribute("type", "macro")
+    btnClear:SetAttribute("macrotext", "/ra lura clear")
+
+    local btnClearBg = btnClear:CreateTexture(nil, "BACKGROUND")
+    btnClearBg:SetAllPoints()
+    btnClearBg:SetColorTexture(0.3, 0.05, 0.05, 0.9)
+
+    local btnClearText = btnClear:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    btnClearText:SetPoint("CENTER")
+    btnClearText:SetText("Clear")
+    btnClearText:SetTextColor(1, 0.3, 0.3, 1)
+
+    local clearHl = btnClear:CreateTexture(nil, "OVERLAY")
+    clearHl:SetAllPoints()
+    clearHl:SetColorTexture(1, 0.2, 0.2, 0.22)
+    clearHl:Hide()
+
+    btnClear:SetScript("OnEnter", function() clearHl:Show() end)
+    btnClear:SetScript("OnLeave", function() clearHl:Hide() end)
+    -- Macro handles click
 
     DLC:RestoreFramePosition(pickerFrame, "LuraPicker")
 end
@@ -448,35 +472,32 @@ end
 -- Broadcast / Receive  (addon comm)
 -- ─────────────────────────────────────────────────────────────────────────────
 
-function UI_LuraWidget:BroadcastSequence()
-    local payload = "SEQ:" .. table.concat(sequence, ",")
-    local channel = DLC:GetBroadcastChannel()
-    if channel then
-        DLC:SendCommMessage(COMM_PREFIX, payload, channel)
+function UI_LuraWidget:BroadcastSymbol(iconIdx)
+    local word = REVERSE_MAP[iconIdx] or ""
+    local msg = string.format("{rt%d} %s", iconIdx, word)
+    if IsInRaid() then
+        SendChatMessage(msg, "RAID")
+    elseif IsInGroup() then
+        SendChatMessage(msg, "PARTY")
     else
-        -- Solo fallback: copy first to avoid wipe-aliasing in ReceiveSequence
-        local copy = {}
-        for _, v in ipairs(sequence) do table.insert(copy, v) end
-        self:ReceiveSequence(copy)
+        -- Solo fallback
+        if self.chatFrame and self.chatFrame:GetScript("OnEvent") then
+            self.chatFrame:GetScript("OnEvent")(self.chatFrame, "CHAT_MSG_RAID", msg)
+        end
     end
 end
 
-function UI_LuraWidget:ReceiveSequence(seq)
-    wipe(sequence)
-    for _, v in ipairs(seq) do table.insert(sequence, v) end
-    RefreshDisplay()
-    if pickerFrame then self:RefreshPickerSequenceSlots() end
-
-    -- NorthernSky-style auto-hide: clear display 15 seconds after a full sequence is received
-    if self.hideTimer then self.hideTimer:Cancel() end
-    if #sequence == 5 then
-        self.hideTimer = C_Timer.NewTimer(15, function()
-            if encounterActive or testMode then
-                wipe(sequence)
-                RefreshDisplay()
-                if pickerFrame then self:RefreshPickerSequenceSlots() end
-            end
-        end)
+function UI_LuraWidget:BroadcastClear()
+    local msg = "lura clear"
+    if IsInRaid() then
+        SendChatMessage(msg, "RAID")
+    elseif IsInGroup() then
+        SendChatMessage(msg, "PARTY")
+    else
+        -- Solo fallback
+        if self.chatFrame and self.chatFrame:GetScript("OnEvent") then
+            self.chatFrame:GetScript("OnEvent")(self.chatFrame, "CHAT_MSG_RAID", msg)
+        end
     end
 end
 
@@ -495,6 +516,8 @@ function UI_LuraWidget:OnEncounterStart(encID)
     end
     self.chatFrame:RegisterEvent("CHAT_MSG_RAID")
     self.chatFrame:RegisterEvent("CHAT_MSG_RAID_LEADER")
+    self.chatFrame:RegisterEvent("CHAT_MSG_PARTY")
+    self.chatFrame:RegisterEvent("CHAT_MSG_PARTY_LEADER")
 end
 
 function UI_LuraWidget:OnEncounterEnd()
@@ -509,6 +532,8 @@ function UI_LuraWidget:OnEncounterEnd()
         if self.chatFrame then
             self.chatFrame:UnregisterEvent("CHAT_MSG_RAID")
             self.chatFrame:UnregisterEvent("CHAT_MSG_RAID_LEADER")
+            self.chatFrame:UnregisterEvent("CHAT_MSG_PARTY")
+            self.chatFrame:UnregisterEvent("CHAT_MSG_PARTY_LEADER")
         end
     end)
 end
@@ -527,6 +552,13 @@ function UI_LuraWidget:ActivateTestMode()
         pickerFrame:Show()
         self:RefreshPickerSequenceSlots()
     end
+    -- Must register chat events during test mode so the addon hears its own broadcasts!
+    if self.chatFrame then
+        self.chatFrame:RegisterEvent("CHAT_MSG_RAID")
+        self.chatFrame:RegisterEvent("CHAT_MSG_RAID_LEADER")
+        self.chatFrame:RegisterEvent("CHAT_MSG_PARTY")
+        self.chatFrame:RegisterEvent("CHAT_MSG_PARTY_LEADER")
+    end
     DLC:Print("|cffaa77ffLura Widget:|r Test mode ON — demo sequence displayed.")
 end
 
@@ -537,6 +569,12 @@ function UI_LuraWidget:DeactivateTestMode()
     if not encounterActive then
         if displayFrame then displayFrame:Hide() end
         if pickerFrame then pickerFrame:Hide() end
+        if self.chatFrame then
+            self.chatFrame:UnregisterEvent("CHAT_MSG_RAID")
+            self.chatFrame:UnregisterEvent("CHAT_MSG_RAID_LEADER")
+            self.chatFrame:UnregisterEvent("CHAT_MSG_PARTY")
+            self.chatFrame:UnregisterEvent("CHAT_MSG_PARTY_LEADER")
+        end
     end
     DLC:Print("|cffaa77ffLura Widget:|r Test mode OFF.")
 end
@@ -563,36 +601,6 @@ end
 -- Addon comm handler
 -- ─────────────────────────────────────────────────────────────────────────────
 
-local function BuildCommHandler()
-    DLC:RegisterComm(COMM_PREFIX, function(_, msg, _, sender)
-        -- Accept only from group leader or assist
-        local isAuth = not IsInRaid() -- solo: always auth
-        if IsInRaid() then
-            for i = 1, GetNumGroupMembers() do
-                local u = "raid" .. i
-                local name = UnitName(u)
-                if name then
-                    local sShort = sender:match("^([^%-]+)") or sender
-                    local nShort = name:match("^([^%-]+)") or name
-                    if sShort == nShort and (UnitIsGroupLeader(u) or UnitIsGroupAssistant(u)) then
-                        isAuth = true; break
-                    end
-                end
-            end
-        end
-        if not isAuth then return end
-
-        if msg:sub(1, 4) == "SEQ:" then
-            local parts = {}
-            for token in msg:sub(5):gmatch("[^,]+") do
-                local n = tonumber(token)
-                if n and n >= 1 and n <= 8 then table.insert(parts, n) end
-            end
-            UI_LuraWidget:ReceiveSequence(parts)
-        end
-    end)
-end
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Event frames (encounter + chat) — all local to this file
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -614,12 +622,34 @@ local function BuildChatFrame()
     local cf = CreateFrame("Frame")
     -- Events are registered dynamically in OnEncounterStart to avoid overhead
     cf:SetScript("OnEvent", function(_, _, msg)
+        local lower = msg:lower()
+        if lower:find("lura clear", 1, true) then
+            wipe(sequence)
+            RefreshDisplay()
+            if pickerFrame and pickerFrame:IsShown() then
+                UI_LuraWidget:RefreshPickerSequenceSlots()
+            end
+            if UI_LuraWidget.hideTimer then UI_LuraWidget.hideTimer:Cancel() end
+            return
+        end
+
         local idx = ParseSymbolFromMessage(msg)
         if idx and #sequence < 5 then
             table.insert(sequence, idx)
             RefreshDisplay()
             if pickerFrame and pickerFrame:IsShown() then
                 UI_LuraWidget:RefreshPickerSequenceSlots()
+            end
+            
+            if UI_LuraWidget.hideTimer then UI_LuraWidget.hideTimer:Cancel() end
+            if #sequence == 5 then
+                UI_LuraWidget.hideTimer = C_Timer.NewTimer(15, function()
+                    wipe(sequence)
+                    RefreshDisplay()
+                    if pickerFrame and pickerFrame:IsShown() then 
+                        UI_LuraWidget:RefreshPickerSequenceSlots() 
+                    end
+                end)
             end
         end
     end)
@@ -636,6 +666,5 @@ function UI_LuraWidget:OnInitialize()
     BuildSettingsFrame()
     self.chatFrame = BuildChatFrame()
     BuildEventFrame()
-    BuildCommHandler()
     DLC:DLC_Log("LuraWidget: initialized (encounter " .. LURA_ENCOUNTER_ID .. ")")
 end
