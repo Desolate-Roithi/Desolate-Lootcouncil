@@ -41,39 +41,12 @@ local DLC               = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil"
 local LURA_ENCOUNTER_ID = 3183
 
 
--- Blizzard native raid-marker texture  (no custom assets needed)
-local MARKER_TEXTURE    = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_%d.blp"
-
--- Chat keyword → Blizzard marker index (1–8)
--- "T" / square → index 6 (blue square) as per user spec
-local SYMBOL_MAP        = {
-    star = 1,
-    circle = 2,
-    diamond = 3,
-    triangle = 4,
-    moon = 5,
-    square = 6,
-    cross = 7,
-    skull = 8,
-    -- NSRT/WeakAura FileDataID aliases
-    ["134635"]  = 6, -- Square
-    ["340528"]  = 7, -- Cross
-    ["351033"]  = 2, -- Circle
-    ["7242384"] = 4, -- Triangle
-    ["236903"]  = 3, -- Diamond
-}
-
-local PICKER_SYMBOLS    = {
-    { label = "Square",   icon = 6 },
-    { label = "Cross",    icon = 7 },
-    { label = "Circle",   icon = 2 },
-    { label = "Triangle", icon = 4 },
-    { label = "Diamond",  icon = 3 },
-}
-
-local REVERSE_MAP = {
-    [1] = "Star", [2] = "Circle", [3] = "Diamond", [4] = "Triangle",
-    [5] = "Moon", [6] = "Square", [7] = "Cross", [8] = "Skull"
+local PICKER_SYMBOLS  = {
+    { label = "Square",   icon = "7549166" },
+    { label = "Cross",    icon = "237529" },
+    { label = "Circle",   icon = "5976915" },
+    { label = "Triangle", icon = "4555562" },
+    { label = "Diamond",  icon = "7549139" },
 }
 
 -- Explicit icon slot positions relative to display frame centre.
@@ -81,40 +54,35 @@ local REVERSE_MAP = {
 --   [5]  [1]     y = +65  (closer in, higher up)
 --   [4] BOSS [2]    y = -10
 --        [3]         y = -70
-local SLOT_POS          = {
+local SLOT_POS        = {
     [1] = { 65, 65 },   -- top-right  (moved up + inward)
     [2] = { 85, -10 },  -- right of BOSS
     [3] = { 0, -70 },   -- directly below BOSS
     [4] = { -85, -10 }, -- left of BOSS
     [5] = { -65, 65 },  -- top-left   (moved up + inward)
 }
-local NUM_OFFSET        = 18
-local ICON_SIZE         = 44
+local NUM_OFFSET      = 18
+local ICON_SIZE       = 44
 
 -- Demo sequence shown in test mode:  Square → Cross → Circle → Triangle → Diamond
-local TEST_SEQUENCE     = { 6, 7, 2, 4, 3 }
+local TEST_SEQUENCE   = { "134635", "340528", "351033", "7242384", "236903" }
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Module state
 -- ─────────────────────────────────────────────────────────────────────────────
 
-local sequence          = {} -- current sequence: up to 5 icon indices
-local encounterActive   = false
-local testMode          = false
+local sequence        = {} -- current sequence: up to 5 icon indices
+local encounterActive = false
+local testMode        = false
 
-local displayFrame           -- pentagon radial display
-local pickerFrame            -- RL/assist horizontal bar
-local settingsFrame          -- /dlc lura settings panel
-local iconSlots         = {} -- [i] = { icon, num, glow }  (display)
-local pickerButtons     = {} -- [i] = button frame with .orderLabel
+local displayFrame         -- pentagon radial display
+local pickerFrame          -- RL/assist horizontal bar
+local settingsFrame        -- /dlc lura settings panel
+local iconSlots       = {} -- [i] = { icon, num, glow }  (display)
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Helpers
 -- ─────────────────────────────────────────────────────────────────────────────
-
-local function MarkerTex(idx)
-    return string.format(MARKER_TEXTURE, idx)
-end
 
 local function IsLeaderOrAssist()
     return UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")
@@ -134,17 +102,6 @@ local function PickerEnabled()
     return GetCfg().pickerEnabled ~= false
 end
 
-local function ParseSymbolFromMessage(msg)
-    if not msg then return nil end
-    local lower = msg:lower()
-    for keyword, idx in pairs(SYMBOL_MAP) do
-        if lower:find(keyword, 1, true) then return idx end
-    end
-    return nil
-end
--- Exposed for Tests/Unit/LuraWidget_Test.lua
-UI_LuraWidget.ParseSymbolFromMessage = ParseSymbolFromMessage
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Display refresh (both frames share this)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -153,9 +110,9 @@ local function RefreshDisplay()
     if not displayFrame then return end
     for i = 1, 5 do
         local slot = iconSlots[i]
-        local idx  = sequence[i]
-        if idx then
-            slot.icon:SetTexture(MarkerTex(idx))
+        local msg  = sequence[i]
+        if msg then
+            slot.icon:SetFormattedText("|T%s:%d:%d|t", msg, ICON_SIZE, ICON_SIZE)
             slot.icon:Show()
             slot.num:SetText(tostring(i))
             slot.num:Show()
@@ -167,24 +124,6 @@ local function RefreshDisplay()
         end
     end
     if #sequence > 0 then displayFrame:Show() else displayFrame:Hide() end
-end
-
-function UI_LuraWidget:RefreshPickerSequenceSlots()
-    -- Reset all order labels first
-    for _, btn in ipairs(pickerButtons) do
-        if btn.orderLabel then btn.orderLabel:SetText("") end
-    end
-    -- Label each button with its position in the sequence
-    for pos, iconIdx in ipairs(sequence) do
-        for _, btn in ipairs(pickerButtons) do
-            if btn.iconIndex == iconIdx then
-                if btn.orderLabel then
-                    btn.orderLabel:SetText(tostring(pos))
-                end
-                break
-            end
-        end
-    end
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -261,9 +200,9 @@ local function BuildDisplayFrame()
         glow:SetColorTexture(0.5, 0.3, 0.9, 0.5)
         glow:Hide()
 
-        -- Icon
-        local icon = displayFrame:CreateTexture(nil, "OVERLAY")
-        icon:SetSize(ICON_SIZE, ICON_SIZE)
+        -- Icon (FontString using Texture Tags for NSRT compatibility)
+        local icon = displayFrame:CreateFontString(nil, "OVERLAY")
+        icon:SetFont("Fonts\\FRIZQT__.TTF", 16)
         icon:SetPoint("CENTER", px, py)
         icon:Hide()
 
@@ -291,10 +230,10 @@ local function BuildPickerFrame()
     local BTN   = 38 -- slightly smaller buttons
     local GAP   = 5
     local PAD   = 10
-    local LBL   = 16 -- height above button for order number
+    local LBL   = 16                                             -- height above button for order number
     local LW    = (#PICKER_SYMBOLS + 1) * (BTN + GAP) - GAP + 10 -- +1 slot for Clear button
     local FW    = PAD + LW + PAD
-    local FH    = LBL + BTN + 36 -- label row + icon row + title + buttons
+    local FH    = LBL + BTN + 36                                 -- label row + icon row + title + buttons
 
     pickerFrame = CreateFrame("Frame", "DLCLuraPicker", UIParent, "BackdropTemplate")
     pickerFrame:SetSize(FW, FH)
@@ -338,21 +277,19 @@ local function BuildPickerFrame()
         local btn = CreateFrame("Button", nil, pickerFrame, "SecureActionButtonTemplate")
         btn:SetSize(BTN, BTN)
         btn:SetPoint("TOPLEFT", bx, -(16 + LBL))
-        btn.iconIndex  = sym.icon
-        btn.orderLabel = lbl
+        btn.iconIndex = sym.icon
 
-        local word = REVERSE_MAP[sym.icon] or ""
         btn:SetAttribute("type", "macro")
-        btn:SetAttribute("macrotext", "/ra {rt" .. sym.icon .. "} " .. word)
+        btn:SetAttribute("macrotext", "/ra " .. sym.icon)
 
-        local btnBg    = btn:CreateTexture(nil, "BACKGROUND")
+        local btnBg = btn:CreateTexture(nil, "BACKGROUND")
         btnBg:SetAllPoints()
         btnBg:SetColorTexture(0.1, 0.07, 0.2, 0.9)
 
         local btnTex = btn:CreateTexture(nil, "ARTWORK")
         btnTex:SetSize(BTN - 4, BTN - 4)
         btnTex:SetPoint("CENTER")
-        btnTex:SetTexture(MarkerTex(sym.icon))
+        btnTex:SetTexture(tonumber(sym.icon))
 
         local hl = btn:CreateTexture(nil, "OVERLAY")
         hl:SetAllPoints()
@@ -370,36 +307,7 @@ local function BuildPickerFrame()
             GameTooltip:Hide()
         end)
         -- No OnClick script needed; macrotext handles the broadcast natively!
-        
-        pickerButtons[i] = btn
     end
-
-    -- The explicit "Clear" Button at the end of the row
-    local cx = PAD + (#PICKER_SYMBOLS) * (BTN + GAP) + 10
-    local btnClear = CreateFrame("Button", nil, pickerFrame, "SecureActionButtonTemplate")
-    btnClear:SetSize(BTN, BTN)
-    btnClear:SetPoint("TOPLEFT", cx, -(16 + LBL))
-    
-    btnClear:SetAttribute("type", "macro")
-    btnClear:SetAttribute("macrotext", "/ra lura clear")
-
-    local btnClearBg = btnClear:CreateTexture(nil, "BACKGROUND")
-    btnClearBg:SetAllPoints()
-    btnClearBg:SetColorTexture(0.3, 0.05, 0.05, 0.9)
-
-    local btnClearText = btnClear:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    btnClearText:SetPoint("CENTER")
-    btnClearText:SetText("Clear")
-    btnClearText:SetTextColor(1, 0.3, 0.3, 1)
-
-    local clearHl = btnClear:CreateTexture(nil, "OVERLAY")
-    clearHl:SetAllPoints()
-    clearHl:SetColorTexture(1, 0.2, 0.2, 0.22)
-    clearHl:Hide()
-
-    btnClear:SetScript("OnEnter", function() clearHl:Show() end)
-    btnClear:SetScript("OnLeave", function() clearHl:Hide() end)
-    -- Macro handles click
 
     DLC:RestoreFramePosition(pickerFrame, "LuraPicker")
 end
@@ -550,7 +458,6 @@ function UI_LuraWidget:ActivateTestMode()
     -- Show picker in test mode always (solo testing — not in a group)
     if PickerEnabled() and pickerFrame then
         pickerFrame:Show()
-        self:RefreshPickerSequenceSlots()
     end
     -- Must register chat events during test mode so the addon hears its own broadcasts!
     if self.chatFrame then
@@ -622,36 +529,19 @@ local function BuildChatFrame()
     local cf = CreateFrame("Frame")
     -- Events are registered dynamically in OnEncounterStart to avoid overhead
     cf:SetScript("OnEvent", function(_, _, msg)
-        local lower = msg:lower()
-        if lower:find("lura clear", 1, true) then
+        -- Bypass 12.0.1 Secret restrictions by reading token opaquely.
+        if #sequence >= 5 then
             wipe(sequence)
-            RefreshDisplay()
-            if pickerFrame and pickerFrame:IsShown() then
-                UI_LuraWidget:RefreshPickerSequenceSlots()
-            end
-            if UI_LuraWidget.hideTimer then UI_LuraWidget.hideTimer:Cancel() end
-            return
         end
 
-        local idx = ParseSymbolFromMessage(msg)
-        if idx and #sequence < 5 then
-            table.insert(sequence, idx)
+        table.insert(sequence, msg)
+        RefreshDisplay()
+
+        if UI_LuraWidget.hideTimer then UI_LuraWidget.hideTimer:Cancel() end
+        UI_LuraWidget.hideTimer = C_Timer.NewTimer(15, function()
+            wipe(sequence)
             RefreshDisplay()
-            if pickerFrame and pickerFrame:IsShown() then
-                UI_LuraWidget:RefreshPickerSequenceSlots()
-            end
-            
-            if UI_LuraWidget.hideTimer then UI_LuraWidget.hideTimer:Cancel() end
-            if #sequence == 5 then
-                UI_LuraWidget.hideTimer = C_Timer.NewTimer(15, function()
-                    wipe(sequence)
-                    RefreshDisplay()
-                    if pickerFrame and pickerFrame:IsShown() then 
-                        UI_LuraWidget:RefreshPickerSequenceSlots() 
-                    end
-                end)
-            end
-        end
+        end)
     end)
     return cf
 end
