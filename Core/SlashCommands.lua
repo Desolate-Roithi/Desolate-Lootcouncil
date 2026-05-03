@@ -116,6 +116,13 @@ function SlashCommands.Handle(input)
     elseif cmd == "sim" then
         local Sim = DesolateLootcouncil:GetModule("Simulation")
         if Sim then Sim:HandleSlashCommand(table.concat(args, " ", 2)) end
+
+        -- [LURA] Remove this elseif block to unload the Lura widget (see UI\Widgets\Lura\LuraWidget.lua removal guide)
+    elseif cmd == "lura" then
+        local LuraWidget = DesolateLootcouncil:GetModule("UI_LuraWidget")
+        if LuraWidget and LuraWidget.HandleSlash then
+            LuraWidget:HandleSlash(string.lower(args[2] or ""))
+        end
     else
         DesolateLootcouncil:Print("Unknown command.")
         DesolateLootcouncil:Print("Available Commands:")
