@@ -4,6 +4,7 @@ if AT.abortLoad then return end
 ---@class UI_Attendance : AceModule
 local UI_Attendance = DesolateLootcouncil:NewModule("UI_Attendance")
 local AceGUI = LibStub("AceGUI-3.0")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- State for the Attendance Window
 local tempAttended = {}
@@ -11,9 +12,9 @@ local tempAbsent = {}
 local currentDecayAmount = 1
 
 StaticPopupDialogs["DLC_CONFIRM_DELETE_HISTORY"] = {
-    text = "Are you sure you want to delete this attendance record? This cannot be undone.",
-    button1 = "Yes",
-    button2 = "No",
+    text = L["Are you sure you want to delete this attendance record? This cannot be undone."],
+    button1 = L["Yes"],
+    button2 = L["No"],
     OnAccept = function()
         UI_Attendance:DeleteHistoryEntry(UI_Attendance.selectedHistoryIndex)
     end,
@@ -26,7 +27,7 @@ StaticPopupDialogs["DLC_CONFIRM_DELETE_HISTORY"] = {
 function UI_Attendance:ShowAttendanceWindow()
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config.sessionActive then
-        DesolateLootcouncil:DLC_Log("No active session to review.", true)
+        DesolateLootcouncil:DLC_Log(L["No active session to review."], true)
         return
     end
 
@@ -48,9 +49,9 @@ function UI_Attendance:ShowAttendanceWindow()
     local isDecayEnabled = config.enabled
     local frame = AceGUI:Create("Frame")
     if isDecayEnabled then
-        frame:SetTitle("Session Attendance & Decay Review")
+        frame:SetTitle(L["Session Attendance & Decay Review"])
     else
-        frame:SetTitle("Session Attendance Review (Decay Disabled)")
+        frame:SetTitle(L["Session Attendance Review (Decay Disabled)"])
     end
     frame:SetLayout("Flow")
     frame:SetWidth(650)
@@ -62,23 +63,11 @@ function UI_Attendance:ShowAttendanceWindow()
     self.attendanceFrame = frame
 
     -- [NEW] Position Persistence
-    DesolateLootcouncil:RestoreFramePosition(frame, "Attendance")
-    local function SavePos(f)
-        DesolateLootcouncil:SaveFramePosition(f, "Attendance")
-    end
-    local rawFrame = (frame --[[@as any]]).frame
-    rawFrame:HookScript("OnDragStop", function(f)
-        f:StopMovingOrSizing()
-        SavePos(frame)
-    end)
-    rawFrame:HookScript("OnHide", function() SavePos(frame) end)
-    if DesolateLootcouncil.Persistence then
-        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Attendance")
-    end
+    DesolateLootcouncil:MakeMovableWithSave(frame, "Attendance")
 
     -- 3. Top Label
     local label = AceGUI:Create("Label")
-    label:SetText("Review attendance before ending session. Click names to move them between lists.")
+    label:SetText(L["Review attendance before ending session. Click names to move them between lists."])
     label:SetFullWidth(true)
     frame:AddChild(label)
 
@@ -91,7 +80,7 @@ function UI_Attendance:ShowAttendanceWindow()
 
     -- Left Column (Attended)
     local leftGroup = AceGUI:Create("InlineGroup")
-    leftGroup:SetTitle("Attended (Safe)")
+    leftGroup:SetTitle(L["Attended (Safe)"])
     leftGroup:SetLayout("Fill")
     leftGroup:SetWidth(300)
     leftGroup:SetHeight(300)
@@ -105,9 +94,9 @@ function UI_Attendance:ShowAttendanceWindow()
     -- Right Column (Absent)
     local rightGroup = AceGUI:Create("InlineGroup")
     if isDecayEnabled then
-        rightGroup:SetTitle("Absent (Apply Decay)")
+        rightGroup:SetTitle(L["Absent (Apply Decay)"])
     else
-        rightGroup:SetTitle("Absent (Reference Only)")
+        rightGroup:SetTitle(L["Absent (Reference Only)"])
     end
     rightGroup:SetLayout("Fill")
     rightGroup:SetWidth(300)
@@ -128,7 +117,7 @@ function UI_Attendance:ShowAttendanceWindow()
     -- Decay Amount Slider (Conditional)
     if isDecayEnabled then
         local slider = AceGUI:Create("Slider")
-        slider:SetLabel("Decay Amount")
+        slider:SetLabel(L["Decay Amount"])
         slider:SetValue(currentDecayAmount)
         slider:SetSliderValues(0, 3, 1)
         slider:SetCallback("OnValueChanged", function(widget, event, value)
@@ -147,7 +136,7 @@ function UI_Attendance:ShowAttendanceWindow()
     -- End Session (Only if Decay Disabled - otherwise we use the Apply button)
     if not isDecayEnabled then
         local btnEnd = AceGUI:Create("Button")
-        btnEnd:SetText("End Session (Save History)")
+        btnEnd:SetText(L["End Session (Save History)"])
         btnEnd:SetWidth(200)
         btnEnd:SetCallback("OnClick", function()
             -- Call StopRaidSession(true) directly
@@ -167,7 +156,7 @@ function UI_Attendance:ShowAttendanceWindow()
     -- Apply Decay & End (Conditional)
     if isDecayEnabled then
         local btnApply = AceGUI:Create("Button")
-        btnApply:SetText("APPLY DECAY & END")
+        btnApply:SetText(L["APPLY DECAY & END"])
         btnApply:SetWidth(180)
         btnApply:SetCallback("OnClick", function()
             self:ApplyDecayAndEndSession()
@@ -288,9 +277,9 @@ function UI_Attendance:ApplyDecayAndEndSession()
             listObj.players = newList
         end
 
-        DLC:DLC_Log(string.format("Applied +%d Position Decay to all lists for absent players.", currentDecayAmount))
+        DLC:DLC_Log(string.format(L["Applied +%d Position Decay to all lists for absent players."], currentDecayAmount))
     else
-        DLC:DLC_Log("Decay Amount is 0. No priorities changed.")
+        DLC:DLC_Log(L["Decay Amount is 0. No priorities changed."])
     end
 
     -- 5. Notify Config Change (Refresh UI immediately)
@@ -322,7 +311,7 @@ function UI_Attendance:DeleteHistoryEntry(index)
     local db = DesolateLootcouncil.db.profile
     if db.AttendanceHistory and db.AttendanceHistory[index] then
         table.remove(db.AttendanceHistory, index)
-        DesolateLootcouncil:DLC_Log("Deleted attendance history entry.", true)
+        DesolateLootcouncil:DLC_Log(L["Deleted attendance history entry."], true)
 
         -- Reset Selection
         self.selectedHistoryIndex = nil
@@ -336,21 +325,21 @@ function UI_Attendance:GetSettingsGroupOptions(config)
     return {
         settingsHeader = {
             type = "header",
-            name = "Settings",
+            name = L["Settings"],
             order = 1,
         },
         enabled = {
             type = "toggle",
-            name = "Enable Priority Decay",
-            desc = "If enabled, absent players will suffer priority decay.",
+            name = L["Enable Priority Decay"],
+            desc = L["If enabled, absent players will suffer priority decay."],
             order = 2,
             get = function() return config.enabled end,
             set = function(_, val) config.enabled = val end,
         },
         defaultPenalty = {
             type = "select",
-            name = "Default Penalty",
-            desc = "Amount of priority lost per missed raid.",
+            name = L["Default Penalty"],
+            desc = L["Amount of priority lost per missed raid."],
             order = 3,
             values = { [0] = "0", [1] = "1", [2] = "2", [3] = "3" },
             get = function() return config.defaultPenalty end,
@@ -363,25 +352,25 @@ function UI_Attendance:GetSessionControlOptions(config)
     return {
         sessionHeader = {
             type = "header",
-            name = "Session Control",
+            name = L["Session Control"],
             order = 10,
         },
         status = {
             type = "description",
             name = function()
-                if config.sessionActive then return "|cff00ff00Session Active|r"
-                else return "|cffff0000Session Inactive|r" end
+                if config.sessionActive then return "|cff00ff00" .. L["Session Active"] .. "|r"
+                else return "|cffff0000" .. L["Session Inactive"] .. "|r" end
             end,
             fontSize = "medium",
             order = 11,
         },
         controlBtn = {
             type = "execute",
-            name = function() return config.sessionActive and "End Session" or "Start Session" end,
+            name = function() return config.sessionActive and L["End Session"] or L["Start Session"] end,
             desc = function()
                 return config.sessionActive and
-                    "Open the Attendance Review window to process decay and end the session." or
-                    "Start a new raid session."
+                    L["Open the Attendance Review window to process decay and end the session."] or
+                    L["Start a new raid session."]
             end,
             func = function()
                 local Roster = DesolateLootcouncil:GetModule("Roster")
@@ -410,13 +399,13 @@ function UI_Attendance:GetRaidHistoryOptions(config, db)
     return {
         historyHeader = {
             type = "header",
-            name = "Raid History",
+            name = L["Raid History"],
             order = 20,
         },
         historyList = {
             type = "select",
-            name = "Select Session",
-            desc = "View details of current or past raid sessions.",
+            name = L["Select Session"],
+            desc = L["View details of current or past raid sessions."],
             order = 21,
             values = function()
                 local history = db.AttendanceHistory or {}
@@ -443,8 +432,8 @@ function UI_Attendance:GetRaidHistoryOptions(config, db)
         },
         deleteBtn = {
             type = "execute",
-            name = "Delete Entry",
-            desc = "Permanently delete the selected history record.",
+            name = L["Delete Entry"],
+            desc = L["Permanently delete the selected history record."],
             order = 23,
             disabled = function() return not self.selectedHistoryIndex or self.selectedHistoryIndex == "CURRENT" end,
             func = function() StaticPopup_Show("DLC_CONFIRM_DELETE_HISTORY") end,
@@ -454,7 +443,7 @@ function UI_Attendance:GetRaidHistoryOptions(config, db)
             type = "description",
             name = function()
                 local idx = self.selectedHistoryIndex
-                if not idx then return "Select a session to view details." end
+                if not idx then return L["Select a session to view details."] end
                 local attendees = {}
 
                 if idx == "CURRENT" then
@@ -471,13 +460,13 @@ function UI_Attendance:GetRaidHistoryOptions(config, db)
                             table.insert(attendees, DesolateLootcouncil:GetDisplayName(name)) 
                         end
                     else
-                        return "Error: History entry not found or empty."
+                        return L["Error: History entry not found or empty."]
                     end
                 end
 
-                if #attendees == 0 then return "|cffffd700No attendees recorded.|r" end
+                if #attendees == 0 then return "|cffffd700" .. L["No attendees recorded."] .. "|r" end
                 table.sort(attendees)
-                return "|cffffd700Attendees (" .. #attendees .. "):|r\n" .. table.concat(attendees, ", ")
+                return "|cffffd700" .. string.format(L["Attendees (%d):"], #attendees) .. "|r\n" .. table.concat(attendees, ", ")
             end,
             order = 22,
         }
@@ -490,7 +479,7 @@ function UI_Attendance:GetAttendanceOptions()
 
     local options = {
         type = "group",
-        name = "Attendance & Decay",
+        name = L["Attendance & Decay"],
         order = 4,
         args = {}
     }

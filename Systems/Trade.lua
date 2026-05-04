@@ -13,6 +13,7 @@ local Trade = DesolateLootcouncil:NewModule("Trade", "AceEvent-3.0", "AceConsole
 
 ---@type DLC_Ref_Trade
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Trade]]
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function Trade:OnEnable()
     self:RegisterEvent("TRADE_SHOW", "OnTradeShow")
@@ -27,7 +28,7 @@ function Trade:OnEnable()
         self:OnStaticPopup(name)
     end)
 
-    DesolateLootcouncil:DLC_Log("Systems/Trade Loaded")
+    DesolateLootcouncil:DLC_Log(L["Systems/Trade Loaded"])
 end
 
 function Trade:OnStaticPopup(name)
@@ -37,7 +38,7 @@ function Trade:OnStaticPopup(name)
         local popup = StaticPopup_FindVisible(name)
         if popup then
             StaticPopup_OnClick(popup, 1)
-            DesolateLootcouncil:DLC_Log("Bypassed Blizzard trade confirmation: " .. name)
+            DesolateLootcouncil:DLC_Log(string.format(L["Bypassed Blizzard trade confirmation: %s"], name))
         end
     end
 end
@@ -67,7 +68,8 @@ function Trade:OnTradeShow()
 
     if #pendingItems > 0 then
         -- Delay slightly to ensure the server is ready to accept item movements
-        C_Timer.After(0.2, function()
+        self.tradeTimer = C_Timer.NewTimer(0.2, function()
+            self.tradeTimer = nil
             -- Ensure trade wasn't closed during the delay (prevents accidental self-equipping via UseContainerItem)
             if TradeFrame and TradeFrame:IsShown() then
                 self:StageAllItems(pendingItems, tradeTargetName)
@@ -76,36 +78,37 @@ function Trade:OnTradeShow()
     end
 end
 
+function Trade:FindAndStageItem(targetItemID, award, targetName)
+    for bag = 0, 4 do
+        local numSlots = C_Container.GetContainerNumSlots(bag)
+        for slot = 1, numSlots do
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and info.itemID == targetItemID and not info.isLocked and not info.isBound then
+                C_Container.UseContainerItem(bag, slot)
+                table.insert(self.currentTrade, {
+                    link   = award.link,
+                    winner = award.winner,
+                    guid   = award.sourceGUID
+                })
+                DesolateLootcouncil:DLC_Log(string.format(L["Staged %s for %s."], award.link, 
+                    DesolateLootcouncil:GetDisplayName(targetName)))
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- Bug 2: Stage ALL pending items for a player in one trade window open
 function Trade:StageAllItems(pendingItems, targetName)
     self.currentTrade = {}
 
     for _, award in ipairs(pendingItems) do
         local targetItemID = award.itemID
-        local staged = false
-
-        for bag = 0, 4 do
-            if staged then break end
-            local numSlots = C_Container.GetContainerNumSlots(bag)
-            for slot = 1, numSlots do
-                if staged then break end
-                local info = C_Container.GetContainerItemInfo(bag, slot)
-                if info and info.itemID == targetItemID and not info.isLocked and not info.isBound then
-                    C_Container.UseContainerItem(bag, slot)
-                    table.insert(self.currentTrade, {
-                        link   = award.link,
-                        winner = award.winner,
-                        guid   = award.sourceGUID
-                    })
-                    DesolateLootcouncil:DLC_Log(string.format("Staged %s for %s.", award.link, 
-                        DesolateLootcouncil:GetDisplayName(targetName)))
-                    staged = true
-                end
-            end
-        end
+        local staged = self:FindAndStageItem(targetItemID, award, targetName)
 
         if not staged then
-            DesolateLootcouncil:DLC_Log(string.format("Could not find %s in bags for %s.", award.link, 
+            DesolateLootcouncil:DLC_Log(string.format(L["Could not find %s in bags for %s."], award.link, 
                 DesolateLootcouncil:GetDisplayName(targetName)))
         end
     end
@@ -142,7 +145,7 @@ function Trade:HandleTradeSuccess()
             if award.link == pending.link and DesolateLootcouncil:GetScoreName(award.winner) == winnerScore and not award.traded then
                 award.traded = true
                 changed = true
-                DesolateLootcouncil:DLC_Log(string.format("Trade complete. %s marked as delivered to %s.", 
+                DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."], 
                     pending.link, DesolateLootcouncil:GetDisplayName(pending.winner)))
                 break
             end
@@ -162,6 +165,11 @@ function Trade:HandleTradeSuccess()
 end
 
 function Trade:TRADE_CLOSED(...)
+    if self.tradeTimer then
+        self.tradeTimer:Cancel()
+        self.tradeTimer = nil
+    end
+
     C_Timer.After(0.5, function()
         self:ClearPending()
     end)

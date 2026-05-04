@@ -17,6 +17,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 
 ---@type DLC_Ref_Version
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Version]]
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- Helper: Parse version string "1.0.0" into number 100 for comparison
 -- Helper: Parse "1.0.0-Beta" -> 1, 0, 0, "Beta"
@@ -56,7 +57,7 @@ function UI_Version:ShowVersionWindow(isTest)
         -- 1. Create Frame
         ---@type AceGUIFrame
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle("Desolate Loot Council - Versions")
+        frame:SetTitle(L["Desolate Loot Council - Versions"])
         frame:SetCallback("OnClose", function(widget)
             if self.refreshTimer then
                 self:CancelTimer(self.refreshTimer)
@@ -220,7 +221,7 @@ function UI_Version:UpdateVersionList(isTest)
     -- 5. Render
     ---@type AceGUILabel
     local header = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    header:SetText("Highest Found Version: " .. highestVerStr)
+    header:SetText(string.format(L["Highest Found Version: %s"], highestVerStr))
     header:SetFontObject(GameFontNormalLarge)
     scroll:AddChild(header)
 
@@ -260,16 +261,16 @@ function UI_Version:UpdateVersionList(isTest)
         end
 
         if not ver then
-            verLabel:SetText("Not Installed / Missing")
+            verLabel:SetText(L["Not Installed / Missing"])
             verLabel:SetColor(0.5, 0.5, 0.5) -- Gray
         else
             -- Check if ver >= highest (Current)
             -- Equivalent to: NOT (highest > ver)
             if not CompareSemVer(highestVerStr, ver) then
-                verLabel:SetText(ver .. " (Current)")
+                verLabel:SetText(string.format(L["%s (Current)"], ver))
                 verLabel:SetColor(0, 1, 0) -- Green
             else
-                verLabel:SetText(ver .. " (Outdated)")
+                verLabel:SetText(string.format(L["%s (Outdated)"], ver))
                 verLabel:SetColor(1, 0, 0) -- Red
             end
         end
@@ -281,7 +282,7 @@ function UI_Version:UpdateVersionList(isTest)
 
     ---@type AceGUIButton
     local btnRefresh = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    btnRefresh:SetText("Refresh / Ping")
+    btnRefresh:SetText(L["Refresh / Ping"])
     btnRefresh:SetWidth(150)
 
     -- Repeating timer to handle button state and countdown text
@@ -290,10 +291,10 @@ function UI_Version:UpdateVersionList(isTest)
         if Comm and Comm.GetVersionCheckRemaining then
             local remaining = Comm:GetVersionCheckRemaining()
             if remaining > 0 then
-                btnRefresh:SetText(string.format("Wait %.0fs", remaining))
+                btnRefresh:SetText(string.format(L["Wait %.0fs"], remaining))
                 btnRefresh:SetDisabled(true)
             else
-                btnRefresh:SetText("Refresh / Ping")
+                btnRefresh:SetText(L["Refresh / Ping"])
                 btnRefresh:SetDisabled(false)
             end
         end
@@ -310,7 +311,7 @@ function UI_Version:UpdateVersionList(isTest)
 
         -- Sent OK: disable button immediately
         btnRefresh:SetDisabled(true)
-        btnRefresh:SetText("Pinging...")
+        btnRefresh:SetText(L["Pinging..."])
         
         -- Delay refresh so responses can arrive before we re-render list
         C_Timer.After(1.5, function()

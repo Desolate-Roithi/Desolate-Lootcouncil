@@ -361,6 +361,10 @@ function DesolateLootcouncil:RestoreFramePosition(frame, windowName)
     if self.Persistence then self.Persistence:RestoreFramePosition(frame, windowName) end
 end
 
+function DesolateLootcouncil:MakeMovableWithSave(frame, windowName)
+    if self.Persistence then self.Persistence:MakeMovableWithSave(frame, windowName) end
+end
+
 --- Global Helper: Is unit in raid/party OR simulated?
 function DesolateLootcouncil:IsUnitInRaid(unitName)
     ---@type Simulation

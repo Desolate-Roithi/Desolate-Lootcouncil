@@ -7,6 +7,7 @@ if AT.abortLoad then return end
 ---@field SaveFramePosition fun(self: Persistence, frame: any, windowName: string)
 ---@field ApplyCollapseHook fun(self: Persistence, widget: any, windowName?: string)
 ---@field ToggleWindowCollapse fun(self: Persistence, widget: any)
+---@field MakeMovableWithSave fun(self: Persistence, widget: any, windowName: string)
 local Persistence = {}
 
 ---@class (partial) PersistenceAddon : AceAddon
@@ -249,6 +250,22 @@ function Persistence:ApplyCollapseHook(widget, windowName)
             end
         end)
     end
+end
+
+function Persistence:MakeMovableWithSave(widget, windowName)
+    local rawFrame = widget.frame or widget
+    self:RestoreFramePosition(widget, windowName)
+
+    local function SavePos()
+        self:SaveFramePosition(widget, windowName)
+    end
+
+    rawFrame:HookScript("OnDragStop", function(f)
+        f:StopMovingOrSizing()
+        SavePos()
+    end)
+    rawFrame:HookScript("OnHide", SavePos)
+    self:ApplyCollapseHook(widget, windowName)
 end
 
 function Persistence:ResetPositions()

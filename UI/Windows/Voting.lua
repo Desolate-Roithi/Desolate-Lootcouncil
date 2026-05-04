@@ -6,7 +6,8 @@ local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting")
 local AceGUI = LibStub("AceGUI-3.0")
 
 -- File-scope constants: defined once, shared across all calls to ShowVotingWindow.
-local VOTE_TEXT  = { [1] = "Bid", [2] = "Roll", [3] = "Offspec", [4] = "T-Mog", [5] = "Pass" }
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+local VOTE_TEXT  = { [1] = L["Bid"], [2] = L["Roll"], [3] = L["Offspec"], [4] = L["T-Mog"], [5] = L["Pass"] }
 local VOTE_COLOR = {
     [1] = "|cff00ff00", [2] = "|cffffd700",
     [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa"
@@ -42,7 +43,7 @@ end
 function UI_Voting:CreateVotingFrame()
     ---@type AceGUIFrame
     local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-    frame:SetTitle("Loot Vote")
+    frame:SetTitle(L["Loot Vote"])
     frame:SetLayout("Fill")
     frame:EnableResize(false)
     frame:SetWidth(800)
@@ -55,17 +56,7 @@ function UI_Voting:CreateVotingFrame()
     self.votingFrame = frame
 
     -- [NEW] Position Persistence
-    DesolateLootcouncil:RestoreFramePosition(frame, "Voting")
-    local function SavePos(f)
-        DesolateLootcouncil:SaveFramePosition(f, "Voting")
-    end
-    local rawFrame = (frame --[[@as any]]).frame
-    rawFrame:HookScript("OnDragStop", function(f)
-        f:StopMovingOrSizing()
-        SavePos(frame)
-    end)
-    rawFrame:HookScript("OnHide", function() SavePos(frame) end)
-    DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Voting")
+    DesolateLootcouncil:MakeMovableWithSave(frame, "Voting")
 
     self.myVotes = self.myVotes or {}
     self.timerLabels = {}
@@ -166,7 +157,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
                 local isClosed = closedItems[guid]
 
                 if isClosed or remaining <= 0 then
-                    info.label:SetText("|cffff0000Closed|r")
+                    info.label:SetText("|cffff0000" .. L["Closed"] .. "|r")
                 else
                     info.label:SetText(FormatTime(remaining))
                 end
@@ -265,7 +256,7 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
         if not itemObj:IsItemEmpty() then
             itemObj:ContinueOnItemLoad(function() self:ShowVotingWindow(nil, true) end)
         end
-        itemLabel:SetText("Loading...")
+        itemLabel:SetText(L["Loading..."])
     else
         itemLabel:SetText(properLink)
         itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
@@ -292,15 +283,15 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
 
     if isClosed or isExpired then
         -- STATE 1: Closed / Expired
-        local votedText = "You voted: |cffaaaaaaAuto Pass|r"
+        local votedText = L["You voted: |cffaaaaaaAuto Pass|r"]
         if currentVote then
-            votedText = "You voted: " .. (VOTE_COLOR[currentVote] or "|cffffffff") .. (VOTE_TEXT[currentVote] or "?") .. "|r"
+            votedText = string.format(L["You voted: %s%s|r"], (VOTE_COLOR[currentVote] or "|cffffffff"), (VOTE_TEXT[currentVote] or "?"))
         end
         local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
         res:SetText(votedText) ; res:SetWidth(200)
         actionGroup:AddChild(res)
         local btn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-        btn:SetText("Closed") ; btn:SetWidth(100) ; btn:SetDisabled(true)
+        btn:SetText(L["Closed"]) ; btn:SetWidth(100) ; btn:SetDisabled(true)
         actionGroup:AddChild(btn)
 
     elseif isPending then
@@ -311,20 +302,20 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
         local vText  = pendingType and VOTE_TEXT[pendingType]  or "?"
         local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
         local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        res:SetText("Voted: " .. vColor .. vText .. "|r") ; res:SetWidth(200)
+        res:SetText(string.format(L["Voted: %s%s|r"], vColor, vText)) ; res:SetWidth(200)
         actionGroup:AddChild(res)
         local syncBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-        syncBtn:SetText("Syncing...") ; syncBtn:SetWidth(100) ; syncBtn:SetDisabled(true)
+        syncBtn:SetText(L["Syncing..."]) ; syncBtn:SetWidth(100) ; syncBtn:SetDisabled(true)
         actionGroup:AddChild(syncBtn)
 
     elseif currentVote then
         -- STATE 3: Voted & confirmed
         local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        res:SetText("Voted: " .. (VOTE_COLOR[currentVote] or "|cffffffff") .. (VOTE_TEXT[currentVote] or "?") .. "|r")
+        res:SetText(string.format(L["Voted: %s%s|r"], (VOTE_COLOR[currentVote] or "|cffffffff"), (VOTE_TEXT[currentVote] or "?")))
         res:SetWidth(200)
         actionGroup:AddChild(res)
         local change = AceGUI:Create("Button") --[[@as AceGUIButton]]
-        change:SetText("Change") ; change:SetWidth(100)
+        change:SetText(L["Change"]) ; change:SetWidth(100)
         change:SetCallback("OnClick", function()
             self.myVotes[guid] = nil
             if SessionModule and SessionModule.SendVote then SessionModule:SendVote(guid, 0) end

@@ -21,6 +21,7 @@ local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0
 
 ---@type DLC_Ref_Loot
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Loot]]
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local function DeepCopy(t)
     if type(t) ~= 'table' then return t end
@@ -51,14 +52,14 @@ function Loot:OnEnable()
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
     self:RegisterEvent("CHAT_MSG_LOOT", "OnLootMessage")
 
-    DesolateLootcouncil:DLC_Log("Systems/Loot Loaded")
+    DesolateLootcouncil:DLC_Log(L["Systems/Loot Loaded"])
 
     -- Clean up stale loot for players logging in the next day.
     -- If they log in outside of a raid, wipe the backlog so it doesn't pop up erroneously.
     if session.loot and #session.loot > 0 then
         if not IsInRaid() and not DesolateLootcouncil.db.profile.debugMode then
             wipe(session.loot)
-            DesolateLootcouncil:DLC_Log("Wiped stale loot backlog from previous session.")
+            DesolateLootcouncil:DLC_Log(L["Wiped stale loot backlog from previous session."])
         elseif DesolateLootcouncil:AmILootMaster() then
             self:ScheduleTimer(function()
                 ---@type UI_Loot
@@ -126,7 +127,7 @@ function Loot:SetItemCategory(itemID, targetListIndex)
     if not targetList.items then targetList.items = {} end
     targetList.items[itemID] = true
 
-    DesolateLootcouncil:DLC_Log(string.format("Added Item %d to '%s'", itemID, targetList.name))
+    DesolateLootcouncil:DLC_Log(string.format(L["Added Item %d to '%s'"], itemID, targetList.name))
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
@@ -144,7 +145,7 @@ function Loot:UnassignItem(itemID)
             end
         end
     end
-    DesolateLootcouncil:DLC_Log("Item unassigned from all priority lists.")
+    DesolateLootcouncil:DLC_Log(L["Item unassigned from all priority lists."])
 end
 
 function Loot:AddItemToList(rawLink, listIndex)
@@ -154,7 +155,7 @@ function Loot:AddItemToList(rawLink, listIndex)
     end
 end
 
-function Loot:CategorizeItem(itemLink)
+function Loot:CategorizeItem(itemLink, fallbackQuality)
     local itemID, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemLink)
     if not itemID then return "Junk/Pass" end
 
@@ -165,7 +166,7 @@ function Loot:CategorizeItem(itemLink)
     -- Fallback Heuristics
     if classID == 2 then return "Weapons" end -- Weapon
     if classID == 4 then                      -- Armor
-        local _, _, quality = C_Item.GetItemInfo(itemLink)
+        local quality = select(3, C_Item.GetItemInfo(itemLink)) or fallbackQuality
         if quality and quality > 1 then return "Rest" end
     end
 
@@ -234,10 +235,47 @@ function Loot:DoAutoRoll(rollID, rollType)
     -- Currently write-only, cleared on module enable.
     self.autoRolledItems[rollID] = rollType
 
-    -- Delay execution slightly to ensure Blizzard UI handles START_LOOT_ROLL first
-    -- This matches the RCLootCouncil approach for auto roll/pass stability.
-    C_Timer.After(0.05, function()
+    -- Delay execution to ensure Blizzard UI handles START_LOOT_ROLL first (increased to 0.15 for high latency)
+    C_Timer.After(0.15, function()
         RollOnLoot(rollID, rollType)
+        
+        -- Retry safeguard if the roll hasn't registered due to severe server lag
+        C_Timer.After(1.0, function()
+            RollOnLoot(rollID, rollType)
+        end)
+    end)
+end
+
+function Loot:ProcessLootSlot(i, session)
+    if GetLootSlotType(i) ~= Enum.LootSlotType.Item then return end
+
+    local sourceGUID = GetLootSourceInfo(i)
+    local itemLink = GetLootSlotLink(i)
+    local texture, itemName, quantity, _, quality = GetLootSlotInfo(i)
+    local rawID = C_Item.GetItemInfoInstant(itemLink)
+    local itemID = tonumber(rawID)
+
+    if not (sourceGUID and itemLink and itemID) then return end
+
+    local item = Item:CreateFromItemLink(itemLink)
+    item:ContinueOnItemLoad(function()
+        local category = self:CategorizeItem(itemLink, quality)
+        local minQuality = DesolateLootcouncil.db.profile.minLootQuality
+        local isImportant = (category == "Tier" or category == "Weapons" or category == "Collectables")
+
+        if not isImportant and (quality or 0) < minQuality then
+            DesolateLootcouncil:DLC_Log(string.format(L["Skipped low quality item: %s"], itemLink))
+            return
+        end
+
+        local uniqueKey = sourceGUID .. "-" .. itemID .. "-" .. i
+        if self:AddSessionItem(itemLink, uniqueKey, texture, quantity, category, itemID) then
+            session.lootedMobs[sourceGUID] = true
+            DesolateLootcouncil:DLC_Log("ADDED: " .. itemName)
+            
+            local UI = DesolateLootcouncil:GetModule("UI_Loot")
+            if UI then UI:ShowLootWindow(session.loot) end
+        end
     end)
 end
 
@@ -246,44 +284,14 @@ function Loot:OnLootOpened()
     if not DesolateLootcouncil:AmILootMaster() then return end
 
     local session = DesolateLootcouncil.db.profile.session
-    local itemsChanged = false
     local numItems = GetNumLootItems()
 
-    DesolateLootcouncil:DLC_Log("--- LOOT SCAN START (" .. numItems .. " slots) ---")
+    DesolateLootcouncil:DLC_Log(string.format(L["--- LOOT SCAN START (%d slots) ---"], numItems))
 
     for i = 1, numItems do
-        if GetLootSlotType(i) == Enum.LootSlotType.Item then
-            local sourceGUID = GetLootSourceInfo(i)
-            local itemLink = GetLootSlotLink(i)
-            local texture, itemName, quantity, _, quality = GetLootSlotInfo(i)
-            local rawID = C_Item.GetItemInfoInstant(itemLink)
-            local itemID = tonumber(rawID)
-
-            if sourceGUID and itemLink and itemID then
-                local category = self:CategorizeItem(itemLink)
-                local minQuality = DesolateLootcouncil.db.profile.minLootQuality
-                local isImportant = (category == "Tier" or category == "Weapons" or category == "Collectables")
-
-                if not isImportant and (quality or 0) < minQuality then
-                    DesolateLootcouncil:DLC_Log("Skipped low quality item: " .. itemLink)
-                else
-                    -- FIX: Include slot index 'i' in uniqueKey to allow multiple identical items from one boss.
-                    local uniqueKey = sourceGUID .. "-" .. itemID .. "-" .. i
-                    if self:AddSessionItem(itemLink, uniqueKey, texture, quantity, category, itemID) then
-                        itemsChanged = true
-                        session.lootedMobs[sourceGUID] = true
-                        DesolateLootcouncil:DLC_Log("ADDED: " .. itemName)
-                    end
-                end
-            end
-        end
+        self:ProcessLootSlot(i, session)
     end
-    DesolateLootcouncil:DLC_Log("--- SCAN END ---")
-
-    if itemsChanged then
-        local UI = DesolateLootcouncil:GetModule("UI_Loot")
-        if UI then UI:ShowLootWindow(session.loot) end
-    end
+    DesolateLootcouncil:DLC_Log(L["--- SCAN END ---"])
 end
 
 function Loot:OnLootMessage(event, msg)
@@ -314,21 +322,22 @@ function Loot:OnLootMessage(event, msg)
     if matched then
         local itemID = C_Item.GetItemInfoInstant(link)
         if itemID then
-            local category = self:CategorizeItem(link)
-            local quality = select(3, C_Item.GetItemInfoInstant(link)) or 0
-            local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
+            local item = Item:CreateFromItemLink(link)
+            item:ContinueOnItemLoad(function()
+                local quality = select(3, C_Item.GetItemInfo(link)) or 0
+                local category = self:CategorizeItem(link, quality)
+                local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
 
-            -- Session Items check logic to avoid double adding
-            -- We use a timestamp-based key for Roll/Push wins as they lack a sourceGUID
-            local guid = "Roll-" .. itemID .. "-" .. GetServerTime()
+                local guid = "Roll-" .. itemID .. "-" .. GetServerTime()
 
-            if quality >= minQuality or category ~= "Junk/Pass" then
-                if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
-                    DesolateLootcouncil:DLC_Log("AUTO-ADDED from self-loot: " .. link)
-                    local UI = DesolateLootcouncil:GetModule("UI_Loot")
-                    if UI then UI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
+                if quality >= minQuality or category ~= "Junk/Pass" then
+                    if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
+                        DesolateLootcouncil:DLC_Log(string.format(L["AUTO-ADDED from self-loot: %s"], link))
+                        local UI = DesolateLootcouncil:GetModule("UI_Loot")
+                        if UI then UI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
+                    end
                 end
-            end
+            end)
         end
     end
 end
@@ -356,7 +365,7 @@ function Loot:ClearLootBacklog()
     -- when the LM opens the loot window a second time (e.g. for crests).
     -- It is only reset on addon load (OnEnable) for the full raid night.
     if session and session.loot then wipe(session.loot) end
-    DesolateLootcouncil:DLC_Log("Loot backlog cleared (dedup store preserved).")
+    DesolateLootcouncil:DLC_Log(L["Loot backlog cleared (dedup store preserved)."])
 end
 
 function Loot:AddManualItem(rawLink)
@@ -390,7 +399,7 @@ function Loot:AddManualItem(rawLink)
             stackIndex = 1,
             texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark"
         })
-        DesolateLootcouncil:DLC_Log("Manually added: " .. link, true)
+        DesolateLootcouncil:DLC_Log(string.format(L["Manually added: %s"], link), true)
 
         local UI = DesolateLootcouncil:GetModule("UI_Loot")
         if UI then UI:ShowLootWindow(session.loot) end
@@ -419,7 +428,7 @@ function Loot:_BroadcastAward(itemData, winnerName, voteType)
 
     local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
     if not isSelf then
-        C_ChatInfo.SendChatMessage("You have been awarded " .. itemData.link .. "! Trade me.", "WHISPER", nil, winnerName)
+        C_ChatInfo.SendChatMessage(string.format(L["You have been awarded %s! Trade me."], itemData.link), "WHISPER", nil, winnerName)
     end
 end
 
@@ -539,7 +548,7 @@ function Loot:_RestoreVotesForReaward(session, awardedItem)
 
     local vCount = 0
     for _ in pairs(awardedItem.votes) do vCount = vCount + 1 end
-    DesolateLootcouncil:DLC_Log("Restored " .. vCount .. " votes for re-awarded item.")
+    DesolateLootcouncil:DLC_Log(string.format(L["Restored %d votes for re-awarded item."], vCount))
 end
 
 function Loot:ReawardItem(index)
@@ -576,7 +585,7 @@ function Loot:ReawardItem(index)
 
     -- 4. Remove the history entry and log
     table.remove(session.awarded, index)
-    DesolateLootcouncil:DLC_Log("Re-awarded item: " .. (awardedItem.link or "???"))
+    DesolateLootcouncil:DLC_Log(string.format(L["Re-awarded item: %s"], (awardedItem.link or "???")))
 
     -- 5. Broadcast the restored item so assistants see it in their Monitor
     local newItem = session.bidding[#session.bidding]
@@ -608,7 +617,7 @@ function Loot:ReawardItem(index)
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
     if Monitor then Monitor:ShowMonitorWindow() end
 
-    DesolateLootcouncil:Print("Item reverted to bidding session.")
+    DesolateLootcouncil:Print(L["Item reverted to bidding session."])
 end
 
 function Loot:AddTestItems()
@@ -622,13 +631,13 @@ function Loot:AddTestItems()
     for _, itemLink in ipairs(testItems) do
         self:AddManualItem(itemLink)
     end
-    DesolateLootcouncil:DLC_Log("Added test items to session.")
+    DesolateLootcouncil:DLC_Log(L["Added test items to session."])
 end
 
 function Loot:ScanDisenchanters()
     local Comm = DesolateLootcouncil:GetModule("Comm")
     if Comm and Comm.SendVersionCheck then
         Comm:SendVersionCheck()
-        DesolateLootcouncil:DLC_Log("Triggered disenchanter scan via version check.")
+        DesolateLootcouncil:DLC_Log(L["Triggered disenchanter scan via version check."])
     end
 end

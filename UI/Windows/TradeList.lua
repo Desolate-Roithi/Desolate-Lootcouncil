@@ -4,6 +4,7 @@ if AT.abortLoad then return end
 ---@class UI_TradeList : AceModule
 local UI_TradeList = DesolateLootcouncil:NewModule("UI_TradeList")
 local AceGUI = LibStub("AceGUI-3.0")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_TradeList:ShowTradeListWindow()
     if not DesolateLootcouncil:AmILootMaster() then
@@ -13,23 +14,13 @@ function UI_TradeList:ShowTradeListWindow()
     if not self.tradeListFrame then
         ---@type AceGUIFrame
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle("Pending Trades")
+        frame:SetTitle(L["Pending Trades"])
         frame:SetLayout("Flow")
         frame:SetCallback("OnClose", function(widget) widget:Hide() end)
         self.tradeListFrame = frame
 
         -- [NEW] Position Persistence
-        DesolateLootcouncil:RestoreFramePosition(frame, "Trade")
-        local function SavePos(f)
-            DesolateLootcouncil:SaveFramePosition(f, "Trade")
-        end
-        local rawFrame = (frame --[[@as any]]).frame
-        rawFrame:HookScript("OnDragStop", function(f)
-            f:StopMovingOrSizing()
-            SavePos(frame)
-        end)
-        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Trade")
+        DesolateLootcouncil:MakeMovableWithSave(frame, "Trade")
     end
 
     self.tradeListFrame:Show()
@@ -115,7 +106,7 @@ function UI_TradeList:ShowTradeListWindow()
                 -- Trade Button
                 ---@type AceGUIButton
                 local btnTrade = AceGUI:Create("Button") --[[@as AceGUIButton]]
-                btnTrade:SetText("Trade")
+                btnTrade:SetText(L["Trade"])
                 btnTrade:SetRelativeWidth(0.15)
                 btnTrade:SetCallback("OnClick", function()
                     local unitID = GetUnitIDForName(item.winner)
@@ -130,13 +121,13 @@ function UI_TradeList:ShowTradeListWindow()
                         if CheckInteractDistance("target", 2) then
                             InitiateTrade("target")
                         else
-                            DesolateLootcouncil:DLC_Log(DesolateLootcouncil:GetDisplayName(item.winner) .. " is out of trade range.")
+                            DesolateLootcouncil:DLC_Log(string.format(L["%s is out of trade range."], DesolateLootcouncil:GetDisplayName(item.winner)))
                         end
                         return
                     end
                     -- 3. Failure: Ask user to target manually
-                    DesolateLootcouncil:DLC_Log("Could not auto-target " ..
-                        DesolateLootcouncil:GetDisplayName(item.winner) .. ". Please target them manually and click Trade again.", true)
+                    DesolateLootcouncil:DLC_Log(string.format(L["Could not auto-target %s. Please target them manually and click Trade again."],
+                        DesolateLootcouncil:GetDisplayName(item.winner)), true)
                 end)
 
                 -- Remove Button
@@ -146,7 +137,7 @@ function UI_TradeList:ShowTradeListWindow()
                 btnRemove:SetRelativeWidth(0.10)
                 btnRemove:SetCallback("OnClick", function()
                     item.traded = true
-                    DesolateLootcouncil:DLC_Log("Marked " .. item.link .. " as traded.")
+                    DesolateLootcouncil:DLC_Log(string.format(L["Marked %s as traded."], item.link))
                     self:ShowTradeListWindow()
                 end)
 
@@ -162,7 +153,7 @@ function UI_TradeList:ShowTradeListWindow()
 
     if pendingCount == 0 then
         local lbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        lbl:SetText("No pending trades.")
+        lbl:SetText(L["No pending trades."])
         lbl:SetFullWidth(true)
         scroll:AddChild(lbl)
     end

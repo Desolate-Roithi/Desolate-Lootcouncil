@@ -17,6 +17,21 @@ if AT.abortLoad then return end
 --  No other files reference this module.  Addon.lua is untouched.
 -- ─────────────────────────────────────────────────────────────────
 --
+-- DESIGN DECISIONS (12.0.1 MIDNIGHT RESTRICTIONS):
+-- ────────────────────────────────────────────────
+--  1. DO NOT REVERT TO NATIVE RAID MARKER STRINGS ({rt1}-{rt8}).
+--     While {rtX} renders fine in chat, 12.0.1 fails to "re-encode" these symbols
+--     into icons when captured from chat and reassigned to custom UI elements.
+--     Using native strings results in literal "{rtX}" text appearing in the widget.
+--  2. USE CUSTOM FILE IDs.
+--     We use direct numeric File IDs (e.g., "7549166") to guarantee icon rendering
+--     via |T tags on custom frames, bypassing the re-encoding failure.
+--  3. PUBLIC CHAT BROADCAST (MACROS).
+--     Hidden addon channels (SendAddonMessage) proved unreliable/throttled for
+--     this encounter in 12.0.1. We use Secure Action Macros to write directly
+--     to RAID/PARTY chat for guaranteed delivery and raider transparency.
+-- ─────────────────────────────────────────────────────────────────
+--
 -- Views
 --   RL + Assists  →  Horizontal picker bar  (build & broadcast sequence)
 --                    Hidden if pickerEnabled = false in /dlc lura settings
@@ -65,7 +80,7 @@ local NUM_OFFSET      = 18
 local ICON_SIZE       = 44
 
 -- Demo sequence shown in test mode:  Square → Cross → Circle → Triangle → Diamond
-local TEST_SEQUENCE   = { "134635", "340528", "351033", "7242384", "236903" }
+local TEST_SEQUENCE   = { "7549166", "237529", "5976915", "4555562", "7549139" }
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Module state

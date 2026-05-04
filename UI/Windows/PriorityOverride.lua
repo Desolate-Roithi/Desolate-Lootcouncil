@@ -8,6 +8,7 @@ local UI_PriorityOverride = DesolateLootcouncil:NewModule("UI_PriorityOverride")
 
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
     if self.priorityOverrideFrame then
@@ -25,11 +26,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
     -- Persistence
-    DesolateLootcouncil:RestoreFramePosition(frame, "PriorityOverride")
-    if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ApplyCollapseHook then
-        ---@diagnostic disable-next-line: redundant-parameter
-        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "PriorityOverride")
-    end
+    DesolateLootcouncil:MakeMovableWithSave(frame, "PriorityOverride")
 
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -42,7 +39,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOP", 0, -15)
-    title:SetText("Override: " .. (list.name or listKey))
+    title:SetText(string.format(L["Override: %s"], (list.name or listKey)))
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -5, -5)
@@ -143,7 +140,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
                     local player = table.remove(currentList, i)
                     table.insert(currentList, newIndex, player)
 
-                    local msg = string.format("Manual Override: Moved %s from %d to %d in %s.", player, i, newIndex,
+                    local msg = string.format(L["Manual Override: Moved %s from %d to %d in %s."], player, i, newIndex,
                         list.name or listKey)
                     local Priority = DesolateLootcouncil:GetModule("Priority") --[[@as Priority]]
                     if Priority then Priority:LogPriorityChange(msg) end

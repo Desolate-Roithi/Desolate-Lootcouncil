@@ -4,12 +4,13 @@ if AT.abortLoad then return end
 ---@class UI_History : AceModule
 local UI_History = DesolateLootcouncil:NewModule("UI_History")
 local AceGUI = LibStub("AceGUI-3.0")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_History:ShowHistoryWindow()
     if not self.historyFrame then
         ---@type AceGUIFrame
         local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle("Session History")
+        frame:SetTitle(L["Session History"])
         frame:SetLayout("Flow")
         frame:SetWidth(500)
         frame:SetHeight(400)
@@ -18,17 +19,7 @@ function UI_History:ShowHistoryWindow()
         self.historyFrame = frame
 
         -- Position Persistence
-        DesolateLootcouncil:RestoreFramePosition(frame, "History")
-        local function SavePos(f)
-            DesolateLootcouncil:SaveFramePosition(f, "History")
-        end
-        local rawFrame = (frame --[[@as any]]).frame
-        rawFrame:HookScript("OnDragStop", function(f)
-            f:StopMovingOrSizing()
-            SavePos(frame)
-        end)
-        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "History")
+        DesolateLootcouncil:MakeMovableWithSave(frame, "History")
     end
 
     self.historyFrame:Show()
@@ -73,7 +64,7 @@ function UI_History:ShowHistoryWindow()
     -- Dropdown
     ---@type AceGUIDropdown
     local dateDropdown = AceGUI:Create("Dropdown") --[[@as AceGUIDropdown]]
-    dateDropdown:SetLabel("Select Date")
+    dateDropdown:SetLabel(L["Select Date"])
     dateDropdown:SetRelativeWidth(0.5)
 
     local dropdownList = {}
@@ -95,7 +86,7 @@ function UI_History:ShowHistoryWindow()
     -- Delete Button
     ---@type AceGUIButton
     local btnDelete = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    btnDelete:SetText("Delete Date")
+    btnDelete:SetText(L["Delete Date"])
     btnDelete:SetRelativeWidth(0.3)
     btnDelete:SetCallback("OnClick", function()
         if not self.selectedHistoryDate then return end
@@ -111,7 +102,7 @@ function UI_History:ShowHistoryWindow()
             end
         end
 
-        DesolateLootcouncil:DLC_Log("Removed " .. countRemoved .. " entries for " .. self.selectedHistoryDate)
+        DesolateLootcouncil:DLC_Log(string.format(L["Removed %d entries for %s"], countRemoved, self.selectedHistoryDate))
         self.selectedHistoryDate = nil -- Reset selection to force refresh logic
         self:ShowHistoryWindow()
     end)
@@ -187,7 +178,7 @@ function UI_History:ShowHistoryWindow()
                 -- Re-award Button
                 ---@type AceGUIButton
                 local btnReaward = AceGUI:Create("Button")
-                btnReaward:SetText("Re-award")
+                btnReaward:SetText(L["Re-award"])
                 btnReaward:SetRelativeWidth(0.20)
                 btnReaward:SetCallback("OnClick", function()
                     ---@type Loot
@@ -208,7 +199,7 @@ function UI_History:ShowHistoryWindow()
 
     if not hasItems then
         local lbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        lbl:SetText("No entries for this date.")
+        lbl:SetText(L["No entries for this date."])
         lbl:SetFullWidth(true)
         scroll:AddChild(lbl)
     end

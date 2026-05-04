@@ -4,6 +4,7 @@ if AT.abortLoad then return end
 ---@class UI_ItemManager : AceModule
 local UI_ItemManager = DesolateLootcouncil:NewModule("UI_ItemManager")
 local AceGUI = LibStub("AceGUI-3.0")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 ---@class (partial) DLC_Ref_ItemManager
 ---@field db table
@@ -16,7 +17,7 @@ function UI_ItemManager:ShowItemManagerWindow()
     if not self.frame then
         ---@type AceGUIFrame
         local frame = AceGUI:Create("Frame")
-        frame:SetTitle("Item Manager")
+        frame:SetTitle(L["Item Manager"])
         frame:SetLayout("Flow")
         frame:SetWidth(600)
         frame:SetHeight(500)
@@ -24,21 +25,7 @@ function UI_ItemManager:ShowItemManagerWindow()
         self.frame = frame
 
         -- Persistence
-        local rawFrame = (frame --[[@as any]]).frame
-        if rawFrame then
-            DesolateLootcouncil:RestoreFramePosition(frame, "ItemManager")
-            local function SavePos(f)
-                DesolateLootcouncil:SaveFramePosition(f, "ItemManager")
-            end
-            rawFrame:HookScript("OnDragStop", function(f)
-                f:StopMovingOrSizing()
-                SavePos(frame)
-            end)
-            rawFrame:HookScript("OnHide", function() SavePos(frame) end)
-        end
-        if DesolateLootcouncil.Persistence then
-            DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "ItemManager")
-        end
+        DesolateLootcouncil:MakeMovableWithSave(frame, "ItemManager")
     end
 
     self.frame:Show()
@@ -52,7 +39,7 @@ function UI_ItemManager:BuildHeaderGroup(db, listNames)
     self.frame:AddChild(headerGroup)
 
     local input = AceGUI:Create("EditBox")
-    input:SetLabel("Item Name/Link/ID")
+    input:SetLabel(L["Item Name/Link/ID"])
     input:SetRelativeWidth(0.40)
     input:DisableButton(true)
     input:SetCallback("OnEnterPressed", function(widget, event, text)
@@ -68,7 +55,7 @@ function UI_ItemManager:BuildHeaderGroup(db, listNames)
     headerGroup:AddChild(input)
 
     local listDropdown = AceGUI:Create("Dropdown")
-    listDropdown:SetLabel("Target List")
+    listDropdown:SetLabel(L["Target List"])
     listDropdown:SetRelativeWidth(0.25)
     listDropdown:SetList(listNames)
 
@@ -80,7 +67,7 @@ function UI_ItemManager:BuildHeaderGroup(db, listNames)
     headerGroup:AddChild(listDropdown)
 
     local addBtn = AceGUI:Create("Button")
-    addBtn:SetText("Add")
+    addBtn:SetText(L["Add"])
     addBtn:SetRelativeWidth(0.15)
     addBtn:SetCallback("OnClick", function()
         local text = input:GetText()
@@ -97,7 +84,7 @@ function UI_ItemManager:BuildHeaderGroup(db, listNames)
 
     if DesolateLootcouncil:AmIRaidAssistOrLM() then
         local syncBtn = AceGUI:Create("Button")
-        syncBtn:SetText("Sync Raid")
+        syncBtn:SetText(L["Sync Raid"])
         syncBtn:SetRelativeWidth(0.2)
         syncBtn:SetCallback("OnClick", function()
             local syncData = {}
@@ -107,7 +94,7 @@ function UI_ItemManager:BuildHeaderGroup(db, listNames)
             local Comm = DesolateLootcouncil:GetModule("Comm")
             if Comm then
                 Comm:SendComm("IM_SYNC", syncData)
-                DesolateLootcouncil:Print("Item Manager lists synced to raid.")
+                DesolateLootcouncil:Print(L["Item Manager lists synced to raid."])
             end
         end)
         headerGroup:AddChild(syncBtn)
@@ -126,7 +113,7 @@ function UI_ItemManager:BuildItemRow(scroll, list, itemID)
                 end
             end)
         end
-        name = "Loading..."
+        name = L["Loading..."]
         itemTexture = C_Item.GetItemIconByID(itemID)
     end
 
@@ -166,12 +153,12 @@ function UI_ItemManager:BuildItemRow(scroll, list, itemID)
     row:AddChild(nameLabel)
 
     local btnRemove = AceGUI:Create("Button")
-    btnRemove:SetText("Remove")
+    btnRemove:SetText(L["Remove"])
     btnRemove:SetRelativeWidth(0.15)
     btnRemove:SetHeight(24)
     btnRemove:SetCallback("OnClick", function()
         list.items[itemID] = nil
-        DesolateLootcouncil:DLC_Log("Removed item ID: " .. itemID)
+        DesolateLootcouncil:DLC_Log(string.format(L["Removed item ID: %s"], itemID))
         self:RefreshWindow()
     end)
     row:AddChild(btnRemove)
@@ -190,12 +177,12 @@ function UI_ItemManager:RefreshWindow()
     self:BuildHeaderGroup(db, listNames)
 
     local sep = AceGUI:Create("Heading")
-    sep:SetText("Assigned Items")
+    sep:SetText(L["Assigned Items"])
     sep:SetFullWidth(true)
     self.frame:AddChild(sep)
 
     local viewDropdown = AceGUI:Create("Dropdown")
-    viewDropdown:SetLabel("Select List to View")
+    viewDropdown:SetLabel(L["Select List to View"])
     viewDropdown:SetList(listNames)
     self.viewListKey = self.viewListKey or 1
     viewDropdown:SetValue(self.viewListKey)
