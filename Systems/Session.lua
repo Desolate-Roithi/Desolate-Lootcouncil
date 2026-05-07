@@ -756,11 +756,35 @@ function Session:HandleSyncVotes(payload)
     end
 end
 
-function Session:HandleSyncLM(payload)
+function Session:HandleSyncLM(payload, sender)
     local lm = payload.data and payload.data.lm
-    if lm then
+    if not lm or not sender then return end
+
+    -- Authority Check: Only accept SYNC_LM from the current Group Leader
+    local isAuthorized = false
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, rank = GetRaidRosterInfo(i)
+            if name and rank == 2 and DesolateLootcouncil:SmartCompare(name, sender) then
+                isAuthorized = true
+                break
+            end
+        end
+    elseif IsInGroup() then
+        -- In a party, check if the sender is the leader
+        isAuthorized = UnitIsGroupLeader(sender)
+    else
+        -- Solo: accept self-syncs
+        isAuthorized = DesolateLootcouncil:SmartCompare(sender, "player")
+    end
+
+    if isAuthorized then
         DesolateLootcouncil.activeLootMaster = lm
         DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(lm, "player")
+        DesolateLootcouncil:DLC_Log(string.format("Loot Master identity synced from Leader (%s): %s",
+            DesolateLootcouncil:GetDisplayName(sender), DesolateLootcouncil:GetDisplayName(lm)))
+    else
+        DesolateLootcouncil:DLC_Log(string.format("Ignored SYNC_LM from non-leader: %s", tostring(sender)))
     end
 end
 
@@ -786,7 +810,7 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
     elseif payload.command == "HISTORY_UPDATE" then
         self:HandleHistoryUpdate(payload)
     elseif payload.command == "SYNC_LM" then
-        self:HandleSyncLM(payload)
+        self:HandleSyncLM(payload, sender)
     end
 end
 

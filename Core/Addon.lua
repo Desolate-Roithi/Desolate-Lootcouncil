@@ -232,27 +232,48 @@ function DesolateLootcouncil:DetermineLootMaster()
         return nil
     end
 
+    -- 1. Use the active, synced Loot Master if valid and present
     if self.activeLootMaster and self.activeLootMaster ~= "" then
         if self:IsUnitInRaid(self.activeLootMaster) or self:SmartCompare(self.activeLootMaster, "player") then
             return self.activeLootMaster
+        else
+            -- LM left or became invalid; clear it to allow fallback
+            self.activeLootMaster = nil
         end
     end
 
-    local configuredLM = self.db.profile.configuredLM
-    if configuredLM and configuredLM ~= "" then
-        if self:IsUnitInRaid(configuredLM) or self:SmartCompare(configuredLM, "player") then
-            return configuredLM
+    -- 2. Authority Check: Only the Raid/Party Leader can nominate an LM via Config.
+    local isLeader = false
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, rank = GetRaidRosterInfo(i)
+            if rank == 2 and self:SmartCompare(name, "player") then
+                isLeader = true
+                break
+            end
         end
-        self:DLC_Log("Configured LM (" .. configuredLM .. ") not found. Falling back to Group Leader.")
+    elseif IsInGroup() then
+        isLeader = UnitIsGroupLeader("player")
     end
 
+    if isLeader then
+        local configuredLM = self.db.profile.configuredLM
+        if configuredLM and configuredLM ~= "" then
+            if self:IsUnitInRaid(configuredLM) or self:SmartCompare(configuredLM, "player") then
+                return configuredLM
+            end
+            self:DLC_Log("Configured LM (" .. configuredLM .. ") not found. Falling back to yourself (Leader).")
+        end
+        return myName
+    end
+
+    -- 3. Raider Fallback: Always default to the actual Group Leader if no LM is synced.
     if IsInRaid() then
         for i = 1, GetNumGroupMembers() do
             local name, rank = GetRaidRosterInfo(i)
             if rank == 2 then return name end
         end
     elseif IsInGroup() then
-        if UnitIsGroupLeader("player") then return myName end
         for i = 1, GetNumSubgroupMembers() do
             local unit = "party" .. i
             if UnitIsGroupLeader(unit) then 
@@ -262,7 +283,8 @@ function DesolateLootcouncil:DetermineLootMaster()
             end
         end
     end
-    return nil
+
+    return myName
 end
 
 function DesolateLootcouncil:UpdateLootMasterStatus()
