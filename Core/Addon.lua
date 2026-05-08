@@ -135,6 +135,12 @@ function DesolateLootcouncil:OnEnable()
     self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "UpdateLootMasterStatus")
     self:RegisterEvent("PARTY_LEADER_CHANGED", "UpdateLootMasterStatus")
+    -- Correct LM state after a reload/login while already in a group.
+    -- PLAYER_ENTERING_WORLD fires before the group is fully restored, so we
+    -- schedule a short delay to let GROUP_ROSTER_UPDATE settle first.
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
+        C_Timer.After(2, function() self:UpdateLootMasterStatus() end)
+    end)
 end
 
 local REFRESH_TIMER = nil
@@ -291,12 +297,17 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
     local targetLM = self:DetermineLootMaster()
     self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
-    self:DLC_Log("Role Update: You are " .. (self.amILM and "Loot Master" or "Raider"))
+    self:DLC_Log("Role Update: You are " .. (self.amILM and "Loot Master" or "Raider") ..
+        " (LM: " .. tostring(self:GetDisplayName(targetLM)) .. ")")
 
-    if self.amILM and IsInGroup() then
+    -- Always broadcast LM identity when in a group, regardless of our own role.
+    -- This ensures late-joiners are corrected even before the session heartbeat fires (30s).
+    -- Raiders also call this on GROUP_ROSTER_UPDATE — only the actual LM executes the send
+    -- because SendSyncLM is a no-op when not in a channel (solo) and the channel is RAID.
+    if IsInGroup() then
         ---@type Session
         local Session = self:GetModule("Session") --[[@as Session]]
-        if Session and Session.SendSyncLM then
+        if self.amILM and Session and Session.SendSyncLM then
             Session:SendSyncLM(targetLM)
         end
     end
@@ -381,6 +392,10 @@ end
 
 function DesolateLootcouncil:RestoreFramePosition(frame, windowName)
     if self.Persistence then self.Persistence:RestoreFramePosition(frame, windowName) end
+end
+
+function DesolateLootcouncil:MakeMovableWithSave(frame, windowName)
+    if self.Persistence then self.Persistence:MakeMovableWithSave(frame, windowName) end
 end
 
 --- Global Helper: Is unit in raid/party OR simulated?

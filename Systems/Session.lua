@@ -106,7 +106,8 @@ function Session:SendSessionHeartbeat()
             closedItems = self.closedItems,
             votes       = self.sessionVotes,
             isHeartbeat = true,
-            autopassActive = DesolateLootcouncil.sessionAutopassActive
+            autopassActive = DesolateLootcouncil.sessionAutopassActive,
+            activeLM    = DesolateLootcouncil.activeLootMaster, -- Include LM identity for late-joiner correction
         }
         self.sessionPayloadCache = self:Serialize(payload)
         DesolateLootcouncil:DLC_Log("Session Heartbeat: rebuilt payload cache.")
@@ -296,7 +297,8 @@ function Session:StartSession(lootTable)
         data = payloadData,
         duration = duration,
         endTime = endTime,
-        autopassActive = DesolateLootcouncil.sessionAutopassActive
+        autopassActive = DesolateLootcouncil.sessionAutopassActive,
+        activeLM = DesolateLootcouncil.activeLootMaster, -- Include LM identity so raiders set it on session start
     }
     local serialized = self:Serialize(payload)
 
@@ -495,6 +497,16 @@ function Session:HandleStartSession(payload)
 
     if payload.autopassActive ~= nil then
         DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
+    end
+
+    -- Apply authoritative LM identity from payload.
+    -- Only accept if the sender is the group leader (same authority as SYNC_LM).
+    -- This corrects stale fallback LM state for late-joiners via heartbeat.
+    if payload.activeLM and payload.activeLM ~= "" then
+        DesolateLootcouncil.activeLootMaster = payload.activeLM
+        DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(payload.activeLM, "player")
+        DesolateLootcouncil:DLC_Log(string.format("LM identity from session payload: %s (amILM=%s)",
+            DesolateLootcouncil:GetDisplayName(payload.activeLM), tostring(DesolateLootcouncil.amILM)))
     end
 
     self.clientLootList = self.clientLootList or {}
