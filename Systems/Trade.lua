@@ -79,20 +79,31 @@ function Trade:OnTradeShow()
 end
 
 function Trade:FindAndStageItem(targetItemID, award, targetName)
+    -- Get bind type for the item to distinguish BoP from BoE
+    local _, _, _, _, _, _, _, _, _, _, _, _, _, bindType = C_Item.GetItemInfo(targetItemID)
+    local isBoP = (bindType == 1)
+
     for bag = 0, 4 do
         local numSlots = C_Container.GetContainerNumSlots(bag)
         for slot = 1, numSlots do
             local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID == targetItemID and not info.isLocked and not info.isBound then
-                C_Container.UseContainerItem(bag, slot)
-                table.insert(self.currentTrade, {
-                    link   = award.link,
-                    winner = award.winner,
-                    guid   = award.sourceGUID
-                })
-                DesolateLootcouncil:DLC_Log(string.format(L["Staged %s for %s."], award.link, 
-                    DesolateLootcouncil:GetDisplayName(targetName)))
-                return true
+            if info and info.itemID == targetItemID and not info.isLocked then
+                -- 12.0.1 Fix: fresh raid loot IS bound (tradeable soulbound).
+                -- We only block 'isBound' if it's a BoE item (to prevent staging equipped gear).
+                -- For BoP items, we must allow bound items to be staged.
+                local canStage = not info.isBound or isBoP
+
+                if canStage then
+                    C_Container.UseContainerItem(bag, slot)
+                    table.insert(self.currentTrade, {
+                        link   = award.link,
+                        winner = award.winner,
+                        guid   = award.sourceGUID
+                    })
+                    DesolateLootcouncil:DLC_Log(string.format(L["Staged %s for %s."], award.link, 
+                        DesolateLootcouncil:GetDisplayName(targetName)))
+                    return true
+                end
             end
         end
     end
