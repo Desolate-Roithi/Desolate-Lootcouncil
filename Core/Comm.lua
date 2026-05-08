@@ -126,9 +126,14 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
             end
         end
     elseif command == "SYNC_AUTOPASS" then
-        DesolateLootcouncil.sessionAutopassActive = data
-        local status = data and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
-        DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
+        -- Only accept autopass state from the current Loot Master (prevent spoofing).
+        if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
+            DesolateLootcouncil.sessionAutopassActive = data
+            local status = data and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
+            DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
+        else
+            DesolateLootcouncil:DLC_Log(string.format("SYNC_AUTOPASS from non-LM '%s' ignored.", tostring(sender)))
+        end
     elseif command == "SYNC_PRIORITY" then
         -- Only accept from the current Loot Master (prevent spoofing)
         if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then

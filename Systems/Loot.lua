@@ -231,14 +231,15 @@ function Loot:OnStartLootRoll(event, rollID)
 end
 
 function Loot:DoAutoRoll(rollID, rollType)
-    -- Tracking table for future use (e.g. preventing double-rolls).
-    -- Currently write-only, cleared on module enable.
+    -- TODO: autoRolledItems is currently write-only. Intended as a future
+    -- double-roll prevention guard (e.g. if START_LOOT_ROLL fires twice for the
+    -- same rollID). Do not remove without replacing with equivalent protection.
     self.autoRolledItems[rollID] = rollType
 
     -- Delay execution to ensure Blizzard UI handles START_LOOT_ROLL first (increased to 0.15 for high latency)
-    C_Timer.After(0.15, function()
+    C_Timer.After(0.25, function()
         RollOnLoot(rollID, rollType)
-        
+
         -- Retry safeguard if the roll hasn't registered due to severe server lag
         C_Timer.After(1.0, function()
             RollOnLoot(rollID, rollType)
@@ -272,7 +273,7 @@ function Loot:ProcessLootSlot(i, session)
         if self:AddSessionItem(itemLink, uniqueKey, texture, quantity, category, itemID) then
             session.lootedMobs[sourceGUID] = true
             DesolateLootcouncil:DLC_Log("ADDED: " .. itemName)
-            
+
             local UI = DesolateLootcouncil:GetModule("UI_Loot")
             if UI then UI:ShowLootWindow(session.loot) end
         end
@@ -414,7 +415,7 @@ end
 ---@param voteType string
 function Loot:_BroadcastAward(itemData, winnerName, voteType)
     local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName)
-    local msg = string.format("Winner of %s is %s! (%s)", itemData.link, winnerDisplay, voteType)
+    local msg = string.format(L["Winner of %s is %s! (%s)"], itemData.link, winnerDisplay, voteType)
 
     if IsInRaid() then
         if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then
@@ -428,7 +429,8 @@ function Loot:_BroadcastAward(itemData, winnerName, voteType)
 
     local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
     if not isSelf then
-        C_ChatInfo.SendChatMessage(string.format(L["You have been awarded %s! Trade me."], itemData.link), "WHISPER", nil, winnerName)
+        C_ChatInfo.SendChatMessage(string.format(L["You have been awarded %s! Trade me."], itemData.link), "WHISPER", nil,
+            winnerName)
     end
 end
 

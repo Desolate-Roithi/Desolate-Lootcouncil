@@ -33,7 +33,7 @@ end
 
 function Trade:OnStaticPopup(name)
     -- Check for trade-related confirmation dialogs
-    if name == "CONFIRM_LOT_BIND" or name == "TRADE_POTENTIALLY_SOUBOUND_ITEM" or name == "TRADE_BOP" then
+    if name == "CONFIRM_LOT_BIND" or name == "TRADE_POTENTIALLY_SOULBOUND_ITEM" or name == "TRADE_BOP" then
         -- Find the visible popup and click "Accept" (button 1)
         local popup = StaticPopup_FindVisible(name)
         if popup then
@@ -79,6 +79,12 @@ function Trade:OnTradeShow()
 end
 
 function Trade:FindAndStageItem(targetItemID, award, targetName)
+    if not targetItemID then
+        DesolateLootcouncil:DLC_Log(string.format(L["Could not find %s in bags for %s."], award.link or "?",
+            DesolateLootcouncil:GetDisplayName(targetName)))
+        return false
+    end
+
     -- Get bind type for the item to distinguish BoP from BoE
     local _, _, _, _, _, _, _, _, _, _, _, _, _, bindType = C_Item.GetItemInfo(targetItemID)
     local isBoP = (bindType == 1)
@@ -114,19 +120,19 @@ end
 function Trade:StageAllItems(pendingItems, targetName)
     self.currentTrade = {}
 
+    -- Register cleanup events unconditionally so currentTrade is always cleared,
+    -- even if all items fail to stage (e.g. not in bags, uncached, wrong bind type).
+    self:RegisterEvent("CHAT_MSG_SYSTEM")
+    self:RegisterEvent("TRADE_CLOSED")
+
     for _, award in ipairs(pendingItems) do
         local targetItemID = award.itemID
         local staged = self:FindAndStageItem(targetItemID, award, targetName)
 
         if not staged then
-            DesolateLootcouncil:DLC_Log(string.format(L["Could not find %s in bags for %s."], award.link, 
+            DesolateLootcouncil:DLC_Log(string.format(L["Could not find %s in bags for %s."], award.link,
                 DesolateLootcouncil:GetDisplayName(targetName)))
         end
-    end
-
-    if #self.currentTrade > 0 then
-        self:RegisterEvent("CHAT_MSG_SYSTEM")
-        self:RegisterEvent("TRADE_CLOSED")
     end
 end
 
