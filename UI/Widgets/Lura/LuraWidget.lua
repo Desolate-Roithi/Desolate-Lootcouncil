@@ -97,6 +97,7 @@ local iconSlots       = {} -- [i] = { icon, num, glow }  (display)
 -- ─────────────────────────────────────────────────────────────────────────────
 
 local function IsLeaderOrAssist()
+    if not IsInGroup() then return true end
     return UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")
 end
 
@@ -231,6 +232,7 @@ local function BuildDisplayFrame()
     end
 
     DLC:RestoreFramePosition(displayFrame, "LuraDisplay")
+    displayFrame:SetSize(W, H) -- Force size to ignore stale DB widths
 end
 
 
@@ -243,7 +245,7 @@ local function BuildPickerFrame()
     local GAP   = 5
     local PAD   = 10
     local LBL   = 16                                             -- height above button for order number
-    local LW    = (#PICKER_SYMBOLS + 1) * (BTN + GAP) - GAP + 10 -- +1 slot for Clear button
+    local LW    = #PICKER_SYMBOLS * (BTN + GAP) - GAP            -- width for exactly 5 buttons
     local FW    = PAD + LW + PAD
     local FH    = LBL + BTN + 36                                 -- label row + icon row + title + buttons
 
@@ -322,6 +324,7 @@ local function BuildPickerFrame()
     end
 
     DLC:RestoreFramePosition(pickerFrame, "LuraPicker")
+    pickerFrame:SetSize(FW, FH) -- Force size to ignore stale DB widths
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
