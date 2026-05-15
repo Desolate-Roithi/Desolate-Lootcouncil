@@ -305,7 +305,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     -- If we just BECAME the LM, reset the prompt flag so we can decide for ourselves
     if self.amILM and not wasLM then
         self.sessionAutopassAnswered = false
-        if self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
+        if IsInRaid() and self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
             StaticPopup_Show("DLC_ENABLE_AUTOPASS")
         end
     end

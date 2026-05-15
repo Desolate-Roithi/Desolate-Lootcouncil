@@ -4,6 +4,28 @@ if AT.abortLoad then return end
 ---@class Roster : AceModule, AceEvent-3.0, AceConsole-3.0
 local Roster = DesolateLootcouncil:NewModule("Roster", "AceEvent-3.0", "AceConsole-3.0")
 
+-- Define autopass popup at file-load time (main chunk) so the dialog exists before
+-- OnInitialize / OnEnable fire. If defined inside OnEnable it would not be available
+-- when Addon:OnInitialize() calls UpdateLootMasterStatus() on the very first load.
+StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
+    text = "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
+    button1 = "Enable",
+    button2 = "No",
+    OnAccept = function()
+        DesolateLootcouncil.sessionAutopassAnswered = true
+        local Comm = DesolateLootcouncil:GetModule("Comm")
+        if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
+    end,
+    OnCancel = function()
+        DesolateLootcouncil.sessionAutopassAnswered = true
+        local Comm = DesolateLootcouncil:GetModule("Comm")
+        if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
 ---@class (partial) DLC_Ref_Roster
 ---@field db table
 ---@field GetModule fun(self: any, name: string): any
@@ -24,26 +46,6 @@ function Roster:OnEnable()
 
     self.scoreMap = {} -- Transient cache for O(1) Smart Recognition
     self:UpdateScoreMap()
-
-    -- Define autopass popup once at module load to avoid repeated table allocation.
-    StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
-        text = "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
-        button1 = "Enable",
-        button2 = "No",
-        OnAccept = function()
-            DesolateLootcouncil.sessionAutopassAnswered = true
-            local Comm = DesolateLootcouncil:GetModule("Comm")
-            if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
-        end,
-        OnCancel = function()
-            DesolateLootcouncil.sessionAutopassAnswered = true
-            local Comm = DesolateLootcouncil:GetModule("Comm")
-            if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-    }
 
     DesolateLootcouncil:DLC_Log("Systems/Roster Loaded")
 end
@@ -439,7 +441,7 @@ function Roster:ZONE_CHANGED_NEW_AREA()
             -- on session start and the value must survive internal zone changes.
             -- If the LM somehow never got the popup (e.g. session was persisted
             -- across a /reload without an autopass answer), re-show it.
-            if DesolateLootcouncil:AmILootMaster() and not DesolateLootcouncil.sessionAutopassAnswered then
+            if IsInRaid() and DesolateLootcouncil:AmILootMaster() and not DesolateLootcouncil.sessionAutopassAnswered then
                 StaticPopup_Show("DLC_ENABLE_AUTOPASS")
             end
         end
@@ -522,7 +524,7 @@ function Roster:GROUP_ROSTER_UPDATE()
             DesolateLootcouncil.sessionAutopassAnswered = false
             -- Re-prompt the LM so they can re-set the autopass state.
             -- Raiders don't need prompting; they are updated on the next heartbeat.
-            if DesolateLootcouncil:AmILootMaster() then
+            if IsInRaid() and DesolateLootcouncil:AmILootMaster() then
                 local config = DesolateLootcouncil.db.profile.DecayConfig
                 if config and config.sessionActive then
                     StaticPopup_Show("DLC_ENABLE_AUTOPASS")
