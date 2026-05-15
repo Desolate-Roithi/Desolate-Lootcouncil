@@ -107,10 +107,12 @@ function DesolateLootcouncil:OnInitialize()
     self.simulatedGroup = { [UnitName("player")] = true }
 
     -- 5. Initialize Autopass state to a known-false default.
-    --    This ensures /dlc status always shows a valid boolean (never nil),
-    --    and the Loot.lua guard `if not sessionAutopassActive` behaves
-    --    predictably on first login before the LM answers the popup.
+    --    CRITICAL: DO NOT change sessionAutopassActive to `nil`. We had a bug where
+    --    `nil` broke the deterministic UI logic. Instead, we use a separate flag
+    --    `sessionAutopassAnswered` to track if the LM has seen the popup, preventing
+    --    endless re-prompts when the LM explicitly clicks "No" (which sets it to false).
     self.sessionAutopassActive = false
+    self.sessionAutopassAnswered = false
 
     -- 5. Register with AceConfig
     LibStub("AceConfig-3.0"):RegisterOptionsTable("DesolateLootcouncil", function() return self:GetOptions() end)
@@ -296,7 +298,17 @@ end
 function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
     local targetLM = self:DetermineLootMaster()
+    local wasLM = self.amILM
     self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
+    
+    -- If we just BECAME the LM, reset the prompt flag so we can decide for ourselves
+    if self.amILM and not wasLM then
+        self.sessionAutopassAnswered = false
+        if self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
+            StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+        end
+    end
+
     self:DLC_Log("Role Update: You are " .. (self.amILM and "Loot Master" or "Raider") ..
         " (LM: " .. tostring(self:GetDisplayName(targetLM)) .. ")")
 

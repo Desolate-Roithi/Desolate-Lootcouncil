@@ -199,14 +199,23 @@ function Loot:OnStartLootRoll(event, rollID)
     end
 
     -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
-    if not DesolateLootcouncil.sessionAutopassActive then return end
+    if not DesolateLootcouncil.sessionAutopassActive then 
+        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: sessionAutopassActive is false.", rollID), true)
+        return 
+    end
 
     local itemID = C_Item.GetItemInfoInstant(link)
-    if not itemID then return end
+    if not itemID then 
+        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: Could not get itemID from link.", rollID), true)
+        return 
+    end
 
     local dbCat = self:GetItemCategory(itemID)
     -- If not officially registered in Item Manager, explicitly ignore it for Autopass
-    if dbCat == "Junk/Pass" then return end
+    if dbCat == "Junk/Pass" then 
+        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for item %d: Category is Junk/Pass (not in Priority DB).", itemID), true)
+        return 
+    end
 
     if isLM then
         -- LM collects it via Need/Greed to award manually; skip BoP Collectables

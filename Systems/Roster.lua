@@ -19,6 +19,7 @@ function Roster:OnEnable()
     self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     self:RegisterEvent("ENCOUNTER_END")
     self:RegisterEvent("PLAYER_LOGIN")
+    self:RegisterEvent("GROUP_ROSTER_UPDATE")
 
     self.scoreMap = {} -- Transient cache for O(1) Smart Recognition
     self:UpdateScoreMap()
@@ -29,10 +30,12 @@ function Roster:OnEnable()
         button1 = "Enable",
         button2 = "No",
         OnAccept = function()
+            DesolateLootcouncil.sessionAutopassAnswered = true
             local Comm = DesolateLootcouncil:GetModule("Comm")
             if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
         end,
         OnCancel = function()
+            DesolateLootcouncil.sessionAutopassAnswered = true
             local Comm = DesolateLootcouncil:GetModule("Comm")
             if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
         end,
@@ -430,7 +433,7 @@ function Roster:ZONE_CHANGED_NEW_AREA()
             -- on session start and the value must survive internal zone changes.
             -- If the LM somehow never got the popup (e.g. session was persisted
             -- across a /reload without an autopass answer), re-show it.
-            if DesolateLootcouncil:AmILootMaster() and not DesolateLootcouncil.sessionAutopassActive then
+            if DesolateLootcouncil:AmILootMaster() and not DesolateLootcouncil.sessionAutopassAnswered then
                 StaticPopup_Show("DLC_ENABLE_AUTOPASS")
             end
         end
@@ -438,8 +441,6 @@ function Roster:ZONE_CHANGED_NEW_AREA()
         DesolateLootcouncil:SendVersionCheck()
     elseif instanceType ~= "raid" and config.sessionActive then
         DesolateLootcouncil:DLC_Log(string.format("DEBUG: Left Raid (%s). Session is still ACTIVE.", name))
-        -- Cleanup Autopass on exit to prevent LFR bleed
-        DesolateLootcouncil.sessionAutopassActive = false
     end
 end
 
@@ -462,6 +463,18 @@ function Roster:PLAYER_LOGIN()
                 "[DLC] Stale session detected (inactive for %.1f hours). Use '/dlc session stop' to end it.",
                 delta / 3600), true)
         end
+    end
+    
+    if not IsInGroup() then
+        DesolateLootcouncil.sessionAutopassActive = false
+        DesolateLootcouncil.sessionAutopassAnswered = false
+    end
+end
+
+function Roster:GROUP_ROSTER_UPDATE()
+    if not IsInGroup() then
+        DesolateLootcouncil.sessionAutopassActive = false
+        DesolateLootcouncil.sessionAutopassAnswered = false
     end
 end
 

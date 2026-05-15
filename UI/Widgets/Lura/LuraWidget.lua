@@ -57,7 +57,7 @@ local LURA_ENCOUNTER_ID = 3183
 
 
 local PICKER_SYMBOLS  = {
-    { label = "Square",   icon = "7549166" },
+    { label = "T",        icon = "133051" },
     { label = "Cross",    icon = "237529" },
     { label = "Circle",   icon = "5976915" },
     { label = "Triangle", icon = "4555562" },
@@ -78,9 +78,6 @@ local SLOT_POS        = {
 }
 local NUM_OFFSET      = 18
 local ICON_SIZE       = 44
-
--- Demo sequence shown in test mode:  Square → Cross → Circle → Triangle → Diamond
-local TEST_SEQUENCE   = { "7549166", "237529", "5976915", "4555562", "7549139" }
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Module state
@@ -138,7 +135,7 @@ local function RefreshDisplay()
             slot.glow:Hide()
         end
     end
-    if #sequence > 0 then displayFrame:Show() else displayFrame:Hide() end
+    if #sequence > 0 or testMode then displayFrame:Show() else displayFrame:Hide() end
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -367,9 +364,11 @@ local function BuildSettingsFrame()
         local cfg = GetCfg()
         cfg.pickerEnabled = self:GetChecked()
         if not cfg.pickerEnabled and pickerFrame and pickerFrame:IsShown() then
-            pickerFrame:Hide()
+            if not InCombatLockdown() then pickerFrame:Hide() end
         elseif cfg.pickerEnabled and IsLeaderOrAssist() and pickerFrame then
-            if encounterActive or testMode then pickerFrame:Show() end
+            if encounterActive or testMode then
+                if not InCombatLockdown() then pickerFrame:Show() end
+            end
         end
     end)
     settingsFrame.pickerCheckbox = cb
@@ -429,13 +428,20 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 
 function UI_LuraWidget:OnEncounterStart(encID)
-    if encID ~= LURA_ENCOUNTER_ID then return end
+    if encID ~= LURA_ENCOUNTER_ID then
+        if pickerFrame and pickerFrame:IsShown() and not InCombatLockdown() then
+            pickerFrame:Hide()
+        end
+        return
+    end
     encounterActive = true
     testMode        = false
     wipe(sequence)
     RefreshDisplay()
     if IsLeaderOrAssist() and PickerEnabled() and pickerFrame then
-        pickerFrame:Show()
+        if not InCombatLockdown() then
+            pickerFrame:Show()
+        end
     end
     self.chatFrame:RegisterEvent("CHAT_MSG_RAID")
     self.chatFrame:RegisterEvent("CHAT_MSG_RAID_LEADER")
@@ -451,7 +457,6 @@ function UI_LuraWidget:OnEncounterEnd()
         wipe(sequence)
         RefreshDisplay()
         if displayFrame then displayFrame:Hide() end
-        if pickerFrame then pickerFrame:Hide() end
         if self.chatFrame then
             self.chatFrame:UnregisterEvent("CHAT_MSG_RAID")
             self.chatFrame:UnregisterEvent("CHAT_MSG_RAID_LEADER")
@@ -466,13 +471,28 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 
 function UI_LuraWidget:ActivateTestMode()
+    local Comm = DLC:GetModule("Comm", true)
+    if Comm and Comm.SendComm then
+        Comm:SendComm("LURA_TEST_START", true)
+    end
+    self:ActivateGlobalTestMode()
+end
+
+function UI_LuraWidget:DeactivateTestMode()
+    local Comm = DLC:GetModule("Comm", true)
+    if Comm and Comm.SendComm then
+        Comm:SendComm("LURA_TEST_END", true)
+    end
+    self:DeactivateGlobalTestMode()
+end
+
+function UI_LuraWidget:ActivateGlobalTestMode()
     testMode = true
     wipe(sequence)
-    for _, v in ipairs(TEST_SEQUENCE) do table.insert(sequence, v) end
     RefreshDisplay()
-    -- Show picker in test mode always (solo testing — not in a group)
-    if PickerEnabled() and pickerFrame then
-        pickerFrame:Show()
+    -- Show picker in test mode always
+    if PickerEnabled() and IsLeaderOrAssist() and pickerFrame then
+        if not InCombatLockdown() then pickerFrame:Show() end
     end
     -- Must register chat events during test mode so the addon hears its own broadcasts!
     if self.chatFrame then
@@ -481,16 +501,16 @@ function UI_LuraWidget:ActivateTestMode()
         self.chatFrame:RegisterEvent("CHAT_MSG_PARTY")
         self.chatFrame:RegisterEvent("CHAT_MSG_PARTY_LEADER")
     end
-    DLC:Print("|cffaa77ffLura Widget:|r Test mode ON — demo sequence displayed.")
+    DLC:Print("|cffaa77ffLura Widget:|r Global Test mode ON. Waiting for sequence from Loot Master...")
 end
 
-function UI_LuraWidget:DeactivateTestMode()
+function UI_LuraWidget:DeactivateGlobalTestMode()
     testMode = false
     wipe(sequence)
     RefreshDisplay()
     if not encounterActive then
         if displayFrame then displayFrame:Hide() end
-        if pickerFrame then pickerFrame:Hide() end
+        if pickerFrame and not InCombatLockdown() then pickerFrame:Hide() end
         if self.chatFrame then
             self.chatFrame:UnregisterEvent("CHAT_MSG_RAID")
             self.chatFrame:UnregisterEvent("CHAT_MSG_RAID_LEADER")
@@ -498,7 +518,7 @@ function UI_LuraWidget:DeactivateTestMode()
             self.chatFrame:UnregisterEvent("CHAT_MSG_PARTY_LEADER")
         end
     end
-    DLC:Print("|cffaa77ffLura Widget:|r Test mode OFF.")
+    DLC:Print("|cffaa77ffLura Widget:|r Global Test mode OFF.")
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -508,6 +528,23 @@ end
 function UI_LuraWidget:HandleSlash(arg)
     if arg == "test" then
         if testMode then self:DeactivateTestMode() else self:ActivateTestMode() end
+        return
+    elseif arg == "show" then
+        if not IsLeaderOrAssist() then
+            DLC:Print("|cffaa77ffLura Widget:|r Only the Raid Leader or Assists can show the picker.")
+            return
+        end
+        if InCombatLockdown() then
+            DLC:Print("|cffaa77ffLura Widget:|r Cannot show/hide the picker during combat.")
+            return
+        end
+        if pickerFrame then
+            if pickerFrame:IsShown() then
+                pickerFrame:Hide()
+            else
+                pickerFrame:Show()
+            end
+        end
         return
     end
     -- /dlc lura (no arg): always show settings panel

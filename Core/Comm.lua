@@ -154,6 +154,12 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
         else
             DesolateLootcouncil:DLC_Log(string.format("SYNC_ROSTER from non-LM '%s' ignored.", tostring(sender)))
         end
+    elseif command == "LURA_TEST_START" then
+        local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
+        if Lura and Lura.ActivateGlobalTestMode then Lura:ActivateGlobalTestMode() end
+    elseif command == "LURA_TEST_END" then
+        local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
+        if Lura and Lura.DeactivateGlobalTestMode then Lura:DeactivateGlobalTestMode() end
     end
 end
 

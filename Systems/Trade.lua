@@ -56,6 +56,8 @@ function Trade:OnTradeShow()
     local tradeTargetName = UnitName("NPC")
     if not tradeTargetName then return end
 
+    if not DesolateLootcouncil:AmILootMaster() then return end
+
     local session = DesolateLootcouncil.db.profile.session
     if not session or not session.awarded then return end
 
@@ -95,10 +97,21 @@ function Trade:FindAndStageItem(targetItemID, award, targetName)
         for slot = 1, numSlots do
             local info = C_Container.GetContainerItemInfo(bag, slot)
             if info and info.itemID == targetItemID and not info.isLocked then
+                local isWarbound = false
+                local tooltipData = C_TooltipInfo.GetBagItem(bag, slot)
+                if tooltipData and tooltipData.lines then
+                    for _, line in ipairs(tooltipData.lines) do
+                        if line.leftText and (line.leftText == ITEM_ACCOUNTBOUND or line.leftText == ITEM_ACCOUNTBOUND_UNTIL_EQUIP or line.leftText == ITEM_BNETACCOUNTBOUND) then
+                            isWarbound = true
+                            break
+                        end
+                    end
+                end
+
                 -- 12.0.1 Fix: fresh raid loot IS bound (tradeable soulbound).
                 -- We only block 'isBound' if it's a BoE item (to prevent staging equipped gear).
                 -- For BoP items, we must allow bound items to be staged.
-                local canStage = not info.isBound or isBoP
+                local canStage = (not info.isBound or isBoP) and not isWarbound
 
                 if canStage then
                     C_Container.UseContainerItem(bag, slot)
