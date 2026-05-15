@@ -111,8 +111,9 @@ function DesolateLootcouncil:OnInitialize()
     --    `nil` broke the deterministic UI logic. Instead, we use a separate flag
     --    `sessionAutopassAnswered` to track if the LM has seen the popup, preventing
     --    endless re-prompts when the LM explicitly clicks "No" (which sets it to false).
-    self.sessionAutopassActive = false
+    self.sessionAutopassActive  = false
     self.sessionAutopassAnswered = false
+    self.amILM                  = false  -- explicit init; starts nil otherwise, breaks wasLM guard in UpdateLootMasterStatus
 
     -- 5. Register with AceConfig
     LibStub("AceConfig-3.0"):RegisterOptionsTable("DesolateLootcouncil", function() return self:GetOptions() end)

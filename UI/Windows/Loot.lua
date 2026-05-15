@@ -76,6 +76,119 @@ function UI_Loot:CreateLootFrame()
     end)
 end
 
+function UI_Loot:CreateLootRow(scroll, data, lootTable, listIndexMap, catList)
+    local link = data.link
+
+    -- Row Container
+    ---@type AceGUISimpleGroup
+    local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+    group:SetLayout("Flow")
+    group:SetFullWidth(true)
+    scroll:AddChild(group)
+
+    -- Item Icon
+    ---@type AceGUIIcon
+    local itemIcon = AceGUI:Create("Icon")
+    itemIcon:SetImage(data.texture or C_Item.GetItemIconByID(data.itemID) or 134400)
+    itemIcon:SetImageSize(24, 24)
+    itemIcon:SetRelativeWidth(0.08)
+    itemIcon:SetCallback("OnClick", function()
+        GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+        if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
+        GameTooltip:Show()
+    end)
+    itemIcon:SetCallback("OnEnter", function()
+        GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
+        if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
+        GameTooltip:Show()
+    end)
+    itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+    group:AddChild(itemIcon)
+
+    -- Item Link
+    ---@type AceGUIInteractiveLabel
+    local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+
+    local _, properLink = C_Item.GetItemInfo(data.link or data.itemID)
+    
+    if not properLink then
+        local itemObj = Item:CreateFromItemID(data.itemID)
+        if not itemObj:IsItemEmpty() then
+            itemObj:ContinueOnItemLoad(function()
+                if self.lootFrame and (self.lootFrame --[[@as any]]).frame:IsShown() then
+                    self:ShowLootWindow(lootTable)
+                end
+            end)
+        end
+        itemLabel:SetText("Loading...")
+    else
+        itemLabel:SetText(properLink or data.link)
+        itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
+    end
+
+    itemLabel:SetRelativeWidth(0.42)
+    itemLabel:SetCallback("OnClick", function()
+        GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
+        if link then GameTooltip:SetHyperlink(link) else GameTooltip:SetItemByID(data.itemID) end
+        GameTooltip:Show()
+    end)
+
+    itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+    itemLabel:SetCallback("OnEnter", function()
+        GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
+        GameTooltip:SetHyperlink(link)
+        GameTooltip:Show()
+    end)
+
+    -- Category Dropdown
+    ---@type AceGUIDropdown
+    local catDropdown = AceGUI:Create("Dropdown") --[[@as AceGUIDropdown]]
+    catDropdown:SetRelativeWidth(0.32)
+    catDropdown:SetList(catList)
+
+    local Loot = DesolateLootcouncil:GetModule("Loot")
+    local savedCat = Loot and Loot:GetItemCategory(data.itemID)
+    if savedCat == "Junk/Pass" then
+        savedCat = data.category or "Junk/Pass"
+    end
+
+    data.category = savedCat
+    catDropdown:SetValue(savedCat)
+
+    catDropdown:SetCallback("OnValueChanged", function(_, _, value)
+        data.category = value
+        local idx = listIndexMap[value]
+        if idx then
+            if Loot then Loot:SetItemCategory(data.itemID, idx) end
+            DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
+        elseif value == "Junk/Pass" then
+            if Loot then Loot:UnassignItem(data.itemID) end
+        end
+    end)
+
+    -- Remove Button
+    ---@type AceGUIButton
+    local removeBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
+    removeBtn:SetText("X")
+    removeBtn:SetRelativeWidth(0.15)
+    removeBtn:SetCallback("OnClick", function()
+        local guid = data.sourceGUID or data.link
+        for idx = #lootTable, 1, -1 do
+            local entry = lootTable[idx]
+            if (entry.sourceGUID or entry.link) == guid then
+                table.remove(lootTable, idx)
+                break
+            end
+        end
+        DesolateLootcouncil:DLC_Log("Removed " .. (link or "item") .. " from session.")
+        self:ShowLootWindow(lootTable)
+    end)
+
+    group:AddChild(itemLabel)
+    group:AddChild(catDropdown)
+    group:AddChild(removeBtn)
+end
+
 function UI_Loot:ShowLootWindow(lootTable)
     -- Clean up existing timer to avoid overwriting pooled buttons (Problem 4)
     if self.refreshTimer then
@@ -252,158 +365,23 @@ function UI_Loot:ShowLootWindow(lootTable)
     
     self.lootFrame:AddChild(scroll)
 
+    local catList = {}
+    local listIndexMap = {}
+    local db = DesolateLootcouncil.db.profile
+    if db.PriorityLists then
+        for idx, list in ipairs(db.PriorityLists) do
+            catList[list.name] = list.name
+            listIndexMap[list.name] = idx
+        end
+    end
+    catList["Junk/Pass"] = "Junk/Pass"
+
     local count = 0
     if lootTable then
         for i = #lootTable, 1, -1 do
             local data = lootTable[i]
             count = count + 1
-            local link = data.link
-
-            -- Row Container
-            ---@type AceGUISimpleGroup
-            local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-            group:SetLayout("Flow")
-            group:SetFullWidth(true)
-            scroll:AddChild(group) -- [FIX] Attach first, populate second
-
-            -- Item Icon (NEW)
-            ---@type AceGUIIcon
-            local itemIcon = AceGUI:Create("Icon")
-            itemIcon:SetImage(data.texture or C_Item.GetItemIconByID(data.itemID) or 134400)
-            itemIcon:SetImageSize(24, 24)
-            itemIcon:SetRelativeWidth(0.08)
-            itemIcon:SetCallback("OnClick", function()
-                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
-                if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
-                GameTooltip:Show()
-            end)
-            itemIcon:SetCallback("OnEnter", function()
-                GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
-                if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
-                GameTooltip:Show()
-            end)
-            itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-            group:AddChild(itemIcon)
-
-            -- Item Link (Interactive Logic)
-            ---@type AceGUIInteractiveLabel
-            local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-
-            -- Bug Fix: Ensure we always try to get the full formatted name/link from the cache
-            -- if data.link is a raw "item:ID" string, it needs formatting.
-            local _, properLink = C_Item.GetItemInfo(data.link or data.itemID)
-            
-            if not properLink then
-                -- Trigger load and refresh once cached
-                local itemObj = Item:CreateFromItemID(data.itemID)
-                if not itemObj:IsItemEmpty() then
-                    itemObj:ContinueOnItemLoad(function()
-                        if self.lootFrame and (self.lootFrame --[[@as any]]).frame:IsShown() then
-                            self:ShowLootWindow(lootTable)
-                        end
-                    end)
-                end
-                itemLabel:SetText("Loading...")
-            else
-                -- If we found a proper hyperlink, use it. Otherwise fallback to data.link.
-                itemLabel:SetText(properLink or data.link)
-                -- Update Icon too if it was missing
-                itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
-            end
-
-            itemLabel:SetRelativeWidth(0.42) -- Adjusted to prevent button truncation
-            itemLabel:SetCallback("OnClick", function()
-                GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
-                if link then GameTooltip:SetHyperlink(link) else GameTooltip:SetItemByID(data.itemID) end
-                GameTooltip:Show()
-            end)
-
-            itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-            itemLabel:SetCallback("OnEnter", function()
-                GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
-                GameTooltip:SetHyperlink(link)
-                GameTooltip:Show()
-            end)
-
-            -- Category Dropdown
-            ---@type AceGUIDropdown
-            local catDropdown = AceGUI:Create("Dropdown") --[[@as AceGUIDropdown]]
-            catDropdown:SetRelativeWidth(0.32) -- Increased slightly for balance
-
-            -- Dynamic Categories
-            local catList = {}
-            local listIndexMap = {} -- Map Name -> Index for SetItemCategory
-
-            -- Re-fetch names *and* map them to indices cause SetItemCategory needs Index?
-            -- Actually SetItemCategory(item, listIndex).
-            -- But our dropdown returns values. Values are names in current implementation?
-            -- let's check earlier code: `catList[pName] = pName`.
-            -- `SetItemCategory` takes `targetListIndex`.
-            -- I need to map Name -> Index.
-
-            local db = DesolateLootcouncil.db.profile
-            if db.PriorityLists then
-                for idx, list in ipairs(db.PriorityLists) do
-                    catList[list.name] = list.name
-                    listIndexMap[list.name] = idx
-                end
-            end
-
-            -- Add Standard Options
-            catList["Junk/Pass"] = "Junk/Pass"
-
-            catDropdown:SetList(catList)
-
-            -- INITIAL VALUE: Check Saved Persistence First
-            local Loot = DesolateLootcouncil:GetModule("Loot")
-            local savedCat = Loot and Loot:GetItemCategory(data.itemID)
-            if savedCat == "Junk/Pass" then
-                -- If nothing saved, fall back to Session category
-                savedCat = data.category or "Junk/Pass"
-            end
-
-            -- PROBLEM 12: Sync the calculated category back to the session data so the broadcast isn't empty!
-            data.category = savedCat
-            catDropdown:SetValue(savedCat)
-
-            catDropdown:SetCallback("OnValueChanged", function(_, _, value)
-                data.category = value
-
-                -- PERSIST CHANGE TO BACKEND
-                local idx = listIndexMap[value]
-                if idx then
-                    if Loot then Loot:SetItemCategory(data.itemID, idx) end
-                    DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
-                elseif value == "Junk/Pass" then
-                    -- Unassign from backend, but KEEP in session (as requested)
-                    if Loot then Loot:UnassignItem(data.itemID) end
-                    -- No UI refresh needed as we just changed the backend state
-                end
-            end)
-
-            -- Remove Button
-            ---@type AceGUIButton
-            local removeBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            removeBtn:SetText("X")
-            removeBtn:SetRelativeWidth(0.15) -- Switched to relative width to prevent truncation (...)
-            removeBtn:SetCallback("OnClick", function()
-                -- B5: Use sourceGUID to find the item, not the stale closure index 'i'.
-                -- After a ContinueOnItemLoad refresh, 'i' may no longer point to this item.
-                local guid = data.sourceGUID or data.link
-                for idx = #lootTable, 1, -1 do
-                    local entry = lootTable[idx]
-                    if (entry.sourceGUID or entry.link) == guid then
-                        table.remove(lootTable, idx)
-                        break
-                    end
-                end
-                DesolateLootcouncil:DLC_Log("Removed " .. (link or "item") .. " from session.")
-                self:ShowLootWindow(lootTable) -- Refresh
-            end)
-
-            group:AddChild(itemLabel)
-            group:AddChild(catDropdown)
-            group:AddChild(removeBtn)
+            self:CreateLootRow(scroll, data, lootTable, listIndexMap, catList)
         end
     end
 

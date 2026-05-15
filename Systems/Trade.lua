@@ -88,45 +88,65 @@ function Trade:FindAndStageItem(targetItemID, award, targetName)
         return false
     end
 
-    -- Get bind type for the item to distinguish BoP from BoE
+    -- Get bind type once (same for all copies of the same itemID)
     local _, _, _, _, _, _, _, _, _, _, _, _, _, bindType = C_Item.GetItemInfo(targetItemID)
     local isBoP = (bindType == 1)
 
+    -- Pass 1: collect ALL slots that hold this item and are not locked.
+    -- We must not stop at the first match; the LM may hold both a warbound
+    -- copy (e.g. their own uncollected drop) and a tradeable copy in different
+    -- slots. We want the first *stageable* one, not just the first occurrence.
+    local candidates = {}
     for bag = 0, 4 do
         local numSlots = C_Container.GetContainerNumSlots(bag)
         for slot = 1, numSlots do
             local info = C_Container.GetContainerItemInfo(bag, slot)
             if info and info.itemID == targetItemID and not info.isLocked then
-                local isWarbound = false
-                local tooltipData = C_TooltipInfo.GetBagItem(bag, slot)
-                if tooltipData and tooltipData.lines then
-                    for _, line in ipairs(tooltipData.lines) do
-                        if line.leftText and (line.leftText == ITEM_ACCOUNTBOUND or line.leftText == ITEM_ACCOUNTBOUND_UNTIL_EQUIP or line.leftText == ITEM_BNETACCOUNTBOUND) then
-                            isWarbound = true
-                            break
-                        end
-                    end
-                end
-
-                -- 12.0.1 Fix: fresh raid loot IS bound (tradeable soulbound).
-                -- We only block 'isBound' if it's a BoE item (to prevent staging equipped gear).
-                -- For BoP items, we must allow bound items to be staged.
-                local canStage = (not info.isBound or isBoP) and not isWarbound
-
-                if canStage then
-                    C_Container.UseContainerItem(bag, slot)
-                    table.insert(self.currentTrade, {
-                        link   = award.link,
-                        winner = award.winner,
-                        guid   = award.sourceGUID
-                    })
-                    DesolateLootcouncil:DLC_Log(string.format(L["Staged %s for %s."], award.link, 
-                        DesolateLootcouncil:GetDisplayName(targetName)))
-                    return true
-                end
+                table.insert(candidates, { bag = bag, slot = slot, info = info })
             end
         end
     end
+
+    -- Pass 2: check warbound on each candidate, stage the first valid one.
+    for _, candidate in ipairs(candidates) do
+        local isWarbound = false
+        local tooltipData = C_TooltipInfo.GetBagItem(candidate.bag, candidate.slot)
+        if tooltipData and tooltipData.lines then
+            for _, line in ipairs(tooltipData.lines) do
+                if line.leftText and (
+                    line.leftText == ITEM_ACCOUNTBOUND or
+                    line.leftText == ITEM_ACCOUNTBOUND_UNTIL_EQUIP or
+                    line.leftText == ITEM_BNETACCOUNTBOUND
+                ) then
+                    isWarbound = true
+                    break
+                end
+            end
+        end
+
+        -- 12.0.1 Fix: fresh raid loot IS bound (tradeable soulbound).
+        -- Only block isBound for BoE items (prevent staging equipped gear).
+        -- For BoP items, allow bound items through — they are the normal case.
+        local canStage = (not candidate.info.isBound or isBoP) and not isWarbound
+
+        if canStage then
+            C_Container.UseContainerItem(candidate.bag, candidate.slot)
+            table.insert(self.currentTrade, {
+                link   = award.link,
+                winner = award.winner,
+                guid   = award.sourceGUID
+            })
+            DesolateLootcouncil:DLC_Log(string.format(L["Staged %s for %s."], award.link,
+                DesolateLootcouncil:GetDisplayName(targetName)))
+            return true
+        else
+            DesolateLootcouncil:DLC_Log(string.format(
+                "DEBUG: Skipped slot [%d,%d] for %s — isWarbound=%s isBound=%s isBoP=%s",
+                candidate.bag, candidate.slot, tostring(award.link),
+                tostring(isWarbound), tostring(candidate.info.isBound), tostring(isBoP)), true)
+        end
+    end
+
     return false
 end
 

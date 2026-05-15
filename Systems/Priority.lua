@@ -87,15 +87,6 @@ function Priority:OnEnable()
     end
 end
 
--- Shuffle Helper (Fisher-Yates)
-local function ShuffleTable(t)
-    local n = #t
-    for i = n, 2, -1 do
-        local j = math.random(i)
-        t[i], t[j] = t[j], t[i]
-    end
-end
-
 -- --- Globally Attached Functions ---
 
 function Priority:GetPriorityListNames()
@@ -127,7 +118,7 @@ function Priority:AddPriorityList(name)
             table.insert(newList, rName)
         end
     end
-    ShuffleTable(newList)
+    DesolateLootcouncil.Math.ShuffleTable(newList)
 
     table.insert(db.PriorityLists, { name = name, players = newList, items = {} })
     local msg = "Added new Priority List: " .. name .. " (Initialized with shuffled roster)"
@@ -196,8 +187,7 @@ function Priority:ShuffleLists()
         for _, name in ipairs(mains) do
             table.insert(newList, name)
         end
-        -- Shuffle independently
-        ShuffleTable(newList)
+        DesolateLootcouncil.Math.ShuffleTable(newList)
         -- Write directly to SavedVariables for immediate persistence
         listObj.players = newList
     end
@@ -242,17 +232,21 @@ function Priority:SyncMissingPlayers()
                 DesolateLootcouncil:GetDisplayName(player.name), listObj.name))
         end
 
-        -- 2. Remove Stale (O(1) lookups using ScoreMap)
-        local RosterSys = DesolateLootcouncil:GetModule("Roster")
+        -- 2. Remove Stale (Check against db.MainRoster directly to ensure Alts are removed)
         for i = #currentList, 1, -1 do
             local pName = currentList[i]
-            local pScore = DesolateLootcouncil:GetScoreName(pName)
-            local existsInRoster = pScore and RosterSys.scoreMap and RosterSys.scoreMap[pScore]
+            local isMain = false
+            for mName, _ in pairs(db.MainRoster) do
+                if DesolateLootcouncil:SmartCompare(mName, pName) then
+                    isMain = true
+                    break
+                end
+            end
 
-            if not existsInRoster then
+            if not isMain then
                 table.remove(currentList, i)
                 removedCount = removedCount + 1
-                self:LogPriorityChange(string.format("Removed %s from %s list (Not in Roster).", 
+                self:LogPriorityChange(string.format("Removed %s from %s list (Not a Main).", 
                     DesolateLootcouncil:GetDisplayName(pName), listObj.name))
             end
         end
@@ -420,7 +414,7 @@ function Priority:GetReversionIndex(listName, origIndex, timestamp)
     -- Iterate all events AFTER the timestamp
     -- PriorityLog is append-only, so just iterate
     for _, log in ipairs(db.PriorityLog) do
-        if log.list == listName and log.time > timestamp then
+        if log.list == listName and log.time >= timestamp then
             -- Someone moved FROM log.from TO log.to
             local f = log.from
             local t = log.to
@@ -451,15 +445,9 @@ function Priority:ReceivePrioritySync(syncedLists)
         for _, localList in ipairs(db.PriorityLists) do
             if localList.name == incoming.name then
                 -- Deep copy players
-                localList.players = {}
-                for i, p in ipairs(incoming.players or {}) do
-                    localList.players[i] = p
-                end
+                localList.players = DesolateLootcouncil.Table.DeepCopy(incoming.players or {})
                 -- Deep copy items
-                localList.items = {}
-                for i, item in ipairs(incoming.items or {}) do
-                    localList.items[i] = item
-                end
+                localList.items = DesolateLootcouncil.Table.DeepCopy(incoming.items or {})
                 updated = updated + 1
                 break
             end

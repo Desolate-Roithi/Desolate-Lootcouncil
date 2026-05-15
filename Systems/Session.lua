@@ -488,7 +488,35 @@ function Session:RemoveSessionItem(guid)
     DesolateLootcouncil:DLC_Log("Removed item from session and pending trades.")
 end
 
-function Session:HandleStartSession(payload)
+--- Returns true if `sender` is permitted to set the LM identity via a session packet.
+--- Two authorized roles:
+---   1. The current activeLootMaster — they are starting/heartbeating their own session.
+---   2. The group leader (rank 2 in raid / party leader) — corrects late-joiners who
+---      receive the heartbeat before SYNC_LM has established activeLootMaster locally.
+local function IsAuthorizedSessionSender(sender)
+    -- 1. Sender is the current known LM
+    local currentLM = DesolateLootcouncil.activeLootMaster
+    if currentLM and currentLM ~= "" then
+        if DesolateLootcouncil:SmartCompare(sender, currentLM) then return true end
+    end
+    -- 2. Sender is the group leader
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, rank = GetRaidRosterInfo(i)
+            if name and rank == 2 and DesolateLootcouncil:SmartCompare(name, sender) then
+                return true
+            end
+        end
+    elseif IsInGroup() then
+        return UnitIsGroupLeader(sender) == true
+    else
+        -- Solo / test mode: accept self-packets
+        return DesolateLootcouncil:SmartCompare(sender, "player")
+    end
+    return false
+end
+
+function Session:HandleStartSession(payload, sender)
     local newItems = payload.data
     local count = newItems and #newItems or 0
     local duration = payload.duration or 300
@@ -500,13 +528,20 @@ function Session:HandleStartSession(payload)
     end
 
     -- Apply authoritative LM identity from payload.
-    -- Only accept if the sender is the group leader (same authority as SYNC_LM).
-    -- This corrects stale fallback LM state for late-joiners via heartbeat.
-    if payload.activeLM and payload.activeLM ~= "" then
+    -- Guard: only accept from the current activeLootMaster (they are the authoritative
+    -- source) or the group leader (bootstrap fallback for late-joiners before
+    -- SYNC_LM has established activeLootMaster locally).
+    -- NOTE: The LM is not required to be the group leader — they are any player
+    -- designated via the leader's configuredLM setting.
+    if payload.activeLM and payload.activeLM ~= "" and IsAuthorizedSessionSender(sender) then
         DesolateLootcouncil.activeLootMaster = payload.activeLM
         DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(payload.activeLM, "player")
         DesolateLootcouncil:DLC_Log(string.format("LM identity from session payload: %s (amILM=%s)",
             DesolateLootcouncil:GetDisplayName(payload.activeLM), tostring(DesolateLootcouncil.amILM)))
+    elseif payload.activeLM and payload.activeLM ~= "" then
+        DesolateLootcouncil:DLC_Log(string.format(
+            "WARN: Ignored activeLM '%s' from unauthorized sender '%s'.",
+            DesolateLootcouncil:GetDisplayName(payload.activeLM), tostring(sender)))
     end
 
     self.clientLootList = self.clientLootList or {}
@@ -816,7 +851,7 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
     elseif payload.command == "CLOSE_ITEM" then
         self:HandleCloseItem(payload)
     elseif payload.command == "LOOT_SESSION_START" then
-        self:HandleStartSession(payload)
+        self:HandleStartSession(payload, sender)
     elseif payload.command == "LOOT_SESSION_END" then
         self:EndSession()
     elseif payload.command == "HISTORY_UPDATE" then

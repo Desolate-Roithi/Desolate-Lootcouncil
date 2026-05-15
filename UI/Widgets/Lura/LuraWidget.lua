@@ -395,14 +395,16 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 
 function UI_LuraWidget:BroadcastSymbol(iconIdx)
-    local word = REVERSE_MAP[iconIdx] or ""
-    local msg = string.format("{rt%d} %s", iconIdx, word)
+    -- NOTE: During encounters the picker uses SecureActionButtonTemplate macros
+    -- (/ra <iconID>) so Blizzard combat-lockdown restrictions are satisfied.
+    -- This Lua path is only reachable outside combat (e.g. solo test fallback).
+    local msg = tostring(iconIdx)  -- iconIdx is already the file ID string
     if IsInRaid() then
         SendChatMessage(msg, "RAID")
     elseif IsInGroup() then
         SendChatMessage(msg, "PARTY")
     else
-        -- Solo fallback
+        -- Solo fallback: inject directly into the local chat frame
         if self.chatFrame and self.chatFrame:GetScript("OnEvent") then
             self.chatFrame:GetScript("OnEvent")(self.chatFrame, "CHAT_MSG_RAID", msg)
         end
@@ -428,12 +430,9 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 
 function UI_LuraWidget:OnEncounterStart(encID)
-    if encID ~= LURA_ENCOUNTER_ID then
-        if pickerFrame and pickerFrame:IsShown() and not InCombatLockdown() then
-            pickerFrame:Hide()
-        end
-        return
-    end
+    if encID ~= LURA_ENCOUNTER_ID then return end
+    -- Non-Lura encounter auto-hide removed: InCombatLockdown() would block it
+    -- anyway, and OnEncounterEnd already handles cleanup correctly.
     encounterActive = true
     testMode        = false
     wipe(sequence)
@@ -473,7 +472,10 @@ end
 function UI_LuraWidget:ActivateTestMode()
     local Comm = DLC:GetModule("Comm", true)
     if Comm and Comm.SendComm then
-        Comm:SendComm("LURA_TEST_START", true)
+        -- Solo: whisper self so we don't broadcast LURA_TEST_START to the guild.
+        -- Grouped: nil target lets SendComm pick RAID/PARTY automatically.
+        local target = (not IsInGroup()) and UnitName("player") or nil
+        Comm:SendComm("LURA_TEST_START", true, target)
     end
     self:ActivateGlobalTestMode()
 end
@@ -481,7 +483,8 @@ end
 function UI_LuraWidget:DeactivateTestMode()
     local Comm = DLC:GetModule("Comm", true)
     if Comm and Comm.SendComm then
-        Comm:SendComm("LURA_TEST_END", true)
+        local target = (not IsInGroup()) and UnitName("player") or nil
+        Comm:SendComm("LURA_TEST_END", true, target)
     end
     self:DeactivateGlobalTestMode()
 end

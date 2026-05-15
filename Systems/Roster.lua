@@ -20,6 +20,7 @@ function Roster:OnEnable()
     self:RegisterEvent("ENCOUNTER_END")
     self:RegisterEvent("PLAYER_LOGIN")
     self:RegisterEvent("GROUP_ROSTER_UPDATE")
+    self:RegisterMessage("DLC_VERSION_UPDATE")
 
     self.scoreMap = {} -- Transient cache for O(1) Smart Recognition
     self:UpdateScoreMap()
@@ -349,6 +350,11 @@ function Roster:AddAlt(altName, mainName)
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Linked Alt " .. DesolateLootcouncil:GetDisplayName(normalizedAlt) .. 
         " to " .. DesolateLootcouncil:GetDisplayName(normalizedMain))
+        
+    local Priority = DesolateLootcouncil:GetModule("Priority")
+    if Priority and Priority.SyncMissingPlayers then
+        Priority:SyncMissingPlayers()
+    end
 end
 
 function Roster:RemovePlayer(name)
@@ -471,11 +477,61 @@ function Roster:PLAYER_LOGIN()
     end
 end
 
-function Roster:GROUP_ROSTER_UPDATE()
-    if not IsInGroup() then
-        DesolateLootcouncil.sessionAutopassActive = false
-        DesolateLootcouncil.sessionAutopassAnswered = false
+local gruResetTimer = nil
+
+function Roster:CheckForNewRaidMembers()
+    if not IsInGroup() or not DesolateLootcouncil:AmILootMaster() then return end
+    
+    local config = DesolateLootcouncil.db.profile.DecayConfig
+    if not config or not config.sessionActive then return end
+    
+    local addedAny = false
+    local members = GetNumGroupMembers()
+    for i = 1, members do
+        local name = GetRaidRosterInfo(i)
+        if name then
+            if DesolateLootcouncil.activeAddonUsers and DesolateLootcouncil.activeAddonUsers[name] then
+                local normalizedName = Ambiguate(name, "none")
+                local score = DesolateLootcouncil:GetScoreName(normalizedName)
+                if score and not self.scoreMap[score] then
+                    self:AddMain(normalizedName)
+                    DesolateLootcouncil:DLC_Log(string.format("New player |cFFFFFF00%s|r appended to priority lists. Please check if this is an Alt.", normalizedName), true)
+                    addedAny = true
+                end
+            end
+        end
     end
+    if addedAny then
+        local Priority = DesolateLootcouncil:GetModule("Priority")
+        if Priority and Priority.SyncMissingPlayers then
+            Priority:SyncMissingPlayers()
+        end
+    end
+end
+
+function Roster:DLC_VERSION_UPDATE()
+    self:CheckForNewRaidMembers()
+end
+
+function Roster:GROUP_ROSTER_UPDATE()
+    if gruResetTimer then gruResetTimer:Cancel() end
+    gruResetTimer = C_Timer.NewTimer(0.5, function()
+        gruResetTimer = nil
+        if not IsInGroup() then
+            DesolateLootcouncil.sessionAutopassActive  = false
+            DesolateLootcouncil.sessionAutopassAnswered = false
+            -- Re-prompt the LM so they can re-set the autopass state.
+            -- Raiders don't need prompting; they are updated on the next heartbeat.
+            if DesolateLootcouncil:AmILootMaster() then
+                local config = DesolateLootcouncil.db.profile.DecayConfig
+                if config and config.sessionActive then
+                    StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+                end
+            end
+        else
+            self:CheckForNewRaidMembers()
+        end
+    end)
 end
 
 --- Applies a received roster sync payload from the Loot Master.

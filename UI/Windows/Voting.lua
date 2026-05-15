@@ -332,7 +332,8 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
         end
         local w = 80
         local BUTTONS = {
-            { "Bid", 1 }, { "Roll", 2 }, { "Offspec", 3 }, { "T-Mog", 4 }, { "Pass", 5 }
+            { VOTE_TEXT[1], 1 }, { VOTE_TEXT[2], 2 },
+            { VOTE_TEXT[3], 3 }, { VOTE_TEXT[4], 4 }, { VOTE_TEXT[5], 5 }
         }
         for _, bd in ipairs(BUTTONS) do
             local btn = AceGUI:Create("Button") --[[@as AceGUIButton]]
