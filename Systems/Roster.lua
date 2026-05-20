@@ -534,11 +534,13 @@ function Roster:GROUP_ROSTER_UPDATE()
             -- Double check after 5 seconds to ensure this isn't a brief loading screen or portal blip
             C_Timer.After(5.0, function()
                 if not IsInRaid() then
-                    DesolateLootcouncil.sessionAutopassActive  = false
-                    DesolateLootcouncil.sessionAutopassAnswered = false
-                    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
-                    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
-                    DesolateLootcouncil:DLC_Log("Raid group disbanded. Autopass session reset.", true)
+                    if DesolateLootcouncil.sessionAutopassActive or DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive then
+                        DesolateLootcouncil.sessionAutopassActive  = false
+                        DesolateLootcouncil.sessionAutopassAnswered = false
+                        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
+                        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
+                        DesolateLootcouncil:DLC_Log("Raid group disbanded. Autopass session reset.", true)
+                    end
                 end
             end)
         else

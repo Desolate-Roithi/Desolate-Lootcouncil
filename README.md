@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.7.9-Beta  
-**Last Updated:** 2026-05-01  
+**Latest Version:** v0.9.2-Beta  
+**Last Updated:** 2026-05-20  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
 ## 🚀 Features
@@ -44,6 +44,51 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v0.9.2-Beta
+* **Autopass Disband Spam Suppression**:
+    - **Spammy Log Suppression**: Resolved an issue where `GROUP_ROSTER_UPDATE` executed its disband reset logic on any non-raid group update (including dungeon party spec changes and solo play) and printed `"Raid group disbanded. Autopass session reset."` even when no Autopass session was active.
+    - **Conditional Reset Guard**: Added an active check guard so that the disband reset warning only prints when transitioning from an active Autopass session to a disbanded state.
+* **Robust Testing**: Added comprehensive unit tests in `Roster_Test.lua` verifying spam suppression.
+
+### v0.9.1-Beta
+* **Communication Dispatcher Refactor**: Re-architected and refactored the communication backend dispatcher for higher reliability and cleaner routing under WoW 12.0.5.
+
+### v0.9.0-Beta
+* **Loot & Autopass Separation**: Decoupled the Autopass logic from the core Loot module into separate backend and frontend systems, improving code clarity and maintainability.
+* **UI Decoupling**: Reworked UI windows to separate presentation layers from priority backend calculations.
+* **Autopass Hardiness**: Improved the reliability of automatic pass/roll operations under server latency.
+
+### v0.8.7-Beta
+* **Lua Error Fixes**: Resolved miscellaneous script errors encountered during live raid sessions.
+
+### v0.8.6-Beta
+* **Lura Module Enhancements**:
+    - **Solo Testing**: Fixed the Lura Memory Widget picker bar logic to allow solo players to test and preview sequences.
+    - **Roster Auto-Append**: Automatically registers untracked addon users as Mains during active sessions to simplify roster management.
+    - **Trade & Autopass Hardening**: Integrated safety checks into auto-trade and autopass flows.
+
+### v0.8.5-Beta
+* **Localization & UI Polish**:
+    - Reworked UI text handling to support multiple languages seamlessly.
+    - Fixed trade window text and popups.
+    - Staging hardening: Enforced strict priority database authority checks for Autopass actions.
+
+### v0.8.4-Beta
+* **LM and Autopass Sync**:
+    - Hardened Loot Master synchronization and improved Autopass permission rules.
+    - Initial localization support structure.
+
+### v0.8.3-Beta
+* **Lura Icons & Clarity**: Updated sequence preview icons to use clear raid markers and direct File IDs instead of relying on Blizzard chat code formatting.
+
+### v0.8.2-Beta
+* **Raid Chat Communication**: Reworked the Lu'Ra sequence broadcasts to utilize public Raid/Party chat, bypassing combat-throttled private addon message channels.
+
+### v0.8.1-Beta & v0.8.0-Beta
+* **Lu'Ra Memory Module**:
+    - Introduced the `UI_LuraWidget` to coordinate the Lu'Ra boss encounter (Midnight Falls).
+    - Provides a sequence picker bar for officers and a pentagon-based execution order radial preview for raiders.
 
 ### v0.7.9-Beta
 * **Autopass Stability & Initialization**:
