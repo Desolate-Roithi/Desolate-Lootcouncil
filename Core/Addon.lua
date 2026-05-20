@@ -72,6 +72,8 @@ local defaults = {
             currentSessionID = nil, -- Timestamp
             lastActivity = nil,     -- Timestamp for stale checks
             currentAttendees = {},  -- Table: [MainName] = true
+            sessionAutopassActive = false,
+            sessionAutopassAnswered = false,
         },
         AttendanceHistory = {},     -- List of past sessions { date, zone, attendees }
         positions         = {},     -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
@@ -111,8 +113,8 @@ function DesolateLootcouncil:OnInitialize()
     --    `nil` broke the deterministic UI logic. Instead, we use a separate flag
     --    `sessionAutopassAnswered` to track if the LM has seen the popup, preventing
     --    endless re-prompts when the LM explicitly clicks "No" (which sets it to false).
-    self.sessionAutopassActive  = false
-    self.sessionAutopassAnswered = false
+    self.sessionAutopassActive  = self.db.profile.DecayConfig.sessionAutopassActive or false
+    self.sessionAutopassAnswered = self.db.profile.DecayConfig.sessionAutopassAnswered or false
     self.amILM                  = false  -- explicit init; starts nil otherwise, breaks wasLM guard in UpdateLootMasterStatus
 
     -- 5. Register with AceConfig

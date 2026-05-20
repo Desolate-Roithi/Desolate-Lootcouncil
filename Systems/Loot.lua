@@ -188,14 +188,12 @@ function Loot:OnStartLootRoll(event, rollID)
     end
 
     if isLM then
-        local now = GetTime()
-        if not self.lastAutopassSync or (now - self.lastAutopassSync) > 30 then
-            self.lastAutopassSync = now
+        C_Timer.After(1.0, function()
             local Comm = DesolateLootcouncil:GetModule("Comm")
             if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
                 Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
             end
-        end
+        end)
     end
 
     -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
@@ -236,6 +234,65 @@ function Loot:OnStartLootRoll(event, rollID)
     else
         -- Only pass natively
         self:DoAutoRoll(rollID, 0) -- Pass — LM handles distribution
+    end
+end
+
+function Loot:ScanAndAutopassActiveLootRolls()
+    DesolateLootcouncil:DLC_Log("Scanning active Blizzard loot roll windows for Autopass...", true)
+
+    if not GroupLootContainer or not GroupLootContainer.rollFrames then
+        DesolateLootcouncil:DLC_Log("DEBUG: GroupLootContainer not found or has no rollFrames.", true)
+        return
+    end
+
+    -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
+    if not DesolateLootcouncil.sessionAutopassActive then 
+        DesolateLootcouncil:DLC_Log("DEBUG: Autopass skipped: sessionAutopassActive is false.", true)
+        return 
+    end
+
+    for _, frame in pairs(GroupLootContainer.rollFrames) do
+        if frame and frame:IsShown() and frame.rollID then
+            local rollID = frame.rollID
+            if not self.autoRolledItems[rollID] then
+                local link = GetLootRollItemLink(rollID)
+                if link then
+                    local itemID = C_Item.GetItemInfoInstant(link)
+                    if itemID then
+                        local dbCat = self:GetItemCategory(itemID)
+                        if dbCat ~= "Junk/Pass" then
+                            -- Check if we are the LM or a raider
+                            if DesolateLootcouncil:AmILootMaster() then
+                                -- LM collects it via Need/Greed to award manually; skip BoP Collectables
+                                local _, _, _, _, isBoP, canNeed, canGreed, canDisenchant, _, _, _, _, canTransmog = GetLootRollItemInfo(rollID)
+                                if not (isBoP and dbCat == "Collectables") then
+                                    local rollType = 0
+                                    if canNeed then
+                                        rollType = 1
+                                    elseif canGreed then
+                                        rollType = 2
+                                    elseif canTransmog then
+                                        rollType = 4
+                                    elseif canDisenchant then
+                                        rollType = 3
+                                    end
+                                    if rollType > 0 then
+                                        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass (LM roll) for %s (rollID: %d, rollType: %d)", link, rollID, rollType), true)
+                                        self:DoAutoRoll(rollID, rollType)
+                                    end
+                                end
+                            else
+                                -- Raider passes natively
+                                DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass (Raider pass) for %s (rollID: %d)", link, rollID), true)
+                                self:DoAutoRoll(rollID, 0)
+                            end
+                        else
+                            DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for %s (rollID: %d): Item is not managed in Priority DB.", link, rollID), true)
+                        end
+                    end
+                end
+            end
+        end
     end
 end
 

@@ -131,6 +131,11 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
             DesolateLootcouncil.sessionAutopassActive = data
             local status = data and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
             DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
+
+            local LootSys = DesolateLootcouncil:GetModule("Loot")
+            if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
+                LootSys:ScanAndAutopassActiveLootRolls()
+            end
         else
             DesolateLootcouncil:DLC_Log(string.format("SYNC_AUTOPASS from non-LM '%s' ignored.", tostring(sender)))
         end
@@ -223,9 +228,15 @@ end
 
 function Comm:SendSyncAutopass(isActive)
     DesolateLootcouncil.sessionAutopassActive = isActive
+    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = isActive
     self:SendComm("SYNC_AUTOPASS", isActive)
     local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
     DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
+
+    local LootSys = DesolateLootcouncil:GetModule("Loot")
+    if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
+        LootSys:ScanAndAutopassActiveLootRolls()
+    end
 end
 
 --- Shares the given data type with all raid assistants and the raid leader

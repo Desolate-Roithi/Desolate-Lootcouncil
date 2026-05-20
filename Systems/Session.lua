@@ -65,11 +65,23 @@ function Session:OnTimerTick()
     -- Approach B: No client polling/batching queues needed!
     -- Session Heartbeat & Full Sync (Late Joiners & Consistency) — LM only
     local now = GetServerTime()
-    if DesolateLootcouncil:AmILootMaster() and self.clientLootList and #self.clientLootList > 0 then
-        -- Item-list Heartbeat (every 30s — late joiners & reloaders)
-        if now - self.lastHeartbeat > 30 then
-            self.lastHeartbeat = now
-            self:SendSessionHeartbeat()
+    if DesolateLootcouncil:AmILootMaster() then
+        -- Periodic Autopass Heartbeat (every 30s)
+        self.lastAutopassHeartbeat = self.lastAutopassHeartbeat or 0
+        if now - self.lastAutopassHeartbeat > 30 then
+            self.lastAutopassHeartbeat = now
+            local Comm = DesolateLootcouncil:GetModule("Comm")
+            if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
+                Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+            end
+        end
+
+        if self.clientLootList and #self.clientLootList > 0 then
+            -- Item-list Heartbeat (every 30s — late joiners & reloaders)
+            if now - self.lastHeartbeat > 30 then
+                self.lastHeartbeat = now
+                self:SendSessionHeartbeat()
+            end
         end
     end
 end
@@ -525,6 +537,11 @@ function Session:HandleStartSession(payload, sender)
 
     if payload.autopassActive ~= nil then
         DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
+
+        local LootSys = DesolateLootcouncil:GetModule("Loot")
+        if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
+            LootSys:ScanAndAutopassActiveLootRolls()
+        end
     end
 
     -- Apply authoritative LM identity from payload.

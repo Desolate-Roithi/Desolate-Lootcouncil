@@ -13,11 +13,13 @@ StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
     button2 = "No",
     OnAccept = function()
         DesolateLootcouncil.sessionAutopassAnswered = true
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
         local Comm = DesolateLootcouncil:GetModule("Comm")
         if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
     end,
     OnCancel = function()
         DesolateLootcouncil.sessionAutopassAnswered = true
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
         local Comm = DesolateLootcouncil:GetModule("Comm")
         if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
     end,
@@ -189,6 +191,11 @@ function Roster:StopRaidSession(saveHistory)
     config.sessionActive = false
     config.currentSessionID = nil
     config.currentAttendees = {}
+
+    DesolateLootcouncil.sessionAutopassActive = false
+    DesolateLootcouncil.sessionAutopassAnswered = false
+    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
+    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
 end
 
 --- Register a player (or their Main) as present
@@ -473,9 +480,11 @@ function Roster:PLAYER_LOGIN()
         end
     end
     
-    if not IsInGroup() then
+    if not IsInRaid() then
         DesolateLootcouncil.sessionAutopassActive = false
         DesolateLootcouncil.sessionAutopassAnswered = false
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
     end
 end
 
@@ -519,19 +528,26 @@ function Roster:GROUP_ROSTER_UPDATE()
     if gruResetTimer then gruResetTimer:Cancel() end
     gruResetTimer = C_Timer.NewTimer(0.5, function()
         gruResetTimer = nil
-        if not IsInGroup() then
-            DesolateLootcouncil.sessionAutopassActive  = false
-            DesolateLootcouncil.sessionAutopassAnswered = false
-            -- Re-prompt the LM so they can re-set the autopass state.
-            -- Raiders don't need prompting; they are updated on the next heartbeat.
-            if IsInRaid() and DesolateLootcouncil:AmILootMaster() then
-                local config = DesolateLootcouncil.db.profile.DecayConfig
-                if config and config.sessionActive then
-                    StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+        if not IsInRaid() then
+            -- Double check after 5 seconds to ensure this isn't a brief loading screen or portal blip
+            C_Timer.After(5.0, function()
+                if not IsInRaid() then
+                    DesolateLootcouncil.sessionAutopassActive  = false
+                    DesolateLootcouncil.sessionAutopassAnswered = false
+                    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
+                    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
+                    DesolateLootcouncil:DLC_Log("Raid group disbanded. Autopass session reset.", true)
                 end
-            end
+            end)
         else
             self:CheckForNewRaidMembers()
+            -- Sync Autopass to newly joined members or after a group update (if LM)
+            if DesolateLootcouncil:AmILootMaster() then
+                local Comm = DesolateLootcouncil:GetModule("Comm")
+                if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
+                    Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+                end
+            end
         end
     end)
 end
