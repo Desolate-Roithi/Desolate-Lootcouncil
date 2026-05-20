@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_Loot : AceModule, AceConsole-3.0
-local UI_Loot = DesolateLootcouncil:NewModule("UI_Loot", "AceConsole-3.0", "AceTimer-3.0")
+local UI_Loot = DesolateLootcouncil:NewModule("UI_Loot", "AceConsole-3.0", "AceTimer-3.0", "AceEvent-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
 ---@class (partial) UI_Loot : AceModule
@@ -422,3 +422,12 @@ function UI_Loot:ShowLootWindow(lootTable)
 
     DesolateLootcouncil:DLC_Log(string.format("Loot Window Populated with %d items", count))
 end
+
+function UI_Loot:OnEnable()
+    self:RegisterMessage("DLC_LOOT_WINDOW_UPDATE", "OnLootWindowUpdate")
+end
+
+function UI_Loot:OnLootWindowUpdate(eventName, lootTable)
+    self:ShowLootWindow(lootTable)
+end
+

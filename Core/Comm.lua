@@ -42,6 +42,148 @@ function Comm:SendComm(command, data, target)
     end
 end
 
+local CommHandlers = {}
+
+function CommHandlers:VERSION_REQ(data, sender)
+    -- Reply with my version and enchanting skill
+    local responseData = {
+        version = DesolateLootcouncil.version,
+    }
+    local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
+    if (mySkill or 0) > 0 then
+        responseData.enchantingSkill = mySkill
+    end
+    self:SendComm("VERSION_RESP", responseData, sender)
+
+    -- Track sender too if they sent version and skill
+    if data and data.version then
+        self:UpdatePlayerInfo(sender, data.version, data.enchantingSkill or 0)
+    end
+end
+CommHandlers.VERSION_CHECK = CommHandlers.VERSION_REQ
+
+function CommHandlers:VERSION_RESP(data, sender)
+    -- Store sender's version and enchanting skill
+    local ver, skill
+    if type(data) == "table" then
+        ver = data.version
+        skill = data.enchantingSkill
+    else
+        ver = data
+        skill = nil
+    end
+
+    self:UpdatePlayerInfo(sender, ver, skill)
+end
+
+function CommHandlers:LOOT_SESSION_START(data, sender)
+    -- Legacy/Active hook for starting loot session remotely
+    ---@type Session
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session and Session.StartSession then
+        -- 'data' might be the loot table or wrapped in 'data.data'
+        local lootTable = data.data or data
+        Session:StartSession(lootTable)
+    end
+end
+
+function CommHandlers:LOOT_SESSION_END(data, sender)
+    ---@type Session
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session and Session.EndSession then Session:EndSession() end
+end
+
+function CommHandlers:IM_SYNC(data, sender)
+    -- Sync Item Manager lists (items only, not players)
+    if data and type(data) == "table" then
+        local db = DesolateLootcouncil.db.profile
+        if db.PriorityLists then
+            local count = 0
+            for listName, items in pairs(data) do
+                for _, localList in ipairs(db.PriorityLists) do
+                    if localList.name == listName then
+                        localList.items = items
+                        count = count + 1
+                        break
+                    end
+                end
+            end
+            DesolateLootcouncil:DLC_Log(string.format("Item Manager Synced: Updated %d item lists.", count))
+
+            -- Refresh UI if open
+            local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
+            if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
+                ItemMgr:RefreshWindow()
+            end
+        end
+    end
+end
+
+function CommHandlers:SYNC_AUTOPASS(data, sender)
+    -- Only accept autopass state from the current Loot Master (prevent spoofing).
+    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
+        local isActive
+        local isHeartbeat = false
+        if type(data) == "table" then
+            isActive = data.isActive
+            isHeartbeat = data.isHeartbeat
+        else
+            isActive = data
+        end
+
+        local changed = (DesolateLootcouncil.sessionAutopassActive ~= isActive)
+        DesolateLootcouncil.sessionAutopassActive = isActive
+
+        if not isHeartbeat or changed then
+            local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
+            if changed or not isHeartbeat then
+                DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
+            end
+
+            local Autopass = DesolateLootcouncil:GetModule("Autopass")
+            if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
+                Autopass:ScanAndAutopassActiveLootRolls()
+            end
+        end
+    else
+        DesolateLootcouncil:DLC_Log(string.format("SYNC_AUTOPASS from non-LM '%s' ignored.", tostring(sender)))
+    end
+end
+
+function CommHandlers:SYNC_PRIORITY(data, sender)
+    -- Only accept from the current Loot Master (prevent spoofing)
+    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
+        local Priority = DesolateLootcouncil:GetModule("Priority")
+        if Priority and Priority.ReceivePrioritySync then
+            Priority:ReceivePrioritySync(data)
+        end
+    else
+        DesolateLootcouncil:DLC_Log(string.format("SYNC_PRIORITY from non-LM '%s' ignored.", tostring(sender)))
+    end
+end
+
+function CommHandlers:SYNC_ROSTER(data, sender)
+    -- Only accept from the current Loot Master (prevent spoofing)
+    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
+        local RosterSys = DesolateLootcouncil:GetModule("Roster")
+        if RosterSys and RosterSys.ReceiveRosterSync then
+            RosterSys:ReceiveRosterSync(data)
+        end
+    else
+        DesolateLootcouncil:DLC_Log(string.format("SYNC_ROSTER from non-LM '%s' ignored.", tostring(sender)))
+    end
+end
+
+function CommHandlers:LURA_TEST_START(data, sender)
+    local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
+    if Lura and Lura.ActivateGlobalTestMode then Lura:ActivateGlobalTestMode() end
+end
+
+function CommHandlers:LURA_TEST_END(data, sender)
+    local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
+    if Lura and Lura.DeactivateGlobalTestMode then Lura:DeactivateGlobalTestMode() end
+end
+
 function Comm:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_COMM" then return end
     if DesolateLootcouncil:SmartCompare(sender, "player") then return end -- Ignore self
@@ -56,130 +198,9 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
         command = data.type
     end
 
-    if command == "VERSION_REQ" or command == "VERSION_CHECK" then
-        -- Reply with my version and enchanting skill
-        local responseData = {
-            version = DesolateLootcouncil.version,
-        }
-        local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
-        if (mySkill or 0) > 0 then
-            responseData.enchantingSkill = mySkill
-        end
-        self:SendComm("VERSION_RESP", responseData, sender)
-
-        -- [OPTIMIZATION] Avoid Individual Whispers for bulk data on every ping.
-        -- We only reply with version. SYNC_AUTOPASS and IM_SYNC are now broadcast 
-        -- independently when they change or when a session starts.
-
-        -- Track sender too if they sent version and skill
-        if data and data.version then
-            self:UpdatePlayerInfo(sender, data.version, data.enchantingSkill or 0)
-        end
-    elseif command == "VERSION_RESP" then
-        -- Store sender's version and enchanting skill
-        local ver, skill
-        if type(data) == "table" then
-            ver = data.version
-            skill = data.enchantingSkill
-        else
-            ver = data
-            skill = nil
-        end
-
-
-        self:UpdatePlayerInfo(sender, ver, skill)
-    elseif command == "LOOT_SESSION_START" then
-        -- Legacy/Active hook for starting loot session remotely
-        ---@type Session
-        local Session = DesolateLootcouncil:GetModule("Session")
-        if Session and Session.StartSession then
-            -- 'data' might be the loot table or wrapped in 'data.data'
-            local lootTable = data.data or data
-            Session:StartSession(lootTable)
-        end
-    elseif command == "LOOT_SESSION_END" then
-        ---@type Session
-        local Session = DesolateLootcouncil:GetModule("Session")
-        if Session and Session.EndSession then Session:EndSession() end
-    elseif command == "IM_SYNC" then
-        -- Sync Item Manager lists (items only, not players)
-        if data and type(data) == "table" then
-            local db = DesolateLootcouncil.db.profile
-            if db.PriorityLists then
-                local count = 0
-                for listName, items in pairs(data) do
-                    for _, localList in ipairs(db.PriorityLists) do
-                        if localList.name == listName then
-                            localList.items = items
-                            count = count + 1
-                            break
-                        end
-                    end
-                end
-                DesolateLootcouncil:DLC_Log(string.format("Item Manager Synced: Updated %d item lists.", count))
-
-                -- Refresh UI if open
-                local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
-                if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
-                    ItemMgr:RefreshWindow()
-                end
-            end
-        end
-    elseif command == "SYNC_AUTOPASS" then
-        -- Only accept autopass state from the current Loot Master (prevent spoofing).
-        if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
-            local isActive
-            local isHeartbeat = false
-            if type(data) == "table" then
-                isActive = data.isActive
-                isHeartbeat = data.isHeartbeat
-            else
-                isActive = data
-            end
-
-            local changed = (DesolateLootcouncil.sessionAutopassActive ~= isActive)
-            DesolateLootcouncil.sessionAutopassActive = isActive
-
-            if not isHeartbeat or changed then
-                local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
-                if changed or not isHeartbeat then
-                    DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
-                end
-
-                local Autopass = DesolateLootcouncil:GetModule("Autopass")
-                if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
-                    Autopass:ScanAndAutopassActiveLootRolls()
-                end
-            end
-        else
-            DesolateLootcouncil:DLC_Log(string.format("SYNC_AUTOPASS from non-LM '%s' ignored.", tostring(sender)))
-        end
-    elseif command == "SYNC_PRIORITY" then
-        -- Only accept from the current Loot Master (prevent spoofing)
-        if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
-            local Priority = DesolateLootcouncil:GetModule("Priority")
-            if Priority and Priority.ReceivePrioritySync then
-                Priority:ReceivePrioritySync(data)
-            end
-        else
-            DesolateLootcouncil:DLC_Log(string.format("SYNC_PRIORITY from non-LM '%s' ignored.", tostring(sender)))
-        end
-    elseif command == "SYNC_ROSTER" then
-        -- Only accept from the current Loot Master (prevent spoofing)
-        if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
-            local RosterSys = DesolateLootcouncil:GetModule("Roster")
-            if RosterSys and RosterSys.ReceiveRosterSync then
-                RosterSys:ReceiveRosterSync(data)
-            end
-        else
-            DesolateLootcouncil:DLC_Log(string.format("SYNC_ROSTER from non-LM '%s' ignored.", tostring(sender)))
-        end
-    elseif command == "LURA_TEST_START" then
-        local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
-        if Lura and Lura.ActivateGlobalTestMode then Lura:ActivateGlobalTestMode() end
-    elseif command == "LURA_TEST_END" then
-        local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
-        if Lura and Lura.DeactivateGlobalTestMode then Lura:DeactivateGlobalTestMode() end
+    local handler = CommHandlers[command]
+    if handler then
+        handler(self, data, sender)
     end
 end
 

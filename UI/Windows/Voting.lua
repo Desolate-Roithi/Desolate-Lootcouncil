@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_Voting : AceModule
-local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting")
+local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting", "AceEvent-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
 -- File-scope constants: defined once, shared across all calls to ShowVotingWindow.
@@ -328,3 +328,32 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
         end
     end
 end
+
+function UI_Voting:OnEnable()
+    self:RegisterMessage("DLC_SESSION_STARTED", "OnSessionStarted")
+    self:RegisterMessage("DLC_SESSION_STOPPED", "OnSessionStopped")
+    self:RegisterMessage("DLC_SESSION_RESTORED", "OnSessionRestored")
+    self:RegisterMessage("DLC_ITEM_CLOSED", "OnItemClosed")
+    self:RegisterMessage("DLC_ITEM_REMOVED", "OnItemRemoved")
+end
+
+function UI_Voting:OnSessionStarted(eventName, cleanList, isLM)
+    self:ShowVotingWindow(cleanList)
+end
+
+function UI_Voting:OnSessionStopped()
+    self:ResetVoting()
+end
+
+function UI_Voting:OnSessionRestored(eventName, clientLootList, isLM)
+    self:ShowVotingWindow(clientLootList)
+end
+
+function UI_Voting:OnItemClosed(eventName, guid)
+    self:ShowVotingWindow(nil, true)
+end
+
+function UI_Voting:OnItemRemoved(eventName, guid)
+    self:RemoveVotingItem(guid)
+end
+

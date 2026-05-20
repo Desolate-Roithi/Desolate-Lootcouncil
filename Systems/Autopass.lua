@@ -132,9 +132,9 @@ function Autopass:ScanAndAutopassActiveLootRolls()
 end
 
 function Autopass:DoAutoRoll(rollID, rollType)
-    -- TODO: autoRolledItems is currently write-only. Intended as a future
-    -- double-roll prevention guard (e.g. if START_LOOT_ROLL fires twice for the
-    -- same rollID). Do not remove without replacing with equivalent protection.
+    -- autoRolledItems is actively read in ProcessRoll to act as a double-roll
+    -- prevention guard (e.g., if START_LOOT_ROLL fires twice for the same
+    -- rollID). Do not remove without replacing with equivalent protection.
     self.autoRolledItems[rollID] = rollType
 
     -- Delay execution to ensure Blizzard UI handles START_LOOT_ROLL first (increased to 0.15 for high latency)

@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_History : AceModule
-local UI_History = DesolateLootcouncil:NewModule("UI_History")
+local UI_History = DesolateLootcouncil:NewModule("UI_History", "AceEvent-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
@@ -199,3 +199,14 @@ function UI_History:ShowHistoryWindow()
         scroll:AddChild(lbl)
     end
 end
+
+function UI_History:OnEnable()
+    self:RegisterMessage("DLC_HISTORY_UPDATED", "OnHistoryUpdated")
+end
+
+function UI_History:OnHistoryUpdated()
+    if self.historyFrame and self.historyFrame.frame and self.historyFrame.frame:IsShown() then
+        self:ShowHistoryWindow()
+    end
+end
+

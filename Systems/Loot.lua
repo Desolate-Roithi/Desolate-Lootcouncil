@@ -51,11 +51,7 @@ function Loot:OnEnable()
             DesolateLootcouncil:DLC_Log(L["Wiped stale loot backlog from previous session."])
         elseif DesolateLootcouncil:AmILootMaster() then
             self:ScheduleTimer(function()
-                ---@type UI_Loot
-                local UI = DesolateLootcouncil:GetModule("UI_Loot")
-                if UI and UI.ShowLootWindow then
-                    UI:ShowLootWindow(session.loot)
-                end
+                self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
             end, 1)
         end
     end
@@ -190,8 +186,7 @@ function Loot:ProcessLootSlot(i, session)
             session.lootedMobs[sourceGUID] = true
             DesolateLootcouncil:DLC_Log("ADDED: " .. itemName)
 
-            local UI = DesolateLootcouncil:GetModule("UI_Loot")
-            if UI then UI:ShowLootWindow(session.loot) end
+            self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
         end
     end)
 end
@@ -250,8 +245,7 @@ function Loot:OnLootMessage(event, msg)
                 if quality >= minQuality or category ~= "Junk/Pass" then
                     if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
                         DesolateLootcouncil:DLC_Log(string.format(L["AUTO-ADDED from self-loot: %s"], link))
-                        local UI = DesolateLootcouncil:GetModule("UI_Loot")
-                        if UI then UI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
+                        self:SendMessage("DLC_LOOT_WINDOW_UPDATE", DesolateLootcouncil.db.profile.session.loot)
                     end
                 end
             end)
@@ -318,8 +312,7 @@ function Loot:AddManualItem(rawLink)
         })
         DesolateLootcouncil:DLC_Log(string.format(L["Manually added: %s"], link), true)
 
-        local UI = DesolateLootcouncil:GetModule("UI_Loot")
-        if UI then UI:ShowLootWindow(session.loot) end
+        self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
     end
 end
 
@@ -382,10 +375,7 @@ function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, or
 
     if Session and Session.SendHistoryUpdate then Session:SendHistoryUpdate(entry) end
 
-    local UI_H = DesolateLootcouncil:GetModule("UI_History")
-    if UI_H and UI_H.historyFrame and UI_H.historyFrame.frame and UI_H.historyFrame.frame:IsShown() then
-        UI_H:ShowHistoryWindow()
-    end
+    self:SendMessage("DLC_HISTORY_UPDATED", entry)
 
     if Session and Session.SendRemoveItem then Session:SendRemoveItem(itemGUID) end
 

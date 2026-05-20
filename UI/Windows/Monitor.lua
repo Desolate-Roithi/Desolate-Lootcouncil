@@ -308,6 +308,35 @@ function UI_Monitor:OnEnable()
     self:RegisterMessage("DLC_VERSION_UPDATE", function()
         self:UpdateDisenchanters()
     end)
+    self:RegisterMessage("DLC_SESSION_STARTED", "OnSessionStarted")
+    self:RegisterMessage("DLC_SESSION_STOPPED", "OnSessionStopped")
+    self:RegisterMessage("DLC_SESSION_RESTORED", "OnSessionRestored")
+    self:RegisterMessage("DLC_ITEM_REMOVED", "OnItemRemoved")
+end
+
+function UI_Monitor:OnSessionStarted(eventName, cleanList, isLM)
+    if isLM then
+        self:ShowMonitorWindow()
+    end
+end
+
+function UI_Monitor:OnSessionStopped()
+    if self.monitorFrame then
+        self.monitorFrame:Hide()
+    end
+    if self.awardFrame then
+        self.awardFrame:Hide()
+    end
+end
+
+function UI_Monitor:OnSessionRestored(eventName, clientLootList, isLM)
+    if isLM then
+        self:ShowMonitorWindow()
+    end
+end
+
+function UI_Monitor:OnItemRemoved(eventName, guid)
+    self:ShowMonitorWindow(true)
 end
 
 function UI_Monitor:UpdateDisenchanters()

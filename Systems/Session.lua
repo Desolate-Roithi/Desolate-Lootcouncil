@@ -167,9 +167,7 @@ function Session:RestoreSession()
         if not isLM and isExpiredOver12h then
             DesolateLootcouncil:DLC_Log("Session > 12h old. Auto-closing for non-LM.")
             wipe(session.activeState)
-            ---@type UI_Voting
-            local UI = DesolateLootcouncil:GetModule("UI_Voting")
-            if UI and UI.ResetVoting then UI:ResetVoting() end
+            self:SendMessage("DLC_SESSION_STOPPED")
             return
         end
 
@@ -208,24 +206,12 @@ function Session:PerformRestore(state, now, expiry)
         DesolateLootcouncil:DLC_Log("Restored active session (" ..
             #self.clientLootList .. " items, LM: " .. DesolateLootcouncil:GetDisplayName(state.activeLM or "?") .. ").")
 
-        ---@type UI_Voting
-        local UI = DesolateLootcouncil:GetModule("UI_Voting")
-        if UI then
-            UI:ShowVotingWindow(self.clientLootList)
-            -- Show Monitor for LM and Assists
-            if DesolateLootcouncil:AmIRaidAssistOrLM() then
-                ---@type UI_Monitor
-                local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-                if Monitor then Monitor:ShowMonitorWindow(true) end
-            end
-        end
+        self:SendMessage("DLC_SESSION_RESTORED", self.clientLootList, DesolateLootcouncil:AmIRaidAssistOrLM())
     else
         -- Scenario B: Expired
         DesolateLootcouncil:DLC_Log("Session expired while offline.")
         wipe(session.activeState)
-        ---@type UI_Voting
-        local UI = DesolateLootcouncil:GetModule("UI_Voting")
-        if UI and UI.ResetVoting then UI:ResetVoting() end
+        self:SendMessage("DLC_SESSION_STOPPED")
     end
 end
 
@@ -330,14 +316,7 @@ end
 --- visible (handles overlapping sessions gracefully).
 ---@param cleanList table
 function Session:OpenActiveSessionUIs(cleanList)
-    -- Note: Do NOT wrap in pcall — silent failure is worse than a visible error here.
-    ---@type UI_Monitor
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor then Monitor:ShowMonitorWindow() end
-
-    ---@type UI_Voting
-    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-    if Voting then Voting:ShowVotingWindow(cleanList) end
+    self:SendMessage("DLC_SESSION_STARTED", cleanList, DesolateLootcouncil:AmIRaidAssistOrLM())
 end
 
 function Session:StartSession(lootTable)
@@ -354,22 +333,19 @@ function Session:StartSession(lootTable)
         return
     end
 
-    ---@type UI_Loot
-    local UI = DesolateLootcouncil:GetModule("UI_Loot")
-
     -- 1. Filter junk, stamp expiry, persist to bidding storage.
     local cleanList, itemCount, duration, endTime = self:FilterBiddingLoot(lootTable)
 
     if itemCount == 0 then
         Loot:ClearLootBacklog()
-        if UI and UI.lootFrame then UI.lootFrame:Hide() end
+        self:SendMessage("DLC_LOOT_WINDOW_UPDATE", nil)
         DesolateLootcouncil:DLC_Log("Session contained only junk. Loot cleared locally; no broadcast sent.")
         return
     end
 
     -- 2. Wipe raw collection so we can keep looting new mobs.
     Loot:ClearLootBacklog()
-    if UI and UI.lootFrame then UI.lootFrame:Hide() end
+    self:SendMessage("DLC_LOOT_WINDOW_UPDATE", nil)
 
     -- 3. Broadcast session start and sync Autopass state.
     self:BroadcastSessionStart(cleanList, itemCount, duration, endTime)
@@ -402,14 +378,8 @@ function Session:SendStopSession()
     -- Clear the Bidding storage so Monitor empties
     wipe(DesolateLootcouncil.db.profile.session.bidding)
 
-    -- 3. Close Monitor
-    ---@type UI_Monitor
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor and Monitor.monitorFrame then Monitor.monitorFrame:Hide() end
-
-    ---@type UI_Voting
-    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-    if Voting and Voting.ResetVoting then Voting:ResetVoting() end
+    -- 3. Close Monitor & Reset Voting
+    self:SendMessage("DLC_SESSION_STOPPED")
 
     -- Clear Saved State
     wipe(DesolateLootcouncil.db.profile.session.activeState)
@@ -433,11 +403,7 @@ function Session:SendCloseItem(itemGUID)
     self.closedItems[itemGUID] = true
     self:SaveSessionState()
 
-    ---@type UI_Voting
-    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-    if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() and Voting.ShowVotingWindow then
-        Voting:ShowVotingWindow(nil, true)
-    end
+    self:SendMessage("DLC_ITEM_CLOSED", itemGUID)
 
     DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(itemGUID, -8))
     self.sessionPayloadCache = nil -- Invalidate heartbeat cache; closed state changed
@@ -503,11 +469,7 @@ function Session:RemoveSessionItem(guid)
     end
 
     -- 4. Refresh Monitor
-    ---@type UI_Monitor
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor and Monitor.ShowMonitorWindow and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-        Monitor:ShowMonitorWindow(true)
-    end
+    self:SendMessage("DLC_ITEM_REMOVED", guid)
 
     -- 5. Refresh Trade List (if open)
     ---@type UI_TradeList
@@ -638,16 +600,7 @@ function Session:HandleStartSession(payload, sender)
 
     DesolateLootcouncil:DLC_Log("Added " .. count .. " items to the session.")
 
-    ---@type UI_Voting
-    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-    if Voting then Voting:ShowVotingWindow(self.clientLootList) end
-
-    -- Restricted auto-pop to LM only
-    if DesolateLootcouncil:AmILootMaster() then
-        ---@type UI_Monitor
-        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-        if Monitor then Monitor:ShowMonitorWindow() end
-    end
+    self:SendMessage("DLC_SESSION_STARTED", self.clientLootList, DesolateLootcouncil:AmIRaidAssistOrLM())
 
     -- Apply closed state from heartbeat for late-joiners
     if payload.closedItems then
@@ -671,23 +624,7 @@ function Session:HandleRemoveItem(payload)
             end
         end
 
-        ---@type UI_Voting
-        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-        if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() then
-            if Voting.RemoveVotingItem then
-                Voting:RemoveVotingItem(guid)
-            else
-                Voting:ShowVotingWindow(self.clientLootList, true)
-            end
-        end
-
-        if DesolateLootcouncil:AmIRaidAssistOrLM() then
-            ---@type UI_Monitor
-            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-            if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                Monitor:ShowMonitorWindow(true)
-            end
-        end
+        self:SendMessage("DLC_ITEM_REMOVED", guid)
     end
 end
 
@@ -698,19 +635,7 @@ function Session:HandleCloseItem(payload)
         self.closedItems[guid] = true
         DesolateLootcouncil:DLC_Log("Voting closed for item: " .. string.sub(guid, -8))
 
-        ---@type UI_Voting
-        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-        if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() and Voting.ShowVotingWindow then
-            Voting:ShowVotingWindow(nil, true)
-        end
-
-        if DesolateLootcouncil:AmIRaidAssistOrLM() then
-            ---@type UI_Monitor
-            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-            if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                Monitor:ShowMonitorWindow(true)
-            end
-        end
+        self:SendMessage("DLC_ITEM_CLOSED", guid)
     end
 end
 
@@ -734,11 +659,7 @@ function Session:HandleHistoryUpdate(payload)
                 traded      = false
             })
 
-            -- Auto-refresh History window if open
-            local UI_H = DesolateLootcouncil:GetModule("UI_History")
-            if UI_H and UI_H.historyFrame and UI_H.historyFrame.frame and UI_H.historyFrame.frame:IsShown() then
-                UI_H:ShowHistoryWindow()
-            end
+            self:SendMessage("DLC_HISTORY_UPDATED", data)
         end
     end
 end
@@ -954,17 +875,7 @@ function Session:EndSession()
     self.sessionPayloadCache = nil -- B10: Invalidate cache; session is dead
     wipe(DesolateLootcouncil.db.profile.session.activeState)
 
-    ---@type UI_Voting
-    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-    if Voting then
-        if Voting.ResetVoting then Voting:ResetVoting() end
-        if Voting.votingFrame then Voting.votingFrame:Hide() end
-    end
-
-    -- Close the monitor window properly for assistants (Follow-up Fix)
-    ---@type UI_Monitor
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor and Monitor.monitorFrame then Monitor.monitorFrame:Hide() end
+    self:SendMessage("DLC_SESSION_STOPPED")
 
     DesolateLootcouncil:DLC_Log("The Loot Session was ended.", true)
 end
