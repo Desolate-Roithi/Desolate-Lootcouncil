@@ -216,65 +216,95 @@ function UI_Attendance:UpdateAttendanceLists()
     end
 end
 
+--- Bottom-to-top bubble-down algorithm for a single priority list.
+--- Absent players are each moved `penalty` positions toward the bottom.
+--- Processing back-to-front prevents earlier shifts from corrupting later indices.
+---@param listObj table   A PriorityList object { name, players, ... }
+---@param penalty  number Positions to decay each absent player
+function UI_Attendance:CalculateListDecay(listObj, penalty)
+    local DLC      = DesolateLootcouncil
+    local listName = listObj.name
+
+    -- Shallow-copy so we can iterate safely while mutating
+    local newList = {}
+    for _, name in ipairs(listObj.players) do
+        table.insert(newList, name)
+    end
+
+    DLC:DLC_Log("Processing List Category: [" .. listName .. "] with " .. #newList .. " entries.")
+
+    -- Iterate backwards: bottom → top
+    for i = #newList, 1, -1 do
+        local name = newList[i]
+        if tempAbsent[name] then
+            local targetIdx = i + penalty
+
+            table.remove(newList, i)
+
+            -- Cap to the last valid insertion position
+            if targetIdx > #newList + 1 then
+                targetIdx = #newList + 1
+            end
+
+            table.insert(newList, targetIdx, name)
+        end
+    end
+
+    -- Diagnostic logging (top 5 slots)
+    if #newList > 0 then
+        DLC:DLC_Log(" >> Sort Winner Rank 1: " .. DLC:GetDisplayName(newList[1]))
+    end
+    DLC:DLC_Log(" --- Final Standings for [" .. listName .. "] ---")
+    for k = 1, math.min(5, #newList) do
+        local stateStr = tempAbsent[newList[k]] and "(Absent)" or "(Present)"
+        DLC:DLC_Log("#" .. k .. ": " .. DLC:GetDisplayName(newList[k]) .. " " .. stateStr)
+    end
+
+    -- Write the sorted result back into the DB object in-place
+    listObj.players = newList
+end
+
+--- Persists the reviewed attendance map into DecayConfig, notifies the UI,
+--- and triggers session stop via the Roster module.
+---@param attendedMap table  Map of { [playerName] = true } for attended players
+function UI_Attendance:CommitAttendanceToHistory(attendedMap)
+    local DLC    = DesolateLootcouncil
+    local config = DLC.db.profile.DecayConfig
+
+    -- Overwrite attendees with the LM-reviewed set for accurate history.
+    config.currentAttendees = {}
+    for name in pairs(attendedMap) do
+        config.currentAttendees[name] = true
+    end
+
+    -- Refresh the Config UI immediately.
+    DLC:DLC_Log("Triggering UI Refresh...")
+    local Registry = LibStub("AceConfigRegistry-3.0", true)
+    if Registry then Registry:NotifyChange("DesolateLootcouncil") end
+
+    local Roster = DLC:GetModule("Roster")
+    if Roster then
+        Roster:StopRaidSession(true)
+    else
+        DLC:DLC_Log("Error: Session module not found.", true)
+    end
+end
+
 function UI_Attendance:ApplyDecayAndEndSession()
     if not currentDecayAmount then currentDecayAmount = 1 end
 
-    local db = DesolateLootcouncil.db.profile
+    local db  = DesolateLootcouncil.db.profile
     local DLC = DesolateLootcouncil
 
     DLC:DLC_Log("--- ApplyDecay Started (Amount: " .. currentDecayAmount .. ") ---")
 
     if currentDecayAmount > 0 then
-        -- 1. Iterate ALL Priority Lists (Tier, Weapons, etc.)
         if not db.PriorityLists or #db.PriorityLists == 0 then
             DLC:DLC_Log("CRITICAL: PriorityLists table is empty or nil!", true)
         end
 
         for _, listObj in ipairs(db.PriorityLists or {}) do
-            local listName = listObj.name
-            local currentList = listObj.players -- Array of strings (names)
-            DLC:DLC_Log("Processing List Category: [" .. listName .. "] with " .. #currentList .. " entries.")
-
-            -- [FIX]: Bottom-to-Top Bubble Down Algorithm.
-            -- Processing from bottom to top prevents lower absent players from jumping around unpredictably
-            -- when higher absent players change the array size.
-            local newList = {}
-            for _, name in ipairs(currentList) do
-                table.insert(newList, name)
-            end
-
-            -- Iterate backwards
-            for i = #newList, 1, -1 do
-                local name = newList[i]
-                if tempAbsent[name] then
-                    local targetIdx = i + currentDecayAmount
-                    
-                    -- Remove the absent player, shrinking the array by 1
-                    table.remove(newList, i)
-                    
-                    -- Cap the target index to the new array's maximum possible append location
-                    if targetIdx > #newList + 1 then
-                        targetIdx = #newList + 1
-                    end
-                    
-                    -- Insert the absent player at their decayed rank
-                    table.insert(newList, targetIdx, name)
-                end
-            end
-
-            if #newList > 0 then
-                DLC:DLC_Log(" >> Sort Winner Rank 1: " .. DesolateLootcouncil:GetDisplayName(newList[1]))
-            end
-
-            -- Final Standings Log
-            DLC:DLC_Log(" --- Final Standings for [" .. listName .. "] ---")
-            for k = 1, math.min(5, #newList) do
-                local stateStr = tempAbsent[newList[k]] and "(Absent)" or "(Present)"
-                DLC:DLC_Log("#" .. k .. ": " .. DesolateLootcouncil:GetDisplayName(newList[k]) .. " " .. stateStr)
-            end
-
-            -- Update the DB list in place
-            listObj.players = newList
+            self:CalculateListDecay(listObj, currentDecayAmount)
         end
 
         DLC:DLC_Log(string.format(L["Applied +%d Position Decay to all lists for absent players."], currentDecayAmount))
@@ -282,27 +312,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
         DLC:DLC_Log(L["Decay Amount is 0. No priorities changed."])
     end
 
-    -- 5. Notify Config Change (Refresh UI immediately)
-    DLC:DLC_Log("Triggering UI Refresh...")
-    local Registry = LibStub("AceConfigRegistry-3.0", true)
-    if Registry then
-        Registry:NotifyChange("DesolateLootcouncil")
-    end
-
-    -- Update the session attendees to match our reviewed list (for history accuracy)
-    local config = DesolateLootcouncil.db.profile.DecayConfig
-    config.currentAttendees = {}
-    for name, _ in pairs(tempAttended) do
-        config.currentAttendees[name] = true
-    end
-
-    -- Call Session:StopRaidSession(true)
-    local Roster = DesolateLootcouncil:GetModule("Roster")
-    if Roster then
-        Roster:StopRaidSession(true)
-    else
-        DLC:DLC_Log("Error: Session module not found.", true)
-    end
+    self:CommitAttendanceToHistory(tempAttended)
 end
 
 function UI_Attendance:DeleteHistoryEntry(index)

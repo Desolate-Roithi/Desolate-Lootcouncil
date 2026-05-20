@@ -1,6 +1,8 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+
 ---@class Roster : AceModule, AceEvent-3.0, AceConsole-3.0
 local Roster = DesolateLootcouncil:NewModule("Roster", "AceEvent-3.0", "AceConsole-3.0")
 
@@ -8,9 +10,9 @@ local Roster = DesolateLootcouncil:NewModule("Roster", "AceEvent-3.0", "AceConso
 -- OnInitialize / OnEnable fire. If defined inside OnEnable it would not be available
 -- when Addon:OnInitialize() calls UpdateLootMasterStatus() on the very first load.
 StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
-    text = "Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)",
-    button1 = "Enable",
-    button2 = "No",
+    text = L["Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)"],
+    button1 = L["Enable"],
+    button2 = L["No"],
     OnAccept = function()
         DesolateLootcouncil.sessionAutopassAnswered = true
         DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true

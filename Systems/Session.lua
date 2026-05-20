@@ -1,6 +1,8 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+
 ---@class Session : AceModule, AceEvent-3.0, AceComm-3.0, AceSerializer-3.0, AceConsole-3.0
 local Session = DesolateLootcouncil:NewModule("Session", "AceEvent-3.0", "AceComm-3.0", "AceSerializer-3.0",
     "AceConsole-3.0", "AceTimer-3.0")
@@ -42,9 +44,9 @@ function Session:OnEnable()
     -- OnCancel reads self.pendingRestore set by RestoreSession to avoid capturing
     -- ephemeral local variables inside a repeated closure allocation.
     StaticPopupDialogs["DLC_CLOSE_SESSION"] = {
-        text = "A previous Loot Session is still active. Do you want to close it?",
-        button1 = "Yes (Close Session)",
-        button2 = "No (Keep Active)",
+        text = L["A previous Loot Session is still active. Do you want to close it?"],
+        button1 = L["Yes (Close Session)"],
+        button2 = L["No (Keep Active)"],
         OnAccept = function()
             Session:SendStopSession()
         end,
@@ -111,15 +113,15 @@ function Session:SendSessionHeartbeat()
         -- The live self.closedItems is untouched; items beyond this cap are
         -- already awarded and irrelevant to any late-joiner entering now.
         local payload = {
-            command     = "LOOT_SESSION_START",
-            data        = payloadData,
-            duration    = self.sessionDuration or 300,
-            endTime     = self.sessionExpiry,
-            closedItems = self.closedItems,
-            votes       = self.sessionVotes,
-            isHeartbeat = true,
+            command        = "LOOT_SESSION_START",
+            data           = payloadData,
+            duration       = self.sessionDuration or 300,
+            endTime        = self.sessionExpiry,
+            closedItems    = self.closedItems,
+            votes          = self.sessionVotes,
+            isHeartbeat    = true,
             autopassActive = DesolateLootcouncil.sessionAutopassActive,
-            activeLM    = DesolateLootcouncil.activeLootMaster, -- Include LM identity for late-joiner correction
+            activeLM       = DesolateLootcouncil.activeLootMaster, -- Include LM identity for late-joiner correction
         }
         self.sessionPayloadCache = self:Serialize(payload)
         DesolateLootcouncil:DLC_Log("Session Heartbeat: rebuilt payload cache.")
@@ -227,103 +229,81 @@ function Session:PerformRestore(state, now, expiry)
     end
 end
 
-function Session:StartSession(lootTable)
-    if not DesolateLootcouncil:AmILootMaster() then return end
+--- Filters junk from a raw loot table, stamps per-item expiry, and persists the
+--- clean list into session.bidding.  Returns the clean list, its item count, the
+--- session duration, and the absolute end-time so callers never recompute them.
+---@param lootTable table
+---@return table cleanList, number itemCount, number duration, number endTime
+function Session:FilterBiddingLoot(lootTable)
+    local session  = DesolateLootcouncil.db.profile.session
+    local duration = DesolateLootcouncil.db.profile.sessionDuration or 300
+    local endTime  = GetServerTime() + duration
 
-    local Loot = DesolateLootcouncil:GetModule("Loot")
-    if Loot and Loot.ScanDisenchanters then
-        Loot:ScanDisenchanters()
-    end
+    self.sessionDuration     = duration
+    self.sessionExpiry       = endTime
+    self.sessionPayloadCache = nil  -- Invalidate heartbeat cache; item list changed.
 
-    if not lootTable or #lootTable == 0 then
-        DesolateLootcouncil:DLC_Log("No items to distribute!")
-        return
-    end
-
-    local session = DesolateLootcouncil.db.profile.session
-    -- 1. Migrate Data (Deep Copy to Bidding Storage)
     local cleanList = {}
     local itemCount = 0
 
     for _, item in ipairs(lootTable) do
         if item.category ~= "Junk/Pass" then
-            table.insert(cleanList, {
-                link = item.link,
-                itemID = item.itemID,
-                texture = item.texture,
-                category = item.category,
+            local entry = {
+                link       = item.link,
+                itemID     = item.itemID,
+                texture    = item.texture,
+                category   = item.category,
                 sourceGUID = item.sourceGUID,
-                stackIndex = item.stackIndex
-            })
+                stackIndex = item.stackIndex,
+                expiry     = endTime,  -- Per-item absolute expiry
+            }
+            table.insert(cleanList, entry)
+            table.insert(session.bidding, entry)
             itemCount = itemCount + 1
         end
     end
 
-    ---@type Loot
-    local Loot = DesolateLootcouncil:GetModule("Loot")
-    ---@type UI_Loot
-    local UI = DesolateLootcouncil:GetModule("UI_Loot")
-
-    if itemCount == 0 then
-        Loot:ClearLootBacklog()
-        if UI and UI.lootFrame then UI.lootFrame:Hide() end
-        DesolateLootcouncil:DLC_Log("Session contained only junk. Loot cleared locally; no broadcast sent.")
-        return
-    end
-
-    -- Copy clean list to persistent storage
-    local duration = DesolateLootcouncil.db.profile.sessionDuration or 300
-    local endTime = GetServerTime() + duration
-    self.sessionDuration = duration
-    self.sessionExpiry = endTime
-
-    for _, item in ipairs(cleanList) do
-        item.expiry = endTime -- Per-item expiry (Absolute)
-        table.insert(session.bidding, item)
-    end
-
-    -- Invalidate heartbeat cache; the item list just changed.
-    self.sessionPayloadCache = nil
-
     DesolateLootcouncil:DLC_Log("Loot moved to Bidding Storage. Collection cleared.")
+    return cleanList, itemCount, duration, endTime
+end
 
-    -- 2. Clear Collection (Wipe session.loot so we can keep looting new mobs)
-    Loot:ClearLootBacklog()
-    if UI and UI.lootFrame then UI.lootFrame:Hide() end
-
-    -- 3. Prepare Payload (ONLY NEW ITEMS)
+--- Serialises the session-start payload and broadcasts it to the group channel
+--- (or whispers to self when running solo / in simulation mode).
+---@param cleanList table
+---@param itemCount number
+---@param duration  number
+---@param endTime   number
+function Session:BroadcastSessionStart(cleanList, itemCount, duration, endTime)
+    -- Build a lean payload — only fields the receiving client needs.
     local payloadData = {}
     for _, item in ipairs(cleanList) do
         table.insert(payloadData, {
-            link = item.link,
-            texture = item.texture,
-            itemID = item.itemID,
+            link       = item.link,
+            texture    = item.texture,
+            itemID     = item.itemID,
             sourceGUID = item.sourceGUID,
-            category = item.category -- Required for dynamic button generation
+            category   = item.category,  -- Required for dynamic button generation
         })
     end
 
-    -- 4. Serialize
     local payload = {
-        command = "LOOT_SESSION_START",
-        data = payloadData,
-        duration = duration,
-        endTime = endTime,
+        command        = "LOOT_SESSION_START",
+        data           = payloadData,
+        duration       = duration,
+        endTime        = endTime,
         autopassActive = DesolateLootcouncil.sessionAutopassActive,
-        activeLM = DesolateLootcouncil.activeLootMaster, -- Include LM identity so raiders set it on session start
+        activeLM       = DesolateLootcouncil.activeLootMaster,
     }
     local serialized = self:Serialize(payload)
-
     DesolateLootcouncil:DLC_Log("Sent packet size: " .. #serialized .. " bytes")
 
-    -- 5. Broadcasting
     local channel = DesolateLootcouncil:GetBroadcastChannel()
 
     if not channel then
+        -- Solo / simulation: whisper to self so OnCommReceived fires normally.
         channel = "WHISPER"
         DesolateLootcouncil:DLC_Log("Not in group, simulating broadcast to self.")
 
-        -- Ensure the Comm module knows about "Self" even if we skipped a Version Check
         local Comm = DesolateLootcouncil:GetModule("Comm")
         if Comm then
             local myName = UnitName("player")
@@ -338,25 +318,64 @@ function Session:StartSession(lootTable)
 
     DesolateLootcouncil:DLC_Log("Broadcasting Bidding Session to " .. channel .. " (" .. itemCount .. " items)...")
 
-    -- Re-broadcast Item Manager & Autopass State to ensure all raiders have it active
+    -- Re-broadcast Autopass state so raiders activate it immediately on session start.
+    -- IM_SYNC broadcast removed. Priority lists sync strictly on manual button press.
     local Comm = DesolateLootcouncil:GetModule("Comm")
-    if Comm then
-        if DesolateLootcouncil.sessionAutopassActive ~= nil then
-            Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
-        end
-        -- IM_SYNC broadcast removed. Priority lists now strictly sync on manual button press.
+    if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
+        Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
     end
+end
 
-    -- Open Monitor Window for LM
+--- Opens the Loot Monitor for the LM and refreshes the Voting window if already
+--- visible (handles overlapping sessions gracefully).
+---@param cleanList table
+function Session:OpenActiveSessionUIs(cleanList)
     -- Note: Do NOT wrap in pcall — silent failure is worse than a visible error here.
     ---@type UI_Monitor
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
     if Monitor then Monitor:ShowMonitorWindow() end
 
-    -- Trigger Refresh if Voting Window is open (for overlapping sessions)
     ---@type UI_Voting
     local Voting = DesolateLootcouncil:GetModule("UI_Voting")
     if Voting then Voting:ShowVotingWindow(cleanList) end
+end
+
+function Session:StartSession(lootTable)
+    if not DesolateLootcouncil:AmILootMaster() then return end
+
+    ---@type Loot
+    local Loot = DesolateLootcouncil:GetModule("Loot")
+    if Loot and Loot.ScanDisenchanters then
+        Loot:ScanDisenchanters()
+    end
+
+    if not lootTable or #lootTable == 0 then
+        DesolateLootcouncil:DLC_Log("No items to distribute!")
+        return
+    end
+
+    ---@type UI_Loot
+    local UI = DesolateLootcouncil:GetModule("UI_Loot")
+
+    -- 1. Filter junk, stamp expiry, persist to bidding storage.
+    local cleanList, itemCount, duration, endTime = self:FilterBiddingLoot(lootTable)
+
+    if itemCount == 0 then
+        Loot:ClearLootBacklog()
+        if UI and UI.lootFrame then UI.lootFrame:Hide() end
+        DesolateLootcouncil:DLC_Log("Session contained only junk. Loot cleared locally; no broadcast sent.")
+        return
+    end
+
+    -- 2. Wipe raw collection so we can keep looting new mobs.
+    Loot:ClearLootBacklog()
+    if UI and UI.lootFrame then UI.lootFrame:Hide() end
+
+    -- 3. Broadcast session start and sync Autopass state.
+    self:BroadcastSessionStart(cleanList, itemCount, duration, endTime)
+
+    -- 4. Open LM windows.
+    self:OpenActiveSessionUIs(cleanList)
 end
 
 function Session:SendStopSession()
@@ -773,8 +792,8 @@ function Session:HandleSyncVotes(payload)
         self.sessionVotes = payload.data.votes or payload.data -- Compatibility
         self.closedItems  = payload.data.closed or self.closedItems or {}
 
-        local myScore = DesolateLootcouncil:GetScoreName("player")
-        local confirmed = payload.data.confirmedVoters or {}
+        local myScore     = DesolateLootcouncil:GetScoreName("player")
+        local confirmed   = payload.data.confirmedVoters or {}
 
         for guid, _ in pairs(self.outboundVotes) do
             local foundInVotes = false

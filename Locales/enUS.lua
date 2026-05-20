@@ -158,4 +158,11 @@ L["Staged %s for %s."] = true
 L["Could not find %s in bags for %s."] = true
 L["Trade complete. %s marked as delivered to %s."] = true
 
+-- Popups
+L["Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)"] = true
+L["Enable"] = true
+L["A previous Loot Session is still active. Do you want to close it?"] = true
+L["Yes (Close Session)"] = true
+L["No (Keep Active)"] = true
+
 
