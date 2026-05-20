@@ -146,9 +146,9 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
                     DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
                 end
 
-                local LootSys = DesolateLootcouncil:GetModule("Loot")
-                if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
-                    LootSys:ScanAndAutopassActiveLootRolls()
+                local Autopass = DesolateLootcouncil:GetModule("Autopass")
+                if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
+                    Autopass:ScanAndAutopassActiveLootRolls()
                 end
             end
         else
@@ -255,9 +255,9 @@ function Comm:SendSyncAutopass(isActive, isHeartbeat)
         local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
         DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
 
-        local LootSys = DesolateLootcouncil:GetModule("Loot")
-        if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
-            LootSys:ScanAndAutopassActiveLootRolls()
+        local Autopass = DesolateLootcouncil:GetModule("Autopass")
+        if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
+            Autopass:ScanAndAutopassActiveLootRolls()
         end
     end
 end

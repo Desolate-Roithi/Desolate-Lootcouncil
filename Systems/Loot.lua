@@ -23,14 +23,6 @@ local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Loot]]
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
-local function DeepCopy(t)
-    if type(t) ~= 'table' then return t end
-    local res = {}
-    for k, v in pairs(t) do
-        res[DeepCopy(k)] = DeepCopy(v)
-    end
-    return res
-end
 
 function Loot:OnInitialize()
     DesolateLootcouncil.currentSessionLoot = DesolateLootcouncil.currentSessionLoot or {}
@@ -46,10 +38,7 @@ function Loot:OnEnable()
     self.sessionItems = session.sessionItems or {} -- Persisted duplicate check
     session.sessionItems = self.sessionItems
 
-    self.autoRolledItems = {}
-
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
-    self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
     self:RegisterEvent("CHAT_MSG_LOOT", "OnLootMessage")
 
     DesolateLootcouncil:DLC_Log(L["Systems/Loot Loaded"])
@@ -173,145 +162,6 @@ function Loot:CategorizeItem(itemLink, fallbackQuality)
     return "Junk/Pass"
 end
 
--- --- Event Handlers --- --
-
-function Loot:OnStartLootRoll(event, rollID)
-    local db = DesolateLootcouncil.db.profile
-    if not db.enableAutoLoot then return end
-
-    local isLM = DesolateLootcouncil:AmILootMaster()
-    local link = GetLootRollItemLink(rollID)
-
-    -- Disable entirely if we are in LFR (Match-made groups)
-    if HasLFGRestrictions() then
-        return
-    end
-
-    if isLM then
-        C_Timer.After(1.0, function()
-            local Comm = DesolateLootcouncil:GetModule("Comm")
-            if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
-                Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
-            end
-        end)
-    end
-
-    -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
-    if not DesolateLootcouncil.sessionAutopassActive then 
-        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: sessionAutopassActive is false.", rollID), true)
-        return 
-    end
-
-    local itemID = C_Item.GetItemInfoInstant(link)
-    if not itemID then 
-        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: Could not get itemID from link.", rollID), true)
-        return 
-    end
-
-    local dbCat = self:GetItemCategory(itemID)
-    -- If not officially registered in Item Manager, explicitly ignore it for Autopass
-    if dbCat == "Junk/Pass" then 
-        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for item %d: Category is Junk/Pass (not in Priority DB).", itemID), true)
-        return 
-    end
-
-    if isLM then
-        -- LM collects it via Need/Greed to award manually; skip BoP Collectables
-        local _, _, _, _, isBoP, canNeed, canGreed, canDisenchant, _, _, _, _, canTransmog = GetLootRollItemInfo(rollID)
-        if isBoP and dbCat == "Collectables" then
-            return
-        end
-
-        if canNeed then
-            self:DoAutoRoll(rollID, 1)
-        elseif canGreed then
-            self:DoAutoRoll(rollID, 2)
-        elseif canTransmog then
-            self:DoAutoRoll(rollID, 4)
-        elseif canDisenchant then
-            self:DoAutoRoll(rollID, 3)
-        end
-    else
-        -- Only pass natively
-        self:DoAutoRoll(rollID, 0) -- Pass — LM handles distribution
-    end
-end
-
-function Loot:ScanAndAutopassActiveLootRolls()
-    DesolateLootcouncil:DLC_Log("Scanning active Blizzard loot roll windows for Autopass...", true)
-
-    if not GroupLootContainer or not GroupLootContainer.rollFrames then
-        DesolateLootcouncil:DLC_Log("DEBUG: GroupLootContainer not found or has no rollFrames.", true)
-        return
-    end
-
-    -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
-    if not DesolateLootcouncil.sessionAutopassActive then 
-        DesolateLootcouncil:DLC_Log("DEBUG: Autopass skipped: sessionAutopassActive is false.", true)
-        return 
-    end
-
-    for _, frame in pairs(GroupLootContainer.rollFrames) do
-        if frame and frame:IsShown() and frame.rollID then
-            local rollID = frame.rollID
-            if not self.autoRolledItems[rollID] then
-                local link = GetLootRollItemLink(rollID)
-                if link then
-                    local itemID = C_Item.GetItemInfoInstant(link)
-                    if itemID then
-                        local dbCat = self:GetItemCategory(itemID)
-                        if dbCat ~= "Junk/Pass" then
-                            -- Check if we are the LM or a raider
-                            if DesolateLootcouncil:AmILootMaster() then
-                                -- LM collects it via Need/Greed to award manually; skip BoP Collectables
-                                local _, _, _, _, isBoP, canNeed, canGreed, canDisenchant, _, _, _, _, canTransmog = GetLootRollItemInfo(rollID)
-                                if not (isBoP and dbCat == "Collectables") then
-                                    local rollType = 0
-                                    if canNeed then
-                                        rollType = 1
-                                    elseif canGreed then
-                                        rollType = 2
-                                    elseif canTransmog then
-                                        rollType = 4
-                                    elseif canDisenchant then
-                                        rollType = 3
-                                    end
-                                    if rollType > 0 then
-                                        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass (LM roll) for %s (rollID: %d, rollType: %d)", link, rollID, rollType), true)
-                                        self:DoAutoRoll(rollID, rollType)
-                                    end
-                                end
-                            else
-                                -- Raider passes natively
-                                DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass (Raider pass) for %s (rollID: %d)", link, rollID), true)
-                                self:DoAutoRoll(rollID, 0)
-                            end
-                        else
-                            DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for %s (rollID: %d): Item is not managed in Priority DB.", link, rollID), true)
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
-function Loot:DoAutoRoll(rollID, rollType)
-    -- TODO: autoRolledItems is currently write-only. Intended as a future
-    -- double-roll prevention guard (e.g. if START_LOOT_ROLL fires twice for the
-    -- same rollID). Do not remove without replacing with equivalent protection.
-    self.autoRolledItems[rollID] = rollType
-
-    -- Delay execution to ensure Blizzard UI handles START_LOOT_ROLL first (increased to 0.15 for high latency)
-    C_Timer.After(0.25, function()
-        RollOnLoot(rollID, rollType)
-
-        -- Retry safeguard if the roll hasn't registered due to severe server lag
-        C_Timer.After(1.0, function()
-            RollOnLoot(rollID, rollType)
-        end)
-    end)
-end
 
 function Loot:ProcessLootSlot(i, session)
     if GetLootSlotType(i) ~= Enum.LootSlotType.Item then return end
@@ -525,7 +375,7 @@ function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, or
         timestamp     = GetServerTime(),
         originalIndex = origIndex,
         fullItemData  = itemData,
-        votes         = Session and Session.sessionVotes and DeepCopy(Session.sessionVotes[itemGUID]) or {},
+        votes         = Session and Session.sessionVotes and DesolateLootcouncil.Table.DeepCopy(Session.sessionVotes[itemGUID]) or {},
         traded        = isSelf,
     }
     table.insert(session.awarded, entry)
@@ -612,7 +462,7 @@ function Loot:_RestoreVotesForReaward(session, awardedItem)
 
     if not Session.sessionVotes then Session.sessionVotes = {} end
     local newGUID = session.bidding[#session.bidding].sourceGUID
-    Session.sessionVotes[newGUID] = DeepCopy(awardedItem.votes)
+    Session.sessionVotes[newGUID] = DesolateLootcouncil.Table.DeepCopy(awardedItem.votes)
 
     local vCount = 0
     for _ in pairs(awardedItem.votes) do vCount = vCount + 1 end
@@ -670,7 +520,7 @@ function Loot:ReawardItem(index)
             } },
             duration = 300,
             endTime  = GetServerTime() + 300,
-            votes    = { [newItem.sourceGUID] = DeepCopy(awardedItem.votes or {}) },
+            votes    = { [newItem.sourceGUID] = DesolateLootcouncil.Table.DeepCopy(awardedItem.votes or {}) },
         }
         local serialized = Session:Serialize(payload)
         local channel = DesolateLootcouncil:GetBroadcastChannel()

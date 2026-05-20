@@ -15,8 +15,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
         self.priorityOverrideFrame:Hide()
     end
 
-    local db = DesolateLootcouncil.db.profile
-    local list = db.PriorityLists[listKey]
+    local list = DesolateLootcouncil.API:GetPriorityList(listKey)
     if not list then return end
 
     local frame = CreateFrame("Frame", "DLCPriorityOverride", UIParent, "BackdropTemplate")
@@ -63,7 +62,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
             child:Hide(); child:SetParent(nil)
         end
 
-        local currentList = db.PriorityLists[listKey].players
+        local currentList = list.players
         -- Safety check
         if not currentList then currentList = {} end
 
@@ -137,13 +136,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
                 newIndex = math.max(1, math.min(newIndex, #currentList))
 
                 if newIndex ~= i then
-                    local player = table.remove(currentList, i)
-                    table.insert(currentList, newIndex, player)
-
-                    local msg = string.format(L["Manual Override: Moved %s from %d to %d in %s."], player, i, newIndex,
-                        list.name or listKey)
-                    local Priority = DesolateLootcouncil:GetModule("Priority") --[[@as Priority]]
-                    if Priority then Priority:LogPriorityChange(msg) end
+                    DesolateLootcouncil.API:MovePlayerInPriorityList(listKey, i, newIndex)
 
                     -- Defer refresh to prevent event collisions or double-processing
                     C_Timer.After(0.01, function() RefreshList() end)

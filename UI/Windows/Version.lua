@@ -117,11 +117,10 @@ function UI_Version:UpdateVersionList(isTest)
     local scroll = self.scrollFrame --[[@as AceGUIScrollFrame]]
 
     -- [FIND_2] Perform initial ping if window is just opening and not on cooldown
-    local Comm = DesolateLootcouncil:GetModule("Comm") --[[@as Comm]]
-    if not self.initialPingSent and Comm then
-        local remaining = Comm:GetVersionCheckRemaining()
+    if not self.initialPingSent then
+        local remaining = DesolateLootcouncil.API:GetVersionCheckCooldown()
         if remaining <= 0 then
-            Comm:SendVersionCheck()
+            DesolateLootcouncil.API:SendVersionCheck()
             self.initialPingSent = true
         end
     end
@@ -140,7 +139,7 @@ function UI_Version:UpdateVersionList(isTest)
     end
 
     -- Add Self
-    AddEntry(UnitName("player"), select(2, UnitClassBase("player")), DesolateLootcouncil.version)
+    AddEntry(UnitName("player"), select(2, UnitClassBase("player")), DesolateLootcouncil.API:GetVersion())
 
     -- Add Group Members
     if IsInRaid() then
@@ -167,8 +166,9 @@ function UI_Version:UpdateVersionList(isTest)
     end
 
     -- Merge Active Addon Users (Sim / Out of Group)
-    if DesolateLootcouncil.activeAddonUsers then
-        for name, _ in pairs(DesolateLootcouncil.activeAddonUsers) do
+    local activeUsers = DesolateLootcouncil.API:GetActiveAddonUsers()
+    if activeUsers then
+        for name, _ in pairs(activeUsers) do
             if not rosterMap[name] then
                 -- Try to guess class or unknown
                 local class = "PRIEST"   -- Default/Unknown color
@@ -181,23 +181,17 @@ function UI_Version:UpdateVersionList(isTest)
     end
 
     -- Fetch Versions from Comm
-    ---@type Comm
-    local Comm = DesolateLootcouncil:GetModule("Comm") --[[@as Comm]]
+    local playerVersions = DesolateLootcouncil.API:GetPlayerVersions()
     local highestVerStr = "0.0.0"
-
-    if Comm then
-        -- Refresh logic happens on button click usually, ensuring versions are fresh requires a ping.
-        -- We won't ping here to avoid loops, purely read.
-
-        -- Map existing data
-        for _, entry in ipairs(roster) do
-            if DesolateLootcouncil:SmartCompare(entry.name, "player") then
-                -- Already set
-            else
-                -- Fix: Use direct table access as GetPlayerVersion is missing
-                local ver = Comm.playerVersions and Comm.playerVersions[entry.name]
-                entry.version = ver
-            end
+    
+    -- Map existing data
+    for _, entry in ipairs(roster) do
+        if DesolateLootcouncil.API:SmartCompare(entry.name, "player") then
+            -- Already set
+        else
+            -- Fix: Use direct table access as GetPlayerVersion is missing
+            local ver = playerVersions and playerVersions[entry.name]
+            entry.version = ver
         end
     end
 
@@ -255,7 +249,7 @@ function UI_Version:UpdateVersionList(isTest)
         local ver = entry.version
 
         -- Override for Sim Data if present in activeAddonUsers but no version sent
-        if not ver and DesolateLootcouncil.activeAddonUsers[entry.name] and not isTest then
+        if not ver and DesolateLootcouncil.API:GetActiveAddonUsers()[entry.name] and not isTest then
             -- Determine if we treat "Active but no version" as something special?
             -- For now, consistent with logic:
         end
@@ -288,22 +282,18 @@ function UI_Version:UpdateVersionList(isTest)
     -- Repeating timer to handle button state and countdown text
     self.refreshTimer = self:ScheduleRepeatingTimer(function()
         if not self.versionFrame or not self.versionFrame:IsShown() then return end
-        if Comm and Comm.GetVersionCheckRemaining then
-            local remaining = Comm:GetVersionCheckRemaining()
-            if remaining > 0 then
-                btnRefresh:SetText(string.format(L["Wait %.0fs"], remaining))
-                btnRefresh:SetDisabled(true)
-            else
-                btnRefresh:SetText(L["Refresh / Ping"])
-                btnRefresh:SetDisabled(false)
-            end
+        local remaining = DesolateLootcouncil.API:GetVersionCheckCooldown()
+        if remaining > 0 then
+            btnRefresh:SetText(string.format(L["Wait %.0fs"], remaining))
+            btnRefresh:SetDisabled(true)
+        else
+            btnRefresh:SetText(L["Refresh / Ping"])
+            btnRefresh:SetDisabled(false)
         end
     end, 1)
 
     btnRefresh:SetCallback("OnClick", function()
-        if not Comm then return end
-
-        local ok, _ = Comm:SendVersionCheck()
+        local ok = DesolateLootcouncil.API:SendVersionCheck()
         if not ok then
             -- Throttled: UI will update via repeating timer
             return

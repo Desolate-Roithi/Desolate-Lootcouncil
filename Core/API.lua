@@ -353,3 +353,114 @@ end
 function DLC_API:GetPriorityLists()
     return DesolateLootcouncil.db.profile.PriorityLists or {}
 end
+
+--- Returns the DecayConfig settings table.
+---@return table config
+function DLC_API:GetAttendanceConfig()
+    return DesolateLootcouncil.db.profile.DecayConfig or {}
+end
+
+--- Returns the MainRoster table.
+---@return table roster
+function DLC_API:GetMainRoster()
+    return DesolateLootcouncil.db.profile.MainRoster or {}
+end
+
+--- Starts a new raid session.
+function DLC_API:StartRaidSession()
+    local r = Roster()
+    if r and r.StartRaidSession then r:StartRaidSession() end
+end
+
+--- Stops the current raid session.
+---@param saveHistory boolean
+function DLC_API:StopRaidSession(saveHistory)
+    local r = Roster()
+    if r and r.StopRaidSession then r:StopRaidSession(saveHistory) end
+end
+
+--- Returns the AttendanceHistory table.
+---@return table history
+function DLC_API:GetAttendanceHistory()
+    return DesolateLootcouncil.db.profile.AttendanceHistory or {}
+end
+
+--- Deletes an attendance history entry by index.
+---@param index number|string
+function DLC_API:DeleteAttendanceHistoryEntry(index)
+    local db = DesolateLootcouncil.db.profile
+    if db.AttendanceHistory and db.AttendanceHistory[index] then
+        table.remove(db.AttendanceHistory, index)
+    end
+end
+
+--- Returns a specific PriorityList object from the profile.
+---@param listKey number|string
+---@return table|nil
+function DLC_API:GetPriorityList(listKey)
+    local db = DesolateLootcouncil.db.profile
+    return db.PriorityLists and db.PriorityLists[listKey]
+end
+
+--- Moves a player within a priority list and logs the change.
+---@param listKey number|string  Index or key of the priority list
+---@param fromIndex number
+---@param toIndex number
+function DLC_API:MovePlayerInPriorityList(listKey, fromIndex, toIndex)
+    local db = DesolateLootcouncil.db.profile
+    local list = db.PriorityLists and db.PriorityLists[listKey]
+    if not list or not list.players then return end
+
+    local players = list.players
+    if fromIndex < 1 or fromIndex > #players or toIndex < 1 or toIndex > #players then return end
+
+    local player = table.remove(players, fromIndex)
+    table.insert(players, toIndex, player)
+
+    local msg = string.format("Manual Override: Moved %s from %d to %d in %s.", player, fromIndex, toIndex, list.name or tostring(listKey))
+    local p = Priority()
+    if p and p.LogPriorityChange then p:LogPriorityChange(msg) end
+end
+
+--- Returns the global addon version.
+---@return string version
+function DLC_API:GetVersion()
+    return DesolateLootcouncil.version or "0.0.0"
+end
+
+--- Returns the map of active addon users.
+---@return table users
+function DLC_API:GetActiveAddonUsers()
+    return DesolateLootcouncil.activeAddonUsers or {}
+end
+
+--- Returns the map of player versions collected by Comm.
+---@return table versions
+function DLC_API:GetPlayerVersions()
+    local c = Comm()
+    return (c and c.playerVersions) or {}
+end
+
+--- Compares two character names for equality.
+---@param name1 string
+---@param name2 string
+---@return boolean
+function DLC_API:SmartCompare(name1, name2)
+    return DesolateLootcouncil:SmartCompare(name1, name2)
+end
+
+--- Broadcasts a version check request.
+---@return boolean success
+function DLC_API:SendVersionCheck()
+    local c = Comm()
+    if c and c.SendVersionCheck then return c:SendVersionCheck() end
+    return false
+end
+
+--- Returns the count of active addon users in the group.
+---@return number count
+function DLC_API:GetActiveUserCount()
+    local c = Comm()
+    return c and c.GetActiveUserCount and c:GetActiveUserCount() or 0
+end
+

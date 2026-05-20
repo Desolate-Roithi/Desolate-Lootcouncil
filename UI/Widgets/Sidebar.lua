@@ -50,33 +50,9 @@ end
 
 function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
     if not sidebarFrame or not sidebarFrame.content then return end
-
-    local Comm = DesolateLootcouncil:GetModule("Comm")
-    local disenchanters = {}
-
-    if Comm and Comm.playerEnchantingSkill then
-        for name, skill in pairs(Comm.playerEnchantingSkill) do
-            if skill > 0 then
-                local inGroup = false
-                if DesolateLootcouncil:IsUnitInRaid(name) then
-                    inGroup = true
-                else
-                    -- Fallback: Blizzard API may require the short name for local-realm players
-                    local shortName = Ambiguate(name, "none")
-                    if UnitInRaid(shortName) or UnitInParty(shortName) then
-                        inGroup = true
-                    end
-                end
-
-                if inGroup then
-                    table.insert(disenchanters, { name = name, skill = skill })
-                end
-            end
-        end
-
-        table.sort(disenchanters, function(a, b) return a.skill > b.skill end)
-    end
-
+ 
+    local disenchanters = DesolateLootcouncil.API:GetDisenchanterList()
+ 
     if #disenchanters == 0 then
         sidebarFrame:Hide()
         sidebarFrame.content:SetText("|cff9d9d9dNo data.\nScanning...|r")
@@ -84,7 +60,7 @@ function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
         sidebarFrame:Show()
         local listString = ""
         for _, de in ipairs(disenchanters) do
-            listString = listString .. string.format("%s (|cff00ff00%d|r)\n", DesolateLootcouncil:GetDisplayName(de.name), de.skill)
+            listString = listString .. string.format("%s (|cff00ff00%d|r)\n", DesolateLootcouncil.API:GetDisplayName(de.name), de.skill)
         end
         sidebarFrame.content:SetText(listString)
     end

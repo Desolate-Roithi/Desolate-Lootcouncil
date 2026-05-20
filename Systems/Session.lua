@@ -559,9 +559,9 @@ function Session:HandleStartSession(payload, sender)
         DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
 
         if not isHeartbeat or changed then
-            local LootSys = DesolateLootcouncil:GetModule("Loot")
-            if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
-                LootSys:ScanAndAutopassActiveLootRolls()
+            local Autopass = DesolateLootcouncil:GetModule("Autopass")
+            if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
+                Autopass:ScanAndAutopassActiveLootRolls()
             end
         end
     end

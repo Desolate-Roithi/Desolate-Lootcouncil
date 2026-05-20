@@ -25,7 +25,7 @@ StaticPopupDialogs["DLC_CONFIRM_DELETE_HISTORY"] = {
 }
 
 function UI_Attendance:ShowAttendanceWindow()
-    local config = DesolateLootcouncil.db.profile.DecayConfig
+    local config = DesolateLootcouncil.API:GetAttendanceConfig()
     if not config.sessionActive then
         DesolateLootcouncil:DLC_Log(L["No active session to review."], true)
         return
@@ -36,7 +36,7 @@ function UI_Attendance:ShowAttendanceWindow()
     tempAbsent = {}
     currentDecayAmount = config.defaultPenalty or 1
 
-    local roster = DesolateLootcouncil.db.profile.MainRoster or {}
+    local roster = DesolateLootcouncil.API:GetMainRoster()
     for name, _ in pairs(roster) do
         if config.currentAttendees[name] then
             tempAttended[name] = true
@@ -140,10 +140,7 @@ function UI_Attendance:ShowAttendanceWindow()
         btnEnd:SetWidth(200)
         btnEnd:SetCallback("OnClick", function()
             -- Call StopRaidSession(true) directly
-            local Roster = DesolateLootcouncil:GetModule("Roster")
-            if Roster then
-                Roster:StopRaidSession(true)
-            end
+            DesolateLootcouncil.API:StopRaidSession(true)
             frame:Hide()
 
             -- Refresh Config
@@ -282,28 +279,23 @@ function UI_Attendance:CommitAttendanceToHistory(attendedMap)
     local Registry = LibStub("AceConfigRegistry-3.0", true)
     if Registry then Registry:NotifyChange("DesolateLootcouncil") end
 
-    local Roster = DLC:GetModule("Roster")
-    if Roster then
-        Roster:StopRaidSession(true)
-    else
-        DLC:DLC_Log("Error: Session module not found.", true)
-    end
+    DesolateLootcouncil.API:StopRaidSession(true)
 end
 
 function UI_Attendance:ApplyDecayAndEndSession()
     if not currentDecayAmount then currentDecayAmount = 1 end
 
-    local db  = DesolateLootcouncil.db.profile
+    local dbLists = DesolateLootcouncil.API:GetPriorityLists()
     local DLC = DesolateLootcouncil
 
     DLC:DLC_Log("--- ApplyDecay Started (Amount: " .. currentDecayAmount .. ") ---")
 
     if currentDecayAmount > 0 then
-        if not db.PriorityLists or #db.PriorityLists == 0 then
+        if #dbLists == 0 then
             DLC:DLC_Log("CRITICAL: PriorityLists table is empty or nil!", true)
         end
 
-        for _, listObj in ipairs(db.PriorityLists or {}) do
+        for _, listObj in ipairs(dbLists) do
             self:CalculateListDecay(listObj, currentDecayAmount)
         end
 
@@ -320,7 +312,7 @@ function UI_Attendance:DeleteHistoryEntry(index)
 
     local db = DesolateLootcouncil.db.profile
     if db.AttendanceHistory and db.AttendanceHistory[index] then
-        table.remove(db.AttendanceHistory, index)
+        DesolateLootcouncil.API:DeleteAttendanceHistoryEntry(index)
         DesolateLootcouncil:DLC_Log(L["Deleted attendance history entry."], true)
 
         -- Reset Selection
@@ -383,21 +375,14 @@ function UI_Attendance:GetSessionControlOptions(config)
                     L["Start a new raid session."]
             end,
             func = function()
-                local Roster = DesolateLootcouncil:GetModule("Roster")
-                if not Roster then return end
-
                 if config.sessionActive then
                     if self.ShowAttendanceWindow then
                         self:ShowAttendanceWindow()
                         LibStub("AceConfigDialog-3.0"):Close("DesolateLootcouncil")
                     end
                 else
-                    if Roster.StartRaidSession then
-                        Roster:StartRaidSession()
-                        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-                    else
-                        DesolateLootcouncil:DLC_Log("Error: StartRaidSession not found in Session module.", true)
-                    end
+                    DesolateLootcouncil.API:StartRaidSession()
+                    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
                 end
             end,
             order = 12,
@@ -405,7 +390,7 @@ function UI_Attendance:GetSessionControlOptions(config)
     }
 end
 
-function UI_Attendance:GetRaidHistoryOptions(config, db)
+function UI_Attendance:GetRaidHistoryOptions(config)
     return {
         historyHeader = {
             type = "header",
@@ -418,7 +403,7 @@ function UI_Attendance:GetRaidHistoryOptions(config, db)
             desc = L["View details of current or past raid sessions."],
             order = 21,
             values = function()
-                local history = db.AttendanceHistory or {}
+                local history = DesolateLootcouncil.API:GetAttendanceHistory()
                 local list = {}
 
                 if config.sessionActive then
@@ -463,11 +448,11 @@ function UI_Attendance:GetRaidHistoryOptions(config, db)
                         end
                     end
                 else
-                    local history = db.AttendanceHistory or {}
+                    local history = DesolateLootcouncil.API:GetAttendanceHistory()
                     local entry = history[idx]
                     if entry and entry.attendees then
                         for name in pairs(entry.attendees) do 
-                            table.insert(attendees, DesolateLootcouncil:GetDisplayName(name)) 
+                            table.insert(attendees, DesolateLootcouncil.API:GetDisplayName(name)) 
                         end
                     else
                         return L["Error: History entry not found or empty."]
@@ -484,8 +469,7 @@ function UI_Attendance:GetRaidHistoryOptions(config, db)
 end
 
 function UI_Attendance:GetAttendanceOptions()
-    local db = DesolateLootcouncil.db.profile
-    local config = db.DecayConfig
+    local config = DesolateLootcouncil.API:GetAttendanceConfig()
 
     local options = {
         type = "group",
@@ -500,7 +484,7 @@ function UI_Attendance:GetAttendanceOptions()
     local sessionCtrl = self:GetSessionControlOptions(config)
     for k, v in pairs(sessionCtrl) do options.args[k] = v end
 
-    local history = self:GetRaidHistoryOptions(config, db)
+    local history = self:GetRaidHistoryOptions(config)
     for k, v in pairs(history) do options.args[k] = v end
 
     return options

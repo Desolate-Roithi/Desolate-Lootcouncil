@@ -33,6 +33,7 @@
     <Script file="Systems\Priority.lua"/>
     <Script file="Systems\Loot.lua"/>
     <Script file="Systems\Session.lua"/>
+    <Script file="Systems\Autopass.lua"/>
     <Script file="Systems\Roster.lua"/>
     <Script file="Systems\Trade.lua"/>
 
