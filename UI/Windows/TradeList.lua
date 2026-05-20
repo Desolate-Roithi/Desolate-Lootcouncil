@@ -7,7 +7,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_TradeList:ShowTradeListWindow()
-    if not DesolateLootcouncil:AmILootMaster() then
+    if not DesolateLootcouncil.API:IsLootMaster() then
         if self.tradeListFrame then self.tradeListFrame:Hide() end
         return
     end
@@ -26,8 +26,7 @@ function UI_TradeList:ShowTradeListWindow()
     self.tradeListFrame:Show()
     self.tradeListFrame:ReleaseChildren()
 
-    local session = DesolateLootcouncil.db.profile.session
-    local awarded = session.awarded
+    local awarded = DesolateLootcouncil.API:GetAwardedList()
 
     ---@type AceGUIScrollFrame
     local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]

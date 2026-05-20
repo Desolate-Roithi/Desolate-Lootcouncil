@@ -128,13 +128,28 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
     elseif command == "SYNC_AUTOPASS" then
         -- Only accept autopass state from the current Loot Master (prevent spoofing).
         if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
-            DesolateLootcouncil.sessionAutopassActive = data
-            local status = data and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
-            DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
+            local isActive
+            local isHeartbeat = false
+            if type(data) == "table" then
+                isActive = data.isActive
+                isHeartbeat = data.isHeartbeat
+            else
+                isActive = data
+            end
 
-            local LootSys = DesolateLootcouncil:GetModule("Loot")
-            if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
-                LootSys:ScanAndAutopassActiveLootRolls()
+            local changed = (DesolateLootcouncil.sessionAutopassActive ~= isActive)
+            DesolateLootcouncil.sessionAutopassActive = isActive
+
+            if not isHeartbeat or changed then
+                local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
+                if changed or not isHeartbeat then
+                    DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
+                end
+
+                local LootSys = DesolateLootcouncil:GetModule("Loot")
+                if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
+                    LootSys:ScanAndAutopassActiveLootRolls()
+                end
             end
         else
             DesolateLootcouncil:DLC_Log(string.format("SYNC_AUTOPASS from non-LM '%s' ignored.", tostring(sender)))
@@ -226,16 +241,24 @@ function Comm:GetActiveUserCount()
     return count
 end
 
-function Comm:SendSyncAutopass(isActive)
+function Comm:SendSyncAutopass(isActive, isHeartbeat)
     DesolateLootcouncil.sessionAutopassActive = isActive
     DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = isActive
-    self:SendComm("SYNC_AUTOPASS", isActive)
-    local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
-    DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
+    
+    local payload = isActive
+    if isHeartbeat then
+        payload = { isActive = isActive, isHeartbeat = true }
+    end
+    self:SendComm("SYNC_AUTOPASS", payload)
+    
+    if not isHeartbeat then
+        local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
+        DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
 
-    local LootSys = DesolateLootcouncil:GetModule("Loot")
-    if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
-        LootSys:ScanAndAutopassActiveLootRolls()
+        local LootSys = DesolateLootcouncil:GetModule("Loot")
+        if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
+            LootSys:ScanAndAutopassActiveLootRolls()
+        end
     end
 end
 

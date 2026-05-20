@@ -146,8 +146,8 @@ function UI_Loot:CreateLootRow(scroll, data, lootTable, listIndexMap, catList)
     catDropdown:SetRelativeWidth(0.32)
     catDropdown:SetList(catList)
 
-    local Loot = DesolateLootcouncil:GetModule("Loot")
-    local savedCat = Loot and Loot:GetItemCategory(data.itemID)
+    local API = DesolateLootcouncil.API
+    local savedCat = API:GetItemCategory(data.itemID)
     if savedCat == "Junk/Pass" then
         savedCat = data.category or "Junk/Pass"
     end
@@ -159,10 +159,10 @@ function UI_Loot:CreateLootRow(scroll, data, lootTable, listIndexMap, catList)
         data.category = value
         local idx = listIndexMap[value]
         if idx then
-            if Loot then Loot:SetItemCategory(data.itemID, idx) end
+            API:SetItemCategory(data.itemID, idx)
             DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
         elseif value == "Junk/Pass" then
-            if Loot then Loot:UnassignItem(data.itemID) end
+            API:UnassignItem(data.itemID)
         end
     end)
 
@@ -196,7 +196,7 @@ function UI_Loot:ShowLootWindow(lootTable)
         self.refreshTimer = nil
     end
 
-    if not DesolateLootcouncil:AmILootMaster() then
+    if not DesolateLootcouncil.API:IsLootMaster() then
         if self.lootFrame then self.lootFrame:Hide() end
         self:Print("Error: Only the Loot Master can open the Loot Window.")
         return
@@ -281,20 +281,16 @@ function UI_Loot:ShowLootWindow(lootTable)
     clearBtn:SetRelativeWidth(0.5)
     clearBtn:SetHeight(25)
     clearBtn:SetCallback("OnClick", function()
-        ---@type Loot
-        local L = DesolateLootcouncil:GetModule("Loot") --[[@as Loot]]
-        if L and L.ClearLootBacklog then
-            L:ClearLootBacklog()
-            self:ShowLootWindow(nil)
-        end
+        DesolateLootcouncil.API:ClearLootBacklog()
+        self:ShowLootWindow(nil)
     end)
 
     ---@type AceGUIButton
     local refreshBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
     
     -- Initial text and state (Problem 5: Avoid flickering "Check Connections")
-    local Comm = DesolateLootcouncil:GetModule("Comm")
-    local startRem = (Comm and Comm.GetVersionCheckRemaining) and Comm:GetVersionCheckRemaining() or 0
+    local API = DesolateLootcouncil.API
+    local startRem = API:GetVersionCheckCooldown()
     if startRem > 0 then
         refreshBtn:SetText(string.format("Refresh (%.0fs)", startRem))
         refreshBtn:SetDisabled(true)
@@ -304,49 +300,43 @@ function UI_Loot:ShowLootWindow(lootTable)
     end
     refreshBtn:SetRelativeWidth(0.5)
     refreshBtn:SetHeight(25)
-    
-    -- (Comm is already declared above; no second declaration needed)
-    
+
     -- Function to update the status icon color/tooltip in-place
     local function UpdateTopIndicator()
         if not self.lootFrame or not self.lootFrame.statusIcon then return end
         local activeC = DesolateLootcouncil:GetActiveUserCount()
         local totalC = GetNumGroupMembers()
         if totalC == 0 then totalC = 1; activeC = 1 end
-        
+
         local ra, ga, ba = 1, 0, 0
         if activeC >= totalC then ra, ga, ba = 0, 1, 0
         elseif activeC > 1 then ra, ga, ba = 1, 1, 0 end
-        
+
         self.lootFrame.statusIcon:SetVertexColor(ra, ga, ba)
     end
 
     refreshBtn:SetCallback("OnClick", function()
-        if Comm and Comm.SendVersionCheck then
-            local success = Comm:SendVersionCheck()
-            if success then
-                DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
-                refreshBtn:SetDisabled(true)
-                refreshBtn:SetText("Pinging...")
-                UpdateTopIndicator()
-            end
+        local success = API:PingVersionCheck()
+        if success then
+            DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
+            refreshBtn:SetDisabled(true)
+            refreshBtn:SetText("Pinging...")
+            UpdateTopIndicator()
         end
     end)
 
     -- Timer for button text cooldown
     self.refreshTimer = self:ScheduleRepeatingTimer(function()
         if not (self.lootFrame --[[@as any]]).frame:IsShown() then return end
-        if Comm and Comm.GetVersionCheckRemaining then
-            local rem = Comm:GetVersionCheckRemaining()
-            if rem > 0 then
-                refreshBtn:SetText(string.format("Refresh (%.0fs)", rem))
-                refreshBtn:SetDisabled(true)
-            else
-                refreshBtn:SetText("Refresh Connections")
-                refreshBtn:SetDisabled(false)
-            end
+        local rem = API:GetVersionCheckCooldown()
+        if rem > 0 then
+            refreshBtn:SetText(string.format("Refresh (%.0fs)", rem))
+            refreshBtn:SetDisabled(true)
+        else
+            refreshBtn:SetText("Refresh Connections")
+            refreshBtn:SetDisabled(false)
         end
-        UpdateTopIndicator() -- Keep icon updated
+        UpdateTopIndicator()
     end, 1)
 
     topRow:AddChild(clearBtn)
@@ -367,12 +357,9 @@ function UI_Loot:ShowLootWindow(lootTable)
 
     local catList = {}
     local listIndexMap = {}
-    local db = DesolateLootcouncil.db.profile
-    if db.PriorityLists then
-        for idx, list in ipairs(db.PriorityLists) do
-            catList[list.name] = list.name
-            listIndexMap[list.name] = idx
-        end
+    for idx, list in ipairs(DesolateLootcouncil.API:GetPriorityLists()) do
+        catList[list.name] = list.name
+        listIndexMap[list.name] = idx
     end
     catList["Junk/Pass"] = "Junk/Pass"
 
@@ -411,9 +398,7 @@ function UI_Loot:ShowLootWindow(lootTable)
 
     local startBtn = self.btnStart --[[@as Button]]
     startBtn:SetScript("OnClick", function()
-        ---@type Session
-        local Session = DesolateLootcouncil:GetModule('Session') --[[@as Session]]
-        Session:StartSession(lootTable)
+        DesolateLootcouncil.API:StartSession(lootTable)
     end)
 
     -- Ensure visibility

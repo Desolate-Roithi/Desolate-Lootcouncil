@@ -25,8 +25,7 @@ function UI_History:ShowHistoryWindow()
     self.historyFrame:Show()
     self.historyFrame:ReleaseChildren()
 
-    local session = DesolateLootcouncil.db.profile.session
-    local awarded = session.awarded or {}
+    local awarded = DesolateLootcouncil.API:GetAwardedList()
 
     -- 1. Date Processing
     local dates = {}
@@ -181,11 +180,7 @@ function UI_History:ShowHistoryWindow()
                 btnReaward:SetText(L["Re-award"])
                 btnReaward:SetRelativeWidth(0.20)
                 btnReaward:SetCallback("OnClick", function()
-                    ---@type Loot
-                    local Loot = DesolateLootcouncil:GetModule("Loot")
-                    if Loot and Loot.ReawardItem then
-                        Loot:ReawardItem(i)
-                    end
+                    DesolateLootcouncil.API:ReawardItem(i)
                 end)
 
                 row:AddChild(icon)

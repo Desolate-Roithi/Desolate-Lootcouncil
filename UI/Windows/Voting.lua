@@ -99,29 +99,18 @@ end
 function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     if not self.votingFrame then self:CreateVotingFrame() end
 
-    -- Sync Persistence
-    ---@type Session
-    local SessionModule = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
-    if SessionModule and SessionModule.myLocalVotes then
-        self.myVotes = SessionModule.myLocalVotes
-    end
+    local API = DesolateLootcouncil.API
+
+    -- Sync confirmed votes from Session
+    self.myVotes = API:GetLocalVotes()
 
     -- New Session Data
     if lootTable then
         self.cachedVotingItems = lootTable
-        -- Fix: Preserve local votes on append
         self.myVotes = self.myVotes or {}
     end
     -- Bug 3: Build a set of awarded GUIDs so we can skip items already distributed
-    local awardedGUIDs = {}
-    local session = DesolateLootcouncil.db.profile.session
-    if session and session.awarded then
-        for _, award in ipairs(session.awarded) do
-            if award.fullItemData and award.fullItemData.sourceGUID then
-                awardedGUIDs[award.fullItemData.sourceGUID] = true
-            end
-        end
-    end
+    local awardedGUIDs = API:GetAwardedGUIDs()
 
     local items = self.cachedVotingItems
     if not items then return end
@@ -150,11 +139,10 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     -- 1. Ticker (Visual Only)
     self.votingTicker = C_Timer.NewTicker(0.5, function()
         local now = GetServerTime()
-        local closedItems = (SessionModule and SessionModule.closedItems) or {}
         for guid, info in pairs(self.timerLabels) do
             if info.label and info.label.frame and info.label.SetText then
                 local remaining = (info.expiry or 0) - now
-                local isClosed = closedItems[guid]
+                local isClosed  = API:IsItemClosed(guid)
 
                 if isClosed or remaining <= 0 then
                     info.label:SetText("|cffff0000" .. L["Closed"] .. "|r")
@@ -189,10 +177,10 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         local guid = data.sourceGUID or data.link
         if not awardedGUIDs[guid] then
             local currentVote = self.myVotes[guid]
-            local isClosed    = (SessionModule and SessionModule.closedItems and SessionModule.closedItems[guid])
+            local isClosed    = API:IsItemClosed(guid)
             local remaining   = (data.expiry or 0) - now
             local isExpired   = (remaining <= 0)
-            local isPending   = (SessionModule and SessionModule.outboundVotes and SessionModule.outboundVotes[guid] ~= nil)
+            local isPending   = (API:GetOutboundVote(guid) ~= nil)
 
             -- Schedule a forced refresh exactly when the item expires
             if not isClosed and not isExpired and remaining > 0 then
@@ -204,8 +192,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 
             self:CreateItemRow(
                 scroll, data, guid,
-                currentVote, isClosed, isExpired, isPending,
-                SessionModule
+                currentVote, isClosed, isExpired, isPending
             )
         end
     end
@@ -221,15 +208,14 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 end
 
 --- Private helper: renders one full item row into the scroll container.
----@param scroll AceGUIScrollFrame
----@param data table          item data (link, texture, itemID, expiry, sourceGUID …)
----@param guid string         item identifier
----@param currentVote number? local vote value (1-5), or nil
----@param isClosed boolean    item is closed by LM
----@param isExpired boolean   item timer ran out
----@param isPending boolean   vote sent but not yet ACK'd
----@param SessionModule any   Session module reference for callbacks
-function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isExpired, isPending, SessionModule)
+---@param scroll      AceGUIScrollFrame
+---@param data        table    item data (link, texture, itemID, expiry, sourceGUID …)
+---@param guid        string   item identifier
+---@param currentVote number?  local vote value (1-5), or nil
+---@param isClosed    boolean  item is closed by LM
+---@param isExpired   boolean  item timer ran out
+---@param isPending   boolean  vote sent but not yet ACK'd
+function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isExpired, isPending)
     ---@type AceGUISimpleGroup
     local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
     group:SetLayout("Flow")
@@ -296,9 +282,8 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
 
     elseif isPending then
         -- STATE 2: Vote sent, awaiting ACK
-        local pendingType = SessionModule and SessionModule.outboundVotes and
-                            SessionModule.outboundVotes[guid] and
-                            SessionModule.outboundVotes[guid].type
+        local outbound   = DesolateLootcouncil.API:GetOutboundVote(guid)
+        local pendingType = outbound and outbound.type
         local vText  = pendingType and VOTE_TEXT[pendingType]  or "?"
         local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
         local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
@@ -318,7 +303,7 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
         change:SetText(L["Change"]) ; change:SetWidth(100)
         change:SetCallback("OnClick", function()
             self.myVotes[guid] = nil
-            if SessionModule and SessionModule.SendVote then SessionModule:SendVote(guid, 0) end
+            DesolateLootcouncil.API:CancelVote(guid)
             self:ShowVotingWindow(nil, true)
         end)
         actionGroup:AddChild(change)
@@ -327,7 +312,7 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
         -- STATE 4: Open, no vote yet
         local function CastVote(val)
             self.myVotes[guid] = val
-            if SessionModule and SessionModule.SendVote then SessionModule:SendVote(guid, val) end
+            DesolateLootcouncil.API:SendVote(guid, val)
             self:ShowVotingWindow(nil, true)
         end
         local w = 80

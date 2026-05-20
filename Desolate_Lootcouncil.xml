@@ -36,7 +36,11 @@
     <Script file="Systems\Roster.lua"/>
     <Script file="Systems\Trade.lua"/>
 
-    <!-- 6. UI -->
+    <!-- 6. API Facade (loaded after all Systems, before any UI) -->
+    <Script file="Core\API.lua"/>
+
+    <!-- 7. UI -->
+
     <Script file="UI\Core.lua"/>
     <Script file="UI\Widgets\Sidebar.lua"/>
     <!-- [LURA] Remove line below to unload the Lura widget (see UI\Widgets\Lura\LuraWidget.lua removal guide) -->

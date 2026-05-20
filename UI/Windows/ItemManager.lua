@@ -44,12 +44,9 @@ function UI_ItemManager:BuildHeaderGroup(db, listNames)
     input:DisableButton(true)
     input:SetCallback("OnEnterPressed", function(widget, event, text)
         if text and text ~= "" and self.tempList then
-            local Loot = DesolateLootcouncil:GetModule("Loot")
-            if Loot then
-                Loot:AddItemToList(text, self.tempList)
-                input:SetText("")
-                self:RefreshWindow()
-            end
+            DesolateLootcouncil.API:AddManagedItem(text, self.tempList)
+            input:SetText("")
+            self:RefreshWindow()
         end
     end)
     headerGroup:AddChild(input)
@@ -72,12 +69,9 @@ function UI_ItemManager:BuildHeaderGroup(db, listNames)
     addBtn:SetCallback("OnClick", function()
         local text = input:GetText()
         if text and text ~= "" and self.tempList then
-            local Loot = DesolateLootcouncil:GetModule("Loot")
-            if Loot then
-                Loot:AddItemToList(text, self.tempList)
-                input:SetText("")
-                self:RefreshWindow()
-            end
+            DesolateLootcouncil.API:AddManagedItem(text, self.tempList)
+            input:SetText("")
+            self:RefreshWindow()
         end
     end)
     headerGroup:AddChild(addBtn)
@@ -87,15 +81,8 @@ function UI_ItemManager:BuildHeaderGroup(db, listNames)
         syncBtn:SetText(L["Sync Raid"])
         syncBtn:SetRelativeWidth(0.2)
         syncBtn:SetCallback("OnClick", function()
-            local syncData = {}
-            for _, list in ipairs(db.PriorityLists) do
-                syncData[list.name] = list.items
-            end
-            local Comm = DesolateLootcouncil:GetModule("Comm")
-            if Comm then
-                Comm:SendComm("IM_SYNC", syncData)
-                DesolateLootcouncil:Print(L["Item Manager lists synced to raid."])
-            end
+            DesolateLootcouncil.API:SyncItemManagerToRaid()
+            DesolateLootcouncil:Print(L["Item Manager lists synced to raid."])
         end)
         headerGroup:AddChild(syncBtn)
     end
@@ -168,10 +155,9 @@ function UI_ItemManager:RefreshWindow()
     if not self.frame then return end
     self.frame:ReleaseChildren()
 
-    local db = DesolateLootcouncil.db.profile
+    local db = DesolateLootcouncil.API:GetItemManagerDB()
+    local pNames = DesolateLootcouncil.API:GetPriorityListNames()
     local listNames = {}
-    local Priority = DesolateLootcouncil:GetModule("Priority")
-    local pNames = Priority and Priority:GetPriorityListNames() or {}
     for i, name in ipairs(pNames) do listNames[i] = name end
 
     self:BuildHeaderGroup(db, listNames)

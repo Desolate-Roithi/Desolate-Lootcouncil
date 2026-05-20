@@ -15,9 +15,10 @@ local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff",
 local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
 
 function UI_Monitor:GetVoteInfo(guid)
-    local SessionData = DesolateLootcouncil:GetModule("Session")
-    local isClosed = SessionData and SessionData.closedItems and SessionData.closedItems[guid]
-    local votes = SessionData and SessionData.sessionVotes and SessionData.sessionVotes[guid] or {}
+    local API = DesolateLootcouncil.API
+    local summary  = API:GetVoteSummary(guid)
+    local votes    = summary.votes
+    local isClosed = summary.isClosed
 
     local bids, rolls, os, tm, pass = 0, 0, 0, 0, 0
     local votedPlayers = {}
@@ -28,8 +29,7 @@ function UI_Monitor:GetVoteInfo(guid)
         elseif vType == 3 then os = os + 1
         elseif vType == 4 then tm = tm + 1
         elseif vType == 5 then pass = pass + 1 end
-        -- Use normalized name for lookup consistency
-        local score = DesolateLootcouncil:GetScoreName(name)
+        local score = API:GetScoreName(name)
         if score then votedPlayers[score] = true end
     end
 
@@ -40,31 +40,31 @@ function UI_Monitor:GetVoteInfo(guid)
     local pending = {}
     if IsInRaid() then
         for i = 1, GetNumGroupMembers() do
-            local fullName = DesolateLootcouncil:GetFullName("raid" .. i)
-            local score = DesolateLootcouncil:GetScoreName(fullName)
-            if score and not votedPlayers[score] then table.insert(pending, DesolateLootcouncil:GetDisplayName(fullName)) end
+            local fullName = API:GetFullName("raid" .. i)
+            local score = API:GetScoreName(fullName)
+            if score and not votedPlayers[score] then table.insert(pending, API:GetDisplayName(fullName)) end
         end
     elseif IsInGroup() then
-        local myFullName = DesolateLootcouncil:GetFullName("player")
-        local myScore = DesolateLootcouncil:GetScoreName(myFullName)
-        if myScore and not votedPlayers[myScore] then table.insert(pending, DesolateLootcouncil:GetDisplayName(myFullName)) end
+        local myFullName = API:GetFullName("player")
+        local myScore = API:GetScoreName(myFullName)
+        if myScore and not votedPlayers[myScore] then table.insert(pending, API:GetDisplayName(myFullName)) end
 
         for i = 1, GetNumSubgroupMembers() do
-            local fullName = DesolateLootcouncil:GetFullName("party" .. i)
-            local score = DesolateLootcouncil:GetScoreName(fullName)
-            if score and not votedPlayers[score] then table.insert(pending, DesolateLootcouncil:GetDisplayName(fullName)) end
+            local fullName = API:GetFullName("party" .. i)
+            local score = API:GetScoreName(fullName)
+            if score and not votedPlayers[score] then table.insert(pending, API:GetDisplayName(fullName)) end
         end
     else
-        local myFullName = DesolateLootcouncil:GetFullName("player")
-        local myScore = DesolateLootcouncil:GetScoreName(myFullName)
-        if myScore and not votedPlayers[myScore] then table.insert(pending, DesolateLootcouncil:GetDisplayName(myFullName)) end
+        local myFullName = API:GetFullName("player")
+        local myScore = API:GetScoreName(myFullName)
+        if myScore and not votedPlayers[myScore] then table.insert(pending, API:GetDisplayName(myFullName)) end
     end
 
     local Sim = DesolateLootcouncil:GetModule("Simulation")
     if Sim and Sim.GetPendingVoters then
         local simPending = Sim:GetPendingVoters(guid)
         if simPending then
-            for _, sName in ipairs(simPending) do table.insert(pending, DesolateLootcouncil:GetDisplayName(sName)) end
+            for _, sName in ipairs(simPending) do table.insert(pending, API:GetDisplayName(sName)) end
         end
     end
 
@@ -160,10 +160,7 @@ function UI_Monitor:BuildItemRow(scroll, item, isLM)
     btnRemove:SetRelativeWidth(0.10)
     btnRemove:SetCallback("OnClick", function()
         C_Timer.After(0.05, function()
-            local Session = DesolateLootcouncil:GetModule("Session")
-            if Session and Session.RemoveSessionItem then
-                Session:RemoveSessionItem(guid)
-            end
+            DesolateLootcouncil.API:RemoveSessionItem(guid)
         end)
     end)
     if isLM then group:AddChild(btnRemove) end
@@ -207,10 +204,9 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
 
     self.monitorFrame:ReleaseChildren()
 
-    local session = DesolateLootcouncil.db.profile.session
-    local isLM = DesolateLootcouncil:AmILootMaster()
-    local SessionInfo = DesolateLootcouncil:GetModule("Session")
-    local items = isLM and session.bidding or (SessionInfo and SessionInfo.clientLootList or {})
+    local API = DesolateLootcouncil.API
+    local isLM = API:IsLootMaster()
+    local items = API:GetBiddingList()
     local parent = (self.monitorFrame --[[@as any]]).frame
 
     ---@type AceGUIScrollFrame
@@ -253,8 +249,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         btn:SetPoint("BOTTOM", parent, "BOTTOM", 0, 15)
         btn:SetFrameLevel(parent:GetFrameLevel() + 10)
         btn:SetScript("OnClick", function()
-            local Session = DesolateLootcouncil:GetModule("Session")
-            if Session and Session.SendStopSession then Session:SendStopSession() end
+            DesolateLootcouncil.API:StopSession()
         end)
         mFrame.btnEnd = btn
     end
@@ -367,11 +362,8 @@ function UI_Monitor:CreateVoteRow(scroll, v, isLM, itemData)
     btnGive:SetRelativeWidth(0.25)
     btnGive:SetCallback("OnClick", function()
         self.awardFrame:Hide()
-        local Loot = DesolateLootcouncil:GetModule("Loot")
-        if Loot and Loot.AwardItem then
-            local voteDesc = VOTE_TEXT[v.type] or "Unknown"
-            Loot:AwardItem(itemData.sourceGUID, v.name, voteDesc)
-        end
+        local voteDesc = VOTE_TEXT[v.type] or "Unknown"
+        DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, v.name, voteDesc)
     end)
     if isLM then row:AddChild(btnGive) end
 end
@@ -397,10 +389,7 @@ function UI_Monitor:CreateDisenchanterRow(scroll, de, isLM, itemData)
     btnGive:SetRelativeWidth(0.25)
     btnGive:SetCallback("OnClick", function()
         self.awardFrame:Hide()
-        local Loot = DesolateLootcouncil:GetModule("Loot")
-        if Loot and Loot.AwardItem then
-            Loot:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
-        end
+        DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
     end)
     if isLM then row:AddChild(btnGive) end
 end
@@ -412,7 +401,7 @@ function UI_Monitor:ShowAwardWindow(itemData)
     end
 
     -- B15: Hoist isLM to function scope — it's stable and was re-declared 3 times below
-    local isLM = DesolateLootcouncil:AmILootMaster()
+    local isLM = DesolateLootcouncil.API:IsLootMaster()
 
     if not self.awardFrame then
         ---@type AceGUIFrame
@@ -441,35 +430,16 @@ function UI_Monitor:ShowAwardWindow(itemData)
     header:SetFontObject(GameFontNormalLarge)
     self.awardFrame:AddChild(header)
 
-    local Session = DesolateLootcouncil:GetModule("Session")
+    local API  = DesolateLootcouncil.API
     local guid = itemData.sourceGUID or itemData.link
-    local votes = Session and Session.sessionVotes and Session.sessionVotes[guid]
+    local summary = API:GetVoteSummary(guid)
+    local votes   = summary.votes
 
     ---@type AceGUIScrollFrame
     local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
     scroll:SetLayout("List")
     scroll:SetFullWidth(true)
     self.awardFrame:AddChild(scroll)
-
-    -- [CHANGED] Smart Rank Lookup with Alt Logic
-    local function GetPlayerRank(playerName, category)
-        local db = DesolateLootcouncil.db.profile
-        if not db.PriorityLists then return 999 end
-
-        -- Resolve Alt -> Main
-        local Roster = DesolateLootcouncil:GetModule("Roster")
-        local searchName = Roster and Roster:GetMain(playerName) or playerName
-        local searchScore = DesolateLootcouncil:GetScoreName(searchName)
-
-        for _, list in ipairs(db.PriorityLists) do
-            if list.name == category then
-                for rank, pName in ipairs(list.players) do
-                    if DesolateLootcouncil:GetScoreName(pName) == searchScore then return rank end
-                end
-            end
-        end
-        return 999
-    end
 
     local voteList = {}
     if votes then
@@ -478,7 +448,7 @@ function UI_Monitor:ShowAwardWindow(itemData)
             local vRoll = (type(voteData) == "table" and voteData.roll) or 0
 
             if vType ~= 5 then
-                local rank = GetPlayerRank(voter, itemData.category)
+                local rank = API:GetPlayerRankInList(voter, itemData.category)
                 table.insert(voteList, { name = voter, type = vType, roll = vRoll, rank = rank })
             end
         end
@@ -505,30 +475,8 @@ function UI_Monitor:ShowAwardWindow(itemData)
     end
 
     -- [NEW] Disenchanters Section
-    local Comm = DesolateLootcouncil:GetModule("Comm")
-    local disenchanters = {}
-
-    if Comm and Comm.playerEnchantingSkill then
-        for name, skill in pairs(Comm.playerEnchantingSkill) do
-            if skill > 0 then
-                local inGroup = false
-                if DesolateLootcouncil:IsUnitInRaid(name) then
-                    inGroup = true
-                else
-                    -- Fallback: Blizzard API might expect the short name for local-realm players
-                    local shortName = Ambiguate(name, "none")
-                    if UnitInRaid(shortName) or UnitInParty(shortName) then
-                        inGroup = true
-                    end
-                end
-
-                if inGroup then
-                    table.insert(disenchanters, { name = name, skill = skill })
-                end
-            end
-        end
-        table.sort(disenchanters, function(a, b) return a.skill > b.skill end)
-    end
+    local API = DesolateLootcouncil.API
+    local disenchanters = API:GetDisenchanterList()
     if DesolateLootcouncil.db.profile.debugMode then
         DesolateLootcouncil:DLC_Log("Monitor: Disenchanters found: " .. #disenchanters)
     end

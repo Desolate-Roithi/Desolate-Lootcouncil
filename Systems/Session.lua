@@ -74,7 +74,7 @@ function Session:OnTimerTick()
             self.lastAutopassHeartbeat = now
             local Comm = DesolateLootcouncil:GetModule("Comm")
             if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
-                Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+                Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive, true)
             end
         end
 
@@ -555,11 +555,14 @@ function Session:HandleStartSession(payload, sender)
     local isHeartbeat = payload.isHeartbeat == true
 
     if payload.autopassActive ~= nil then
+        local changed = (DesolateLootcouncil.sessionAutopassActive ~= payload.autopassActive)
         DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
 
-        local LootSys = DesolateLootcouncil:GetModule("Loot")
-        if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
-            LootSys:ScanAndAutopassActiveLootRolls()
+        if not isHeartbeat or changed then
+            local LootSys = DesolateLootcouncil:GetModule("Loot")
+            if LootSys and LootSys.ScanAndAutopassActiveLootRolls then
+                LootSys:ScanAndAutopassActiveLootRolls()
+            end
         end
     end
 
