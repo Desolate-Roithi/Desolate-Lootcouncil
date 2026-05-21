@@ -58,7 +58,7 @@ function Autopass:ProcessRoll(rollID)
 
     local itemID = C_Item.GetItemInfoInstant(link)
     if not itemID then 
-        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: Could not get itemID from link.", rollID), true)
+        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: Could not get itemID from link.", rollID))
         return 
     end
 
@@ -66,16 +66,16 @@ function Autopass:ProcessRoll(rollID)
     local dbCat = Loot and Loot:GetItemCategory(itemID) or "Junk/Pass"
     -- If not officially registered in Item Manager, explicitly ignore it for Autopass
     if dbCat == "Junk/Pass" then 
-        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for %s (rollID: %d): Item is not managed in Priority DB.", link, rollID), true)
+        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for %s (rollID: %d): Item is not managed in Priority DB.", link, rollID))
         return 
     end
 
     local rollType = self:DetermineRollAction(rollID, dbCat)
     if rollType then
         if DesolateLootcouncil:AmILootMaster() then
-            DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass (LM roll) for %s (rollID: %d, rollType: %d)", link, rollID, rollType), true)
+            DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass (LM roll) for %s (rollID: %d, rollType: %d)", link, rollID, rollType))
         else
-            DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass (Raider pass) for %s (rollID: %d)", link, rollID), true)
+            DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass (Raider pass) for %s (rollID: %d)", link, rollID))
         end
         self:DoAutoRoll(rollID, rollType)
     end
@@ -103,7 +103,7 @@ function Autopass:OnStartLootRoll(event, rollID)
 
     -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
     if not DesolateLootcouncil.sessionAutopassActive then 
-        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: sessionAutopassActive is false.", rollID), true)
+        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: sessionAutopassActive is false.", rollID))
         return 
     end
 
@@ -111,16 +111,16 @@ function Autopass:OnStartLootRoll(event, rollID)
 end
 
 function Autopass:ScanAndAutopassActiveLootRolls()
-    DesolateLootcouncil:DLC_Log("Scanning active Blizzard loot roll windows for Autopass...", true)
+    DesolateLootcouncil:DLC_Log("DEBUG: Scanning active Blizzard loot roll windows for Autopass...")
 
     if not GroupLootContainer or not GroupLootContainer.rollFrames then
-        DesolateLootcouncil:DLC_Log("DEBUG: GroupLootContainer not found or has no rollFrames.", true)
+        DesolateLootcouncil:DLC_Log("DEBUG: GroupLootContainer not found or has no rollFrames.")
         return
     end
 
     -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
     if not DesolateLootcouncil.sessionAutopassActive then 
-        DesolateLootcouncil:DLC_Log("DEBUG: Autopass skipped: sessionAutopassActive is false.", true)
+        DesolateLootcouncil:DLC_Log("DEBUG: Autopass skipped: sessionAutopassActive is false.")
         return 
     end
 
