@@ -137,13 +137,5 @@ function Autopass:DoAutoRoll(rollID, rollType)
     -- rollID). Do not remove without replacing with equivalent protection.
     self.autoRolledItems[rollID] = rollType
 
-    -- Delay execution to ensure Blizzard UI handles START_LOOT_ROLL first (increased to 0.15 for high latency)
-    C_Timer.After(0.25, function()
-        RollOnLoot(rollID, rollType)
-
-        -- Retry safeguard if the roll hasn't registered due to severe server lag
-        C_Timer.After(1.0, function()
-            RollOnLoot(rollID, rollType)
-        end)
-    end)
+    RollOnLoot(rollID, rollType)
 end
