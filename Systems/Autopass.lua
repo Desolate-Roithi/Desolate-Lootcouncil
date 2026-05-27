@@ -56,13 +56,17 @@ function Autopass:ProcessRoll(rollID)
     local link = GetLootRollItemLink(rollID)
     if not link then return end
 
+    -- Hoist a single GetModule call — used for both ID fallback and category lookup.
+    local Loot = DesolateLootcouncil:GetModule("Loot")
     local itemID = C_Item.GetItemInfoInstant(link)
+    if not itemID then
+        itemID = Loot and Loot:GetItemIDFromLink(link)
+    end
     if not itemID then 
         DesolateLootcouncil:DLC_Log(string.format("DEBUG: Autopass skipped for RollID %d: Could not get itemID from link.", rollID))
         return 
     end
 
-    local Loot = DesolateLootcouncil:GetModule("Loot")
     local dbCat = Loot and Loot:GetItemCategory(itemID) or "Junk/Pass"
     -- If not officially registered in Item Manager, explicitly ignore it for Autopass
     if dbCat == "Junk/Pass" then 
@@ -131,11 +135,53 @@ function Autopass:ScanAndAutopassActiveLootRolls()
     end
 end
 
+function Autopass:HideGroupLootFrameWithRollID(rollID)
+    if not rollID or not GroupLootContainer then return end
+
+    local function removeFrame(frame)
+        if _G.GroupLootContainer_RemoveFrame then
+            -- pcall guards against protected-frame errors if Blizzard changes
+            -- GroupLootContainer internals between patches.
+            local ok, err = pcall(_G.GroupLootContainer_RemoveFrame, GroupLootContainer, frame)
+            if not ok then
+                DesolateLootcouncil:DLC_Log("DEBUG: GroupLootContainer_RemoveFrame failed: " .. tostring(err))
+                if frame.Hide then frame:Hide() end
+            end
+        elseif frame.Hide then
+            frame:Hide()
+        end
+    end
+
+    if GroupLootContainer.rollFrames then
+        for _, frame in pairs(GroupLootContainer.rollFrames) do
+            if frame and frame:IsShown() and frame.rollID == rollID then
+                removeFrame(frame)
+                break
+            end
+        end
+    else
+        for i = 1, 4 do
+            local frame = _G["GroupLootFrame" .. i]
+            if frame and frame:IsShown() and frame.rollID == rollID then
+                removeFrame(frame)
+                break
+            end
+        end
+    end
+end
+
 function Autopass:DoAutoRoll(rollID, rollType)
     -- autoRolledItems is actively read in ProcessRoll to act as a double-roll
     -- prevention guard (e.g., if START_LOOT_ROLL fires twice for the same
     -- rollID). Do not remove without replacing with equivalent protection.
     self.autoRolledItems[rollID] = rollType
 
-    RollOnLoot(rollID, rollType)
+    C_Timer.After(0.05, function()
+        RollOnLoot(rollID, rollType)
+        -- RunNextFrame defers the dismiss until Blizzard has processed the roll
+        -- result, matching RC's own pattern for frame cleanup.
+        RunNextFrame(function()
+            self:HideGroupLootFrameWithRollID(rollID)
+        end)
+    end)
 end
