@@ -679,7 +679,7 @@ function Session:HandleVote(payload, sender)
         else
             -- Use authoritative roll from sender if available, or fallback to local generation
             local serverRoll = data.roll or math.random(1, 100)
-            self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll }
+            self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll, note = data.note or "" }
 
             -- Only the actual LM is allowed to trigger auto-closes
             if DesolateLootcouncil:AmILootMaster() then
@@ -835,13 +835,13 @@ function Session:SendSyncVotes()
     -- Use SendSessionHeartbeat() for full state resync instead.
 end
 
-function Session:SendVote(itemGUID, voteType)
+function Session:SendVote(itemGUID, voteType, note)
     self.myLocalVotes = self.myLocalVotes or {}
 
     if voteType == 0 then
         self.myLocalVotes[itemGUID] = nil
     else
-        self.myLocalVotes[itemGUID] = voteType
+        self.myLocalVotes[itemGUID] = { type = voteType, note = note or "" }
     end
     self:SaveSessionState()
 
@@ -853,7 +853,7 @@ function Session:SendVote(itemGUID, voteType)
     local roll = math.random(1, 100)
     local payload = {
         command = "VOTE",
-        data = { guid = itemGUID, vote = voteType, roll = roll }
+        data = { guid = itemGUID, vote = voteType, roll = roll, note = note or "" }
     }
 
     -- Local snap (Monitor/Voting UI consistency)

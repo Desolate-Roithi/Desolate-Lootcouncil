@@ -14,7 +14,6 @@ local VOTE_COLOR = {
 }
 
 -- Module-level tooltip helper: one function shared by all item rows.
--- Takes the widget and item link directly — no per-item closure needed.
 local function ShowItemTooltip(widget, link)
     if not link then return end
     GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
@@ -55,10 +54,18 @@ function UI_Voting:CreateVotingFrame()
     end)
     self.votingFrame = frame
 
-    -- [NEW] Position Persistence
+    -- Style the frame with the active theme
+    local UI_Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+    if UI_Theme then
+        UI_Theme:ApplyTheme(frame)
+    end
+
+    -- Position Persistence
     DesolateLootcouncil:MakeMovableWithSave(frame, "Voting")
 
     self.myVotes = self.myVotes or {}
+    self.myNotes = self.myNotes or {}
+    self.noteExpanded = self.noteExpanded or {}
     self.timerLabels = {}
     self.expirationTimers = {} -- Store expiration triggers
 end
@@ -92,6 +99,8 @@ end
 
 function UI_Voting:ResetVoting()
     self.myVotes = {}
+    self.myNotes = {}
+    self.noteExpanded = {}
     self.cachedVotingItems = {}
     if self.votingFrame then self.votingFrame:Hide() end
 end
@@ -103,13 +112,15 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 
     -- Sync confirmed votes from Session
     self.myVotes = API:GetLocalVotes()
+    self.myNotes = self.myNotes or {}
+    self.noteExpanded = self.noteExpanded or {}
 
     -- New Session Data
     if lootTable then
         self.cachedVotingItems = lootTable
         self.myVotes = self.myVotes or {}
     end
-    -- Bug 3: Build a set of awarded GUIDs so we can skip items already distributed
+    -- Build a set of awarded GUIDs so we can skip items already distributed
     local awardedGUIDs = API:GetAwardedGUIDs()
 
     local items = self.cachedVotingItems
@@ -160,7 +171,13 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     scroll:SetFullWidth(true)
     scroll:SetFullHeight(true)
 
-    -- [NEW] Preserve Scroll Status on Refresh
+    -- Style the ScrollFrame background using active theme
+    local UI_Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+    if UI_Theme then
+        UI_Theme:ApplyTheme(scroll)
+    end
+
+    -- Preserve Scroll Status on Refresh
     if not self.scrollStatus or not isRefresh then
         self.scrollStatus = { scrollvalue = 0 }
     end
@@ -169,7 +186,6 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     self.votingFrame:AddChild(scroll)
     self.scrollContainer = scroll
 
-    -- VOTE_TEXT / VOTE_COLOR are file-scope constants (no per-call allocation).
     local now = GetServerTime()
 
     for i = #items, 1, -1 do
@@ -208,19 +224,22 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 end
 
 --- Private helper: renders one full item row into the scroll container.
----@param scroll      AceGUIScrollFrame
----@param data        table    item data (link, texture, itemID, expiry, sourceGUID …)
----@param guid        string   item identifier
----@param currentVote number?  local vote value (1-5), or nil
----@param isClosed    boolean  item is closed by LM
----@param isExpired   boolean  item timer ran out
----@param isPending   boolean  vote sent but not yet ACK'd
 function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isExpired, isPending)
+    local UI_Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+
+    -- Container for the entire row (holds both the main row and expanded note input)
     ---@type AceGUISimpleGroup
-    local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    group:SetLayout("Flow")
-    group:SetFullWidth(true)
-    scroll:AddChild(group)
+    local rowGroup = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+    rowGroup:SetLayout("List")
+    rowGroup:SetFullWidth(true)
+    scroll:AddChild(rowGroup)
+
+    -- Top Part: Icon, Link, Timer, and Action Buttons
+    ---@type AceGUISimpleGroup
+    local mainRow = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
+    mainRow:SetLayout("Flow")
+    mainRow:SetFullWidth(true)
+    rowGroup:AddChild(mainRow)
 
     -- Icon
     ---@type AceGUIIcon
@@ -231,7 +250,7 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
     itemIcon:SetCallback("OnClick",  function() ShowItemTooltip(itemIcon, data.link) end)
     itemIcon:SetCallback("OnEnter",  function() ShowItemTooltip(itemIcon, data.link) end)
     itemIcon:SetCallback("OnLeave",  function() GameTooltip:Hide() end)
-    group:AddChild(itemIcon)
+    mainRow:AddChild(itemIcon)
 
     -- Item link label
     ---@type AceGUIInteractiveLabel
@@ -250,14 +269,14 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
     itemLabel:SetRelativeWidth(0.25)
     itemLabel:SetCallback("OnEnter", function(w) ShowItemTooltip(w, data.link) end)
     itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-    group:AddChild(itemLabel)
+    mainRow:AddChild(itemLabel)
 
     -- Timer label
     ---@type AceGUILabel
     local timerLbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
     timerLbl:SetText("...")
     timerLbl:SetRelativeWidth(0.06)
-    group:AddChild(timerLbl)
+    mainRow:AddChild(timerLbl)
     self.timerLabels[guid] = { label = timerLbl, expiry = data.expiry }
 
     -- Action group
@@ -265,20 +284,24 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
     local actionGroup = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
     actionGroup:SetLayout("Flow")
     actionGroup:SetRelativeWidth(0.64)
-    group:AddChild(actionGroup)
+    mainRow:AddChild(actionGroup)
 
     if isClosed or isExpired then
-        -- STATE 1: Closed / Expired
+        -- STATE 4: Closed / Expired
         local votedText = L["You voted: |cffaaaaaaAuto Pass|r"]
         if currentVote then
-            votedText = string.format(L["You voted: %s%s|r"], (VOTE_COLOR[currentVote] or "|cffffffff"), (VOTE_TEXT[currentVote] or "?"))
+            local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
+            local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
+            votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText)
         end
         local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        res:SetText(votedText) ; res:SetWidth(200)
+        res:SetText(votedText) ; res:SetWidth(280)
         actionGroup:AddChild(res)
+        
         local btn = AceGUI:Create("Button") --[[@as AceGUIButton]]
         btn:SetText(L["Closed"]) ; btn:SetWidth(100) ; btn:SetDisabled(true)
         actionGroup:AddChild(btn)
+        if UI_Theme then UI_Theme:ApplyTheme(btn) end
 
     elseif isPending then
         -- STATE 2: Vote sent, awaiting ACK
@@ -286,19 +309,25 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
         local pendingType = outbound and outbound.type
         local vText  = pendingType and VOTE_TEXT[pendingType]  or "?"
         local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
+        local noteText = self.myNotes[guid] and self.myNotes[guid] ~= "" and (" (" .. self.myNotes[guid] .. ")") or ""
         local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        res:SetText(string.format(L["Voted: %s%s|r"], vColor, vText)) ; res:SetWidth(200)
+        res:SetText(string.format(L["Voted: %s%s|r%s"], vColor, vText, noteText)) ; res:SetWidth(280)
         actionGroup:AddChild(res)
+        
         local syncBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
         syncBtn:SetText(L["Syncing..."]) ; syncBtn:SetWidth(100) ; syncBtn:SetDisabled(true)
         actionGroup:AddChild(syncBtn)
+        if UI_Theme then UI_Theme:ApplyTheme(syncBtn) end
 
     elseif currentVote then
         -- STATE 3: Voted & confirmed
+        local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
+        local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
         local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        res:SetText(string.format(L["Voted: %s%s|r"], (VOTE_COLOR[currentVote] or "|cffffffff"), (VOTE_TEXT[currentVote] or "?")))
-        res:SetWidth(200)
+        res:SetText(string.format(L["Voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText))
+        res:SetWidth(280)
         actionGroup:AddChild(res)
+        
         local change = AceGUI:Create("Button") --[[@as AceGUIButton]]
         change:SetText(L["Change"]) ; change:SetWidth(100)
         change:SetCallback("OnClick", function()
@@ -307,15 +336,17 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
             self:ShowVotingWindow(nil, true)
         end)
         actionGroup:AddChild(change)
+        if UI_Theme then UI_Theme:ApplyTheme(change) end
 
     else
-        -- STATE 4: Open, no vote yet
+        -- STATE 1: Open, no vote yet
         local function CastVote(val)
             self.myVotes[guid] = val
-            DesolateLootcouncil.API:SendVote(guid, val)
+            local note = self.myNotes[guid] or ""
+            DesolateLootcouncil.API:SendVote(guid, val, note)
             self:ShowVotingWindow(nil, true)
         end
-        local w = 80
+        local w = 68
         local BUTTONS = {
             { VOTE_TEXT[1], 1 }, { VOTE_TEXT[2], 2 },
             { VOTE_TEXT[3], 3 }, { VOTE_TEXT[4], 4 }, { VOTE_TEXT[5], 5 }
@@ -325,6 +356,34 @@ function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isEx
             btn:SetText(bd[1]) ; btn:SetWidth(w)
             btn:SetCallback("OnClick", function() CastVote(bd[2]) end)
             actionGroup:AddChild(btn)
+            if UI_Theme then UI_Theme:ApplyTheme(btn) end
+        end
+
+        -- Clickable Note Toggle Button (Note icon context)
+        local noteBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
+        noteBtn:SetText(self.noteExpanded[guid] and "[-] Note" or "[+] Note")
+        noteBtn:SetWidth(60)
+        noteBtn:SetCallback("OnClick", function()
+            self.noteExpanded[guid] = not self.noteExpanded[guid]
+            self:ShowVotingWindow(nil, true)
+        end)
+        actionGroup:AddChild(noteBtn)
+        if UI_Theme then UI_Theme:ApplyTheme(noteBtn) end
+    end
+
+    -- Render Expanded Inline Note Input Field directly below row
+    if not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid] then
+        ---@type AceGUIEditBox
+        local noteEdit = AceGUI:Create("EditBox") --[[@as AceGUIEditBox]]
+        noteEdit:SetLabel(L["Add note to Loot Master..."])
+        noteEdit:SetText(self.myNotes[guid] or "")
+        noteEdit:SetFullWidth(true)
+        noteEdit:SetCallback("OnTextChanged", function(_, _, text)
+            self.myNotes[guid] = text
+        end)
+        rowGroup:AddChild(noteEdit)
+        if UI_Theme then
+            UI_Theme:ApplyTheme(noteEdit)
         end
     end
 end
@@ -356,4 +415,3 @@ end
 function UI_Voting:OnItemRemoved(eventName, guid)
     self:RemoveVotingItem(guid)
 end
-

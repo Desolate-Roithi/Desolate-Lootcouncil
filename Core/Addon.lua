@@ -77,6 +77,7 @@ local defaults = {
         },
         AttendanceHistory = {},     -- List of past sessions { date, zone, attendees }
         positions         = {},     -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
+        activeTheme       = "Midnight", -- Default UI Theme (Midnight Void)
         dbCreatedAt       = 0,      -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
     }
 }

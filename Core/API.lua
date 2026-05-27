@@ -223,9 +223,10 @@ end
 --- Sends a vote for the given item.
 ---@param guid     string
 ---@param voteType number  1=Bid 2=Roll 3=OS 4=TM 5=Pass 0=Cancel
-function DLC_API:SendVote(guid, voteType)
+---@param note     string? optional custom note
+function DLC_API:SendVote(guid, voteType, note)
     local s = Session()
-    if s and s.SendVote then s:SendVote(guid, voteType) end
+    if s and s.SendVote then s:SendVote(guid, voteType, note) end
 end
 
 --- Cancels (retracts) the player's vote on the given item.

@@ -62,6 +62,30 @@ function GeneralSettings:GetGeneralOptions()
                 get = function(info) return DesolateLootcouncil.db.profile.debugMode end,
                 set = function(info, val) DesolateLootcouncil.db.profile.debugMode = val end,
             },
+            themeHeader = {
+                type = "header",
+                name = "UI Theme",
+                order = 7,
+            },
+            activeTheme = {
+                type = "select",
+                name = "Active Theme",
+                desc = "Select the appearance of the user interface.",
+                order = 8,
+                width = "normal",
+                values = {
+                    ["Midnight"] = "Midnight (Void)",
+                    ["Classic"] = "Classic Slate",
+                    ["Minimalist"] = "Pure Dark (Minimal)",
+                    ["Fel"] = "Emerald Fel",
+                },
+                get = function(info) return DesolateLootcouncil.db.profile.activeTheme or "Midnight" end,
+                set = function(info, val)
+                    DesolateLootcouncil.db.profile.activeTheme = val
+                    local UI_Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+                    if UI_Theme then UI_Theme:ApplyThemeToAllOpenWindows() end
+                end,
+            },
             resetLayout = {
                 type = "execute",
                 name = "Reset Window Layout",
@@ -85,8 +109,8 @@ function GeneralSettings:GetGeneralOptions()
                 order = 6,
                 width = "normal",
                 func = function()
-                    local UI = DesolateLootcouncil:GetModule("UI_History")
-                    if UI then UI:ShowHistoryWindow() end
+                    local UI_History = DesolateLootcouncil:GetModule("UI_History")
+                    if UI_History then UI_History:ShowHistoryWindow() end
                 end,
             },
             shareHeader = {
