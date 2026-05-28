@@ -5,195 +5,132 @@ if AT.abortLoad then return end
 local UI_History = DesolateLootcouncil:NewModule("UI_History", "AceEvent-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
-function UI_History:ShowHistoryWindow()
+--- Opens a lightweight loot history window scoped to the CURRENT raid session.
+--- Allows the Loot Master to quickly re-award items from this session.
+function UI_History:ShowSessionLootHistory()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
-    if not self.historyFrame then
-        local frame = NativeGUI:CreateWindow("DLCHistoryFrame", L["Session History"], 500, 420, "History")
-        self.historyFrame = frame
+    if not self.sessionFrame then
+        local frame = NativeGUI:CreateWindow("DLCSessionHistoryFrame", L["Session Loot History"], 520, 420, "SessionHistory")
+        self.sessionFrame = frame
         self.rowPool = {}
     end
 
-    self.historyFrame:Show()
+    self.sessionFrame:Show()
 
+    -- Hide all pooled rows
     for _, r in ipairs(self.rowPool) do
         r:Hide()
         r:ClearAllPoints()
     end
 
-    local awarded = DesolateLootcouncil.API:GetAwardedList()
-
-    -- 1. Date Processing
-    local dates = {}
-    local dateMap = {}
-    for _, item in ipairs(awarded) do
-        local d = date("%Y-%m-%d", item.timestamp or time())
-        if not dateMap[d] then
-            dateMap[d] = true
-            table.insert(dates, d)
-        end
-    end
-    -- Sort Newest -> Oldest
-    table.sort(dates, function(a, b) return a > b end)
-
-    -- Default Selection
-    if not self.selectedHistoryDate and #dates > 0 then
-        self.selectedHistoryDate = dates[1]
-    end
-    if self.selectedHistoryDate and not dateMap[self.selectedHistoryDate] then
-        self.selectedHistoryDate = #dates > 0 and dates[1] or nil
-    end
-
-    -- Create/Update Date Dropdown
-    local dropdownList = {}
-    for _, d in ipairs(dates) do
-        dropdownList[d] = d
-    end
-
-    if not self.dateDrop then
-        local dropContainer = NativeGUI:CreateDropdown(self.historyFrame, L["Select Date"], 220, dropdownList, self.selectedHistoryDate, function(key)
-            self.selectedHistoryDate = key
-            self:ShowHistoryWindow()
-        end)
-        dropContainer:SetPoint("TOPLEFT", self.historyFrame, "TOPLEFT", 16, -42)
-        self.dateDrop = dropContainer
-    else
-        self.dateDrop:SetList(dropdownList)
-        self.dateDrop:SetValue(self.selectedHistoryDate)
-    end
-
-    -- Create/Update Delete Button
-    if not self.btnDelete then
-        local btn = NativeGUI:CreateButton(self.historyFrame, L["Delete Date"], 120, 24, "Stop")
-        btn:SetPoint("TOPRIGHT", self.historyFrame, "TOPRIGHT", -16, -42)
-        btn:SetScript("OnClick", function()
-            if not self.selectedHistoryDate then return end
-
-            local countRemoved = 0
-            for i = #awarded, 1, -1 do
-                local item = awarded[i]
-                local d = date("%Y-%m-%d", item.timestamp or time())
-                if d == self.selectedHistoryDate then
-                    table.remove(awarded, i)
-                    countRemoved = countRemoved + 1
-                end
-            end
-
-            DesolateLootcouncil:DLC_Log(string.format(L["Removed %d entries for %s"], countRemoved, self.selectedHistoryDate))
-            self.selectedHistoryDate = nil
-            self:ShowHistoryWindow()
-        end)
-        self.btnDelete = btn
-    end
-
     if not self.scrollFrame then
-        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.historyFrame, -80, -16)
-        self.scrollFrame = scrollFrame
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.sessionFrame, -50, -16)
+        self.scrollFrame  = scrollFrame
         self.scrollContent = scrollContent
     end
-
     self.scrollFrame:Show()
     self.scrollContent:Show()
 
-    local hasItems = false
+    local awarded = DesolateLootcouncil.API:GetAwardedList()
+
+    local hasItems  = false
     local topOffset = 0
     local rowHeight = 32
-    local count = 0
+    local count     = 0
 
-    if self.selectedHistoryDate then
-        for i = #awarded, 1, -1 do
-            local item = awarded[i]
-            local d = date("%Y-%m-%d", item.timestamp or time())
+    -- Show newest first (iterate in reverse)
+    for i = #awarded, 1, -1 do
+        local item = awarded[i]
+        hasItems = true
+        count = count + 1
 
-            if d == self.selectedHistoryDate then
-                hasItems = true
-                count = count + 1
+        if not self.rowPool[count] then
+            self.rowPool[count] = NativeGUI:CreateRowContainer(self.scrollContent, false)
+        end
+        local row = self.rowPool[count]
+        row:Show()
+        row:SetHeight(rowHeight)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT",  self.scrollContent, "TOPLEFT",  0,   -topOffset)
+        row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
 
-                if not self.rowPool[count] then
-                    self.rowPool[count] = NativeGUI:CreateRowContainer(self.scrollContent, false)
-                end
-                local row = self.rowPool[count]
-                row:Show()
-                row:SetHeight(rowHeight)
-                row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
-                row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
+        -- Re-award Button (anchors right first)
+        if not row.btnReaward then
+            local btn = NativeGUI:CreateButton(row, L["Re-award"], 80, 24, "Bid")
+            row.btnReaward = btn
+        end
+        row.btnReaward:ClearAllPoints()
+        row.btnReaward:SetPoint("RIGHT", -8, 0)
+        row.btnReaward:Show()
+        local capturedIdx = i
+        row.btnReaward:SetScript("OnClick", function()
+            DesolateLootcouncil.API:ReawardItem(capturedIdx)
+        end)
 
-                -- Re-award Button (created early for right anchoring target)
-                if not row.btnReaward then
-                    local btn = NativeGUI:CreateButton(row, L["Re-award"], 80, 24, "Bid")
-                    row.btnReaward = btn
-                end
-                row.btnReaward:ClearAllPoints()
-                row.btnReaward:SetPoint("RIGHT", -8, 0)
-                row.btnReaward:Show()
-                row.btnReaward:SetScript("OnClick", function()
-                    DesolateLootcouncil.API:ReawardItem(i)
-                end)
+        -- Item icon
+        if not row.iconBtn then
+            local btn = CreateFrame("Button", nil, row)
+            btn:SetSize(24, 24)
+            btn:SetPoint("LEFT", 8, 0)
+            local tex = btn:CreateTexture(nil, "BACKGROUND")
+            tex:SetAllPoints()
+            btn.texture = tex
+            row.iconBtn = btn
+        end
+        row.iconBtn.texture:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+        row.iconBtn:Show()
 
-                -- Icon
-                if not row.iconBtn then
-                    local btn = CreateFrame("Button", nil, row)
-                    btn:SetSize(24, 24)
-                    btn:SetPoint("LEFT", 8, 0)
-                    local tex = btn:CreateTexture(nil, "BACKGROUND")
-                    tex:SetAllPoints()
-                    btn.texture = tex
-                    row.iconBtn = btn
-                end
-                row.iconBtn.texture:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-                row.iconBtn:Show()
-
-                local function ShowTip()
-                    if item.link then
-                        GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
-                        GameTooltip:SetHyperlink(item.link)
-                        GameTooltip:Show()
-                    end
-                end
-                row.iconBtn:SetScript("OnClick", ShowTip)
-                row.iconBtn:SetScript("OnEnter", ShowTip)
-                row.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-                -- Type Label (right-aligned next to Re-award button)
-                if not row.typeLabel then
-                    local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                    lbl:SetSize(80, 20)
-                    lbl:SetJustifyH("RIGHT")
-                    row.typeLabel = lbl
-                end
-                row.typeLabel:ClearAllPoints()
-                row.typeLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -10, 0)
-                row.typeLabel:SetTextColor(0.7, 0.7, 0.7)
-                row.typeLabel:SetText("(" .. (item.voteType or "?") .. ")")
-                row.typeLabel:Show()
-
-                -- Text Label (sandwiched dynamically)
-                if not row.itemLabel then
-                    local btn = CreateFrame("Button", nil, row)
-                    btn:SetHeight(20)
-                    local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                    txt:SetPoint("LEFT", 0, 0)
-                    txt:SetPoint("RIGHT", 0, 0)
-                    txt:SetJustifyH("LEFT")
-                    btn.text = txt
-                    row.itemLabel = btn
-                end
-                row.itemLabel:ClearAllPoints()
-                row.itemLabel:SetPoint("LEFT", row.iconBtn, "RIGHT", 8, 0)
-                row.itemLabel:SetPoint("RIGHT", row.typeLabel, "LEFT", -10, 0)
-
-                local class = item.winnerClass
-                local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
-                row.itemLabel.text:SetText((item.link or "???") .. " -> |c" .. classColor .. DesolateLootcouncil:GetDisplayName(item.winner or "Unknown") .. "|r")
-                row.itemLabel:Show()
-                row.itemLabel:SetScript("OnClick", ShowTip)
-                row.itemLabel:SetScript("OnEnter", ShowTip)
-                row.itemLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-                topOffset = topOffset + rowHeight + 8
+        local function ShowTip()
+            if item.link then
+                GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
+                GameTooltip:SetHyperlink(item.link)
+                GameTooltip:Show()
             end
         end
+        row.iconBtn:SetScript("OnClick",  ShowTip)
+        row.iconBtn:SetScript("OnEnter",  ShowTip)
+        row.iconBtn:SetScript("OnLeave",  function() GameTooltip:Hide() end)
+
+        -- Vote-type pill (right of icon, left of Re-award)
+        if not row.typeLabel then
+            local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            lbl:SetWidth(50)
+            lbl:SetJustifyH("RIGHT")
+            row.typeLabel = lbl
+        end
+        row.typeLabel:ClearAllPoints()
+        row.typeLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -8, 0)
+        row.typeLabel:SetText("(" .. (item.voteType or "?") .. ")")
+        row.typeLabel:SetTextColor(0.7, 0.7, 0.7)
+        row.typeLabel:Show()
+
+        -- Item link + winner label
+        if not row.itemLabel then
+            local btn = CreateFrame("Button", nil, row)
+            btn:SetHeight(20)
+            local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            txt:SetPoint("LEFT", 0, 0)
+            txt:SetPoint("RIGHT", 0, 0)
+            txt:SetJustifyH("LEFT")
+            txt:SetWordWrap(false)
+            btn.text = txt
+            row.itemLabel = btn
+        end
+        row.itemLabel:ClearAllPoints()
+        row.itemLabel:SetPoint("LEFT",  row.iconBtn,   "RIGHT", 8,   0)
+        row.itemLabel:SetPoint("RIGHT", row.typeLabel, "LEFT",  -6, 0)
+
+        local class      = item.winnerClass
+        local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
+        local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
+        row.itemLabel.text:SetText((item.link or "???") .. " → |c" .. classColor .. winnerDisp .. "|r")
+        row.itemLabel:Show()
+        row.itemLabel:SetScript("OnClick",  ShowTip)
+        row.itemLabel:SetScript("OnEnter",  ShowTip)
+        row.itemLabel:SetScript("OnLeave",  function() GameTooltip:Hide() end)
+
+        topOffset = topOffset + rowHeight + 6
     end
 
     if not hasItems then
@@ -201,7 +138,7 @@ function UI_History:ShowHistoryWindow()
             self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             self.emptyLabel:SetPoint("TOPLEFT", 10, -10)
         end
-        self.emptyLabel:SetText(L["No entries for this date."])
+        self.emptyLabel:SetText(L["No loot awarded in this session."])
         self.emptyLabel:Show()
         self.scrollContent:SetHeight(40)
     else
@@ -210,12 +147,15 @@ function UI_History:ShowHistoryWindow()
     end
 end
 
+--- Kept for backward-compat. Redirects to ShowSessionLootHistory.
+UI_History.ShowHistoryWindow = UI_History.ShowSessionLootHistory
+
 function UI_History:OnEnable()
     self:RegisterMessage("DLC_HISTORY_UPDATED", "OnHistoryUpdated")
 end
 
 function UI_History:OnHistoryUpdated()
-    if self.historyFrame and self.historyFrame:IsShown() then
-        self:ShowHistoryWindow()
+    if self.sessionFrame and self.sessionFrame:IsShown() then
+        self:ShowSessionLootHistory()
     end
 end

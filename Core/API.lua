@@ -187,6 +187,12 @@ function DLC_API:GetDisenchanterList()
                 local shortName = Ambiguate(name, "none")
                 inGroup = UnitInRaid(shortName) or UnitInParty(shortName)
             end
+            if not inGroup then
+                local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+                if Sim and Sim:IsSimulated(name) then
+                    inGroup = true
+                end
+            end
             if inGroup then
                 table.insert(result, { name = name, skill = skill })
             end

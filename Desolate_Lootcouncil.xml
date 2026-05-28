@@ -56,8 +56,10 @@
     <Script file="UI\Windows\Attendance.lua"/>
     <Script file="UI\Windows\PriorityLogHistory.lua"/>
     <Script file="UI\Windows\History.lua"/>
+    <Script file="UI\Windows\RaidHistory.lua"/>
     <Script file="UI\Windows\Loot.lua"/>
     <Script file="UI\Windows\Monitor.lua"/>
+    <Script file="UI\Windows\Award.lua"/>
     <Script file="UI\Windows\PriorityOverride.lua"/>
     <Script file="UI\Windows\TradeList.lua"/>
     <Script file="UI\Windows\ItemManager.lua"/>

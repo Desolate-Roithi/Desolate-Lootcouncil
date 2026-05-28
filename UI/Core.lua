@@ -71,7 +71,7 @@ function UI:CloseMasterLootWindow()
 end
 
 function UI:ShowAwardWindow(itemData)
-    local M = DesolateLootcouncil:GetModule("UI_Monitor")
+    local M = DesolateLootcouncil:GetModule("UI_Award")
     if M then M:ShowAwardWindow(itemData) end
 end
 
@@ -116,7 +116,9 @@ function UI:ResetVoting()
 
     local M = DesolateLootcouncil:GetModule("UI_Monitor")
     if M and M.monitorFrame then M.monitorFrame:Hide() end
-    if M and M.awardFrame then M.awardFrame:Hide() end
+
+    local A = DesolateLootcouncil:GetModule("UI_Award")
+    if A and A.awardFrame then A.awardFrame:Hide() end
 
     self:Print("Voting data cleared.")
 end

@@ -8,9 +8,6 @@ local UI_Monitor = DesolateLootcouncil:NewModule("UI_Monitor", "AceEvent-3.0", "
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
-local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
-local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
-
 function UI_Monitor:GetVoteInfo(guid)
     local API = DesolateLootcouncil.API
     local summary  = API:GetVoteSummary(guid)
@@ -128,7 +125,8 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     local btnAward = NativeGUI:CreateButton(row.actionFrame, isLM and L["Award"] or L["View Rolls"], 75, 24, "Bid")
     btnAward:SetPoint("LEFT", 0, 0)
     btnAward:SetScript("OnClick", function()
-        self:ShowAwardWindow(item)
+        local AwardUI = DesolateLootcouncil:GetModule("UI_Award", true)
+        if AwardUI then AwardUI:ShowAwardWindow(item) end
     end)
 
     if isLM then
@@ -146,12 +144,13 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
 
     if not row.countsFrame then
         local cf = CreateFrame("Frame", nil, row)
-        cf:SetSize(220, 20)
+        cf:SetSize(280, 20)
         
         local text = cf:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         text:SetPoint("LEFT", 0, 0)
         text:SetPoint("RIGHT", 0, 0)
         text:SetJustifyH("RIGHT")
+        text:SetWordWrap(false)
         cf.text = text
         
         row.countsFrame = cf
@@ -186,6 +185,7 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
         text:SetPoint("LEFT", 0, 0)
         text:SetPoint("RIGHT", 0, 0)
         text:SetJustifyH("LEFT")
+        text:SetWordWrap(false)
         lbl.text = text
         
         row.itemLabel = lbl
@@ -230,6 +230,60 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         end)
         self.monitorFrame = frame
         self.rowPool = {}
+
+        -- Premium Disenchant Toggle Button next to Close (X) button
+        if frame.titleBar then
+            frame.titleBar:ClearAllPoints()
+            frame.titleBar:SetPoint("TOPLEFT", 2, -2)
+            frame.titleBar:SetPoint("TOPRIGHT", -64, -2)
+        end
+
+        local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+        local deBtn = CreateFrame("Button", nil, frame, "BackdropTemplate")
+        deBtn:SetSize(20, 20)
+        deBtn:SetPoint("TOPRIGHT", frame.closeButton, "TOPLEFT", -6, 0)
+        deBtn:SetFrameLevel(frame.closeButton:GetFrameLevel() + 5)
+        deBtn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        deBtn:SetBackdropColor(theme.bg[1] * 1.5, theme.bg[2] * 1.5, theme.bg[3] * 1.5, 0.8)
+        deBtn:SetBackdropBorderColor(unpack(theme.border))
+
+        local deIcon = deBtn:CreateTexture(nil, "OVERLAY")
+        deIcon:SetSize(14, 14)
+        deIcon:SetPoint("CENTER", 0, 0)
+        deIcon:SetTexture("Interface\\Icons\\spell_holy_removecurse")
+        deIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        deBtn.icon = deIcon
+
+        deBtn:SetScript("OnEnter", function()
+            local activeTheme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+            deBtn:SetBackdropColor(unpack(activeTheme.buttonHover))
+            deBtn:SetBackdropBorderColor(unpack(activeTheme.border))
+            if deBtn.icon then
+                deBtn.icon:SetDesaturated(false)
+                deBtn.icon:SetVertexColor(1, 1, 1, 1)
+            end
+            GameTooltip:SetOwner(deBtn, "ANCHOR_TOP")
+            GameTooltip:SetText(L["Toggle Disenchanters Sidebar"], 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        deBtn:SetScript("OnLeave", function()
+            self:UpdateDisenchantersButtonState()
+            GameTooltip:Hide()
+        end)
+        deBtn:SetScript("OnClick", function()
+            if self.deFrame and self.deFrame:IsShown() then
+                self.userClosedDE = true
+            else
+                self.userClosedDE = false
+            end
+            self:UpdateDisenchanters()
+        end)
+
+        self.deBtn = deBtn
     end
 
     if not isRefresh then
@@ -288,11 +342,11 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
             if LootUI then LootUI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
         end)
 
-        self.btnHist = NativeGUI:CreateButton(nav, L["History"], 70, 24, "Pass")
+        self.btnHist = NativeGUI:CreateButton(nav, L["Session History"], 100, 24, "Pass")
         self.btnHist:SetPoint("LEFT", 205, 0)
         self.btnHist:SetScript("OnClick", function()
             local History = DesolateLootcouncil:GetModule("UI_History", true)
-            if History then History:ShowHistoryWindow() end
+            if History then History:ShowSessionLootHistory() end
         end)
 
         self.btnAttend = NativeGUI:CreateButton(nav, L["Attendance"], 85, 24, "Pass")
@@ -330,6 +384,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
 end
 
 function UI_Monitor:OnEnable()
+    self.userClosedDE = true
     self:RegisterMessage("DLC_VERSION_UPDATE", function()
         self:UpdateDisenchanters()
     end)
@@ -347,7 +402,6 @@ end
 
 function UI_Monitor:OnSessionStopped()
     if self.monitorFrame then self.monitorFrame:Hide() end
-    if self.awardFrame then self.awardFrame:Hide() end
 end
 
 function UI_Monitor:OnSessionRestored(eventName, clientLootList, isLM)
@@ -360,6 +414,30 @@ function UI_Monitor:OnItemRemoved(eventName, guid)
     self:ShowMonitorWindow(true)
 end
 
+function UI_Monitor:UpdateDisenchantersButtonState()
+    if not self.deBtn then return end
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+    local isShown = self.deFrame and self.deFrame:IsShown()
+
+    if isShown then
+        -- Active state: Glowing border, slightly brightened button background
+        self.deBtn:SetBackdropBorderColor(unpack(theme.border))
+        self.deBtn:SetBackdropColor(theme.bg[1] * 2.0, theme.bg[2] * 2.0, theme.bg[3] * 2.0, 0.9)
+        if self.deBtn.icon then
+            self.deBtn.icon:SetDesaturated(false)
+            self.deBtn.icon:SetVertexColor(1, 1, 1, 1)
+        end
+    else
+        -- Inactive/Muted state: Grey border, darker background, desaturated icon
+        self.deBtn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.5)
+        self.deBtn:SetBackdropColor(theme.bg[1] * 1.0, theme.bg[2] * 1.0, theme.bg[3] * 1.0, 0.7)
+        if self.deBtn.icon then
+            self.deBtn.icon:SetDesaturated(true)
+            self.deBtn.icon:SetVertexColor(0.5, 0.5, 0.5, 0.6)
+        end
+    end
+end
+
 function UI_Monitor:UpdateDisenchanters()
     if not self.deFrame then return end
     local Sidebar = DesolateLootcouncil:GetModule("UI_Sidebar", true)
@@ -367,257 +445,21 @@ function UI_Monitor:UpdateDisenchanters()
         Sidebar:UpdateDisenchanters(self.deFrame)
     end
     
-    if self.monitorFrame and self.monitorFrame.isCollapsed then
+    if self.userClosedDE == true or (self.monitorFrame and self.monitorFrame.isCollapsed) then
         self.deFrame:Hide()
-    end
-end
-
-function UI_Monitor:CreateVoteRow(index, scroll, v, isLM, itemData)
-    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
-
-    if not self.awardRowPool[index] then
-        self.awardRowPool[index] = NativeGUI:CreateRowContainer(scroll, false)
-    end
-    local row = self.awardRowPool[index]
-    row:Show()
-
-    local rowHeight = 32
-    row:SetHeight(rowHeight)
-
-    local topOffset = (index - 1) * (rowHeight + 6)
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, -topOffset)
-    row:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", -12, -topOffset)
-
-    -- Give item button (created/positioned first for relative text anchor)
-    if isLM then
-        if not row.btnGive then
-            local btn = NativeGUI:CreateButton(row, L["Give"], 50, 22, "Bid")
-            row.btnGive = btn
-        end
-        row.btnGive:ClearAllPoints()
-        row.btnGive:SetPoint("RIGHT", -10, 0)
-        row.btnGive:Show()
-        row.btnGive:SetScript("OnClick", function()
-            self.awardFrame:Hide()
-            local voteDesc = VOTE_TEXT[v.type] or "Unknown"
-            DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, v.name, voteDesc)
-        end)
-    elseif row.btnGive then
-        row.btnGive:Hide()
-    end
-
-    -- Player Name
-    local lblName = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblName:SetSize(110, 20)
-    lblName:SetPoint("LEFT", 10, 0)
-    lblName:SetJustifyH("LEFT")
-    lblName:SetText(DesolateLootcouncil:GetDisplayName(v.name))
-
-    -- Rank / Roll value
-    local rankText
-    if v.type == 1 then
-        rankText = (v.rank == 999) and "|cff9d9d9d" .. L["Unranked"] .. "|r" or ("#" .. v.rank)
-        if v.rank <= 5 then rankText = "|cffffd700" .. rankText .. "|r" end
+    elseif self.userClosedDE == false then
+        self.deFrame:Show()
     else
-        rankText = "Roll: " .. v.roll
-    end
-
-    local lblRank = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblRank:SetSize(70, 20)
-    lblRank:SetPoint("LEFT", lblName, "RIGHT", 10, 0)
-    lblRank:SetJustifyH("LEFT")
-    lblRank:SetText(rankText)
-
-    -- Bid Response pill
-    local lblResp = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblResp:SetSize(80, 20)
-    lblResp:SetPoint("LEFT", lblRank, "RIGHT", 10, 0)
-    lblResp:SetJustifyH("LEFT")
-    local color = VOTE_COLOR[v.type] or ""
-    local txt = VOTE_TEXT[v.type] or "?"
-    lblResp:SetText(color .. txt .. "|r")
-
-    -- Voter Custom Note (sandwiched dynamically)
-    local lblNote = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblNote:SetPoint("LEFT", lblResp, "RIGHT", 10, 0)
-    lblNote:SetPoint("RIGHT", (isLM and row.btnGive or row), (isLM and "LEFT" or "RIGHT"), -10, 0)
-    lblNote:SetJustifyH("LEFT")
-    if v.note and v.note ~= "" then
-        lblNote:SetText("|cffc79c6e" .. v.note .. "|r")
-    else
-        lblNote:SetText("")
-    end
-
-    scroll:SetHeight(topOffset + rowHeight + 10)
-end
-
-function UI_Monitor:CreateDisenchanterRow(index, scroll, de, isLM, itemData)
-    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
-
-    if not self.deRowPool[index] then
-        self.deRowPool[index] = NativeGUI:CreateRowContainer(scroll, false)
-    end
-    local row = self.deRowPool[index]
-    row:Show()
-
-    local rowHeight = 32
-    row:SetHeight(rowHeight)
-
-    local topOffset = (index - 1) * (rowHeight + 6)
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, -topOffset)
-    row:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", -12, -topOffset)
-
-    if isLM then
-        if not row.btnGive then
-            local btn = NativeGUI:CreateButton(row, L["Give"], 50, 22, "Bid")
-            row.btnGive = btn
-        end
-        row.btnGive:ClearAllPoints()
-        row.btnGive:SetPoint("RIGHT", -10, 0)
-        row.btnGive:Show()
-        row.btnGive:SetScript("OnClick", function()
-            self.awardFrame:Hide()
-            DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
-        end)
-    elseif row.btnGive then
-        row.btnGive:Hide()
-    end
-
-    local lblName = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblName:SetSize(130, 20)
-    lblName:SetPoint("LEFT", 10, 0)
-    lblName:SetJustifyH("LEFT")
-    lblName:SetText(DesolateLootcouncil:GetDisplayName(de.name))
-
-    local lblSkill = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblSkill:SetPoint("LEFT", lblName, "RIGHT", 10, 0)
-    lblSkill:SetPoint("RIGHT", (isLM and row.btnGive or row), (isLM and "LEFT" or "RIGHT"), -10, 0)
-    lblSkill:SetJustifyH("LEFT")
-    lblSkill:SetText(string.format(L["Lvl %d"], de.skill))
-
-
-    scroll:SetHeight(topOffset + rowHeight + 10)
-end
-
-function UI_Monitor:ShowAwardWindow(itemData)
-    if not itemData then
-        if self.awardFrame then self.awardFrame:Hide() end
-        return
-    end
-
-    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
-    local isLM = DesolateLootcouncil.API:IsLootMaster()
-
-    if not self.awardFrame then
-        local frame = NativeGUI:CreateWindow("DLCAwardFrame", L["Award Item"], 500, 500, "Award")
-        self.awardFrame = frame
-        self.awardRowPool = {}
-        self.deRowPool = {}
-    end
-
-    self.awardFrame:Show()
-
-    -- Reset pools
-    for _, r in ipairs(self.awardRowPool) do r:Hide() end
-    for _, r in ipairs(self.deRowPool) do r:Hide() end
-
-    -- Custom centered item header
-    local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
-    local _, properLink = C_Item.GetItemInfo(itemData.link)
-
-    if not self.awardHeader then
-        local header = self.awardFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        header:SetPoint("TOP", 0, -40)
-        self.awardHeader = header
-    end
-    self.awardHeader:SetText((properLink or itemData.link) .. "|cffaaaaaa" .. catText .. "|r")
-
-    local API  = DesolateLootcouncil.API
-    local guid = itemData.sourceGUID or itemData.link
-    local summary = API:GetVoteSummary(guid)
-    local votes   = summary.votes
-
-    if not self.awardScroll then
-        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.awardFrame, -65, -16)
-        self.awardScroll = scrollFrame
-        self.awardScrollContent = scrollContent
-    end
-    self.awardScroll:Show()
-    self.awardScrollContent:Show()
-    self.awardScrollContent:SetHeight(1)
-
-    local voteList = {}
-    if votes then
-        for voter, voteData in pairs(votes) do
-            local vType = type(voteData) == "table" and voteData.type or voteData
-            local vRoll = (type(voteData) == "table" and voteData.roll) or 0
-            local vNote = (type(voteData) == "table" and voteData.note) or ""
-
-            if vType ~= 5 then
-                local rank = API:GetPlayerRankInList(voter, itemData.category)
-                table.insert(voteList, { name = voter, type = vType, roll = vRoll, rank = rank, note = vNote })
-            end
-        end
-
-        table.sort(voteList, function(a, b)
-            if a.type ~= b.type then return a.type < b.type end
-            if a.type == 1 then
-                if a.rank ~= b.rank then return a.rank < b.rank end
-                return a.roll > b.roll
-            end
-            return a.roll > b.roll
-        end)
-    end
-
-    local scrollHeight = 0
-    if #voteList == 0 then
-        if not self.awardEmptyLabel then
-            local lbl = self.awardScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-            lbl:SetPoint("TOPLEFT", 10, -10)
-            self.awardEmptyLabel = lbl
-        end
-        self.awardEmptyLabel:SetText(L["No active votes."])
-        self.awardEmptyLabel:Show()
-        scrollHeight = scrollHeight + 30
-    else
-        if self.awardEmptyLabel then self.awardEmptyLabel:Hide() end
-        for idx, v in ipairs(voteList) do
-            self:CreateVoteRow(idx, self.awardScrollContent, v, isLM, itemData)
-            scrollHeight = scrollHeight + 38
+        -- Default scan-based visibility
+        local disenchanters = DesolateLootcouncil.API:GetDisenchanterList()
+        if #disenchanters > 0 then
+            self.deFrame:Show()
+        else
+            self.deFrame:Hide()
         end
     end
 
-    -- Disenchanters Section
-    local disenchanters = API:GetDisenchanterList()
-    if DesolateLootcouncil.db.profile.debugMode then
-        DesolateLootcouncil:DLC_Log("Monitor: Disenchanters found: " .. #disenchanters)
-    end
-
-    if #disenchanters > 0 then
-        if not self.deHeaderLabel then
-            local deHeader = self.awardScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            self.deHeaderLabel = deHeader
-        end
-        self.deHeaderLabel:ClearAllPoints()
-        self.deHeaderLabel:SetPoint("TOP", self.awardScrollContent, "TOP", 0, -scrollHeight - 10)
-        self.deHeaderLabel:SetText(L["Disenchanters"])
-        self.deHeaderLabel:Show()
-
-        scrollHeight = scrollHeight + 25
-
-        for idx, de in ipairs(disenchanters) do
-            local nextDeScroll = CreateFrame("Frame", nil, self.awardScrollContent)
-            nextDeScroll:SetPoint("TOPLEFT", 0, -scrollHeight)
-            self:CreateDisenchanterRow(idx, nextDeScroll, de, isLM, itemData)
-            scrollHeight = scrollHeight + 38
-        end
-    elseif self.deHeaderLabel then
-        self.deHeaderLabel:Hide()
-    end
-
-    self.awardScrollContent:SetHeight(scrollHeight + 10)
+    self:UpdateDisenchantersButtonState()
 end
 
 function UI_Monitor:CloseMasterLootWindow()

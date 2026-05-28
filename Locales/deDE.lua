@@ -50,14 +50,30 @@ L["Error: History entry not found or empty."] = "Fehler: Raid-Verlaufs-Eintrag n
 L["No attendees recorded."] = "Keine Teilnehmer aufgezeichnet."
 L["Attendees (%d):"] = "Teilnehmer (%d):"
 L["Attendance & Decay"] = "Anwesenheit & Verfall"
+L["Open Full History"] = "Vollständigen Verlauf öffnen"
+L["Open the combined raid history window for the selected session."] = "Öffne das kombinierte Raid-Verlaufsfenster für die ausgewählte Sitzung."
 
 -- History.lua
 L["Session History"] = "Lootsession-Verlauf"
+L["Session Loot History"] = "Sitzungs-Loot-Verlauf"
 L["Select Date"] = "Datum auswählen"
 L["Delete Date"] = "Datum löschen"
 L["Re-award"] = "Neu vergeben"
 L["No entries for this date."] = "Keine Einträge für dieses Datum."
 L["Removed %d entries for %s"] = "%d Einträge für %s entfernt"
+L["No loot awarded in this session."] = "Kein Loot in dieser Sitzung vergeben."
+
+-- RaidHistory.lua
+L["Raid History"] = "Raid-Verlauf"
+L["Loot Awarded"] = "Vergebenes Loot"
+L["Players Attended"] = "Anwesende Spieler"
+L["Position Changes"] = "Positionsänderungen"
+L["Decay Applied"] = "Verfall angewendet"
+L["No position changes recorded."] = "Keine Positionsänderungen aufgezeichnet."
+L["Position log only available for current session."] = "Positionsprotokoll nur für die aktuelle Sitzung verfügbar."
+L["Decay disabled."] = "Verfall deaktiviert."
+L["No decay applied yet."] = "Noch kein Verfall angewendet."
+L["Decay of %d positions was applied when session ended."] = "Ein Verfall von %d Positionen wurde beim Ende der Sitzung angewendet."
 
 -- Monitor.lua
 L["Loot Monitor"] = "Loot-Monitor"
@@ -75,6 +91,7 @@ L["Pending Trades"] = "Ausstehender Handel"
 L["Stop Session"] = "Lootsession beenden"
 L["Loot Backlog"] = "Loot-Rückstand"
 L["History"] = "Verlauf"
+L["Session History"] = "Sitzungs-Verlauf"
 L["Attendance"] = "Anwesenheit"
 L["Version Check"] = "Versionsprüfung"
 L["Unranked"] = "Ohne Rang"
@@ -99,6 +116,8 @@ L["Offspec"] = "Offspec"
 L["T-Mog"] = "T-Mog"
 L["You voted: %s%s|r"] = "Du hast abgestimmt: %s%s|r"
 L["Voted: %s%s|r"] = "Abgestimmt: %s%s|r"
+L["Add Private Note"] = "Private Notiz hinzufügen"
+L["Add note to Loot Master..."] = "Notiz an Plündermeister hinzufügen..."
 
 -- ItemManager.lua
 L["Item Manager"] = "Gegenstands-Manager"

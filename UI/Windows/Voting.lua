@@ -117,8 +117,8 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         row:ClearAllPoints()
     end
 
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     if not self.scrollFrame then
-        local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
         local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.votingFrame, -50, -16)
         self.scrollFrame = scrollFrame
         self.scrollContent = scrollContent
@@ -126,6 +126,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 
     self.scrollFrame:Show()
     self.scrollContent:Show()
+    NativeGUI:StyleScrollBar(self.scrollFrame)
 
     self.votingTicker = C_Timer.NewTicker(0.5, function()
         local now = GetServerTime()
@@ -156,6 +157,13 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
             local isExpired   = (remaining <= 0)
             local isPending   = (API:GetOutboundVote(guid) ~= nil)
 
+            if isExpired and not currentVote and not isPending and not isClosed then
+                -- Automatically send an Auto Pass vote to the Loot Master
+                self.myVotes[guid] = 5
+                DesolateLootcouncil.API:SendVote(guid, 5, "")
+                currentVote = 5
+            end
+
             if not isClosed and not isExpired and remaining > 0 then
                 local t = C_Timer.NewTimer(remaining, function()
                     self:ShowVotingWindow(nil, true)
@@ -170,6 +178,18 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
             )
         end
     end
+
+    -- Set total scroll content height based on the total height of all displayed rows
+    local totalHeight = 0
+    for k = 1, rowCount do
+        local r = self.rowPool[k]
+        if r and r:IsShown() then
+            totalHeight = totalHeight + r:GetHeight() + 10
+        end
+    end
+    if self.scrollContent then
+        self.scrollContent:SetHeight(totalHeight)
+    end
 end
 
 function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExpired, isPending)
@@ -183,6 +203,12 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
     row:Show()
 
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+    -- Dynamically update backdrop color in case theme changed
+    local bgR = theme.bg[1] + 0.03
+    local bgG = theme.bg[2] + 0.03
+    local bgB = theme.bg[3] + 0.03
+    row:SetBackdropColor(bgR, bgG, bgB, 0.95)
+
     if isActive then
         row:SetBackdropBorderColor(unpack(theme.border))
     else
@@ -230,7 +256,7 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
         row.actionFrame = CreateFrame("Frame", nil, row)
     end
     row.actionFrame:ClearAllPoints()
-    row.actionFrame:SetSize(420, 36)
+    row.actionFrame:SetSize(393, 36)
     row.actionFrame:SetPoint("RIGHT", row, "RIGHT", -12, (rowHeight == 92) and 24 or 0)
 
     if not row.itemLabel then
@@ -254,33 +280,40 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
     end
 
     if not row.timerLbl then
-        local timer = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local timer = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         timer:SetWidth(45)
         timer:SetJustifyH("CENTER")
         row.timerLbl = timer
     end
     row.timerLbl:ClearAllPoints()
-    row.timerLbl:SetPoint("RIGHT", row.actionFrame, "LEFT", -5, 0)
+    row.timerLbl:SetPoint("LEFT", row.actionFrame, "LEFT", 0, 0)
     self.timerLabels[guid] = { fontString = row.timerLbl, expiry = data.expiry }
 
-    -- Restrict item label width further if timer is visible
-    row.itemLabel:SetPoint("RIGHT", row.timerLbl, "LEFT", -10, 0)
-
-    local kids = { row.actionFrame:GetChildren() }
-    for _, kid in ipairs(kids) do
-        kid:Hide()
-        kid:ClearAllPoints()
+    -- Setup reusable status elements to prevent memory leaks
+    if not row.statusBtn then
+        row.statusBtn = NativeGUI:CreateButton(row.actionFrame, "", 100, 24, "Pass")
     end
+    row.statusBtn:Hide()
+    row.statusBtn:ClearAllPoints()
+    row.statusBtn:SetPoint("RIGHT", 0, 0)
 
-    local regions = { row.actionFrame:GetRegions() }
-    for _, reg in ipairs(regions) do
-        if reg:GetObjectType() == "FontString" then
-            reg:SetText("")
-            reg:Hide()
-        end
+    if not row.statusText then
+        local fs = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetJustifyH("LEFT")
+        row.statusText = fs
+    end
+    row.statusText:Hide()
+    row.statusText:ClearAllPoints()
+
+    -- Explicitly hide active voting buttons to prevent overlapping layouts
+    if row.actionFrame.noteBtn then row.actionFrame.noteBtn:Hide() end
+    if row.votingButtons then
+        for _, btn in ipairs(row.votingButtons) do btn:Hide() end
     end
 
     if isClosed or isExpired then
+        row.timerLbl:Hide()
+
         local votedText = L["You voted: |cffaaaaaaAuto Pass|r"]
         if currentVote then
             local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
@@ -288,52 +321,65 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
             votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText)
         end
 
-        local btn = NativeGUI:CreateButton(row.actionFrame, L["Closed"], 100, 24, "Pass")
-        btn:SetPoint("RIGHT", 0, 0)
-        btn:SetEnabled(false)
+        row.statusBtn:SetText(L["Closed"])
+        row.statusBtn:SetEnabled(false)
+        row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
+        row.statusBtn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
+        row.statusBtn:SetScript("OnClick", nil)
+        row.statusBtn:Show()
 
-        local res = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        res:SetPoint("LEFT", 0, 0)
-        res:SetPoint("RIGHT", btn, "LEFT", -10, 0)
-        res:SetJustifyH("LEFT")
-        res:SetText(votedText)
+        row.statusText:SetText(votedText)
+        row.statusText:SetPoint("LEFT", row.actionFrame, "LEFT", 0, 0)
+        row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
+        row.statusText:Show()
 
     elseif isPending then
+        row.timerLbl:Show()
+
         local outbound   = DesolateLootcouncil.API:GetOutboundVote(guid)
         local pendingType = outbound and outbound.type
         local vText  = pendingType and VOTE_TEXT[pendingType]  or "?"
         local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
         local noteText = self.myNotes[guid] and self.myNotes[guid] ~= "" and (" (" .. self.myNotes[guid] .. ")") or ""
 
-        local syncBtn = NativeGUI:CreateButton(row.actionFrame, L["Syncing..."], 100, 24, "Note")
-        syncBtn:SetPoint("RIGHT", 0, 0)
-        syncBtn:SetEnabled(false)
+        row.statusBtn:SetText(L["Syncing..."])
+        row.statusBtn:SetEnabled(false)
+        row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
+        row.statusBtn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
+        row.statusBtn:SetScript("OnClick", nil)
+        row.statusBtn:Show()
 
-        local res = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        res:SetPoint("LEFT", 0, 0)
-        res:SetPoint("RIGHT", syncBtn, "LEFT", -10, 0)
-        res:SetJustifyH("LEFT")
-        res:SetText(string.format(L["Voted: %s%s|r%s"], vColor, vText, noteText))
+        row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", vColor, vText, noteText))
+        row.statusText:SetPoint("LEFT", row.timerLbl, "RIGHT", 8, 0)
+        row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
+        row.statusText:Show()
 
     elseif currentVote then
+        row.timerLbl:Show()
+
         local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
         local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
 
-        local change = NativeGUI:CreateButton(row.actionFrame, L["Change"], 100, 24, "Pass")
-        change:SetPoint("RIGHT", 0, 0)
-        change:SetScript("OnClick", function()
+        row.statusBtn:SetText(L["Change"])
+        row.statusBtn:SetEnabled(true)
+        local btnTheme = row.statusBtn.themeBorder or theme.border
+        row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
+        row.statusBtn:SetBackdropBorderColor(unpack(btnTheme))
+        row.statusBtn:SetScript("OnClick", function()
             self.myVotes[guid] = nil
             DesolateLootcouncil.API:CancelVote(guid)
             self:ShowVotingWindow(nil, true)
         end)
+        row.statusBtn:Show()
 
-        local res = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        res:SetPoint("LEFT", 0, 0)
-        res:SetPoint("RIGHT", change, "LEFT", -10, 0)
-        res:SetJustifyH("LEFT")
-        res:SetText(string.format(L["Voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText))
+        row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText))
+        row.statusText:SetPoint("LEFT", row.timerLbl, "RIGHT", 8, 0)
+        row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
+        row.statusText:Show()
 
     else
+        row.timerLbl:Show()
+
         local function CastVote(val)
             self.myVotes[guid] = val
             local note = self.myNotes[guid] or ""
@@ -348,29 +394,29 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
             { VOTE_TEXT[3], 3, "Offspec" }, { VOTE_TEXT[4], 4, "T-Mog" }, { VOTE_TEXT[5], 5, "Pass" }
         }
 
-        for idx, bd in ipairs(BUTTONS) do
-            local btn = NativeGUI:CreateButton(row.actionFrame, bd[1], w, 24, bd[3])
-            btn:SetPoint("LEFT", (idx - 1) * (w + spacing), 0)
-            btn:SetScript("OnClick", function() CastVote(bd[2]) end)
-        end
-
         -- Modern Notepad Icon-Based Private Note Button
-        local noteBtn = CreateFrame("Button", nil, row.actionFrame, "BackdropTemplate")
-        noteBtn:SetSize(24, 24)
-        noteBtn:SetPoint("LEFT", 5 * (w + spacing), 0)
-        noteBtn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
-        noteBtn:SetBackdropColor(unpack(theme.buttonBg))
-        noteBtn:SetBackdropBorderColor(0.6, 0.3, 0.9, 1.0)
+        if not row.actionFrame.noteBtn then
+            local noteBtn = CreateFrame("Button", nil, row.actionFrame, "BackdropTemplate")
+            noteBtn:SetSize(24, 24)
+            noteBtn:SetPoint("RIGHT", 0, 0)
+            noteBtn:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 1,
+            })
 
-        local noteTex = noteBtn:CreateTexture(nil, "OVERLAY")
-        noteTex:SetSize(16, 16)
-        noteTex:SetPoint("CENTER")
-        noteTex:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
-        noteBtn.icon = noteTex
+            local noteTex = noteBtn:CreateTexture(nil, "OVERLAY")
+            noteTex:SetSize(16, 16)
+            noteTex:SetPoint("CENTER")
+            noteTex:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
+            noteBtn.icon = noteTex
+
+            row.actionFrame.noteBtn = noteBtn
+        end
+        local noteBtn = row.actionFrame.noteBtn
+        noteBtn:Show()
+        noteBtn:SetBackdropColor(unpack(theme.buttonBg))
+        noteBtn:SetBackdropBorderColor(unpack(theme.border))
 
         noteBtn:SetScript("OnEnter", function()
             noteBtn:SetBackdropColor(unpack(theme.buttonHover))
@@ -386,6 +432,19 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
             self.noteExpanded[guid] = not self.noteExpanded[guid]
             self:ShowVotingWindow(nil, true)
         end)
+
+        row.votingButtons = row.votingButtons or {}
+        for idx, bd in ipairs(BUTTONS) do
+            local btn = row.votingButtons[idx]
+            if not btn then
+                btn = NativeGUI:CreateButton(row.actionFrame, bd[1], w, 24, bd[3])
+                row.votingButtons[idx] = btn
+            end
+            btn:Show()
+            btn:ClearAllPoints()
+            btn:SetPoint("RIGHT", -24 - spacing - (5 - idx) * (w + spacing), 0)
+            btn:SetScript("OnClick", function() CastVote(bd[2]) end)
+        end
     end
 
     if not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid] then
@@ -399,6 +458,9 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
         row.noteBox:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -12, 5)
         row.noteBox:Show()
         row.noteEdit:SetText(self.myNotes[guid] or "")
+        -- Dynamically update EditBox theme colors to prevent stale theme borders/backgrounds
+        row.noteEdit:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
+        row.noteEdit:SetBackdropBorderColor(unpack(theme.border))
         row.noteEdit:SetScript("OnTextChanged", function(sb)
             self.myNotes[guid] = sb:GetText()
         end)
@@ -406,9 +468,6 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
         row.noteBox:Hide()
     end
 
-    if index == #self.cachedVotingItems then
-        self.scrollContent:SetHeight(topOffset + rowHeight + 10)
-    end
 end
 
 

@@ -455,37 +455,20 @@ function UI_Attendance:GetRaidHistoryOptions(config)
             func = function() StaticPopup_Show("DLC_CONFIRM_DELETE_HISTORY") end,
             width = "half",
         },
-        historyDetails = {
-            type = "description",
-            name = function()
-                local idx = self.selectedHistoryIndex
-                if not idx then return L["Select a session to view details."] end
-                local attendees = {}
-
-                if idx == "CURRENT" then
-                    if config.currentAttendees then
-                        for name in pairs(config.currentAttendees) do 
-                            table.insert(attendees, DesolateLootcouncil:GetDisplayName(name)) 
-                        end
-                    end
-                else
-                    local history = DesolateLootcouncil.API:GetAttendanceHistory()
-                    local entry = history[idx]
-                    if entry and entry.attendees then
-                        for name in pairs(entry.attendees) do 
-                            table.insert(attendees, DesolateLootcouncil.API:GetDisplayName(name)) 
-                        end
-                    else
-                        return L["Error: History entry not found or empty."]
-                    end
+        viewBtn = {
+            type = "execute",
+            name = L["Open Full History"],
+            desc = L["Open the combined raid history window for the selected session."],
+            order = 24,
+            disabled = function() return not self.selectedHistoryIndex end,
+            func = function()
+                local RaidHistory = DesolateLootcouncil:GetModule("UI_RaidHistory", true)
+                if RaidHistory then
+                    RaidHistory:ShowRaidHistoryWindow(self.selectedHistoryIndex)
                 end
-
-                if #attendees == 0 then return "|cffffd700" .. L["No attendees recorded."] .. "|r" end
-                table.sort(attendees)
-                return "|cffffd700" .. string.format(L["Attendees (%d):"], #attendees) .. "|r\n" .. table.concat(attendees, ", ")
             end,
-            order = 22,
-        }
+            width = "normal",
+        },
     }
 end
 

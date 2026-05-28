@@ -45,7 +45,7 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
     local titleBar = CreateFrame("Frame", nil, frame)
     titleBar:SetHeight(38)
     titleBar:SetPoint("TOPLEFT", 2, -2)
-    titleBar:SetPoint("TOPRIGHT", -22, -2)
+    titleBar:SetPoint("TOPRIGHT", -36, -2)
     titleBar:EnableMouse(true)
     titleBar:RegisterForDrag("LeftButton")
     titleBar:SetScript("OnDragStart", function() frame:StartMoving() end)
@@ -69,11 +69,14 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
     })
-    close:SetBackdropColor(0.15, 0.1, 0.2, 0.8)
-    close:SetBackdropBorderColor(0.4, 0.2, 0.6, 0.8)
+    close:SetBackdropColor(theme.bg[1] * 1.5, theme.bg[2] * 1.5, theme.bg[3] * 1.5, 0.8)
+    close:SetBackdropBorderColor(unpack(theme.border))
 
     local xText = close:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    xText:SetPoint("CENTER")
+    xText:SetSize(20, 20)
+    xText:SetPoint("CENTER", 0, 0)
+    xText:SetJustifyH("CENTER")
+    xText:SetJustifyV("MIDDLE")
     xText:SetText("X")
     xText:SetTextColor(1, 1, 1, 0.8)
 
@@ -83,8 +86,9 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
         close:SetBackdropColor(0.3, 0.1, 0.1, 0.9)
     end)
     close:SetScript("OnLeave", function()
+        local activeTheme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
         xText:SetTextColor(1, 1, 1, 0.8)
-        close:SetBackdropColor(0.15, 0.1, 0.2, 0.8)
+        close:SetBackdropColor(activeTheme.bg[1] * 1.5, activeTheme.bg[2] * 1.5, activeTheme.bg[3] * 1.5, 0.8)
     end)
 
     -- Elegant Neon Purple Sizing Handle in bottom-right corner
@@ -108,6 +112,7 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
         end
     end)
 
+    frame.titleBar = titleBar
     frame.titleText = title
     frame.closeButton = close
     frame.grabber = grabber
@@ -137,11 +142,16 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
             scrollBar:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 6, -16)
             scrollBar:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 6, 16)
 
+            local thumb = scrollBar:GetThumbTexture()
+
             for i = 1, scrollBar:GetNumRegions() do
                 local r = select(i, scrollBar:GetRegions())
                 if r and r:GetObjectType() == "Texture" then
-                    r:SetTexture(nil)
-                    r:SetAlpha(0)
+                    -- Do NOT hide/nil our custom trackBg or active thumb texture
+                    if r ~= scrollBar.trackBg and r ~= thumb then
+                        r:SetTexture(nil)
+                        r:SetAlpha(0)
+                    end
                 end
             end
 
@@ -152,13 +162,14 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
                 scrollBar.trackBg = trackBg
             end
             scrollBar.trackBg:SetColorTexture(theme.bg[1] * 1.2, theme.bg[2] * 1.2, theme.bg[3] * 1.2, 0.7)
+            scrollBar.trackBg:SetAlpha(0.7)
 
             -- Sleek flat thumb matching active theme border
-            local thumb = scrollBar:GetThumbTexture()
             if thumb then
                 thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
                 thumb:SetColorTexture(unpack(theme.border))
                 thumb:SetSize(12, 24)
+                thumb:SetAlpha(1.0)
             end
 
             -- Strip retro arrow button textures and apply modern atlas arrows
@@ -175,8 +186,10 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
                 for i = 1, upBtn:GetNumRegions() do
                     local r = select(i, upBtn:GetRegions())
                     if r and r:GetObjectType() == "Texture" then
-                        r:SetTexture(nil)
-                        r:SetAlpha(0)
+                        if r ~= upBtn.customArrow then
+                            r:SetTexture(nil)
+                            r:SetAlpha(0)
+                        end
                     end
                 end
 
@@ -188,6 +201,7 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
                     upBtn.customArrow = customArrow
                 end
                 upBtn.customArrow:SetVertexColor(unpack(theme.border))
+                upBtn.customArrow:SetAlpha(1.0)
 
                 -- Sleek micro-interactions on hover
                 upBtn:SetScript("OnEnter", function()
@@ -211,8 +225,10 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
                 for i = 1, downBtn:GetNumRegions() do
                     local r = select(i, downBtn:GetRegions())
                     if r and r:GetObjectType() == "Texture" then
-                        r:SetTexture(nil)
-                        r:SetAlpha(0)
+                        if r ~= downBtn.customArrow then
+                            r:SetTexture(nil)
+                            r:SetAlpha(0)
+                        end
                     end
                 end
 
@@ -224,6 +240,7 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
                     downBtn.customArrow = customArrow
                 end
                 downBtn.customArrow:SetVertexColor(unpack(theme.border))
+                downBtn.customArrow:SetAlpha(1.0)
 
                 -- Sleek micro-interactions on hover
                 downBtn:SetScript("OnEnter", function()
@@ -306,13 +323,13 @@ function UI_NativeGUI:CreateButton(parent, text, width, height, buttonType)
     })
 
     local BUTTON_COLORS = {
-        ["Bid"] = { border = { 0.0, 0.8, 0.6, 1.0 }, hover = { 0.0, 0.5, 0.4, 0.5 } },
-        ["Roll"] = { border = { 0.0, 0.6, 0.9, 1.0 }, hover = { 0.0, 0.4, 0.6, 0.5 } },
-        ["Offspec"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.5 } },
-        ["T-Mog"] = { border = { 0.6, 0.6, 0.6, 1.0 }, hover = { 0.4, 0.4, 0.4, 0.5 } },
-        ["Pass"] = { border = { 0.3, 0.3, 0.3, 1.0 }, hover = { 0.2, 0.2, 0.2, 0.5 } },
-        ["Note"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.5 } },
-        ["Stop"] = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.6 } },
+        ["Bid"] = { border = { 0.0, 0.8, 0.6, 1.0 }, hover = { 0.0, 0.5, 0.4, 0.8 } },
+        ["Roll"] = { border = { 0.0, 0.6, 0.9, 1.0 }, hover = { 0.0, 0.4, 0.6, 0.8 } },
+        ["Offspec"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
+        ["T-Mog"] = { border = { 0.6, 0.6, 0.6, 1.0 }, hover = { 0.45, 0.45, 0.45, 0.9 } },
+        ["Pass"] = { border = { 0.35, 0.35, 0.35, 1.0 }, hover = { 0.40, 0.40, 0.40, 0.9 } },
+        ["Note"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
+        ["Stop"] = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.9 } },
     }
 
     local activeTheme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
@@ -321,14 +338,23 @@ function UI_NativeGUI:CreateButton(parent, text, width, height, buttonType)
     local bgCol = activeTheme.buttonBg
     local hoverCol = custom and custom.hover or activeTheme.buttonHover
 
+    btn.buttonType = buttonType
+    btn.themeBg = bgCol
+    btn.themeHover = hoverCol
+    btn.themeBorder = borderCol
+
     btn:SetBackdropColor(unpack(bgCol))
     btn:SetBackdropBorderColor(unpack(borderCol))
 
     btn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(unpack(hoverCol))
+        if self.themeHover then
+            self:SetBackdropColor(unpack(self.themeHover))
+        end
     end)
     btn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(unpack(bgCol))
+        if self.themeBg then
+            self:SetBackdropColor(unpack(self.themeBg))
+        end
     end)
 
     return btn

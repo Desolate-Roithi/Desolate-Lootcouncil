@@ -21,21 +21,23 @@ function UI_Sidebar:AttachTo(parentFrame)
     -- Anchor to the RIGHT SIDE of the Monitor
     f:SetPoint("TOPLEFT", monitorRawFrame, "TOPRIGHT", 5, 0)
 
-    -- Add Backdrop (Black background)
+    -- Apply active theme backdrop matching CreateWindow/ApplyTheme style
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
     f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true,
-        tileSize = 16,
-        edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 }
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        tile = true, tileSize = 16, edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 }
     })
-    f:SetBackdropColor(0, 0, 0, 1)
+    f:SetBackdropColor(theme.bg[1] * 0.9, theme.bg[2] * 0.9, theme.bg[3] * 0.9, 0.95)
+    f:SetBackdropBorderColor(unpack(theme.border))
 
     -- Add Title
     local t = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     t:SetPoint("TOP", 0, -10)
     t:SetText("Disenchanters")
+    t:SetTextColor(unpack(theme.border))
+    f.titleText = t
 
     -- Add Content FontString (Left Aligned)
     local c = f:CreateFontString(nil, "OVERLAY", "GameFontWhiteSmall")
@@ -54,10 +56,8 @@ function UI_Sidebar:UpdateDisenchanters(sidebarFrame)
     local disenchanters = DesolateLootcouncil.API:GetDisenchanterList()
  
     if #disenchanters == 0 then
-        sidebarFrame:Hide()
         sidebarFrame.content:SetText("|cff9d9d9dNo data.\nScanning...|r")
     else
-        sidebarFrame:Show()
         local listString = ""
         for _, de in ipairs(disenchanters) do
             listString = listString .. string.format("%s (|cff00ff00%d|r)\n", DesolateLootcouncil.API:GetDisplayName(de.name), de.skill)

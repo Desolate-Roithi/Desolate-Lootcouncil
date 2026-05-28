@@ -128,11 +128,14 @@ function UI_Theme:ApplyTheme(widgetOrFrame, windowType)
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
                 edgeSize = 1,
             })
-            cb:SetBackdropColor(0.15, 0.1, 0.2, 0.8)
-            cb:SetBackdropBorderColor(0.4, 0.2, 0.6, 0.8)
+            cb:SetBackdropColor(theme.bg[1] * 1.5, theme.bg[2] * 1.5, theme.bg[3] * 1.5, 0.8)
+            cb:SetBackdropBorderColor(unpack(theme.border))
 
             local text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            text:SetPoint("CENTER")
+            text:SetSize(20, 20)
+            text:SetPoint("CENTER", 0, 0)
+            text:SetJustifyH("CENTER")
+            text:SetJustifyV("MIDDLE")
             text:SetText("X")
             text:SetTextColor(1, 1, 1, 0.8)
 
@@ -144,8 +147,9 @@ function UI_Theme:ApplyTheme(widgetOrFrame, windowType)
                 cb:SetBackdropColor(0.3, 0.1, 0.1, 0.9)
             end)
             cb:SetScript("OnLeave", function()
+                local activeTheme = UI_Theme:GetActiveTheme()
                 text:SetTextColor(1, 1, 1, 0.8)
-                cb:SetBackdropColor(0.15, 0.1, 0.2, 0.8)
+                cb:SetBackdropColor(activeTheme.bg[1] * 1.5, activeTheme.bg[2] * 1.5, activeTheme.bg[3] * 1.5, 0.8)
             end)
 
             f._customCloseButton = cb
@@ -303,20 +307,60 @@ end
 function UI_Theme:StyleNativeWindow(frame)
     if not frame then return end
     local theme = self:GetActiveTheme()
-    frame:SetBackdropColor(unpack(theme.bg))
-    frame:SetBackdropBorderColor(unpack(theme.border))
 
-    if frame.titleText then
-        frame.titleText:SetTextColor(unpack(theme.textHeader))
+    local BUTTON_COLORS = {
+        ["Bid"] = { border = { 0.0, 0.8, 0.6, 1.0 }, hover = { 0.0, 0.5, 0.4, 0.8 } },
+        ["Roll"] = { border = { 0.0, 0.6, 0.9, 1.0 }, hover = { 0.0, 0.4, 0.6, 0.8 } },
+        ["Offspec"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
+        ["T-Mog"] = { border = { 0.6, 0.6, 0.6, 1.0 }, hover = { 0.45, 0.45, 0.45, 0.9 } },
+        ["Pass"] = { border = { 0.35, 0.35, 0.35, 1.0 }, hover = { 0.40, 0.40, 0.40, 0.9 } },
+        ["Note"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
+        ["Stop"] = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.9 } },
+    }
+
+    local function StyleElement(f)
+        if not f then return end
+
+        if f == frame then
+            f:SetBackdropColor(unpack(theme.bg))
+            f:SetBackdropBorderColor(unpack(theme.border))
+        end
+
+        if f.titleText then
+            f.titleText:SetTextColor(unpack(theme.textHeader))
+        end
+
+        if f.closeButton then
+            f.closeButton:SetBackdropColor(theme.bg[1] * 1.5, theme.bg[2] * 1.5, theme.bg[3] * 1.5, 0.8)
+            f.closeButton:SetBackdropBorderColor(unpack(theme.border))
+        end
+
+        if f.grabberTex then
+            f.grabberTex:SetVertexColor(theme.border[1], theme.border[2], theme.border[3], 0.8)
+        end
+
+        if f.GetObjectType and f:GetObjectType() == "Button" and f.buttonType then
+            local custom = BUTTON_COLORS[f.buttonType]
+            local borderCol = custom and custom.border or theme.border
+            local bgCol = theme.buttonBg
+            local hoverCol = custom and custom.hover or theme.buttonHover
+
+            f.themeBg = bgCol
+            f.themeHover = hoverCol
+            f.themeBorder = borderCol
+
+            f:SetBackdropColor(unpack(bgCol))
+            f:SetBackdropBorderColor(unpack(borderCol))
+        end
+
+        if f.GetChildren then
+            for _, child in ipairs({ f:GetChildren() }) do
+                StyleElement(child)
+            end
+        end
     end
 
-    if frame.closeButton then
-        frame.closeButton:SetBackdropBorderColor(unpack(theme.border))
-    end
-
-    if frame.grabberTex then
-        frame.grabberTex:SetVertexColor(theme.border[1], theme.border[2], theme.border[3], 0.8)
-    end
+    StyleElement(frame)
 end
 
 --- Re-applies active theme to all open addon UI windows.
@@ -347,10 +391,25 @@ function UI_Theme:ApplyThemeToAllOpenWindows()
     local MonitorUI = DesolateLootcouncil:GetModule("UI_Monitor", true)
     if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
         self:StyleNativeWindow(MonitorUI.monitorFrame)
-        if MonitorUI.awardFrame then
-            self:StyleNativeWindow(MonitorUI.awardFrame)
+        local theme = self:GetActiveTheme()
+        if MonitorUI.deBtn then
+            MonitorUI:UpdateDisenchantersButtonState()
+        end
+        if MonitorUI.deFrame then
+            MonitorUI.deFrame:SetBackdropColor(theme.bg[1] * 0.9, theme.bg[2] * 0.9, theme.bg[3] * 0.9, 0.95)
+            MonitorUI.deFrame:SetBackdropBorderColor(unpack(theme.border))
+            if MonitorUI.deFrame.titleText then
+                MonitorUI.deFrame.titleText:SetTextColor(unpack(theme.border))
+            end
         end
         MonitorUI:ShowMonitorWindow(true)
+    end
+
+    -- Award Window
+    local AwardUI = DesolateLootcouncil:GetModule("UI_Award", true)
+    if AwardUI and AwardUI.awardFrame and AwardUI.awardFrame:IsShown() then
+        self:StyleNativeWindow(AwardUI.awardFrame)
+        AwardUI:ShowAwardWindow(AwardUI.activeItemData)
     end
 
     -- Voting Window

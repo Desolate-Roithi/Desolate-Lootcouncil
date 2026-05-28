@@ -44,15 +44,31 @@ L["Select a session to view details."] = true
 L["Error: History entry not found or empty."] = true
 L["No attendees recorded."] = true
 L["Attendees (%d):"] = true
+L["Open Full History"] = true
+L["Open the combined raid history window for the selected session."] = true
 L["Attendance & Decay"] = true
 
 -- History.lua
 L["Session History"] = true
+L["Session Loot History"] = true
 L["Select Date"] = true
 L["Delete Date"] = true
 L["Re-award"] = true
 L["No entries for this date."] = true
 L["Removed %d entries for %s"] = true
+L["No loot awarded in this session."] = true
+
+-- RaidHistory.lua
+L["Raid History"] = true
+L["Loot Awarded"] = true
+L["Players Attended"] = true
+L["Position Changes"] = true
+L["Decay Applied"] = true
+L["No position changes recorded."] = true
+L["Position log only available for current session."] = true
+L["Decay disabled."] = true
+L["No decay applied yet."] = true
+L["Decay of %d positions was applied when session ended."] = true
 
 -- Monitor.lua
 L["Loot Monitor"] = true
@@ -70,6 +86,7 @@ L["Pending Trades"] = true
 L["Stop Session"] = true
 L["Loot Backlog"] = true
 L["History"] = true
+L["Session History"] = true
 L["Attendance"] = true
 L["Version Check"] = true
 L["Unranked"] = true
@@ -98,6 +115,8 @@ L["Pass"] = true
 L["You voted: %s%s|r"] = true
 L["Voted: %s%s|r"] = true
 L["You voted: |cffaaaaaaAuto Pass|r"] = true
+L["Add Private Note"] = true
+L["Add note to Loot Master..."] = true
 
 -- ItemManager.lua
 L["Item Manager"] = true

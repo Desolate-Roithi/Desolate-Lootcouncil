@@ -1,6 +1,8 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+
 ---@class UI_Loot : AceModule, AceTimer-3.0
 local UI_Loot = DesolateLootcouncil:NewModule("UI_Loot", "AceConsole-3.0", "AceTimer-3.0", "AceEvent-3.0")
 
@@ -194,23 +196,29 @@ function UI_Loot:ShowLootWindow(lootTable)
         end)
 
         -- Category Dropdown
+        row.catCallback = function(value)
+            data.category = value
+            local idx = listIndexMap[value]
+            if idx then
+                DesolateLootcouncil.API:SetItemCategory(data.itemID, idx)
+                DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
+            elseif value == "Junk/Pass" then
+                DesolateLootcouncil.API:UnassignItem(data.itemID)
+            end
+        end
+
         if not row.catDrop then
             -- We create a custom native dropdown
             local dropContainer, dropBtn = NativeGUI:CreateDropdown(row, nil, 110, catList, nil, function(value)
-                data.category = value
-                local idx = listIndexMap[value]
-                if idx then
-                    DesolateLootcouncil.API:SetItemCategory(data.itemID, idx)
-                    DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
-                elseif value == "Junk/Pass" then
-                    DesolateLootcouncil.API:UnassignItem(data.itemID)
+                if row.catCallback then
+                    row.catCallback(value)
                 end
             end)
             row.catDrop = dropContainer
             row.catDropBtn = dropBtn
         end
         row.catDrop:ClearAllPoints()
-        row.catDrop:SetPoint("RIGHT", row.removeBtn, "LEFT", -6, 12) -- Y offset compensates for dropdown container label layout
+        row.catDrop:SetPoint("RIGHT", row.removeBtn, "LEFT", -6, 7) -- Y offset compensates for dropdown container label layout
         row.catDrop:Show()
 
         local savedCat = DesolateLootcouncil.API:GetItemCategory(data.itemID) or data.category or "Junk/Pass"
