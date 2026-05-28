@@ -221,7 +221,7 @@ end
 ---@return string classFilename
 function Roster:GetUnitClass(unitName)
     if DesolateLootcouncil:SmartCompare(unitName, "player") then
-        local _, classFilename = UnitClassBase("player")
+        local _, classFilename = UnitClass("player")
         return classFilename
     end
     if IsInRaid() and GetRaidRosterInfo then
@@ -235,15 +235,20 @@ function Roster:GetUnitClass(unitName)
         for i = 1, GetNumSubgroupMembers() do
             local name = GetUnitName("party" .. i, true)
             if name and DesolateLootcouncil:SmartCompare(name, unitName) then
-                local _, fileName = UnitClassBase("party" .. i)
+                local _, fileName = UnitClass("party" .. i)
                 return fileName
             end
         end
     end
     -- Fallback: look up in MainRoster
     local main = self:GetMain(unitName) or unitName
-    local rData = DesolateLootcouncil.db.profile.MainRoster[main]
-    if rData and rData.class then return rData.class end
+    for mName, rData in pairs(DesolateLootcouncil.db.profile.MainRoster) do
+        if DesolateLootcouncil:SmartCompare(mName, main) then
+            if rData and rData.class and rData.class ~= "" then
+                return rData.class
+            end
+        end
+    end
     return "WARRIOR"
 end
 

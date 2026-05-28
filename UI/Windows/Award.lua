@@ -8,8 +8,24 @@ local UI_Award = DesolateLootcouncil:NewModule("UI_Award", "AceEvent-3.0")
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
-local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
 local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
+
+local function GetClassColorHex(class)
+    if not class then return "ffffffff" end
+    local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if c then
+        if c.colorStr then
+            if c.colorStr:len() == 8 then
+                return c.colorStr
+            else
+                return "ff" .. c.colorStr
+            end
+        else
+            return string.format("ff%02x%02x%02x", c.r*255, c.g*255, c.b*255)
+        end
+    end
+    return "ffffffff"
+end
 
 local function GetPlayerClass(name)
     local targetName = DesolateLootcouncil:NormalizeName(name)
@@ -166,7 +182,7 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         lblName:SetJustifyH("LEFT")
         row.lblName = lblName
     end
-    local classColor = RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
+    local classColor = GetClassColorHex(class)
     row.lblName:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(v.name) .. "|r")
 
     -- 3. Bid Response pill
@@ -177,7 +193,8 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         lblResp:SetJustifyH("LEFT")
         row.lblResp = lblResp
     end
-    local color = VOTE_COLOR[v.type] or ""
+    local vc = NativeGUI.VOTE_COLORS[v.type]
+    local color = vc and vc.hex or ""
     local txt = VOTE_TEXT[v.type] or "?"
     row.lblResp:SetText(color .. txt .. "|r")
 

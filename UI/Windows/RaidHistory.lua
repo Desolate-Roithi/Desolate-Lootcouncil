@@ -210,7 +210,7 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
         self.pLootRows = {}   -- loot item rows
 
         -- Dropdown
-        local drop = NativeGUI:CreateDropdown(frame, L["Select Session"], 320, {}, nil, function(key)
+        local drop, dropBtn = NativeGUI:CreateDropdown(frame, L["Select Session"], 320, {}, nil, function(key)
             self.selectedIndex = key
             self:Refresh()
         end, RaidHistorySort)
@@ -219,7 +219,7 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
 
         -- Delete button — aligned to dropdown top edge
         local btnDel = NativeGUI:CreateButton(frame, L["Delete Entry"], 110, 24, "Stop")
-        btnDel:SetPoint("TOPLEFT", drop, "TOPRIGHT", 10, 0)
+        btnDel:SetPoint("LEFT", dropBtn, "RIGHT", 10, 0)
         btnDel:SetScript("OnClick", function()
             if not self.selectedIndex or self.selectedIndex == "CURRENT" then return end
             DesolateLootcouncil.API:DeleteAttendanceHistoryEntry(self.selectedIndex)

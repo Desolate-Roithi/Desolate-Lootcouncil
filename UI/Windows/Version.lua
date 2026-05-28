@@ -126,7 +126,7 @@ function UI_Version:UpdateVersionList(isTest)
         end
     end
 
-    AddEntry(UnitName("player"), select(2, UnitClassBase("player")), DesolateLootcouncil.API:GetVersion())
+    AddEntry(UnitName("player"), select(2, UnitClass("player")), DesolateLootcouncil.API:GetVersion())
 
     if IsInRaid() then
         for i = 1, 40 do
@@ -142,7 +142,7 @@ function UI_Version:UpdateVersionList(isTest)
                 local unit = "party" .. i
                 if UnitExists(unit) then
                     local name = UnitName(unit)
-                    local filename = select(2, UnitClassBase(unit))
+                    local filename = select(2, UnitClass(unit))
                     AddEntry(name, filename, nil)
                 end
             end

@@ -5,6 +5,23 @@ if AT.abortLoad then return end
 local UI_TradeList = DesolateLootcouncil:NewModule("UI_TradeList")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
+local function GetClassColorHex(class)
+    if not class then return "ffffffff" end
+    local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if c then
+        if c.colorStr then
+            if c.colorStr:len() == 8 then
+                return c.colorStr
+            else
+                return "ff" .. c.colorStr
+            end
+        else
+            return string.format("ff%02x%02x%02x", c.r*255, c.g*255, c.b*255)
+        end
+    end
+    return "ffffffff"
+end
+
 function UI_TradeList:ShowTradeListWindow()
     if not DesolateLootcouncil.API:IsLootMaster() then
         if self.tradeListFrame then self.tradeListFrame:Hide() end
@@ -146,7 +163,7 @@ function UI_TradeList:ShowTradeListWindow()
                 row.winnerLabel:Show()
 
                 local class = item.winnerClass or DesolateLootcouncil:GetModule("Roster"):GetUnitClass(item.winner)
-                local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
+                local classColor = GetClassColorHex(class)
                 row.winnerLabel:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(item.winner) .. "|r")
 
                 -- Link Label (sandwiched dynamically)

@@ -5,6 +5,23 @@ if AT.abortLoad then return end
 local UI_History = DesolateLootcouncil:NewModule("UI_History", "AceEvent-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
+local function GetClassColorHex(class)
+    if not class then return "ffffffff" end
+    local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if c then
+        if c.colorStr then
+            if c.colorStr:len() == 8 then
+                return c.colorStr
+            else
+                return "ff" .. c.colorStr
+            end
+        else
+            return string.format("ff%02x%02x%02x", c.r*255, c.g*255, c.b*255)
+        end
+    end
+    return "ffffffff"
+end
+
 --- Opens a lightweight loot history window scoped to the CURRENT raid session.
 --- Allows the Loot Master to quickly re-award items from this session.
 function UI_History:ShowSessionLootHistory()
@@ -118,7 +135,7 @@ function UI_History:ShowSessionLootHistory()
         row.itemLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -8, 0)
 
         local class      = item.winnerClass or DesolateLootcouncil:GetModule("Roster"):GetUnitClass(item.winner)
-        local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
+        local classColor = GetClassColorHex(class)
         local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
         local vtColor    = "ff888888"
         if item.voteType then

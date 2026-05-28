@@ -355,7 +355,8 @@ function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, or
     if not session.awarded then return false end
 
     local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
-    local _, winnerClass = UnitClassBase(winnerName)
+    local R = DesolateLootcouncil:GetModule("Roster")
+    local winnerClass = R and R:GetUnitClass(winnerName) or "WARRIOR"
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
 
     local entry = {
