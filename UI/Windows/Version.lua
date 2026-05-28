@@ -1,35 +1,17 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
----@class UI_Version : AceModule
+---@class UI_Version : AceModule, AceTimer-3.0
 local UI_Version = DesolateLootcouncil:NewModule("UI_Version", "AceEvent-3.0", "AceTimer-3.0")
-local AceGUI = LibStub("AceGUI-3.0")
-
----@class (partial) DLC_Ref_Version
----@field db table
----@field version string
----@field activeAddonUsers table
----@field GetModule fun(self: DLC_Ref_Version, name: string): any
----@field RestoreFramePosition fun(self: DLC_Ref_Version, frame: any, windowName: string)
----@field SaveFramePosition fun(self: DLC_Ref_Version, frame: any, windowName: string)
----@field ApplyCollapseHook fun(self: DLC_Ref_Version, widget: any)
----@field Persistence Persistence
-
----@type DLC_Ref_Version
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Version]]
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
--- Helper: Parse version string "1.0.0" into number 100 for comparison
--- Helper: Parse "1.0.0-Beta" -> 1, 0, 0, "Beta"
 local function ParseSemVer(v)
     if not v or v == "" then return 0, 0, 0, "" end
-    -- Handle cases where version might be nil-ish or malformed
     local major, minor, patch, suffix = v:match("(%d+)%.(%d+)%.(%d+)%-?(.*)")
     if not major then return 0, 0, 0, "" end
     return tonumber(major), tonumber(minor), tonumber(patch), (suffix or "")
 end
 
--- Return true if v1 > v2
 local function CompareSemVer(v1, v2)
     local M1, m1, p1, s1 = ParseSemVer(v1)
     local M2, m2, p2, s2 = ParseSemVer(v2)
@@ -38,60 +20,60 @@ local function CompareSemVer(v1, v2)
     if m1 ~= m2 then return m1 > m2 end
     if p1 ~= p2 then return p1 > p2 end
 
-    -- Core equal. Check suffixes.
-    -- Release (empty suffix) > Pre-release (any suffix)
     if s1 == "" and s2 ~= "" then return true end
     if s1 ~= "" and s2 == "" then return false end
 
-    -- Both have suffixes? Alphabetical (Beta > Alpha)
     if s1 ~= "" and s2 ~= "" then
         return s1:lower() > s2:lower()
     end
-
-    -- Equal
     return false
 end
 
 function UI_Version:ShowVersionWindow(isTest)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
     if not self.versionFrame then
-        -- 1. Create Frame
-        ---@type AceGUIFrame
-        local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle(L["Desolate Loot Council - Versions"])
-        frame:SetCallback("OnClose", function(widget)
+        local frame = NativeGUI:CreateWindow("DLCVersionFrame", L["Desolate Loot Council - Versions"], 320, 400, "Version")
+        self.versionFrame = frame
+        self.rowPool = {}
+
+        local btnRefresh = NativeGUI:CreateButton(frame, L["Refresh / Ping"], 180, 24, "Pass")
+        btnRefresh:SetPoint("BOTTOM", frame, "BOTTOM", 0, 12)
+        self.btnRefresh = btnRefresh
+
+        -- Repeating timer to handle button state and countdown text
+        self.refreshTimer = self:ScheduleRepeatingTimer(function()
+            if not self.versionFrame or not self.versionFrame:IsShown() then return end
+            local remaining = DesolateLootcouncil.API:GetVersionCheckCooldown()
+            if remaining > 0 then
+                btnRefresh:SetText(string.format(L["Wait %.0fs"], remaining))
+                btnRefresh:SetEnabled(false)
+            else
+                btnRefresh:SetText(L["Refresh / Ping"])
+                btnRefresh:SetEnabled(true)
+            end
+        end, 1)
+
+        btnRefresh:SetScript("OnClick", function()
+            local ok = DesolateLootcouncil.API:SendVersionCheck()
+            if not ok then return end
+
+            btnRefresh:SetEnabled(false)
+            btnRefresh:SetText(L["Pinging..."])
+            
+            C_Timer.After(1.5, function()
+                if self.versionFrame then
+                    self:UpdateVersionList(isTest)
+                end
+            end)
+        end)
+
+        frame:HookScript("OnHide", function()
             if self.refreshTimer then
                 self:CancelTimer(self.refreshTimer)
                 self.refreshTimer = nil
             end
-            AceGUI:Release(widget)
-            self.versionFrame = nil
-            self.scrollFrame = nil
-            self.initialPingSent = nil -- Reset for next open
         end)
-        frame:SetLayout("Fill")
-        frame:SetWidth(300)
-        frame:SetHeight(350)
-        self.versionFrame = frame
-
-        -- [NEW] Position Persistence
-        DesolateLootcouncil:RestoreFramePosition(frame, "Version")
-        local function SavePos(f)
-            DesolateLootcouncil:SaveFramePosition(f, "Version")
-        end
-        local rawFrame = (frame --[[@as any]]).frame
-        rawFrame:HookScript("OnDragStop", function(f)
-            f:StopMovingOrSizing()
-            SavePos(frame)
-        end)
-        rawFrame:HookScript("OnHide", function() SavePos(frame) end)
-        DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Version")
-
-        -- 2. Container (Scroll)
-        ---@type AceGUIScrollFrame
-        local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
-        scroll:SetLayout("List")
-        frame:AddChild(scroll)
-        self.scrollFrame = scroll
     end
 
     self.versionFrame:Show()
@@ -107,16 +89,24 @@ function UI_Version:OnEnable()
 end
 
 function UI_Version:UpdateVersionList(isTest)
-    if self.refreshTimer then
-        self:CancelTimer(self.refreshTimer)
-        self.refreshTimer = nil
+    if not self.versionFrame then return end
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    for _, r in ipairs(self.rowPool) do
+        r:Hide()
+        r:ClearAllPoints()
     end
 
-    if not self.scrollFrame then return end
-    self.scrollFrame:ReleaseChildren()
-    local scroll = self.scrollFrame --[[@as AceGUIScrollFrame]]
+    if not self.scrollFrame then
+        -- Leave space for footer button (bottomOffset = -46)
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.versionFrame, -75, -46)
+        self.scrollFrame = scrollFrame
+        self.scrollContent = scrollContent
+    end
 
-    -- [FIND_2] Perform initial ping if window is just opening and not on cooldown
+    self.scrollFrame:Show()
+    self.scrollContent:Show()
+
     if not self.initialPingSent then
         local remaining = DesolateLootcouncil.API:GetVersionCheckCooldown()
         if remaining <= 0 then
@@ -125,11 +115,9 @@ function UI_Version:UpdateVersionList(isTest)
         end
     end
 
-    -- 3. Gather Data
     local roster = {}
     local rosterMap = {}
 
-    -- Helper to add unique
     local function AddEntry(name, class, version)
         if not rosterMap[name] then
             local entry = { name = name, class = class, version = version }
@@ -138,10 +126,8 @@ function UI_Version:UpdateVersionList(isTest)
         end
     end
 
-    -- Add Self
     AddEntry(UnitName("player"), select(2, UnitClassBase("player")), DesolateLootcouncil.API:GetVersion())
 
-    -- Add Group Members
     if IsInRaid() then
         for i = 1, 40 do
             local name = GetRaidRosterInfo(i)
@@ -153,7 +139,6 @@ function UI_Version:UpdateVersionList(isTest)
     elseif IsInGroup() then
         local members = GetNumGroupMembers()
         if members > 0 then
-            -- Loop including player
             for i = 1, members - 1 do
                 local unit = "party" .. i
                 if UnitExists(unit) then
@@ -165,14 +150,12 @@ function UI_Version:UpdateVersionList(isTest)
         end
     end
 
-    -- Merge Active Addon Users (Sim / Out of Group)
     local activeUsers = DesolateLootcouncil.API:GetActiveAddonUsers()
     if activeUsers then
         for name, _ in pairs(activeUsers) do
             if not rosterMap[name] then
-                -- Try to guess class or unknown
-                local class = "PRIEST"   -- Default/Unknown color
-                if UnitExists(name) then -- Might be visible but not in group?
+                local class = "PRIEST"
+                if UnitExists(name) then
                     class = select(2, UnitClassBase(name))
                 end
                 AddEntry(name, class, nil)
@@ -180,135 +163,85 @@ function UI_Version:UpdateVersionList(isTest)
         end
     end
 
-    -- Fetch Versions from Comm
     local playerVersions = DesolateLootcouncil.API:GetPlayerVersions()
     local highestVerStr = "0.0.0"
     
-    -- Map existing data
     for _, entry in ipairs(roster) do
-        if DesolateLootcouncil.API:SmartCompare(entry.name, "player") then
-            -- Already set
-        else
-            -- Fix: Use direct table access as GetPlayerVersion is missing
+        if not DesolateLootcouncil.API:SmartCompare(entry.name, "player") then
             local ver = playerVersions and playerVersions[entry.name]
             entry.version = ver
         end
     end
 
-    -- Test Data Injection
     if isTest then
         AddEntry("OutdatedPlayer", "WARRIOR", "0.0.1")
         AddEntry("MissingPlayer", "MAGE", nil)
         AddEntry("FuturePlayer", "ROGUE", "9.9.9")
     end
 
-    -- 4. Calculate Highest
     for _, entry in ipairs(roster) do
         if entry.version then
-            -- If entry.version > highestVerStr
             if CompareSemVer(entry.version, highestVerStr) then
                 highestVerStr = entry.version
             end
         end
     end
 
-    -- 5. Render
-    ---@type AceGUILabel
-    local header = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    header:SetText(string.format(L["Highest Found Version: %s"], highestVerStr))
-    header:SetFontObject(GameFontNormalLarge)
-    scroll:AddChild(header)
-
-    ---@type AceGUILabel
-    local spacer = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    spacer:SetText(" ")
-    scroll:AddChild(spacer)
+    -- Header Info label
+    if not self.headerLabel then
+        self.headerLabel = self.versionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        self.headerLabel:SetPoint("TOPLEFT", 16, -42)
+    end
+    self.headerLabel:SetText(string.format(L["Highest Found Version: %s"], highestVerStr))
+    self.headerLabel:Show()
 
     table.sort(roster, function(a, b) return a.name < b.name end)
 
-    for _, entry in ipairs(roster) do
-        ---@type AceGUISimpleGroup
-        local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-        group:SetLayout("Flow")
-        group:SetFullWidth(true)
+    local topOffset = 0
+    local rowHeight = 24
 
-        ---@type AceGUILabel
-        local nameLabel = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        local color = entry.class and RAID_CLASS_COLORS[entry.class] or { r = 1, g = 1, b = 1 }
-        nameLabel:SetText(DesolateLootcouncil:GetDisplayName(entry.name))
-        if RAID_CLASS_COLORS[entry.class] then
-            nameLabel:SetColor(color.r, color.g, color.b)
-        else
-            nameLabel:SetColor(0.7, 0.7, 0.7) -- Grey for unknown
+    for idx, entry in ipairs(roster) do
+        if not self.rowPool[idx] then
+            self.rowPool[idx] = NativeGUI:CreateRowContainer(self.scrollContent, false)
         end
-        nameLabel:SetWidth(150)
-        group:AddChild(nameLabel)
+        local row = self.rowPool[idx]
+        row:Show()
+        row:SetHeight(rowHeight)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
+        row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
 
-        ---@type AceGUILabel
-        local verLabel = AceGUI:Create("Label") --[[@as AceGUILabel]]
+        -- Class-colored player name
+        if not row.nameText then
+            row.nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.nameText:SetPoint("LEFT", 8, 0)
+        end
+        row.nameText:SetText(DesolateLootcouncil:GetDisplayName(entry.name))
+        local color = entry.class and RAID_CLASS_COLORS[entry.class] or { r = 0.7, g = 0.7, b = 0.7 }
+        row.nameText:SetTextColor(color.r, color.g, color.b)
+
+        -- Version status text
+        if not row.verText then
+            row.verText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.verText:SetPoint("RIGHT", -8, 0)
+        end
+
         local ver = entry.version
-
-        -- Override for Sim Data if present in activeAddonUsers but no version sent
-        if not ver and DesolateLootcouncil.API:GetActiveAddonUsers()[entry.name] and not isTest then
-            -- Determine if we treat "Active but no version" as something special?
-            -- For now, consistent with logic:
-        end
-
         if not ver then
-            verLabel:SetText(L["Not Installed / Missing"])
-            verLabel:SetColor(0.5, 0.5, 0.5) -- Gray
+            row.verText:SetText(L["Not Installed / Missing"])
+            row.verText:SetTextColor(0.5, 0.5, 0.5)
         else
-            -- Check if ver >= highest (Current)
-            -- Equivalent to: NOT (highest > ver)
             if not CompareSemVer(highestVerStr, ver) then
-                verLabel:SetText(string.format(L["%s (Current)"], ver))
-                verLabel:SetColor(0, 1, 0) -- Green
+                row.verText:SetText(string.format(L["%s (Current)"], ver))
+                row.verText:SetTextColor(0, 1, 0)
             else
-                verLabel:SetText(string.format(L["%s (Outdated)"], ver))
-                verLabel:SetColor(1, 0, 0) -- Red
+                row.verText:SetText(string.format(L["%s (Outdated)"], ver))
+                row.verText:SetTextColor(1, 0, 0)
             end
         end
-        verLabel:SetWidth(200)
-        group:AddChild(verLabel)
 
-        scroll:AddChild(group)
+        topOffset = topOffset + rowHeight + 4
     end
 
-    ---@type AceGUIButton
-    local btnRefresh = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    btnRefresh:SetText(L["Refresh / Ping"])
-    btnRefresh:SetWidth(150)
-
-    -- Repeating timer to handle button state and countdown text
-    self.refreshTimer = self:ScheduleRepeatingTimer(function()
-        if not self.versionFrame or not self.versionFrame:IsShown() then return end
-        local remaining = DesolateLootcouncil.API:GetVersionCheckCooldown()
-        if remaining > 0 then
-            btnRefresh:SetText(string.format(L["Wait %.0fs"], remaining))
-            btnRefresh:SetDisabled(true)
-        else
-            btnRefresh:SetText(L["Refresh / Ping"])
-            btnRefresh:SetDisabled(false)
-        end
-    end, 1)
-
-    btnRefresh:SetCallback("OnClick", function()
-        local ok = DesolateLootcouncil.API:SendVersionCheck()
-        if not ok then
-            -- Throttled: UI will update via repeating timer
-            return
-        end
-
-        -- Sent OK: disable button immediately
-        btnRefresh:SetDisabled(true)
-        btnRefresh:SetText(L["Pinging..."])
-        
-        -- Delay refresh so responses can arrive before we re-render list
-        C_Timer.After(1.5, function()
-            if self.versionFrame then
-                self:UpdateVersionList(isTest)
-            end
-        end)
-    end)
-    scroll:AddChild(btnRefresh)
+    self.scrollContent:SetHeight(topOffset + 10)
 end

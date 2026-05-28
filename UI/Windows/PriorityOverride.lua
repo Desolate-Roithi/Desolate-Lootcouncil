@@ -18,80 +18,101 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
     local list = DesolateLootcouncil.API:GetPriorityList(listKey)
     if not list then return end
 
-    local frame = CreateFrame("Frame", "DLCPriorityOverride", UIParent, "BackdropTemplate")
-    frame:SetWidth(350)
-    frame:SetHeight(500)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+
+    -- Create Midnight-styled native window
+    local frame = NativeGUI:CreateWindow(
+        "DLCPriorityOverride",
+        string.format(L["Override: %s"], (list.name or listKey)),
+        320, 500,
+        "PriorityOverride"
+    )
     frame:SetPoint("CENTER")
-    frame:SetFrameStrata("HIGH")
-    frame:SetToplevel(true)
-    -- Persistence
-    DesolateLootcouncil:MakeMovableWithSave(frame, "PriorityOverride")
 
-    frame:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true,
-        tileSize = 32,
-        edgeSize = 32,
-        insets = { left = 8, right = 8, top = 8, bottom = 8 }
-    })
-
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -15)
-    title:SetText(string.format(L["Override: %s"], (list.name or listKey)))
-
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -5, -5)
-
+    -- Drag-and-drop priority list scroll area
     local scrollFrame = CreateFrame("ScrollFrame", "DLCPriorityScroll", frame, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", 15, -50)
     scrollFrame:SetPoint("BOTTOMRIGHT", -35, 15)
 
+    -- Style scrollbar
+    NativeGUI:StyleScrollBar(scrollFrame)
+
     local content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetWidth(300)
+    content:SetWidth(scrollFrame:GetWidth() or 260)
     content:SetHeight(1)
     scrollFrame:SetScrollChild(content)
+
+    -- Sync content width on resize
+    scrollFrame:SetScript("OnSizeChanged", function(self, w)
+        content:SetWidth(w)
+    end)
 
     self.priorityOverrideFrame = frame
     self.priorityOverrideContent = content
 
     local function RefreshList()
-        content:Hide() -- Hide during update
+        content:Hide()
         local children = { content:GetChildren() }
         for _, child in ipairs(children) do
             child:Hide(); child:SetParent(nil)
         end
 
         local currentList = list.players
-        -- Safety check
         if not currentList then currentList = {} end
 
-        local rowHeight = 25
+        local rowHeight = 28
 
         for i, name in ipairs(currentList) do
             local row = CreateFrame("Button", nil, content, "BackdropTemplate")
-            row:SetWidth(280)
             row:SetHeight(rowHeight)
-            row:SetPoint("TOPLEFT", 10, -(i - 1) * rowHeight)
+            row:SetPoint("TOPLEFT", 0, -(i - 1) * rowHeight)
+            row:SetPoint("TOPRIGHT", 0, -(i - 1) * rowHeight)
             row:SetBackdrop({
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
                 edgeSize = 1,
             })
-            row:SetBackdropColor(0.1, 0.1, 0.1, 0.5)
-            row:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
 
-            local text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-            text:SetPoint("LEFT", 10, 0)
-            text:SetText(string.format("%d. %s", i, name))
+            local bgR = theme.bg[1] + 0.04
+            local bgG = theme.bg[2] + 0.04
+            local bgB = theme.bg[3] + 0.04
+            row:SetBackdropColor(bgR, bgG, bgB, 0.9)
+            row:SetBackdropBorderColor(
+                theme.border[1] * 0.25,
+                theme.border[2] * 0.25,
+                theme.border[3] * 0.25,
+                0.5
+            )
+
+            -- Rank number (accent-coloured)
+            local rankLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            rankLabel:SetPoint("LEFT", 8, 0)
+            rankLabel:SetText(string.format("%d.", i))
+            rankLabel:SetTextColor(unpack(theme.accent))
+            rankLabel:SetWidth(28)
+            rankLabel:SetJustifyH("RIGHT")
+
+            -- Player name
+            local nameLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            nameLabel:SetPoint("LEFT", rankLabel, "RIGHT", 6, 0)
+            nameLabel:SetPoint("RIGHT", -8, 0)
+            nameLabel:SetJustifyH("LEFT")
+            nameLabel:SetText(DesolateLootcouncil:GetDisplayName(name))
+            nameLabel:SetTextColor(unpack(theme.textNormal))
+
+            -- Drag grip icon (subtle ≡ indicator on the right)
+            local grip = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            grip:SetPoint("RIGHT", -8, 0)
+            grip:SetText("≡")
+            grip:SetTextColor(theme.border[1], theme.border[2], theme.border[3], 0.5)
 
             -- Drag Logic
-            row:SetMovable(true) -- FIX: Required for StartMoving
+            row:SetMovable(true)
             row:RegisterForDrag("LeftButton")
             row:SetScript("OnDragStart", function(self)
                 self:SetFrameStrata("TOOLTIP")
 
-                -- Calculate Drag Offset (Where did we grab the row?)
                 local _, cy = GetCursorPosition()
                 local scale = self:GetEffectiveScale()
                 local _, center = self:GetCenter()
@@ -103,7 +124,9 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
 
                 self:StartMoving()
                 self.isDragging = true
-                self:SetBackdropColor(0.2, 0.5, 0.8, 0.8)
+                -- Highlight with accent while dragging
+                self:SetBackdropColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.9)
+                self:SetBackdropBorderColor(unpack(theme.border))
             end)
 
             row:SetScript("OnDragStop", function(self)
@@ -112,44 +135,41 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
                 self:SetFrameStrata("HIGH")
                 self:ClearAllPoints()
 
-                -- Use Cursor Position + Offset for reliable "Center" target
                 local _, cursorY = GetCursorPosition()
                 local scale = self:GetEffectiveScale()
-
-                -- Apply offset to get back to the visual center of the row (in raw pixels)
-                -- dragOffset was calculated as (center * scale) - cursorY
                 local targetCenterRaw = cursorY + (self.dragOffset or 0)
-
-                -- Convert back to UI coordinates
                 local targetY = targetCenterRaw / scale
 
                 local contentTop = content:GetTop() or 0
-                -- Distance from the top of the list to the row center
                 local relativeY = contentTop - targetY
-
-                -- Calculate index: Each row is 'rowHeight' pixels.
-                -- +1 because Lua is 1-indexed (0-25px = Index 1)
-                -- We use implicit rounding by math.floor for the bucket
                 local newIndex = math.floor(relativeY / rowHeight) + 1
-
-                -- Clamp to valid range
                 newIndex = math.max(1, math.min(newIndex, #currentList))
 
                 if newIndex ~= i then
                     DesolateLootcouncil.API:MovePlayerInPriorityList(listKey, i, newIndex)
-
-                    -- Defer refresh to prevent event collisions or double-processing
-                    C_Timer.After(0.01, function() RefreshList() end)
-                else
-                    -- Just snap back visually if no change, no full refresh needed but safer
-                    C_Timer.After(0.01, function() RefreshList() end)
                 end
+                C_Timer.After(0.01, function() RefreshList() end)
             end)
 
-            row:SetScript("OnEnter",
-                function(self) if not self.isDragging then self:SetBackdropColor(0.3, 0.3, 0.3, 0.8) end end)
-            row:SetScript("OnLeave",
-                function(self) if not self.isDragging then self:SetBackdropColor(0.1, 0.1, 0.1, 0.5) end end)
+            row:SetScript("OnEnter", function(self)
+                if not self.isDragging then
+                    self:SetBackdropColor(unpack(theme.buttonHover))
+                    self:SetBackdropBorderColor(theme.border[1] * 0.6, theme.border[2] * 0.6, theme.border[3] * 0.6, 0.8)
+                    grip:SetTextColor(unpack(theme.border))
+                end
+            end)
+            row:SetScript("OnLeave", function(self)
+                if not self.isDragging then
+                    self:SetBackdropColor(bgR, bgG, bgB, 0.9)
+                    self:SetBackdropBorderColor(
+                        theme.border[1] * 0.25,
+                        theme.border[2] * 0.25,
+                        theme.border[3] * 0.25,
+                        0.5
+                    )
+                    grip:SetTextColor(theme.border[1], theme.border[2], theme.border[3], 0.5)
+                end
+            end)
         end
 
         content:SetHeight(#currentList * rowHeight + 10)

@@ -118,9 +118,6 @@ function DesolateLootcouncil:OnInitialize()
     self.sessionAutopassAnswered = self.db.profile.DecayConfig.sessionAutopassAnswered or false
     self.amILM                  = false  -- explicit init; starts nil otherwise, breaks wasLM guard in UpdateLootMasterStatus
 
-    -- 5. Register with AceConfig
-    LibStub("AceConfig-3.0"):RegisterOptionsTable("DesolateLootcouncil", function() return self:GetOptions() end)
-    self.optionsFrame = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("DesolateLootcouncil", "Desolate Loot Council")
 
     -- 6. Validate/Notify
     if self.db.profile.configuredLM == "" then
@@ -365,29 +362,9 @@ function DesolateLootcouncil:GetActiveUserCount()
 end
 
 function DesolateLootcouncil:OpenConfig()
-    -- Set default size for AceConfig specifically before opening
-    local layouts = self.DefaultLayouts
-    if layouts and layouts["Config"] then
-        LibStub("AceConfigDialog-3.0"):SetDefaultSize("DesolateLootcouncil", layouts["Config"].width,
-            layouts["Config"].height)
-    end
-
-    local frame = LibStub("AceConfigDialog-3.0"):Open("DesolateLootcouncil")
-    if frame then
-        self:RestoreFramePosition(frame, "Config")
-        local savePos = function(f) self:SaveFramePosition(f, "Config") end
-        local rawFrame = (frame --[[@as any]]).frame
-        if rawFrame then
-            rawFrame:HookScript("OnDragStop", function(f)
-                f:StopMovingOrSizing()
-                savePos(frame)
-            end)
-            rawFrame:HookScript("OnHide", function() savePos(frame) end)
-        end
-
-        if self.Persistence and self.Persistence.ApplyCollapseHook then
-            self.Persistence:ApplyCollapseHook(frame, "Config")
-        end
+    local UI = self:GetModule("UI", true)
+    if UI and UI.ShowSettingsWindow then
+        UI:ShowSettingsWindow()
     end
 end
 

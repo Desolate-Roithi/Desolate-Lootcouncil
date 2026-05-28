@@ -3,7 +3,6 @@ if AT.abortLoad then return end
 
 ---@class UI_Voting : AceModule
 local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting", "AceEvent-3.0")
-local AceGUI = LibStub("AceGUI-3.0")
 
 -- File-scope constants: defined once, shared across all calls to ShowVotingWindow.
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
@@ -12,14 +11,6 @@ local VOTE_COLOR = {
     [1] = "|cff00ff00", [2] = "|cffffd700",
     [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa"
 }
-
--- Module-level tooltip helper: one function shared by all item rows.
-local function ShowItemTooltip(widget, link)
-    if not link then return end
-    GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
-    GameTooltip:SetHyperlink(link)
-    GameTooltip:Show()
-end
 
 ---@class (partial) DLC_Ref_UIVoting : AceAddon
 ---@field db table
@@ -40,34 +31,21 @@ local function FormatTime(seconds)
 end
 
 function UI_Voting:CreateVotingFrame()
-    ---@type AceGUIFrame
-    local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-    frame:SetTitle(L["Loot Vote"])
-    frame:SetLayout("Fill")
-    frame:EnableResize(false)
-    frame:SetWidth(800)
-    frame:SetHeight(450)
-    frame:SetCallback("OnClose", function(widget)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local frame = NativeGUI:CreateWindow("DLCVotingFrame", L["Loot Vote"], 800, 450, "Voting")
+
+    frame:HookScript("OnHide", function()
         if self.votingTicker then self.votingTicker:Cancel() end
         self:CancelAllTimers()
-        widget:Hide()
     end)
+
     self.votingFrame = frame
-
-    -- Style the frame with the active theme
-    local UI_Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
-    if UI_Theme then
-        UI_Theme:ApplyTheme(frame)
-    end
-
-    -- Position Persistence
-    DesolateLootcouncil:MakeMovableWithSave(frame, "Voting")
-
     self.myVotes = self.myVotes or {}
     self.myNotes = self.myNotes or {}
     self.noteExpanded = self.noteExpanded or {}
     self.timerLabels = {}
-    self.expirationTimers = {} -- Store expiration triggers
+    self.expirationTimers = {}
+    self.rowPool = {}
 end
 
 function UI_Voting:CancelAllTimers()
@@ -80,7 +58,6 @@ function UI_Voting:CancelAllTimers()
 end
 
 function UI_Voting:RemoveVotingItem(guid)
-    -- 1. Remove from Data
     if self.cachedVotingItems then
         for i, item in ipairs(self.cachedVotingItems) do
             if (item.sourceGUID or item.link) == guid then
@@ -89,7 +66,6 @@ function UI_Voting:RemoveVotingItem(guid)
             end
         end
     end
-    -- 2. Full Refresh
     if self.cachedVotingItems and #self.cachedVotingItems == 0 then
         if self.votingFrame then self.votingFrame:Hide() end
         return
@@ -103,6 +79,9 @@ function UI_Voting:ResetVoting()
     self.noteExpanded = {}
     self.cachedVotingItems = {}
     if self.votingFrame then self.votingFrame:Hide() end
+    if self.rowPool then
+        for _, r in ipairs(self.rowPool) do r:Hide() end
+    end
 end
 
 function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
@@ -110,17 +89,14 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 
     local API = DesolateLootcouncil.API
 
-    -- Sync confirmed votes from Session
     self.myVotes = API:GetLocalVotes()
     self.myNotes = self.myNotes or {}
     self.noteExpanded = self.noteExpanded or {}
 
-    -- New Session Data
     if lootTable then
         self.cachedVotingItems = lootTable
         self.myVotes = self.myVotes or {}
     end
-    -- Build a set of awarded GUIDs so we can skip items already distributed
     local awardedGUIDs = API:GetAwardedGUIDs()
 
     local items = self.cachedVotingItems
@@ -128,65 +104,47 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 
     if not isRefresh then
         self.votingFrame:Show()
-        -- Ensure window is maximized if it was previously collapsed
-        local frame = (self.votingFrame --[[@as any]]).frame
-        if frame then
-            frame.startCollapsed = nil -- Cancel initial hook timer
-            if frame.isCollapsed then
-                DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.votingFrame)
-            end
-        end
-    elseif not (self.votingFrame.frame and self.votingFrame.frame:IsShown()) then
-        return -- Don't force pop up if the user manually hid it
+    elseif not self.votingFrame:IsShown() then
+        return
     end
 
-    self.votingFrame:ReleaseChildren()
-    self.timerLabels = {}
-
-    -- Cancel old timers
     if self.votingTicker then self.votingTicker:Cancel() end
     self:CancelAllTimers()
+    self.timerLabels = {}
 
-    -- 1. Ticker (Visual Only)
+    for _, row in ipairs(self.rowPool) do
+        row:Hide()
+        row:ClearAllPoints()
+    end
+
+    if not self.scrollFrame then
+        local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.votingFrame, -50, -16)
+        self.scrollFrame = scrollFrame
+        self.scrollContent = scrollContent
+    end
+
+    self.scrollFrame:Show()
+    self.scrollContent:Show()
+
     self.votingTicker = C_Timer.NewTicker(0.5, function()
         local now = GetServerTime()
         for guid, info in pairs(self.timerLabels) do
-            if info.label and info.label.frame and info.label.SetText then
+            if info.fontString then
                 local remaining = (info.expiry or 0) - now
                 local isClosed  = API:IsItemClosed(guid)
 
                 if isClosed or remaining <= 0 then
-                    info.label:SetText("|cffff0000" .. L["Closed"] .. "|r")
+                    info.fontString:SetText("|cffff0000" .. L["Closed"] .. "|r")
                 else
-                    info.label:SetText(FormatTime(remaining))
+                    info.fontString:SetText(FormatTime(remaining))
                 end
             end
         end
     end)
 
-    -- 2. Build Layout
-    ---@type AceGUIScrollFrame
-    local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
-    scroll:SetLayout("List")
-    scroll:SetFullWidth(true)
-    scroll:SetFullHeight(true)
-
-    -- Style the ScrollFrame background using active theme
-    local UI_Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
-    if UI_Theme then
-        UI_Theme:ApplyTheme(scroll)
-    end
-
-    -- Preserve Scroll Status on Refresh
-    if not self.scrollStatus or not isRefresh then
-        self.scrollStatus = { scrollvalue = 0 }
-    end
-    scroll:SetStatusTable(self.scrollStatus)
-
-    self.votingFrame:AddChild(scroll)
-    self.scrollContainer = scroll
-
     local now = GetServerTime()
+    local rowCount = 0
 
     for i = #items, 1, -1 do
         local data = items[i]
@@ -198,7 +156,6 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
             local isExpired   = (remaining <= 0)
             local isPending   = (API:GetOutboundVote(guid) ~= nil)
 
-            -- Schedule a forced refresh exactly when the item expires
             if not isClosed and not isExpired and remaining > 0 then
                 local t = C_Timer.NewTimer(remaining, function()
                     self:ShowVotingWindow(nil, true)
@@ -206,187 +163,255 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
                 table.insert(self.expirationTimers, t)
             end
 
+            rowCount = rowCount + 1
             self:CreateItemRow(
-                scroll, data, guid,
+                rowCount, data, guid,
                 currentVote, isClosed, isExpired, isPending
             )
         end
     end
-
-    -- Add a small spacer at the bottom
-    ---@type AceGUILabel
-    local spacer = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    spacer:SetText(" ")
-    spacer:SetFullWidth(true)
-    scroll:AddChild(spacer)
-
-    self.votingFrame:DoLayout()
 end
 
---- Private helper: renders one full item row into the scroll container.
-function UI_Voting:CreateItemRow(scroll, data, guid, currentVote, isClosed, isExpired, isPending)
-    local UI_Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExpired, isPending)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local isActive = not isClosed and not isExpired and not currentVote
 
-    -- Container for the entire row (holds both the main row and expanded note input)
-    ---@type AceGUISimpleGroup
-    local rowGroup = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    rowGroup:SetLayout("List")
-    rowGroup:SetFullWidth(true)
-    scroll:AddChild(rowGroup)
+    if not self.rowPool[index] then
+        self.rowPool[index] = NativeGUI:CreateRowContainer(self.scrollContent, isActive)
+    end
+    local row = self.rowPool[index]
+    row:Show()
 
-    -- Top Part: Icon, Link, Timer, and Action Buttons
-    ---@type AceGUISimpleGroup
-    local mainRow = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    mainRow:SetLayout("Flow")
-    mainRow:SetFullWidth(true)
-    rowGroup:AddChild(mainRow)
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+    if isActive then
+        row:SetBackdropBorderColor(unpack(theme.border))
+    else
+        row:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
+    end
 
-    -- Icon
-    ---@type AceGUIIcon
-    local itemIcon = AceGUI:Create("Icon")
-    itemIcon:SetImage(data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400)
-    itemIcon:SetImageSize(24, 24)
-    itemIcon:SetRelativeWidth(0.05)
-    itemIcon:SetCallback("OnClick",  function() ShowItemTooltip(itemIcon, data.link) end)
-    itemIcon:SetCallback("OnEnter",  function() ShowItemTooltip(itemIcon, data.link) end)
-    itemIcon:SetCallback("OnLeave",  function() GameTooltip:Hide() end)
-    mainRow:AddChild(itemIcon)
+    local rowHeight = (not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid]) and 92 or 44
+    row:SetHeight(rowHeight)
 
-    -- Item link label
-    ---@type AceGUIInteractiveLabel
-    local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+    local topOffset = 0
+    for k = 1, index - 1 do
+        local prevRow = self.rowPool[k]
+        if prevRow and prevRow:IsShown() then
+            topOffset = topOffset + prevRow:GetHeight() + 10
+        end
+    end
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
+    row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
+
+    if not row.itemIcon then
+        local icon = CreateFrame("Button", nil, row)
+        icon:SetSize(28, 28)
+        
+        local tex = icon:CreateTexture(nil, "BACKGROUND")
+        tex:SetAllPoints()
+        icon.texture = tex
+        
+        row.itemIcon = icon
+    end
+    row.itemIcon:ClearAllPoints()
+    row.itemIcon:SetPoint("LEFT", 12, (rowHeight == 92) and 24 or 0)
+    row.itemIcon.texture:SetTexture(data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400)
+
+    local function ShowTip()
+        GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
+        GameTooltip:SetHyperlink(data.link)
+        GameTooltip:Show()
+    end
+    row.itemIcon:SetScript("OnClick", ShowTip)
+    row.itemIcon:SetScript("OnEnter", ShowTip)
+    row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    if not row.actionFrame then
+        row.actionFrame = CreateFrame("Frame", nil, row)
+    end
+    row.actionFrame:ClearAllPoints()
+    row.actionFrame:SetSize(420, 36)
+    row.actionFrame:SetPoint("RIGHT", row, "RIGHT", -12, (rowHeight == 92) and 24 or 0)
+
+    if not row.itemLabel then
+        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        lbl:SetJustifyH("LEFT")
+        row.itemLabel = lbl
+    end
+    row.itemLabel:ClearAllPoints()
+    row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 10, 0)
+    row.itemLabel:SetPoint("RIGHT", row.actionFrame, "LEFT", -15, 0)
+
     local _, properLink = C_Item.GetItemInfo(data.link)
     if not properLink then
         local itemObj = Item:CreateFromItemID(data.itemID)
         if not itemObj:IsItemEmpty() then
             itemObj:ContinueOnItemLoad(function() self:ShowVotingWindow(nil, true) end)
         end
-        itemLabel:SetText(L["Loading..."])
+        row.itemLabel:SetText(L["Loading..."])
     else
-        itemLabel:SetText(properLink)
-        itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
+        row.itemLabel:SetText(properLink)
     end
-    itemLabel:SetRelativeWidth(0.25)
-    itemLabel:SetCallback("OnEnter", function(w) ShowItemTooltip(w, data.link) end)
-    itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-    mainRow:AddChild(itemLabel)
 
-    -- Timer label
-    ---@type AceGUILabel
-    local timerLbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    timerLbl:SetText("...")
-    timerLbl:SetRelativeWidth(0.06)
-    mainRow:AddChild(timerLbl)
-    self.timerLabels[guid] = { label = timerLbl, expiry = data.expiry }
+    if not row.timerLbl then
+        local timer = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        timer:SetWidth(45)
+        timer:SetJustifyH("CENTER")
+        row.timerLbl = timer
+    end
+    row.timerLbl:ClearAllPoints()
+    row.timerLbl:SetPoint("RIGHT", row.actionFrame, "LEFT", -5, 0)
+    self.timerLabels[guid] = { fontString = row.timerLbl, expiry = data.expiry }
 
-    -- Action group
-    ---@type AceGUISimpleGroup
-    local actionGroup = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    actionGroup:SetLayout("Flow")
-    actionGroup:SetRelativeWidth(0.64)
-    mainRow:AddChild(actionGroup)
+    -- Restrict item label width further if timer is visible
+    row.itemLabel:SetPoint("RIGHT", row.timerLbl, "LEFT", -10, 0)
+
+    local kids = { row.actionFrame:GetChildren() }
+    for _, kid in ipairs(kids) do
+        kid:Hide()
+        kid:ClearAllPoints()
+    end
+
+    local regions = { row.actionFrame:GetRegions() }
+    for _, reg in ipairs(regions) do
+        if reg:GetObjectType() == "FontString" then
+            reg:SetText("")
+            reg:Hide()
+        end
+    end
 
     if isClosed or isExpired then
-        -- STATE 4: Closed / Expired
         local votedText = L["You voted: |cffaaaaaaAuto Pass|r"]
         if currentVote then
             local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
             local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
             votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText)
         end
-        local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        res:SetText(votedText) ; res:SetWidth(280)
-        actionGroup:AddChild(res)
-        
-        local btn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-        btn:SetText(L["Closed"]) ; btn:SetWidth(100) ; btn:SetDisabled(true)
-        actionGroup:AddChild(btn)
-        if UI_Theme then UI_Theme:ApplyTheme(btn) end
+
+        local btn = NativeGUI:CreateButton(row.actionFrame, L["Closed"], 100, 24, "Pass")
+        btn:SetPoint("RIGHT", 0, 0)
+        btn:SetEnabled(false)
+
+        local res = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        res:SetPoint("LEFT", 0, 0)
+        res:SetPoint("RIGHT", btn, "LEFT", -10, 0)
+        res:SetJustifyH("LEFT")
+        res:SetText(votedText)
 
     elseif isPending then
-        -- STATE 2: Vote sent, awaiting ACK
         local outbound   = DesolateLootcouncil.API:GetOutboundVote(guid)
         local pendingType = outbound and outbound.type
         local vText  = pendingType and VOTE_TEXT[pendingType]  or "?"
         local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
         local noteText = self.myNotes[guid] and self.myNotes[guid] ~= "" and (" (" .. self.myNotes[guid] .. ")") or ""
-        local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        res:SetText(string.format(L["Voted: %s%s|r%s"], vColor, vText, noteText)) ; res:SetWidth(280)
-        actionGroup:AddChild(res)
-        
-        local syncBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-        syncBtn:SetText(L["Syncing..."]) ; syncBtn:SetWidth(100) ; syncBtn:SetDisabled(true)
-        actionGroup:AddChild(syncBtn)
-        if UI_Theme then UI_Theme:ApplyTheme(syncBtn) end
+
+        local syncBtn = NativeGUI:CreateButton(row.actionFrame, L["Syncing..."], 100, 24, "Note")
+        syncBtn:SetPoint("RIGHT", 0, 0)
+        syncBtn:SetEnabled(false)
+
+        local res = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        res:SetPoint("LEFT", 0, 0)
+        res:SetPoint("RIGHT", syncBtn, "LEFT", -10, 0)
+        res:SetJustifyH("LEFT")
+        res:SetText(string.format(L["Voted: %s%s|r%s"], vColor, vText, noteText))
 
     elseif currentVote then
-        -- STATE 3: Voted & confirmed
         local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
         local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
-        local res = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        res:SetText(string.format(L["Voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText))
-        res:SetWidth(280)
-        actionGroup:AddChild(res)
-        
-        local change = AceGUI:Create("Button") --[[@as AceGUIButton]]
-        change:SetText(L["Change"]) ; change:SetWidth(100)
-        change:SetCallback("OnClick", function()
+
+        local change = NativeGUI:CreateButton(row.actionFrame, L["Change"], 100, 24, "Pass")
+        change:SetPoint("RIGHT", 0, 0)
+        change:SetScript("OnClick", function()
             self.myVotes[guid] = nil
             DesolateLootcouncil.API:CancelVote(guid)
             self:ShowVotingWindow(nil, true)
         end)
-        actionGroup:AddChild(change)
-        if UI_Theme then UI_Theme:ApplyTheme(change) end
+
+        local res = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        res:SetPoint("LEFT", 0, 0)
+        res:SetPoint("RIGHT", change, "LEFT", -10, 0)
+        res:SetJustifyH("LEFT")
+        res:SetText(string.format(L["Voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText))
 
     else
-        -- STATE 1: Open, no vote yet
         local function CastVote(val)
             self.myVotes[guid] = val
             local note = self.myNotes[guid] or ""
             DesolateLootcouncil.API:SendVote(guid, val, note)
             self:ShowVotingWindow(nil, true)
         end
-        local w = 68
+
+        local w = 60
+        local spacing = 4
         local BUTTONS = {
-            { VOTE_TEXT[1], 1 }, { VOTE_TEXT[2], 2 },
-            { VOTE_TEXT[3], 3 }, { VOTE_TEXT[4], 4 }, { VOTE_TEXT[5], 5 }
+            { VOTE_TEXT[1], 1, "Bid" }, { VOTE_TEXT[2], 2, "Roll" },
+            { VOTE_TEXT[3], 3, "Offspec" }, { VOTE_TEXT[4], 4, "T-Mog" }, { VOTE_TEXT[5], 5, "Pass" }
         }
-        for _, bd in ipairs(BUTTONS) do
-            local btn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-            btn:SetText(bd[1]) ; btn:SetWidth(w)
-            btn:SetCallback("OnClick", function() CastVote(bd[2]) end)
-            actionGroup:AddChild(btn)
-            if UI_Theme then UI_Theme:ApplyTheme(btn) end
+
+        for idx, bd in ipairs(BUTTONS) do
+            local btn = NativeGUI:CreateButton(row.actionFrame, bd[1], w, 24, bd[3])
+            btn:SetPoint("LEFT", (idx - 1) * (w + spacing), 0)
+            btn:SetScript("OnClick", function() CastVote(bd[2]) end)
         end
 
-        -- Clickable Note Toggle Button (Note icon context)
-        local noteBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-        noteBtn:SetText(self.noteExpanded[guid] and "[-] Note" or "[+] Note")
-        noteBtn:SetWidth(60)
-        noteBtn:SetCallback("OnClick", function()
+        -- Modern Notepad Icon-Based Private Note Button
+        local noteBtn = CreateFrame("Button", nil, row.actionFrame, "BackdropTemplate")
+        noteBtn:SetSize(24, 24)
+        noteBtn:SetPoint("LEFT", 5 * (w + spacing), 0)
+        noteBtn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        noteBtn:SetBackdropColor(unpack(theme.buttonBg))
+        noteBtn:SetBackdropBorderColor(0.6, 0.3, 0.9, 1.0)
+
+        local noteTex = noteBtn:CreateTexture(nil, "OVERLAY")
+        noteTex:SetSize(16, 16)
+        noteTex:SetPoint("CENTER")
+        noteTex:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
+        noteBtn.icon = noteTex
+
+        noteBtn:SetScript("OnEnter", function()
+            noteBtn:SetBackdropColor(unpack(theme.buttonHover))
+            GameTooltip:SetOwner(noteBtn, "ANCHOR_TOP")
+            GameTooltip:SetText(L["Add Private Note"], 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        noteBtn:SetScript("OnLeave", function()
+            noteBtn:SetBackdropColor(unpack(theme.buttonBg))
+            GameTooltip:Hide()
+        end)
+        noteBtn:SetScript("OnClick", function()
             self.noteExpanded[guid] = not self.noteExpanded[guid]
             self:ShowVotingWindow(nil, true)
         end)
-        actionGroup:AddChild(noteBtn)
-        if UI_Theme then UI_Theme:ApplyTheme(noteBtn) end
     end
 
-    -- Render Expanded Inline Note Input Field directly below row
     if not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid] then
-        ---@type AceGUIEditBox
-        local noteEdit = AceGUI:Create("EditBox") --[[@as AceGUIEditBox]]
-        noteEdit:SetLabel(L["Add note to Loot Master..."])
-        noteEdit:SetText(self.myNotes[guid] or "")
-        noteEdit:SetFullWidth(true)
-        noteEdit:SetCallback("OnTextChanged", function(_, _, text)
-            self.myNotes[guid] = text
-        end)
-        rowGroup:AddChild(noteEdit)
-        if UI_Theme then
-            UI_Theme:ApplyTheme(noteEdit)
+        if not row.noteBox then
+            local noteBox, edit = NativeGUI:CreateEditBox(row, L["Add note to Loot Master..."])
+            row.noteBox = noteBox
+            row.noteEdit = edit
         end
+        row.noteBox:ClearAllPoints()
+        row.noteBox:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -45)
+        row.noteBox:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -12, 5)
+        row.noteBox:Show()
+        row.noteEdit:SetText(self.myNotes[guid] or "")
+        row.noteEdit:SetScript("OnTextChanged", function(sb)
+            self.myNotes[guid] = sb:GetText()
+        end)
+    elseif row.noteBox then
+        row.noteBox:Hide()
+    end
+
+    if index == #self.cachedVotingItems then
+        self.scrollContent:SetHeight(topOffset + rowHeight + 10)
     end
 end
+
+
 
 function UI_Voting:OnEnable()
     self:RegisterMessage("DLC_SESSION_STARTED", "OnSessionStarted")

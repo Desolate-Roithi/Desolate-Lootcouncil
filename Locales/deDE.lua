@@ -4,6 +4,7 @@ if not L then return end
 -- Global
 L["Close"] = "Schließen"
 L["Loading..."] = "Lädt..."
+L["Desolate Loot Council Settings"] = "Desolate Loot Council Einstellungen"
 
 -- Attendance.lua
 L["Are you sure you want to delete this attendance record? This cannot be undone."] =
@@ -72,6 +73,10 @@ L["View Rolls"] = "Würfe ansehen"
 L["Session Monitor"] = "Lootsession-Monitor"
 L["Pending Trades"] = "Ausstehender Handel"
 L["Stop Session"] = "Lootsession beenden"
+L["Loot Backlog"] = "Loot-Rückstand"
+L["History"] = "Verlauf"
+L["Attendance"] = "Anwesenheit"
+L["Version Check"] = "Versionsprüfung"
 L["Unranked"] = "Ohne Rang"
 L["Give"] = "Zuweisen"
 L["Lvl %d"] = "Lvl %d"

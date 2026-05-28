@@ -3,7 +3,6 @@ if AT.abortLoad then return end
 
 ---@class UI_TradeList : AceModule
 local UI_TradeList = DesolateLootcouncil:NewModule("UI_TradeList")
-local AceGUI = LibStub("AceGUI-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_TradeList:ShowTradeListWindow()
@@ -11,31 +10,33 @@ function UI_TradeList:ShowTradeListWindow()
         if self.tradeListFrame then self.tradeListFrame:Hide() end
         return
     end
-    if not self.tradeListFrame then
-        ---@type AceGUIFrame
-        local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle(L["Pending Trades"])
-        frame:SetLayout("Flow")
-        frame:SetCallback("OnClose", function(widget) widget:Hide() end)
-        self.tradeListFrame = frame
 
-        -- [NEW] Position Persistence
-        DesolateLootcouncil:MakeMovableWithSave(frame, "Trade")
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if not self.tradeListFrame then
+        local frame = NativeGUI:CreateWindow("DLCTradeFrame", L["Pending Trades"], 500, 350, "Trade")
+        self.tradeListFrame = frame
+        self.rowPool = {}
     end
 
     self.tradeListFrame:Show()
-    self.tradeListFrame:ReleaseChildren()
+
+    for _, r in ipairs(self.rowPool) do
+        r:Hide()
+        r:ClearAllPoints()
+    end
+
+    if not self.scrollFrame then
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.tradeListFrame, -50, -16)
+        self.scrollFrame = scrollFrame
+        self.scrollContent = scrollContent
+    end
+
+    self.scrollFrame:Show()
+    self.scrollContent:Show()
 
     local awarded = DesolateLootcouncil.API:GetAwardedList()
 
-    ---@type AceGUIScrollFrame
-    local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
-    scroll:SetLayout("List")
-    scroll:SetFullWidth(true)
-    scroll:SetFullHeight(true)
-    self.tradeListFrame:AddChild(scroll)
-
-    -- Smart Trade Helper
     local function GetUnitIDForName(playerName)
         local targetScore = DesolateLootcouncil:GetScoreName(playerName)
         if not targetScore then return nil end
@@ -52,69 +53,52 @@ function UI_TradeList:ShowTradeListWindow()
     end
 
     local pendingCount = 0
+    local topOffset = 0
+    local rowHeight = 32
 
     if awarded then
         for _, item in ipairs(awarded) do
             if not item.traded then
                 pendingCount = pendingCount + 1
 
-                ---@type AceGUISimpleGroup
-                local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-                row:SetLayout("Flow")
-                row:SetFullWidth(true)
+                if not self.rowPool[pendingCount] then
+                    self.rowPool[pendingCount] = NativeGUI:CreateRowContainer(self.scrollContent, false)
+                end
+                local row = self.rowPool[pendingCount]
+                row:Show()
+                row:SetHeight(rowHeight)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
+                row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
 
-                -- Icon (Interactive NEW)
-                ---@type AceGUIIcon
-                local icon = AceGUI:Create("Icon")
-                icon:SetImage(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-                icon:SetImageSize(24, 24)
-                icon:SetRelativeWidth(0.05)
-                icon:SetCallback("OnClick", function()
-                    GameTooltip:SetOwner((icon --[[@as any]]).frame, "ANCHOR_CURSOR")
-                    GameTooltip:SetHyperlink(item.link)
-                    GameTooltip:Show()
+                -- Remove Button ("X") (created early for anchoring)
+                if not row.btnRemove then
+                    local btn = NativeGUI:CreateButton(row, "X", 26, 24, "Stop")
+                    row.btnRemove = btn
+                end
+                row.btnRemove:ClearAllPoints()
+                row.btnRemove:SetPoint("RIGHT", -8, 0)
+                row.btnRemove:Show()
+                row.btnRemove:SetScript("OnClick", function()
+                    item.traded = true
+                    DesolateLootcouncil:DLC_Log(string.format(L["Marked %s as traded."], item.link))
+                    self:ShowTradeListWindow()
                 end)
-                icon:SetCallback("OnEnter", function()
-                    GameTooltip:SetOwner((icon --[[@as any]]).frame, "ANCHOR_CURSOR")
-                    GameTooltip:SetHyperlink(item.link)
-                    GameTooltip:Show()
-                end)
-                icon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-
-                -- Link
-                ---@type AceGUIInteractiveLabel
-                local linkLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-                -- Bug 1: preserve item.link as-is (the original awarded drop link with bonus IDs)
-                linkLabel:SetText(item.link)
-                linkLabel:SetRelativeWidth(0.40) -- Reduced from 0.45 to accommodate icon (0.05)
-                linkLabel:SetCallback("OnEnter", function(widget)
-                    GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
-                    GameTooltip:SetHyperlink(item.link)
-                    GameTooltip:Show()
-                end)
-                linkLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-
-                -- Winner
-                ---@type AceGUILabel
-                local winnerLabel = AceGUI:Create("Label") --[[@as AceGUILabel]]
-                local class = item.winnerClass
-                local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
-                winnerLabel:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(item.winner) .. "|r")
-                winnerLabel:SetRelativeWidth(0.20)
 
                 -- Trade Button
-                ---@type AceGUIButton
-                local btnTrade = AceGUI:Create("Button") --[[@as AceGUIButton]]
-                btnTrade:SetText(L["Trade"])
-                btnTrade:SetRelativeWidth(0.15)
-                btnTrade:SetCallback("OnClick", function()
+                if not row.btnTrade then
+                    local btn = NativeGUI:CreateButton(row, L["Trade"], 60, 24, "Bid")
+                    row.btnTrade = btn
+                end
+                row.btnTrade:ClearAllPoints()
+                row.btnTrade:SetPoint("RIGHT", row.btnRemove, "LEFT", -6, 0)
+                row.btnTrade:Show()
+                row.btnTrade:SetScript("OnClick", function()
                     local unitID = GetUnitIDForName(item.winner)
-                    -- 1. Try to find UnitID (Raid/Party)
                     if unitID and CheckInteractDistance(unitID, 2) then
                         InitiateTrade(unitID)
                         return
                     end
-                    -- 2. Check if player already targets them manually
                     local winnerScore = DesolateLootcouncil:GetScoreName(item.winner)
                     if DesolateLootcouncil:GetUnitScore("target") == winnerScore then
                         if CheckInteractDistance("target", 2) then
@@ -124,36 +108,82 @@ function UI_TradeList:ShowTradeListWindow()
                         end
                         return
                     end
-                    -- 3. Failure: Ask user to target manually
                     DesolateLootcouncil:DLC_Log(string.format(L["Could not auto-target %s. Please target them manually and click Trade again."],
                         DesolateLootcouncil:GetDisplayName(item.winner)), true)
                 end)
 
-                -- Remove Button
-                ---@type AceGUIButton
-                local btnRemove = AceGUI:Create("Button") --[[@as AceGUIButton]]
-                btnRemove:SetText("X")
-                btnRemove:SetRelativeWidth(0.10)
-                btnRemove:SetCallback("OnClick", function()
-                    item.traded = true
-                    DesolateLootcouncil:DLC_Log(string.format(L["Marked %s as traded."], item.link))
-                    self:ShowTradeListWindow()
-                end)
+                -- Icon
+                if not row.iconBtn then
+                    local btn = CreateFrame("Button", nil, row)
+                    btn:SetSize(24, 24)
+                    btn:SetPoint("LEFT", 8, 0)
+                    local tex = btn:CreateTexture(nil, "BACKGROUND")
+                    tex:SetAllPoints()
+                    btn.texture = tex
+                    row.iconBtn = btn
+                end
+                row.iconBtn.texture:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+                row.iconBtn:Show()
 
-                row:AddChild(icon)
-                row:AddChild(linkLabel)
-                row:AddChild(winnerLabel)
-                row:AddChild(btnTrade)
-                row:AddChild(btnRemove)
-                scroll:AddChild(row)
+                local function ShowTip()
+                    GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
+                    GameTooltip:SetHyperlink(item.link)
+                    GameTooltip:Show()
+                end
+                row.iconBtn:SetScript("OnClick", ShowTip)
+                row.iconBtn:SetScript("OnEnter", ShowTip)
+                row.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+                -- Winner Label (class colored, right aligned next to Trade button)
+                if not row.winnerLabel then
+                    local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    lbl:SetSize(100, 20)
+                    lbl:SetJustifyH("RIGHT")
+                    row.winnerLabel = lbl
+                end
+                row.winnerLabel:ClearAllPoints()
+                row.winnerLabel:SetPoint("RIGHT", row.btnTrade, "LEFT", -10, 0)
+                row.winnerLabel:Show()
+
+                local class = item.winnerClass
+                local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
+                row.winnerLabel:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(item.winner) .. "|r")
+
+                -- Link Label (sandwiched dynamically)
+                if not row.linkLabel then
+                    local btn = CreateFrame("Button", nil, row)
+                    btn:SetHeight(20)
+                    local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    txt:SetPoint("LEFT", 0, 0)
+                    txt:SetPoint("RIGHT", 0, 0)
+                    txt:SetJustifyH("LEFT")
+                    btn.text = txt
+                    row.linkLabel = btn
+                end
+                row.linkLabel:ClearAllPoints()
+                row.linkLabel:SetPoint("LEFT", row.iconBtn, "RIGHT", 8, 0)
+                row.linkLabel:SetPoint("RIGHT", row.winnerLabel, "LEFT", -10, 0)
+                row.linkLabel.text:SetText(item.link)
+                row.linkLabel:Show()
+                row.linkLabel:SetScript("OnClick", ShowTip)
+                row.linkLabel:SetScript("OnEnter", ShowTip)
+                row.linkLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+                topOffset = topOffset + rowHeight + 8
             end
         end
     end
 
     if pendingCount == 0 then
-        local lbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        lbl:SetText(L["No pending trades."])
-        lbl:SetFullWidth(true)
-        scroll:AddChild(lbl)
+        if not self.emptyLabel then
+            self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            self.emptyLabel:SetPoint("TOPLEFT", 10, -10)
+        end
+        self.emptyLabel:SetText(L["No pending trades."])
+        self.emptyLabel:Show()
+        self.scrollContent:SetHeight(40)
+    else
+        if self.emptyLabel then self.emptyLabel:Hide() end
+        self.scrollContent:SetHeight(topOffset + 10)
     end
 end

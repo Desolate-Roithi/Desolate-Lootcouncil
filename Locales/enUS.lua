@@ -4,6 +4,7 @@ if not L then return end
 -- Global
 L["Close"] = true
 L["Loading..."] = true
+L["Desolate Loot Council Settings"] = true
 
 -- Attendance.lua
 L["Are you sure you want to delete this attendance record? This cannot be undone."] = true
@@ -67,6 +68,10 @@ L["View Rolls"] = true
 L["Session Monitor"] = true
 L["Pending Trades"] = true
 L["Stop Session"] = true
+L["Loot Backlog"] = true
+L["History"] = true
+L["Attendance"] = true
+L["Version Check"] = true
 L["Unranked"] = true
 L["Give"] = true
 L["Lvl %d"] = true
