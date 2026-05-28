@@ -42,7 +42,8 @@ L["Open the Attendance Review window to process decay and end the session."] =
 L["Start a new raid session."] = "Eine neue Raid-Lootsession starten."
 L["Raid History"] = "Raid-Verlauf"
 L["Select Session"] = "Lootsession auswählen"
-L["View details of current or past raid sessions."] = "Details der aktuellen oder vergangenen Raid-Lootsessions anzeigen."
+L["View details of current or past raid sessions."] =
+"Details der aktuellen oder vergangenen Raid-Lootsessions anzeigen."
 L["Delete Entry"] = "Eintrag löschen"
 L["Permanently delete the selected history record."] = "Lösche den ausgewählten Raid-Verlaufsdatensatz dauerhaft."
 L["Select a session to view details."] = "Wähle eine Lootsession aus, um Details anzuzeigen."
@@ -51,7 +52,8 @@ L["No attendees recorded."] = "Keine Teilnehmer aufgezeichnet."
 L["Attendees (%d):"] = "Teilnehmer (%d):"
 L["Attendance & Decay"] = "Anwesenheit & Verfall"
 L["Open Full History"] = "Vollständigen Verlauf öffnen"
-L["Open the combined raid history window for the selected session."] = "Öffne das kombinierte Raid-Verlaufsfenster für die ausgewählte Sitzung."
+L["Open the combined raid history window for the selected session."] =
+"Öffne das kombinierte Raid-Verlaufsfenster für die ausgewählte Sitzung."
 
 -- History.lua
 L["Session History"] = "Lootsession-Verlauf"
@@ -70,12 +72,14 @@ L["Players Attended"] = "Anwesende Spieler"
 L["Position Changes"] = "Positionsänderungen"
 L["Decay Applied"] = "Verfall angewendet"
 L["No position changes recorded."] = "Keine Positionsänderungen aufgezeichnet."
-L["Position log not available (pre-dates session tracking)."] = "Positionsprotokoll nicht verfügbar (älter als Sitzungsverfolgung)."
+L["Position log not available (pre-dates session tracking)."] =
+"Positionsprotokoll nicht verfügbar (älter als Sitzungsverfolgung)."
 L["... and %d more entries"] = "... und %d weitere Einträge"
 L["Position log only available for current session."] = "Positionsprotokoll nur für die aktuelle Sitzung verfügbar."
 L["Decay disabled."] = "Verfall deaktiviert."
 L["No decay applied yet."] = "Noch kein Verfall angewendet."
-L["Decay of %d positions was applied when session ended."] = "Ein Verfall von %d Positionen wurde beim Ende der Sitzung angewendet."
+L["Decay of %d positions was applied when session ended."] =
+"Ein Verfall von %d Positionen wurde beim Ende der Sitzung angewendet."
 
 -- Monitor.lua
 L["Loot Monitor"] = "Loot-Monitor"
@@ -91,6 +95,10 @@ L["View Rolls"] = "Würfe ansehen"
 L["Session Monitor"] = "Lootsession-Monitor"
 L["Pending Trades"] = "Ausstehender Handel"
 L["Stop Session"] = "Lootsession beenden"
+L["Loot Backlog"] = "Loot-Rückstand"
+L["History"] = "Verlauf"
+L["Attendance"] = "Anwesenheit"
+L["Version Check"] = "Versionsprüfung"
 L["Loot Backlog"] = "Loot-Rückstand"
 L["History"] = "Verlauf"
 L["Session History"] = "Sitzungs-Verlauf"
@@ -186,8 +194,16 @@ L["Could not find %s in bags for %s."] = "Konnte %s nicht in den Taschen für %s
 L["Trade complete. %s marked as delivered to %s."] = "Handel abgeschlossen. %s als an %s geliefert markiert."
 
 -- Popups
-L["Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)"] = "Möchtest du automatisches Passen für diese Raidsitzung aktivieren?\n(Raidmitglieder passen automatisch auf zugewiesene Beute)"
+L["Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)"] =
+"Möchtest du automatisches Passen für diese Raidsitzung aktivieren?\n(Raidmitglieder passen automatisch auf zugewiesene Beute)"
 L["Enable"] = "Aktivieren"
-L["A previous Loot Session is still active. Do you want to close it?"] = "Eine vorherige Lootsession ist noch aktiv. Möchtest du sie schließen?"
+L["A previous Loot Session is still active. Do you want to close it?"] =
+"Eine vorherige Lootsession ist noch aktiv. Möchtest du sie schließen?"
 L["Yes (Close Session)"] = "Ja (Sitzung schließen)"
 L["No (Keep Active)"] = "Nein (Aktiv lassen)"
+
+L["Award Log"] = "Vergabe-Log"
+L["Loot Log"] = "Loot-Log"
+L["ToDebugString"] = "Debug-Zeichenfolge"
+L["Toggle Disenchanters Sidebar"] = "Entzauberer-Seitenleiste umschalten"
+L["You voted: %s%s|r%s"] = "Du hast abgestimmt: %s%s|r%s"

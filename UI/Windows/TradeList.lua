@@ -145,7 +145,7 @@ function UI_TradeList:ShowTradeListWindow()
                 row.winnerLabel:SetPoint("RIGHT", row.btnTrade, "LEFT", -10, 0)
                 row.winnerLabel:Show()
 
-                local class = item.winnerClass
+                local class = item.winnerClass or DesolateLootcouncil:GetModule("Roster"):GetUnitClass(item.winner)
                 local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
                 row.winnerLabel:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(item.winner) .. "|r")
 

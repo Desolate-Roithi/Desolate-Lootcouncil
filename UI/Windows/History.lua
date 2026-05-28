@@ -117,10 +117,17 @@ function UI_History:ShowSessionLootHistory()
         row.itemLabel:SetPoint("LEFT",  row.iconBtn,   "RIGHT", 8,  0)
         row.itemLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -8, 0)
 
-        local class      = item.winnerClass
+        local class      = item.winnerClass or DesolateLootcouncil:GetModule("Roster"):GetUnitClass(item.winner)
         local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
         local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
-        local vt         = item.voteType and (" |cff888888(" .. item.voteType .. ")|r") or ""
+        local vtColor    = "ff888888"
+        if item.voteType then
+            local vc = NativeGUI.VOTE_COLORS[item.voteType]
+            if vc then
+                vtColor = vc.hex:sub(3)
+            end
+        end
+        local vt         = item.voteType and (" |c" .. vtColor .. "(" .. item.voteType .. ")|r") or ""
         row.itemLabel.text:SetText((item.link or "???") .. " - |c" .. classColor .. winnerDisp .. "|r" .. vt)
         row.itemLabel:Show()
         row.itemLabel:SetScript("OnClick",  ShowTip)

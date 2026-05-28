@@ -4,6 +4,23 @@ if AT.abortLoad then return end
 ---@class UI_NativeGUI : AceModule
 local UI_NativeGUI = DesolateLootcouncil:NewModule("UI_NativeGUI")
 
+UI_NativeGUI.VOTE_COLORS = {
+    [1] = { hex = "|cffff8000", r = 1.0,  g = 0.5,  b = 0.0  },
+    [2] = { hex = "|cffa335ee", r = 0.64, g = 0.21, b = 0.93 },
+    [3] = { hex = "|cff0070dd", r = 0.0,  g = 0.44, b = 0.87 },
+    [4] = { hex = "|cff1eff00", r = 0.12, g = 1.0,  b = 0.0  },
+    [5] = { hex = "|cff9d9d9d", r = 0.62, g = 0.62, b = 0.62 },
+
+    Bid     = { hex = "|cffff8000", r = 1.0,  g = 0.5,  b = 0.0  },
+    Roll    = { hex = "|cffa335ee", r = 0.64, g = 0.21, b = 0.93 },
+    OS      = { hex = "|cff0070dd", r = 0.0,  g = 0.44, b = 0.87 },
+    Offspec = { hex = "|cff0070dd", r = 0.0,  g = 0.44, b = 0.87 },
+    TM      = { hex = "|cff1eff00", r = 0.12, g = 1.0,  b = 0.0  },
+    ["T-Mog"] = { hex = "|cff1eff00", r = 0.12, g = 1.0,  b = 0.0  },
+    Pass    = { hex = "|cff9d9d9d", r = 0.62, g = 0.62, b = 0.62 },
+}
+
+
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 
@@ -35,7 +52,9 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        tile = true, tileSize = 16, edgeSize = 1,
+        tile = true,
+        tileSize = 16,
+        edgeSize = 1,
         insets = { left = 1, right = 1, top = 1, bottom = 1 }
     })
     frame:SetBackdropColor(unpack(theme.bg))
@@ -205,7 +224,8 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
 
                 -- Sleek micro-interactions on hover
                 upBtn:SetScript("OnEnter", function()
-                    upBtn.customArrow:SetVertexColor(theme.border[1] * 1.2, theme.border[2] * 1.2, theme.border[3] * 1.2, 1.0)
+                    upBtn.customArrow:SetVertexColor(theme.border[1] * 1.2, theme.border[2] * 1.2, theme.border[3] * 1.2,
+                        1.0)
                 end)
                 upBtn:SetScript("OnLeave", function()
                     upBtn.customArrow:SetVertexColor(unpack(theme.border))
@@ -244,7 +264,8 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
 
                 -- Sleek micro-interactions on hover
                 downBtn:SetScript("OnEnter", function()
-                    downBtn.customArrow:SetVertexColor(theme.border[1] * 1.2, theme.border[2] * 1.2, theme.border[3] * 1.2, 1.0)
+                    downBtn.customArrow:SetVertexColor(theme.border[1] * 1.2, theme.border[2] * 1.2,
+                        theme.border[3] * 1.2, 1.0)
                 end)
                 downBtn:SetScript("OnLeave", function()
                     downBtn.customArrow:SetVertexColor(unpack(theme.border))
@@ -323,13 +344,13 @@ function UI_NativeGUI:CreateButton(parent, text, width, height, buttonType)
     })
 
     local BUTTON_COLORS = {
-        ["Bid"] = { border = { 0.0, 0.8, 0.6, 1.0 }, hover = { 0.0, 0.5, 0.4, 0.8 } },
-        ["Roll"] = { border = { 0.0, 0.6, 0.9, 1.0 }, hover = { 0.0, 0.4, 0.6, 0.8 } },
-        ["Offspec"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
-        ["T-Mog"] = { border = { 0.6, 0.6, 0.6, 1.0 }, hover = { 0.45, 0.45, 0.45, 0.9 } },
-        ["Pass"] = { border = { 0.35, 0.35, 0.35, 1.0 }, hover = { 0.40, 0.40, 0.40, 0.9 } },
-        ["Note"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
-        ["Stop"] = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.9 } },
+        ["Bid"]     = { border = { 1.0, 0.5, 0.0, 1.0 }, hover = { 0.7, 0.35, 0.0, 0.8 } },
+        ["Roll"]    = { border = { 0.64, 0.21, 0.93, 1.0 }, hover = { 0.45, 0.15, 0.65, 0.8 } },
+        ["Offspec"] = { border = { 0.0, 0.44, 0.87, 1.0 }, hover = { 0.0, 0.3, 0.6, 0.8 } },
+        ["T-Mog"]   = { border = { 0.12, 1.0, 0.0, 1.0 }, hover = { 0.08, 0.7, 0.0, 0.8 } },
+        ["Pass"]    = { border = { 1.0, 1.0, 1.0, 1.0 }, hover = { 0.7, 0.7, 0.7, 0.8 } },
+        ["Note"]    = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
+        ["Stop"]    = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.9 } },
     }
 
     local activeTheme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
@@ -369,7 +390,9 @@ function UI_NativeGUI:CreateRowContainer(parent, isActive)
     row:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        tile = true, tileSize = 16, edgeSize = 1,
+        tile = true,
+        tileSize = 16,
+        edgeSize = 1,
         insets = { left = 1, right = 1, top = 1, bottom = 1 }
     })
 
@@ -503,7 +526,7 @@ function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValu
         else
             menu:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
             menu:SetWidth(btn:GetWidth())
-            
+
             for _, r in ipairs(itemRows) do r:Hide() end
 
             local keys = {}
@@ -649,7 +672,7 @@ function UI_NativeGUI:CreateStepper(parent, labelText, width, minVal, maxVal, st
 
     local lbl = container:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     lbl:SetPoint("LEFT", 0, 0)
-    
+
     local function UpdateText()
         lbl:SetText(string.format("%s: %s", labelText or "", tostring(val)))
     end

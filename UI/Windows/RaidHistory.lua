@@ -16,13 +16,6 @@ local SECTION_ICONS = {
     positions = "Interface\\Icons\\inv_misc_scrollunrolled01d",
 }
 
-local VOTE_COLOURS = {
-    Bid  = { 0.0, 0.8, 0.0  },
-    Roll = { 1.0, 0.85, 0.0 },
-    OS   = { 0.0, 0.85, 0.85 },
-    TM   = { 0.93, 0.65, 0.37 },
-}
-
 -- ============================================================
 -- Widget Pool Helpers
 -- ============================================================
@@ -88,6 +81,7 @@ end
 local function FactoryNameTag(parent)
     local row = CreateFrame("Frame", nil, parent)
     row:SetHeight(18)
+    row:EnableMouse(true)
     local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     lbl:SetAllPoints()
     lbl:SetJustifyH("LEFT")
@@ -135,9 +129,47 @@ end
 -- Helpers
 -- ============================================================
 
+local CLASS_COORDS = {
+    WARRIOR     = {0, 0.25, 0, 0.25},
+    MAGE        = {0.25, 0.5, 0, 0.25},
+    ROGUE       = {0.5, 0.75, 0, 0.25},
+    DRUID       = {0.75, 1, 0, 0.25},
+    HUNTER      = {0, 0.25, 0.25, 0.5},
+    SHAMAN      = {0.25, 0.5, 0.25, 0.5},
+    PRIEST      = {0.5, 0.75, 0.25, 0.5},
+    WARLOCK     = {0.75, 1, 0.25, 0.5},
+    PALADIN     = {0, 0.25, 0.5, 0.75},
+    DEATHKNIGHT = {0.25, 0.5, 0.5, 0.75},
+    MONK        = {0.5, 0.75, 0.5, 0.75},
+    DEMONHUNTER = {0.75, 1, 0.5, 0.75},
+    EVOKER      = {0, 0.25, 0.75, 1.0},
+}
+
+local function GetClassIconMarkup(class, size)
+    if not class then return "" end
+    size = size or 14
+    local coords = CLASS_COORDS[class:upper()]
+    if coords then
+        local l, r, t, b = coords[1]*256, coords[2]*256, coords[3]*256, coords[4]*256
+        return string.format("|TInterface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes:%d:%d:0:0:256:256:%d:%d:%d:%d|t", size, size, l, r, t, b)
+    end
+    return ""
+end
+
 local function ClassColour(class, name)
     local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-    if c then return "|cff" .. c.colorStr .. name .. "|r" end
+    if c then
+        local colorStr = c.colorStr
+        if colorStr then
+            if colorStr:len() == 8 then
+                return "|c" .. colorStr .. name .. "|r"
+            else
+                return "|cff" .. colorStr .. name .. "|r"
+            end
+        else
+            return string.format("|cff%02x%02x%02x%s|r", c.r*255, c.g*255, c.b*255, name)
+        end
+    end
     return name
 end
 
@@ -417,7 +449,9 @@ function UI_RaidHistory:Refresh()
 
                 -- Vote type
                 local vt    = item.voteType or "?"
-                local vtCol = VOTE_COLOURS[vt] or { 0.6, 0.6, 0.6 }
+                local vtCol = { 0.6, 0.6, 0.6 }
+                local vc = NativeGUI.VOTE_COLORS[vt]
+                if vc then vtCol = { vc.r, vc.g, vc.b } end
                 row.vtLbl:ClearAllPoints()
                 row.vtLbl:SetPoint("RIGHT", row.timeLbl, "LEFT", -4, 0)
                 row.vtLbl:SetText(vt)
@@ -450,11 +484,13 @@ function UI_RaidHistory:Refresh()
     if not attendCollapsed then
         local attendees = {}
         if sessionEntry.attendees then
-            for name in pairs(sessionEntry.attendees) do
-                table.insert(attendees, API:GetDisplayName(name))
+            for rawName in pairs(sessionEntry.attendees) do
+                table.insert(attendees, rawName)
             end
         end
-        table.sort(attendees)
+        table.sort(attendees, function(a, b)
+            return API:GetDisplayName(a) < API:GetDisplayName(b)
+        end)
 
         if #attendees == 0 then
             AddText(L["No attendees recorded."], 14, { 0.5, 0.5, 0.5 })
@@ -466,14 +502,78 @@ function UI_RaidHistory:Refresh()
 
             for r = 1, rowsNeed do
                 for c = 1, COL_CNT do
-                    local ni   = (r - 1) * COL_CNT + c
-                    local name = attendees[ni]
-                    if name then
+                    local ni      = (r - 1) * COL_CNT + c
+                    local rawName = attendees[ni]
+                    if rawName then
                         local nt = NextNameTag()
                         nt:SetWidth(COL_W)
                         nt:SetPoint("TOPLEFT", sc, "TOPLEFT", 14 + (c - 1) * COL_W, -yOffset)
-                        nt.lbl:SetText("- " .. name)
-                        nt.lbl:SetTextColor(0.85, 0.85, 0.85)
+
+                        local displayName = API:GetDisplayName(rawName)
+                        local chars = sessionEntry.attendeeDetails and sessionEntry.attendeeDetails[rawName]
+
+                        if chars and next(chars) ~= nil then
+                            local maxKills = -1
+                            local bestClass = nil
+                            local attendedList = {}
+                            local iconMarkups = ""
+
+                            local charNames = {}
+                            for cName in pairs(chars) do
+                                table.insert(charNames, cName)
+                            end
+                            table.sort(charNames)
+
+                            for _, cName in ipairs(charNames) do
+                                local cData = chars[cName]
+                                local charClass = cData.class or "WARRIOR"
+                                local kills = cData.kills or 0
+
+                                iconMarkups = iconMarkups .. GetClassIconMarkup(charClass, 13)
+
+                                if kills > maxKills then
+                                    maxKills = kills
+                                    bestClass = charClass
+                                end
+
+                                table.insert(attendedList, { name = cName, class = charClass, kills = kills })
+                            end
+
+                            local colName = ClassColour(bestClass or "WARRIOR", displayName)
+                            nt.lbl:SetText("- " .. iconMarkups .. " " .. colName)
+
+                            nt:SetScript("OnEnter", function()
+                                GameTooltip:SetOwner(nt, "ANCHOR_TOP")
+                                GameTooltip:ClearLines()
+                                GameTooltip:AddLine(displayName, 1, 1, 1)
+                                GameTooltip:AddLine(" ", 1, 1, 1)
+                                GameTooltip:AddLine("Characters Attended:", 0.93, 0.65, 0.37)
+                                for _, char in ipairs(attendedList) do
+                                    local classColor = RAID_CLASS_COLORS[char.class] and RAID_CLASS_COLORS[char.class].colorStr or "ffffffff"
+                                    local charDisp = "|c" .. classColor .. char.name .. "|r"
+                                    local killsStr = string.format("%d boss kills", char.kills)
+                                    GameTooltip:AddLine(string.format("• %s (%s, %s)", charDisp, char.class, killsStr), 0.7, 0.7, 0.7)
+                                end
+                                GameTooltip:Show()
+                            end)
+                            nt:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                        else
+                            local class = "WARRIOR"
+                            local rData = db.MainRoster and db.MainRoster[rawName]
+                            if rData and rData.class then class = rData.class end
+                            local icon = GetClassIconMarkup(class, 13)
+                            local colName = ClassColour(class, displayName)
+                            nt.lbl:SetText("- " .. icon .. " " .. colName)
+
+                            nt:SetScript("OnEnter", function()
+                                GameTooltip:SetOwner(nt, "ANCHOR_TOP")
+                                GameTooltip:ClearLines()
+                                GameTooltip:AddLine(displayName, 1, 1, 1)
+                                GameTooltip:AddLine("No detailed character/boss kills data available.", 0.5, 0.5, 0.5)
+                                GameTooltip:Show()
+                            end)
+                            nt:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                        end
                     end
                 end
                 yOffset = yOffset + ROW_H + 2

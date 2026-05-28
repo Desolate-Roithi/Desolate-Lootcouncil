@@ -21,6 +21,15 @@ end
 
 function Autopass:OnEnable()
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "SyncAutopassState")
+    self:SyncAutopassState()
+end
+
+function Autopass:SyncAutopassState()
+    local config = DesolateLootcouncil.db.profile.DecayConfig
+    if config then
+        DesolateLootcouncil.sessionAutopassActive = config.sessionAutopassActive or false
+    end
 end
 
 --- Determines which roll type (Need=1, Greed=2, Disenchant=3, Transmog=4, Pass=0, or nil to skip) should be used.

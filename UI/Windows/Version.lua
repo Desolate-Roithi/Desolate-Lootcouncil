@@ -130,10 +130,9 @@ function UI_Version:UpdateVersionList(isTest)
 
     if IsInRaid() then
         for i = 1, 40 do
-            local name = GetRaidRosterInfo(i)
+            local name, _, _, _, _, fileName = GetRaidRosterInfo(i)
             if name then
-                local filename = select(2, UnitClassBase(name))
-                AddEntry(name, filename, nil)
+                AddEntry(name, fileName, nil)
             end
         end
     elseif IsInGroup() then
@@ -154,10 +153,7 @@ function UI_Version:UpdateVersionList(isTest)
     if activeUsers then
         for name, _ in pairs(activeUsers) do
             if not rosterMap[name] then
-                local class = "PRIEST"
-                if UnitExists(name) then
-                    class = select(2, UnitClassBase(name))
-                end
+                local class = DesolateLootcouncil:GetModule("Roster"):GetUnitClass(name)
                 AddEntry(name, class, nil)
             end
         end

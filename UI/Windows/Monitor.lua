@@ -9,25 +9,34 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_Monitor:GetVoteInfo(guid)
-    local API = DesolateLootcouncil.API
-    local summary  = API:GetVoteSummary(guid)
-    local votes    = summary.votes
-    local isClosed = summary.isClosed
+    local API                       = DesolateLootcouncil.API
+    local summary                   = API:GetVoteSummary(guid)
+    local votes                     = summary.votes
+    local isClosed                  = summary.isClosed
 
     local bids, rolls, os, tm, pass = 0, 0, 0, 0, 0
-    local votedPlayers = {}
+    local votedPlayers              = {}
     for name, voteData in pairs(votes) do
         local vType = type(voteData) == "table" and voteData.type or voteData
-        if vType == 1 then bids = bids + 1
-        elseif vType == 2 then rolls = rolls + 1
-        elseif vType == 3 then os = os + 1
-        elseif vType == 4 then tm = tm + 1
-        elseif vType == 5 then pass = pass + 1 end
+        if vType == 1 then
+            bids = bids + 1
+        elseif vType == 2 then
+            rolls = rolls + 1
+        elseif vType == 3 then
+            os = os + 1
+        elseif vType == 4 then
+            tm = tm + 1
+        elseif vType == 5 then
+            pass = pass + 1
+        end
         local score = API:GetScoreName(name)
         if score then votedPlayers[score] = true end
     end
 
-    local countsText = string.format("|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cff00ffffOS:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r", bids, rolls, os, tm, pass)
+    local countsText = string.format(
+        "|cffff8000Bid:%d|r | |cffa335eeRoll:%d|r | |cff0070ddOS:%d|r | |cff1eff00TM:%d|r | |cff9d9d9dPass:%d|r",
+        bids, rolls, os, tm, pass
+    )
 
     if isClosed then return countsText .. " |cffff0000[Closed]|r", {} end
 
@@ -90,11 +99,11 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
         local icon = CreateFrame("Button", nil, row)
         icon:SetSize(24, 24)
         icon:SetPoint("LEFT", 8, 0)
-        
+
         local tex = icon:CreateTexture(nil, "BACKGROUND")
         tex:SetAllPoints()
         icon.texture = tex
-        
+
         row.itemIcon = icon
     end
     row.itemIcon.texture:SetTexture(C_Item.GetItemIconByID(item.itemID) or 134400)
@@ -144,19 +153,19 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
 
     if not row.countsFrame then
         local cf = CreateFrame("Frame", nil, row)
-        cf:SetSize(280, 20)
-        
+        cf:SetSize(330, 20)
+
         local text = cf:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         text:SetPoint("LEFT", 0, 0)
         text:SetPoint("RIGHT", 0, 0)
         text:SetJustifyH("RIGHT")
         text:SetWordWrap(false)
         cf.text = text
-        
+
         row.countsFrame = cf
     end
     row.countsFrame:ClearAllPoints()
-    row.countsFrame:SetPoint("RIGHT", row.actionFrame, "LEFT", -15, 0)
+    row.countsFrame:SetPoint("RIGHT", row.actionFrame, "LEFT", -5, 0)
     row.countsFrame.text:SetText(countsText)
 
     if #pendingList > 0 then
@@ -180,19 +189,19 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     if not row.itemLabel then
         local lbl = CreateFrame("Button", nil, row)
         lbl:SetHeight(20)
-        
+
         local text = lbl:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         text:SetPoint("LEFT", 0, 0)
         text:SetPoint("RIGHT", 0, 0)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         lbl.text = text
-        
+
         row.itemLabel = lbl
     end
     row.itemLabel:ClearAllPoints()
     row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 10, 0)
-    row.itemLabel:SetPoint("RIGHT", row.countsFrame, "LEFT", -15, 0)
+    row.itemLabel:SetPoint("RIGHT", row.countsFrame, "LEFT", 2, 0)
 
     local _, properLink = C_Item.GetItemInfo(link)
     if not properLink then
@@ -221,6 +230,11 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
 end
 
 function UI_Monitor:ShowMonitorWindow(isRefresh)
+    if not DesolateLootcouncil:AmIRaidAssistOrLM() then
+        if self.monitorFrame then self.monitorFrame:Hide() end
+        return
+    end
+
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.monitorFrame then
@@ -342,7 +356,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
             if LootUI then LootUI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
         end)
 
-        self.btnHist = NativeGUI:CreateButton(nav, L["Session History"], 100, 24, "Pass")
+        self.btnHist = NativeGUI:CreateButton(nav, L["Award Log"], 72, 24, "Pass")
         self.btnHist:SetPoint("LEFT", 205, 0)
         self.btnHist:SetScript("OnClick", function()
             local History = DesolateLootcouncil:GetModule("UI_History", true)
@@ -350,14 +364,14 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         end)
 
         self.btnAttend = NativeGUI:CreateButton(nav, L["Attendance"], 85, 24, "Pass")
-        self.btnAttend:SetPoint("LEFT", 280, 0)
+        self.btnAttend:SetPoint("LEFT", 282, 0)
         self.btnAttend:SetScript("OnClick", function()
             local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
             if Attendance then Attendance:ShowAttendanceWindow() end
         end)
 
         self.btnVer = NativeGUI:CreateButton(nav, L["Version Check"], 100, 24, "Pass")
-        self.btnVer:SetPoint("LEFT", 370, 0)
+        self.btnVer:SetPoint("LEFT", 372, 0)
         self.btnVer:SetScript("OnClick", function()
             local Version = DesolateLootcouncil:GetModule("UI_Version", true)
             if Version then Version:ShowVersionWindow() end
@@ -444,7 +458,7 @@ function UI_Monitor:UpdateDisenchanters()
     if Sidebar then
         Sidebar:UpdateDisenchanters(self.deFrame)
     end
-    
+
     if self.userClosedDE == true or (self.monitorFrame and self.monitorFrame.isCollapsed) then
         self.deFrame:Hide()
     elseif self.userClosedDE == false then

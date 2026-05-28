@@ -7,10 +7,13 @@ local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting", "AceEvent-3.0")
 -- File-scope constants: defined once, shared across all calls to ShowVotingWindow.
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local VOTE_TEXT  = { [1] = L["Bid"], [2] = L["Roll"], [3] = L["Offspec"], [4] = L["T-Mog"], [5] = L["Pass"] }
-local VOTE_COLOR = {
-    [1] = "|cff00ff00", [2] = "|cffffd700",
-    [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa"
-}
+local VOTE_COLOR = setmetatable({}, {
+    __index = function(_, key)
+        local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+        local vc = NativeGUI and NativeGUI.VOTE_COLORS and NativeGUI.VOTE_COLORS[key]
+        return vc and vc.hex or "|cffffffff"
+    end
+})
 
 ---@class (partial) DLC_Ref_UIVoting : AceAddon
 ---@field db table
@@ -37,6 +40,65 @@ function UI_Voting:CreateVotingFrame()
     frame:HookScript("OnHide", function()
         if self.votingTicker then self.votingTicker:Cancel() end
         self:CancelAllTimers()
+
+        -- Outstanding votes check and repeating ticker
+        if self.reminderTicker then
+            self.reminderTicker:Cancel()
+            self.reminderTicker = nil
+        end
+
+        local items = self.cachedVotingItems
+        if not items or #items == 0 then return end
+
+        local hasUnvoted = false
+        local now = GetServerTime()
+        local API = DesolateLootcouncil.API
+        for _, item in ipairs(items) do
+            local guid = item.sourceGUID or item.link
+            local remaining = (item.expiry or 0) - now
+            local isClosed = API:IsItemClosed(guid)
+            local isExpired = (item.expiry and item.expiry > 0) and (remaining <= 0)
+            if not self.myVotes[guid] and not isClosed and not isExpired then
+                hasUnvoted = true
+                break
+            end
+        end
+
+        if hasUnvoted then
+            DesolateLootcouncil:Print(L["You have outstanding loot votes! Type /dlc vote to reopen."])
+            
+            self.reminderTicker = C_Timer.NewTicker(60, function()
+                if not self.cachedVotingItems or #self.cachedVotingItems == 0 then
+                    if self.reminderTicker then
+                        self.reminderTicker:Cancel()
+                        self.reminderTicker = nil
+                    end
+                    return
+                end
+
+                local stillUnvoted = false
+                local nowSec = GetServerTime()
+                for _, item in ipairs(self.cachedVotingItems) do
+                    local g = item.sourceGUID or item.link
+                    local remaining = (item.expiry or 0) - nowSec
+                    local isClosed = API:IsItemClosed(g)
+                    local isExpired = (item.expiry and item.expiry > 0) and (remaining <= 0)
+                    if not self.myVotes[g] and not isClosed and not isExpired then
+                        stillUnvoted = true
+                        break
+                    end
+                end
+
+                if stillUnvoted then
+                    DesolateLootcouncil:Print(L["REMINDER: You still have outstanding loot votes! Type /dlc vote to reopen."])
+                else
+                    if self.reminderTicker then
+                        self.reminderTicker:Cancel()
+                        self.reminderTicker = nil
+                    end
+                end
+            end)
+        end
     end)
 
     self.votingFrame = frame
@@ -74,6 +136,10 @@ function UI_Voting:RemoveVotingItem(guid)
 end
 
 function UI_Voting:ResetVoting()
+    if self.reminderTicker then
+        self.reminderTicker:Cancel()
+        self.reminderTicker = nil
+    end
     self.myVotes = {}
     self.myNotes = {}
     self.noteExpanded = {}
@@ -85,6 +151,10 @@ function UI_Voting:ResetVoting()
 end
 
 function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
+    if self.reminderTicker then
+        self.reminderTicker:Cancel()
+        self.reminderTicker = nil
+    end
     if not self.votingFrame then self:CreateVotingFrame() end
 
     local API = DesolateLootcouncil.API
@@ -153,18 +223,20 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         if not awardedGUIDs[guid] then
             local currentVote = self.myVotes[guid]
             local isClosed    = API:IsItemClosed(guid)
-            local remaining   = (data.expiry or 0) - now
-            local isExpired   = (remaining <= 0)
+            local expiry      = data.expiry or 0
+            local remaining   = expiry - now
+            local isExpired   = (expiry > 0) and (remaining <= 0)
+            local shouldAutoPass = (expiry > 0) and (remaining <= -3)
             local isPending   = (API:GetOutboundVote(guid) ~= nil)
 
-            if isExpired and not currentVote and not isPending and not isClosed then
+            if shouldAutoPass and not currentVote and not isPending and not isClosed then
                 -- Automatically send an Auto Pass vote to the Loot Master
                 self.myVotes[guid] = 5
                 DesolateLootcouncil.API:SendVote(guid, 5, "")
                 currentVote = 5
             end
 
-            if not isClosed and not isExpired and remaining > 0 then
+            if not isClosed and not isExpired and expiry > 0 and remaining > 0 then
                 local t = C_Timer.NewTimer(remaining, function()
                     self:ShowVotingWindow(nil, true)
                 end)

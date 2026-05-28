@@ -117,6 +117,11 @@ L["Pass"] = true
 L["You voted: %s%s|r"] = true
 L["Voted: %s%s|r"] = true
 L["You voted: |cffaaaaaaAuto Pass|r"] = true
+L["Award Log"] = true
+L["Loot Log"] = true
+L["ToDebugString"] = true
+L["Toggle Disenchanters Sidebar"] = true
+L["You voted: %s%s|r%s"] = true
 L["Add Private Note"] = true
 L["Add note to Loot Master..."] = true
 

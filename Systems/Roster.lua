@@ -135,6 +135,7 @@ function Roster:StartRaidSession()
     config.sessionActive = true
     config.currentSessionID = time()
     config.currentAttendees = {}
+    config.attendeeDetails = {}
     config.lastActivity = time()
 
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
@@ -164,11 +165,24 @@ function Roster:StopRaidSession(saveHistory)
             date      = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
             zone      = GetRealZoneText() or "Unknown",
             sessionID = config.currentSessionID,
-            attendees = {}
+            attendees = {},
+            attendeeDetails = {}
         }
         -- Deep copy attendees
         for name, _ in pairs(config.currentAttendees) do
             entry.attendees[name] = true
+        end
+        -- Deep copy attendee details
+        if config.attendeeDetails then
+            for mainName, chars in pairs(config.attendeeDetails) do
+                entry.attendeeDetails[mainName] = {}
+                for charName, charData in pairs(chars) do
+                    entry.attendeeDetails[mainName][charName] = {
+                        class = charData.class,
+                        kills = charData.kills
+                    }
+                end
+            end
         end
         table.insert(db.AttendanceHistory, 1, entry) -- Insert at top (Newest)
 
@@ -194,6 +208,7 @@ function Roster:StopRaidSession(saveHistory)
     config.sessionActive = false
     config.currentSessionID = nil
     config.currentAttendees = {}
+    config.attendeeDetails = {}
 
     DesolateLootcouncil.sessionAutopassActive = false
     DesolateLootcouncil.sessionAutopassAnswered = false
@@ -201,9 +216,41 @@ function Roster:StopRaidSession(saveHistory)
     DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
 end
 
+--- Helper to get a unit's class filename robustly
+---@param unitName string
+---@return string classFilename
+function Roster:GetUnitClass(unitName)
+    if DesolateLootcouncil:SmartCompare(unitName, "player") then
+        local _, classFilename = UnitClassBase("player")
+        return classFilename
+    end
+    if IsInRaid() and GetRaidRosterInfo then
+        for i = 1, GetNumGroupMembers() do
+            local name, _, _, _, _, fileName = GetRaidRosterInfo(i)
+            if name and DesolateLootcouncil:SmartCompare(name, unitName) then
+                return fileName
+            end
+        end
+    elseif IsInGroup() and GetNumSubgroupMembers then
+        for i = 1, GetNumSubgroupMembers() do
+            local name = GetUnitName("party" .. i, true)
+            if name and DesolateLootcouncil:SmartCompare(name, unitName) then
+                local _, fileName = UnitClassBase("party" .. i)
+                return fileName
+            end
+        end
+    end
+    -- Fallback: look up in MainRoster
+    local main = self:GetMain(unitName) or unitName
+    local rData = DesolateLootcouncil.db.profile.MainRoster[main]
+    if rData and rData.class then return rData.class end
+    return "WARRIOR"
+end
+
 --- Register a player (or their Main) as present
 ---@param unitName string
-function Roster:RegisterAttendance(unitName)
+---@param isEncounterKill boolean|nil
+function Roster:RegisterAttendance(unitName, isEncounterKill)
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config.sessionActive then return end
 
@@ -211,11 +258,31 @@ function Roster:RegisterAttendance(unitName)
 
     -- Verification: Does this main exist in our MainRoster?
     if DesolateLootcouncil.db.profile.MainRoster[mainName] then
+        if not config.currentAttendees then config.currentAttendees = {} end
         if not config.currentAttendees[mainName] then
             config.currentAttendees[mainName] = true
             DesolateLootcouncil:DLC_Log(string.format("Attendance Registered: %s (Main: %s)", 
                 DesolateLootcouncil:GetDisplayName(unitName), 
                 DesolateLootcouncil:GetDisplayName(mainName)))
+        end
+
+        -- Detailed multi-character tracking
+        if not config.attendeeDetails then config.attendeeDetails = {} end
+        if not config.attendeeDetails[mainName] then
+            config.attendeeDetails[mainName] = {}
+        end
+
+        local cleanUnitName = DesolateLootcouncil:GetDisplayName(unitName)
+        if not config.attendeeDetails[mainName][cleanUnitName] then
+            local class = self:GetUnitClass(unitName)
+            config.attendeeDetails[mainName][cleanUnitName] = {
+                class = class,
+                kills = 0
+            }
+        end
+
+        if isEncounterKill then
+            config.attendeeDetails[mainName][cleanUnitName].kills = config.attendeeDetails[mainName][cleanUnitName].kills + 1
         end
     else
         -- Show both the original unit name and the resolved main so the officer
@@ -230,7 +297,8 @@ function Roster:RegisterAttendance(unitName)
 end
 
 --- Captures current group members (or simulates if persistent group set)
-function Roster:SnapshotRoster()
+---@param isEncounterKill boolean|nil
+function Roster:SnapshotRoster(isEncounterKill)
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config.sessionActive then
         self:Printf("Error: No active session. Start one with /dlc session start")
@@ -246,7 +314,7 @@ function Roster:SnapshotRoster()
             for i = 1, members do
                 local name = GetRaidRosterInfo(i)
                 if name then
-                    self:RegisterAttendance(name)
+                    self:RegisterAttendance(name, isEncounterKill)
                 end
             end
         end
@@ -258,7 +326,7 @@ function Roster:SnapshotRoster()
     if Sim then
         local sims = Sim:GetRoster()
         for _, name in ipairs(sims) do
-            self:RegisterAttendance(name)
+            self:RegisterAttendance(name, isEncounterKill)
         end
         if #sims > 0 then
             DesolateLootcouncil:DLC_Log("Included " .. #sims .. " simulated players in roster snapshot.")
@@ -466,7 +534,7 @@ function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, g
     if success == 1 then
         local _, instanceType = GetInstanceInfo()
         if instanceType == "raid" then
-            self:SnapshotRoster()
+            self:SnapshotRoster(true)
             self:Printf("Encounter '%s' Defeated. Attendance updated.", encounterName)
         end
     end
