@@ -455,7 +455,7 @@ end
 ---@param defaultValue any  initial key value
 ---@param callback fun(key: any)  triggered on value changed
 ---@return Frame container, Button dropdownBtn
-function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValue, callback)
+function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValue, callback, customSort)
     local container = CreateFrame("Frame", nil, parent)
     container:SetSize(width, 42)
 
@@ -531,7 +531,11 @@ function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValu
 
             local keys = {}
             for k in pairs(currentList) do table.insert(keys, k) end
-            table.sort(keys, function(a, b) return tostring(currentList[a]) < tostring(currentList[b]) end)
+            if customSort then
+                table.sort(keys, function(a, b) return customSort(a, b, currentList) end)
+            else
+                table.sort(keys, function(a, b) return tostring(currentList[a]) < tostring(currentList[b]) end)
+            end
 
             local rowHeight = 20
             local menuHeight = 6
@@ -596,6 +600,9 @@ function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValu
     container.SetList = function(_, newList)
         currentList = newList or {}
         fs:SetText(GetDisplayValue(currentValue))
+    end
+    container.SetSort = function(_, newSort)
+        customSort = newSort
     end
     container.GetValue = function()
         return currentValue

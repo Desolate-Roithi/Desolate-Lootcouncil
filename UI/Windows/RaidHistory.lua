@@ -178,6 +178,17 @@ local function FmtTime(ts)
     return date("%H:%M", ts)
 end
 
+local function RaidHistorySort(a, b)
+    if a == "CURRENT" then return true end
+    if b == "CURRENT" then return false end
+    local numA = tonumber(a)
+    local numB = tonumber(b)
+    if numA and numB then
+        return numA < numB
+    end
+    return tostring(a) < tostring(b)
+end
+
 -- ============================================================
 -- Public: Open window
 -- ============================================================
@@ -202,7 +213,7 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
         local drop = NativeGUI:CreateDropdown(frame, L["Select Session"], 320, {}, nil, function(key)
             self.selectedIndex = key
             self:Refresh()
-        end)
+        end, RaidHistorySort)
         drop:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
         self.sessionDrop = drop
 
