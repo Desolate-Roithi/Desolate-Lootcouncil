@@ -161,8 +161,9 @@ function Roster:StopRaidSession(saveHistory)
         if not db.AttendanceHistory then db.AttendanceHistory = {} end
 
         local entry = {
-            date = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
-            zone = GetRealZoneText() or "Unknown",
+            date      = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
+            zone      = GetRealZoneText() or "Unknown",
+            sessionID = config.currentSessionID,
             attendees = {}
         }
         -- Deep copy attendees

@@ -92,20 +92,16 @@ function UI_History:ShowSessionLootHistory()
         row.iconBtn:SetScript("OnEnter",  ShowTip)
         row.iconBtn:SetScript("OnLeave",  function() GameTooltip:Hide() end)
 
-        -- Vote-type pill (right of icon, left of Re-award)
+        -- Vote-type label (hidden — now inlined in itemLabel text below)
         if not row.typeLabel then
             local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             lbl:SetWidth(50)
             lbl:SetJustifyH("RIGHT")
             row.typeLabel = lbl
         end
-        row.typeLabel:ClearAllPoints()
-        row.typeLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -8, 0)
-        row.typeLabel:SetText("(" .. (item.voteType or "?") .. ")")
-        row.typeLabel:SetTextColor(0.7, 0.7, 0.7)
-        row.typeLabel:Show()
+        row.typeLabel:Hide()
 
-        -- Item link + winner label
+        -- Item link + winner label (fills space between icon and Re-award)
         if not row.itemLabel then
             local btn = CreateFrame("Button", nil, row)
             btn:SetHeight(20)
@@ -118,13 +114,14 @@ function UI_History:ShowSessionLootHistory()
             row.itemLabel = btn
         end
         row.itemLabel:ClearAllPoints()
-        row.itemLabel:SetPoint("LEFT",  row.iconBtn,   "RIGHT", 8,   0)
-        row.itemLabel:SetPoint("RIGHT", row.typeLabel, "LEFT",  -6, 0)
+        row.itemLabel:SetPoint("LEFT",  row.iconBtn,   "RIGHT", 8,  0)
+        row.itemLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -8, 0)
 
         local class      = item.winnerClass
         local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
         local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
-        row.itemLabel.text:SetText((item.link or "???") .. " → |c" .. classColor .. winnerDisp .. "|r")
+        local vt         = item.voteType and (" |cff888888(" .. item.voteType .. ")|r") or ""
+        row.itemLabel.text:SetText((item.link or "???") .. " - |c" .. classColor .. winnerDisp .. "|r" .. vt)
         row.itemLabel:Show()
         row.itemLabel:SetScript("OnClick",  ShowTip)
         row.itemLabel:SetScript("OnEnter",  ShowTip)

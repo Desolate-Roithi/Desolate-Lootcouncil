@@ -163,6 +163,15 @@ function Priority:LogPriorityChange(msg)
     if #db.History > 100 then
         table.remove(db.History, 1)
     end
+
+    -- Also log into per-session bucket (for RaidHistory display)
+    local sessionID = db.DecayConfig and db.DecayConfig.currentSessionID
+    if sessionID then
+        if not db.SessionPositionLog then db.SessionPositionLog = {} end
+        local key = tostring(sessionID)
+        if not db.SessionPositionLog[key] then db.SessionPositionLog[key] = {} end
+        table.insert(db.SessionPositionLog[key], entry)
+    end
 end
 
 function Priority:ShuffleLists()
