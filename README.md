@@ -2,8 +2,8 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v0.9.2-Beta  
-**Last Updated:** 2026-05-20  
+**Latest Version:** v1.0.0-Alpha  
+**Last Updated:** 2026-05-30  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
 ## 🚀 Features
@@ -44,6 +44,15 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v1.0.0-Alpha
+* **UI Refactoring & Maintainability**:
+    - Refactored `ApplyTheme` switchboard in `Theme.lua` into type-specific helpers (`StyleButton`, `StyleEditBox`, `StyleDropdown`, `StyleFrame`).
+    - Modularized `ShowVotingWindow` and `CreateItemRow` in `Voting.lua` by extracting scrolling tick updates, layout height calculation, row positioning, and status style management.
+* **Autopass Debug Logger & Active State Sync**:
+    - Added real-time step-by-step roll evaluation logging in chat for Loot Masters and Raid Assists.
+    - Implemented a secure version check handshake where the Loot Master immediately whispers the current Autopass state back to incoming version requests, instantly syncing late-joiners, zone transitioners, and reloaded clients.
+* **Verification Integrity**: Full linter compliance (0 errors/0 warnings) and test runner passing.
 
 ### v0.9.2-Beta
 * **Autopass Disband Spam Suppression**:
