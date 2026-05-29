@@ -212,9 +212,9 @@ function UI_Version:UpdateVersionList(isTest)
             row.nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.nameText:SetPoint("LEFT", 8, 0)
         end
-        row.nameText:SetText(DesolateLootcouncil:GetDisplayName(entry.name))
-        local color = entry.class and RAID_CLASS_COLORS[entry.class] or { r = 0.7, g = 0.7, b = 0.7 }
-        row.nameText:SetTextColor(color.r, color.g, color.b)
+        local displayName = DesolateLootcouncil:GetDisplayName(entry.name)
+        row.nameText:SetText(NativeGUI:FormatClassColor(entry.class, displayName))
+        row.nameText:SetTextColor(1, 1, 1)
 
         -- Version status text
         if not row.verText then

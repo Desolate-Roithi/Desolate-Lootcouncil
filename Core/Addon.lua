@@ -214,15 +214,14 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
 
             ---@type UI_History
             local HistoryUI = self:GetModule("UI_History") --[[@as UI_History]]
-            if HistoryUI and HistoryUI.historyFrame and HistoryUI.historyFrame.frame and
-                HistoryUI.historyFrame.frame:IsShown() then
+            if HistoryUI and HistoryUI.sessionFrame and HistoryUI.sessionFrame:IsShown() then
                 HistoryUI:ShowHistoryWindow()
             end
         end
 
         ---@type UI_ItemManager
         local ItemMgr = self:GetModule("UI_ItemManager") --[[@as UI_ItemManager]]
-        if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
+        if ItemMgr and ItemMgr.frame and ItemMgr.frame:IsShown() then
             ItemMgr:RefreshWindow()
         end
 

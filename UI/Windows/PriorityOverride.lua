@@ -98,13 +98,15 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
             nameLabel:SetPoint("LEFT", rankLabel, "RIGHT", 6, 0)
             nameLabel:SetPoint("RIGHT", -8, 0)
             nameLabel:SetJustifyH("LEFT")
-            nameLabel:SetText(DesolateLootcouncil:GetDisplayName(name))
-            nameLabel:SetTextColor(unpack(theme.textNormal))
+            
+            local R = DesolateLootcouncil:GetModule("Roster")
+            local class = R and R:GetUnitClass(name)
+            nameLabel:SetText(NativeGUI:FormatClassColor(class, DesolateLootcouncil:GetDisplayName(name)))
 
-            -- Drag grip icon (subtle ≡ indicator on the right)
+            -- Drag grip icon (subtle == indicator on the right)
             local grip = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             grip:SetPoint("RIGHT", -8, 0)
-            grip:SetText("≡")
+            grip:SetText("==")
             grip:SetTextColor(theme.border[1], theme.border[2], theme.border[3], 0.5)
 
             -- Drag Logic

@@ -65,9 +65,9 @@ function UI_Monitor:GetVoteInfo(guid)
 
     local Sim = DesolateLootcouncil:GetModule("Simulation")
     if Sim and Sim.GetPendingVoters then
-        local simPending = Sim:GetPendingVoters(guid)
+        local simPending = Sim:GetPendingVoters(guid, votedPlayers)
         if simPending then
-            for _, sName in ipairs(simPending) do table.insert(pending, API:GetDisplayName(sName)) end
+            for _, sName in ipairs(simPending) do table.insert(pending, sName) end
         end
     end
 

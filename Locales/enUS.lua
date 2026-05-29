@@ -124,6 +124,10 @@ L["Toggle Disenchanters Sidebar"] = true
 L["You voted: %s%s|r%s"] = true
 L["Add Private Note"] = true
 L["Add note to Loot Master..."] = true
+L["min"] = true
+L["sec"] = true
+L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"] = true
+L["You have outstanding loot votes! Type /dlc vote to reopen."] = true
 
 -- ItemManager.lua
 L["Item Manager"] = true

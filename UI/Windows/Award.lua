@@ -10,23 +10,6 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
 
-local function GetClassColorHex(class)
-    if not class then return "ffffffff" end
-    local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-    if c then
-        if c.colorStr then
-            if c.colorStr:len() == 8 then
-                return c.colorStr
-            else
-                return "ff" .. c.colorStr
-            end
-        else
-            return string.format("ff%02x%02x%02x", c.r*255, c.g*255, c.b*255)
-        end
-    end
-    return "ffffffff"
-end
-
 local function GetPlayerClass(name)
     local targetName = DesolateLootcouncil:NormalizeName(name)
     
@@ -182,7 +165,7 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         lblName:SetJustifyH("LEFT")
         row.lblName = lblName
     end
-    local classColor = GetClassColorHex(class)
+    local classColor = NativeGUI:GetClassColorHex(class)
     row.lblName:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(v.name) .. "|r")
 
     -- 3. Bid Response pill
@@ -297,7 +280,7 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
         lblName:SetJustifyH("LEFT")
         row.lblName = lblName
     end
-    local classColor = RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
+    local classColor = NativeGUI:GetClassColorHex(class)
     row.lblName:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(de.name) .. "|r")
 
     -- 3. Skill Level
@@ -314,28 +297,7 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
     scroll:SetHeight(topOffset + rowHeight + 10)
 end
 
-function UI_Award:ShowAwardWindow(itemData)
-    if not itemData then
-        if self.awardFrame then self.awardFrame:Hide() end
-        return
-    end
-
-    self.activeItemData = itemData
-    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
-    local isLM = DesolateLootcouncil.API:IsLootMaster()
-
-    if not self.awardFrame then
-        local frame = NativeGUI:CreateWindow("DLCAwardFrame", L["Award Item"], 700, 500, "Award")
-        self.awardFrame = frame
-    end
-
-    self.awardFrame:Show()
-
-    -- Reset pools
-    for _, r in ipairs(self.awardRowPool) do r:Hide() end
-    for _, r in ipairs(self.deRowPool) do r:Hide() end
-
-    -- Custom centered item header with icon and quality border
+local function RenderAwardHeader(self, itemData)
     local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
     local _, properLink, quality = C_Item.GetItemInfo(itemData.link)
     if not quality then
@@ -387,21 +349,9 @@ function UI_Award:ShowAwardWindow(itemData)
     else
         self.awardHeaderContainer.iconBorder:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
     end
+end
 
-    local API  = DesolateLootcouncil.API
-    local guid = itemData.sourceGUID or itemData.link
-    local summary = API:GetVoteSummary(guid)
-    local votes   = summary.votes
-
-    local disenchanters = API:GetDisenchanterList()
-    local N = #disenchanters
-    local H = 0
-    if N > 0 then
-        local numDisplay = math.min(N, 3)
-        local contentHeight = numDisplay * 32 + (numDisplay - 1) * 6
-        H = 18 + 8 + contentHeight
-    end
-
+local function RenderVoteList(self, voteList, isLM, itemData, NativeGUI)
     if not self.awardScroll then
         local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.awardFrame, -75, -16)
         self.awardScroll = scrollFrame
@@ -410,38 +360,6 @@ function UI_Award:ShowAwardWindow(itemData)
     self.awardScroll:Show()
     self.awardScrollContent:Show()
     self.awardScrollContent:SetHeight(1)
-
-    -- Dynamically push votes list upwards if the bottom disenchant dock is visible
-    self.awardScroll:ClearAllPoints()
-    self.awardScroll:SetPoint("TOPLEFT", self.awardFrame, "TOPLEFT", 16, -75)
-    if H > 0 then
-        self.awardScroll:SetPoint("BOTTOMRIGHT", self.awardFrame, "BOTTOMRIGHT", -36, H + 24)
-    else
-        self.awardScroll:SetPoint("BOTTOMRIGHT", self.awardFrame, "BOTTOMRIGHT", -36, 16)
-    end
-
-    local voteList = {}
-    if votes then
-        for voter, voteData in pairs(votes) do
-            local vType = type(voteData) == "table" and voteData.type or voteData
-            local vRoll = (type(voteData) == "table" and voteData.roll) or 0
-            local vNote = (type(voteData) == "table" and voteData.note) or ""
-
-            if vType ~= 5 then
-                local rank = API:GetPlayerRankInList(voter, itemData.category)
-                table.insert(voteList, { name = voter, type = vType, roll = vRoll, rank = rank, note = vNote })
-            end
-        end
-
-        table.sort(voteList, function(a, b)
-            if a.type ~= b.type then return a.type < b.type end
-            if a.type == 1 then
-                if a.rank ~= b.rank then return a.rank < b.rank end
-                return a.roll > b.roll
-            end
-            return a.roll > b.roll
-        end)
-    end
 
     local scrollHeight = 0
     if #voteList == 0 then
@@ -461,8 +379,9 @@ function UI_Award:ShowAwardWindow(itemData)
         end
     end
     self.awardScrollContent:SetHeight(scrollHeight + 10)
+end
 
-    -- Dynamic Disenchanters Bottom Dock
+local function RenderDisenchantersDock(self, disenchanters, isLM, itemData, N, H, NativeGUI)
     if H > 0 then
         if not self.deContainer then
             local deContainer = CreateFrame("Frame", nil, self.awardFrame)
@@ -526,3 +445,84 @@ function UI_Award:ShowAwardWindow(itemData)
         end
     end
 end
+
+function UI_Award:ShowAwardWindow(itemData)
+    if not itemData then
+        if self.awardFrame then self.awardFrame:Hide() end
+        return
+    end
+
+    self.activeItemData = itemData
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local isLM = DesolateLootcouncil.API:IsLootMaster()
+
+    if not self.awardFrame then
+        local frame = NativeGUI:CreateWindow("DLCAwardFrame", L["Award Item"], 700, 500, "Award")
+        self.awardFrame = frame
+    end
+
+    self.awardFrame:Show()
+
+    -- Reset pools
+    for _, r in ipairs(self.awardRowPool) do r:Hide() end
+    for _, r in ipairs(self.deRowPool) do r:Hide() end
+
+    -- Render Custom Header
+    RenderAwardHeader(self, itemData)
+
+    local API  = DesolateLootcouncil.API
+    local guid = itemData.sourceGUID or itemData.link
+    local summary = API:GetVoteSummary(guid)
+    local votes   = summary.votes
+
+    local disenchanters = API:GetDisenchanterList()
+    local N = #disenchanters
+    local H = 0
+    if N > 0 then
+        local numDisplay = math.min(N, 3)
+        local contentHeight = numDisplay * 32 + (numDisplay - 1) * 6
+        H = 18 + 8 + contentHeight
+    end
+
+    -- Render Votes List
+    RenderVoteList(self, {}, isLM, itemData, NativeGUI)
+
+    -- Dynamically push votes list upwards if the bottom disenchant dock is visible
+    self.awardScroll:ClearAllPoints()
+    self.awardScroll:SetPoint("TOPLEFT", self.awardFrame, "TOPLEFT", 16, -75)
+    if H > 0 then
+        self.awardScroll:SetPoint("BOTTOMRIGHT", self.awardFrame, "BOTTOMRIGHT", -36, H + 24)
+    else
+        self.awardScroll:SetPoint("BOTTOMRIGHT", self.awardFrame, "BOTTOMRIGHT", -36, 16)
+    end
+
+    local voteList = {}
+    if votes then
+        for voter, voteData in pairs(votes) do
+            local vType = type(voteData) == "table" and voteData.type or voteData
+            local vRoll = (type(voteData) == "table" and voteData.roll) or 0
+            local vNote = (type(voteData) == "table" and voteData.note) or ""
+
+            if vType ~= 5 then
+                local rank = API:GetPlayerRankInList(voter, itemData.category)
+                table.insert(voteList, { name = voter, type = vType, roll = vRoll, rank = rank, note = vNote })
+            end
+        end
+
+        table.sort(voteList, function(a, b)
+            if a.type ~= b.type then return a.type < b.type end
+            if a.type == 1 then
+                if a.rank ~= b.rank then return a.rank < b.rank end
+                return a.roll > b.roll
+            end
+            return a.roll > b.roll
+        end)
+    end
+
+    -- Render Votes List with actual values
+    RenderVoteList(self, voteList, isLM, itemData, NativeGUI)
+
+    -- Render Bottom Dock
+    RenderDisenchantersDock(self, disenchanters, isLM, itemData, N, H, NativeGUI)
+end
+

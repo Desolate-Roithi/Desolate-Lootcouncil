@@ -467,3 +467,52 @@ function Priority:ReceivePrioritySync(syncedLists)
         "Priority Sync received from LM. Updated %d list(s).", updated), true)
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
+
+--- Bottom-to-top bubble-down algorithm for a single priority list.
+--- Absent players are each moved `penalty` positions toward the bottom.
+--- Processing back-to-front prevents earlier shifts from corrupting later indices.
+---@param listObj table   A PriorityList object { name, players, ... }
+---@param penalty  number Positions to decay each absent player
+---@param absentMap table  Map of absent player names { [playerName] = true }
+function Priority:CalculateListDecay(listObj, penalty, absentMap)
+    local listName = listObj.name
+
+    -- Shallow-copy so we can iterate safely while mutating
+    local newList = {}
+    for _, name in ipairs(listObj.players) do
+        table.insert(newList, name)
+    end
+
+    DesolateLootcouncil:DLC_Log("Processing List Category: [" .. listName .. "] with " .. #newList .. " entries.")
+
+    -- Iterate backwards: bottom → top
+    for i = #newList, 1, -1 do
+        local name = newList[i]
+        if absentMap[name] then
+            local targetIdx = i + penalty
+
+            table.remove(newList, i)
+
+            -- Cap to the last valid insertion position
+            if targetIdx > #newList + 1 then
+                targetIdx = #newList + 1
+            end
+
+            table.insert(newList, targetIdx, name)
+        end
+    end
+
+    -- Diagnostic logging (top 5 slots)
+    if #newList > 0 then
+        DesolateLootcouncil:DLC_Log(" >> Sort Winner Rank 1: " .. DesolateLootcouncil:GetDisplayName(newList[1]))
+    end
+    DesolateLootcouncil:DLC_Log(" --- Final Standings for [" .. listName .. "] ---")
+    for k = 1, math.min(5, #newList) do
+        local stateStr = absentMap[newList[k]] and "(Absent)" or "(Present)"
+        DesolateLootcouncil:DLC_Log("#" .. k .. ": " .. DesolateLootcouncil:GetDisplayName(newList[k]) .. " " .. stateStr)
+    end
+
+    -- Write the sorted result back into the DB object in-place
+    listObj.players = newList
+end
+

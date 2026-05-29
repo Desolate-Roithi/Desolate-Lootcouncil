@@ -59,6 +59,15 @@ function CommHandlers:VERSION_REQ(data, sender)
     if data and data.version then
         self:UpdatePlayerInfo(sender, data.version, data.enchantingSkill or 0)
     end
+
+    -- Autopass Sync Handshake: If the local player is the Loot Master, respond to the player's
+    -- version ping by whispering our authoritative Autopass active state directly to them.
+    -- This instantly syncs late-joiners, zone transitioners, and reloaded raiders
+    -- without waiting for the 30-second heartbeat.
+    if DesolateLootcouncil:AmILootMaster() then
+        local active = DesolateLootcouncil.sessionAutopassActive or false
+        self:SendComm("SYNC_AUTOPASS", { isActive = active, isHeartbeat = true }, sender)
+    end
 end
 CommHandlers.VERSION_CHECK = CommHandlers.VERSION_REQ
 

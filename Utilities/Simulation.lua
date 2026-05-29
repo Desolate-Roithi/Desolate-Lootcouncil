@@ -99,15 +99,29 @@ function Simulation:GetRoster()
     return list
 end
 
-function Simulation:GetPendingVoters(guid)
-    ---@type Session
-    local Session = DesolateLootcouncil:GetModule("Session")
-    if not Session or not Session.sessionVotes then return nil end
+function Simulation:GetPendingVoters(guid, votedPlayers)
+    -- If the caller already resolved voted scores, use that directly.
+    -- Otherwise fall back to reading Session.sessionVotes ourselves.
+    local votedScores = votedPlayers
+    if not votedScores then
+        ---@type Session
+        local Session = DesolateLootcouncil:GetModule("Session")
+        if not Session or not Session.sessionVotes then return nil end
 
-    local votes = Session.sessionVotes[guid] or {}
+        local votes = Session.sessionVotes[guid] or {}
+        votedScores = {}
+        for voterName in pairs(votes) do
+            local score = DesolateLootcouncil:GetScoreName(voterName)
+            if score then
+                votedScores[score] = true
+            end
+        end
+    end
+
     local pending = {}
     for name, _ in pairs(self.activeSims) do
-        if not votes[name] then
+        local simScore = DesolateLootcouncil:GetScoreName(name)
+        if simScore and not votedScores[simScore] then
             table.insert(pending, name .. " (Sim)")
         end
     end

@@ -207,3 +207,8 @@ L["Loot Log"] = "Loot-Log"
 L["ToDebugString"] = "Debug-Zeichenfolge"
 L["Toggle Disenchanters Sidebar"] = "Entzauberer-Seitenleiste umschalten"
 L["You voted: %s%s|r%s"] = "Du hast abgestimmt: %s%s|r%s"
+L["min"] = "Min."
+L["sec"] = "Sek."
+L["You have outstanding loot votes! Type /dlc vote to reopen."] = "Du hast noch ausstehende Loot-Abstimmungen! Gib /dlc vote ein, um sie wieder zu öffnen."
+L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"] = "|cffff8000Abstimmung schließt in %s \226\128\148 deine Stimme wird noch benötigt:|r %s"
+

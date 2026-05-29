@@ -59,6 +59,166 @@ end
 --- Styles a frame using the active theme.
 ---@param widgetOrFrame any  AceGUI widget object, native frame, or button
 ---@param windowType string? optional visual context hint
+local BUTTON_COLORS = {
+    ["Bid"] = { border = { 0.0, 0.8, 0.6, 1.0 }, hover = { 0.0, 0.5, 0.4, 0.5 } },
+    ["Roll"] = { border = { 0.0, 0.6, 0.9, 1.0 }, hover = { 0.0, 0.4, 0.6, 0.5 } },
+    ["Offspec"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.5 } },
+    ["T-Mog"] = { border = { 0.6, 0.6, 0.6, 1.0 }, hover = { 0.4, 0.4, 0.4, 0.5 } },
+    ["Pass"] = { border = { 0.3, 0.3, 0.3, 1.0 }, hover = { 0.2, 0.2, 0.2, 0.5 } },
+    ["Note"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.5 } },
+    ["Stop"] = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.6 } },
+}
+
+function UI_Theme:StyleButton(widgetOrFrame, f, theme, windowType)
+    if widgetOrFrame.type ~= "Button" and f:GetObjectType() ~= "Button" then return end
+    if not f.SetBackdrop then return end
+
+    f:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    -- Clear standard textures
+    if f.SetNormalTexture then f:SetNormalTexture("") end
+    if f.SetPushedTexture then f:SetPushedTexture("") end
+    if f.SetHighlightTexture then f:SetHighlightTexture("") end
+    if f.SetDisabledTexture then f:SetDisabledTexture("") end
+
+    local custom = BUTTON_COLORS[windowType]
+    local borderCol = custom and custom.border or theme.border
+    local bgCol = theme.buttonBg
+    local hoverCol = custom and custom.hover or theme.buttonHover
+
+    f:SetBackdropColor(unpack(bgCol))
+    f:SetBackdropBorderColor(unpack(borderCol))
+
+    -- Ensure hover scripts are registered securely
+    if not f._themedHover then
+        f:HookScript("OnEnter", function(self)
+            self:SetBackdropColor(unpack(hoverCol))
+        end)
+        f:HookScript("OnLeave", function(self)
+            self:SetBackdropColor(unpack(bgCol))
+        end)
+        f._themedHover = true
+    end
+end
+
+function UI_Theme:StyleEditBox(widgetOrFrame, theme)
+    if widgetOrFrame.type ~= "EditBox" then return end
+    local eb = widgetOrFrame.editbox
+    if not eb then return end
+
+    if not eb.SetBackdrop then
+        Mixin(eb, BackdropTemplateMixin)
+    end
+    eb:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    eb:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
+    eb:SetBackdropBorderColor(unpack(theme.border))
+
+    -- Hide the default Blizzard texture components of the editbox
+    for i = 1, eb:GetNumRegions() do
+        local r = select(i, eb:GetRegions())
+        if r and r:GetObjectType() == "Texture" then
+            local tex = r:GetTexture()
+            if tex and (string.find(tex, "UI%-ChatTextBox") or string.find(tex, "Edge") or string.find(tex, "Background")) then
+                r:SetAlpha(0)
+            end
+        end
+    end
+end
+
+function UI_Theme:StyleDropdown(widgetOrFrame, theme)
+    if widgetOrFrame.type ~= "Dropdown" then return end
+    local drop = widgetOrFrame.dropdown
+    if not drop then return end
+
+    if not drop.SetBackdrop then
+        Mixin(drop, BackdropTemplateMixin)
+    end
+    drop:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    drop:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
+    drop:SetBackdropBorderColor(unpack(theme.border))
+end
+
+function UI_Theme:StyleFrame(widgetOrFrame, f, theme)
+    if widgetOrFrame.type ~= "Frame" then return end
+
+    -- Hide the default Blizzard dialog textures and headers
+    for i = 1, f:GetNumRegions() do
+        local r = select(i, f:GetRegions())
+        if r and r:GetObjectType() == "Texture" then
+            r:SetTexture(nil)
+            r:SetAlpha(0)
+            r:Hide()
+        end
+    end
+
+    -- Hide sizers, bottom-right Close button, status bar
+    for _, child in ipairs({ f:GetChildren() }) do
+        local childType = child:GetObjectType()
+        if childType == "Button" then
+            local text = child:GetText()
+            if text == CLOSE or text == "Close" or text == "Schließen" or text == "Loot Monitor" or text == "Loot Vote" then
+                child:Hide()
+            elseif child.SetBackdrop then
+                -- This is the status bar
+                child:Hide()
+            end
+        elseif childType == "Frame" and child ~= widgetOrFrame.content then
+            -- Sizers
+            child:Hide()
+        end
+    end
+
+    -- Create beautiful minimalist close button "X" in top right
+    if not f._customCloseButton then
+        local cb = CreateFrame("Button", nil, f, "BackdropTemplate")
+        cb:SetSize(20, 20)
+        cb:SetPoint("TOPRIGHT", -12, -12)
+        cb:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        cb:SetBackdropColor(theme.bg[1] * 1.5, theme.bg[2] * 1.5, theme.bg[3] * 1.5, 0.8)
+        cb:SetBackdropBorderColor(unpack(theme.border))
+
+        local text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        text:SetSize(20, 20)
+        text:SetPoint("CENTER", 0, 0)
+        text:SetJustifyH("CENTER")
+        text:SetJustifyV("MIDDLE")
+        text:SetText("X")
+        text:SetTextColor(1, 1, 1, 0.8)
+
+        cb:SetScript("OnClick", function()
+            widgetOrFrame:Hide()
+        end)
+        cb:SetScript("OnEnter", function()
+            text:SetTextColor(1, 0.3, 0.3, 1)
+            cb:SetBackdropColor(0.3, 0.1, 0.1, 0.9)
+        end)
+        cb:SetScript("OnLeave", function()
+            local activeTheme = self:GetActiveTheme()
+            text:SetTextColor(1, 1, 1, 0.8)
+            cb:SetBackdropColor(activeTheme.bg[1] * 1.5, activeTheme.bg[2] * 1.5, activeTheme.bg[3] * 1.5, 0.8)
+        end)
+
+        f._customCloseButton = cb
+    else
+        f._customCloseButton:Show()
+    end
+end
+
 function UI_Theme:ApplyTheme(widgetOrFrame, windowType)
     if not widgetOrFrame then return end
     local theme = self:GetActiveTheme()
@@ -89,74 +249,11 @@ function UI_Theme:ApplyTheme(widgetOrFrame, windowType)
     f:SetBackdropColor(unpack(theme.bg))
     f:SetBackdropBorderColor(unpack(theme.border))
 
-    -- 4. Strip legacy Ace3 Frame elements for a clean futuristic gaming look
-    if widgetOrFrame.type == "Frame" then
-        -- Hide the default Blizzard dialog textures and headers
-        for i = 1, f:GetNumRegions() do
-            local r = select(i, f:GetRegions())
-            if r and r:GetObjectType() == "Texture" then
-                r:SetTexture(nil)
-                r:SetAlpha(0)
-                r:Hide()
-            end
-        end
-
-        -- Hide sizers, bottom-right Close button, status bar
-        for _, child in ipairs({ f:GetChildren() }) do
-            local childType = child:GetObjectType()
-            if childType == "Button" then
-                local text = child:GetText()
-                if text == CLOSE or text == "Close" or text == "Schließen" or text == "Loot Monitor" or text == "Loot Vote" then
-                    child:Hide()
-                elseif child.SetBackdrop then
-                    -- This is the status bar
-                    child:Hide()
-                end
-            elseif childType == "Frame" and child ~= widgetOrFrame.content then
-                -- Sizers
-                child:Hide()
-            end
-        end
-
-        -- Create beautiful minimalist close button "X" in top right
-        if not f._customCloseButton then
-            local cb = CreateFrame("Button", nil, f, "BackdropTemplate")
-            cb:SetSize(20, 20)
-            cb:SetPoint("TOPRIGHT", -12, -12)
-            cb:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
-            })
-            cb:SetBackdropColor(theme.bg[1] * 1.5, theme.bg[2] * 1.5, theme.bg[3] * 1.5, 0.8)
-            cb:SetBackdropBorderColor(unpack(theme.border))
-
-            local text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            text:SetSize(20, 20)
-            text:SetPoint("CENTER", 0, 0)
-            text:SetJustifyH("CENTER")
-            text:SetJustifyV("MIDDLE")
-            text:SetText("X")
-            text:SetTextColor(1, 1, 1, 0.8)
-
-            cb:SetScript("OnClick", function()
-                widgetOrFrame:Hide()
-            end)
-            cb:SetScript("OnEnter", function()
-                text:SetTextColor(1, 0.3, 0.3, 1)
-                cb:SetBackdropColor(0.3, 0.1, 0.1, 0.9)
-            end)
-            cb:SetScript("OnLeave", function()
-                local activeTheme = UI_Theme:GetActiveTheme()
-                text:SetTextColor(1, 1, 1, 0.8)
-                cb:SetBackdropColor(activeTheme.bg[1] * 1.5, activeTheme.bg[2] * 1.5, activeTheme.bg[3] * 1.5, 0.8)
-            end)
-
-            f._customCloseButton = cb
-        else
-            f._customCloseButton:Show()
-        end
-    end
+    -- 4. Delegate component styling
+    self:StyleFrame(widgetOrFrame, f, theme)
+    self:StyleEditBox(widgetOrFrame, theme)
+    self:StyleButton(widgetOrFrame, f, theme, windowType)
+    self:StyleDropdown(widgetOrFrame, theme)
 
     -- 5. Style Title text if available
     if widgetOrFrame.titletext then
@@ -167,103 +264,13 @@ function UI_Theme:ApplyTheme(widgetOrFrame, windowType)
         widgetOrFrame.titletext:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -14)
     end
 
-    -- 6. Style EditBox widgets to hide retro borders and render clean Obsidian boxes
-    if widgetOrFrame.type == "EditBox" then
-        local eb = widgetOrFrame.editbox
-        if eb then
-            if not eb.SetBackdrop then
-                Mixin(eb, BackdropTemplateMixin)
-            end
-            eb:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
-            })
-            eb:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
-            eb:SetBackdropBorderColor(unpack(theme.border))
-
-            -- Hide the default Blizzard texture components of the editbox
-            for i = 1, eb:GetNumRegions() do
-                local r = select(i, eb:GetRegions())
-                if r and r:GetObjectType() == "Texture" then
-                    local tex = r:GetTexture()
-                    if tex and (string.find(tex, "UI%-ChatTextBox") or string.find(tex, "Edge") or string.find(tex, "Background")) then
-                        r:SetAlpha(0)
-                    end
-                end
-            end
-        end
-    end
-
-    -- 7. Detect and style button widgets
-    local BUTTON_COLORS = {
-        ["Bid"] = { border = { 0.0, 0.8, 0.6, 1.0 }, hover = { 0.0, 0.5, 0.4, 0.5 } },
-        ["Roll"] = { border = { 0.0, 0.6, 0.9, 1.0 }, hover = { 0.0, 0.4, 0.6, 0.5 } },
-        ["Offspec"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.5 } },
-        ["T-Mog"] = { border = { 0.6, 0.6, 0.6, 1.0 }, hover = { 0.4, 0.4, 0.4, 0.5 } },
-        ["Pass"] = { border = { 0.3, 0.3, 0.3, 1.0 }, hover = { 0.2, 0.2, 0.2, 0.5 } },
-        ["Note"] = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.5 } },
-        ["Stop"] = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.6 } },
-    }
-
-    if widgetOrFrame.type == "Button" or f:GetObjectType() == "Button" then
-        if f.SetBackdrop then
-            f:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
-            })
-            -- Clear standard textures
-            if f.SetNormalTexture then f:SetNormalTexture("") end
-            if f.SetPushedTexture then f:SetPushedTexture("") end
-            if f.SetHighlightTexture then f:SetHighlightTexture("") end
-            if f.SetDisabledTexture then f:SetDisabledTexture("") end
-
-            local custom = BUTTON_COLORS[windowType]
-            local borderCol = custom and custom.border or theme.border
-            local bgCol = theme.buttonBg
-            local hoverCol = custom and custom.hover or theme.buttonHover
-
-            f:SetBackdropColor(unpack(bgCol))
-            f:SetBackdropBorderColor(unpack(borderCol))
-
-            -- Ensure hover scripts are registered securely
-            if not f._themedHover then
-                f:HookScript("OnEnter", function(self)
-                    self:SetBackdropColor(unpack(hoverCol))
-                end)
-                f:HookScript("OnLeave", function(self)
-                    self:SetBackdropColor(unpack(bgCol))
-                end)
-                f._themedHover = true
-            end
-        end
-    end
-
-    -- 8. Style Heading widgets
+    -- 6. Style Heading widgets
     if widgetOrFrame.type == "Heading" then
         if widgetOrFrame.label then
             widgetOrFrame.label:SetTextColor(unpack(theme.textHeader))
         end
         if widgetOrFrame.left and widgetOrFrame.left.SetTexture then widgetOrFrame.left:SetTexture(nil) end
         if widgetOrFrame.right and widgetOrFrame.right.SetTexture then widgetOrFrame.right:SetTexture(nil) end
-    end
-
-    -- 9. Style Dropdown widgets
-    if widgetOrFrame.type == "Dropdown" then
-        local drop = widgetOrFrame.dropdown
-        if drop then
-            if not drop.SetBackdrop then
-                Mixin(drop, BackdropTemplateMixin)
-            end
-            drop:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
-            })
-            drop:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
-            drop:SetBackdropBorderColor(unpack(theme.border))
-        end
     end
 end
 

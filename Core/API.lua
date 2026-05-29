@@ -831,4 +831,16 @@ function DLC_API:ImportProfileData(importStringRaw, importName)
     return true, ""
 end
 
+--- Calculates and applies decay to a priority list.
+---@param listObj table
+---@param penalty number
+---@param absentMap table
+function DLC_API:CalculateListDecay(listObj, penalty, absentMap)
+    local p = Priority()
+    if p and p.CalculateListDecay then
+        p:CalculateListDecay(listObj, penalty, absentMap)
+    end
+end
+
+
 

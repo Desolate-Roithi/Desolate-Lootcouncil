@@ -30,48 +30,10 @@ local function RefreshSettingsUI()
     end
 end
 
-function UI_Attendance:ShowAttendanceWindow()
-    local config = DesolateLootcouncil.API:GetAttendanceConfig()
-    if not config.sessionActive then
-        DesolateLootcouncil:DLC_Log(L["No active session to review."], true)
-        return
-    end
-
-    -- 1. Initialize Temp Lists
-    tempAttended = {}
-    tempAbsent = {}
-    currentDecayAmount = config.defaultPenalty or 1
-
-    local roster = DesolateLootcouncil.API:GetMainRoster()
-    for name, _ in pairs(roster) do
-        if config.currentAttendees[name] then
-            tempAttended[name] = true
-        else
-            tempAbsent[name] = true
-        end
-    end
-
-    -- 2. Create Frame
-    local isDecayEnabled = config.enabled
-    local titleText = isDecayEnabled and L["Session Attendance & Decay Review"] or L["Session Attendance Review (Decay Disabled)"]
-
+local function CreateAttendanceColumns(self, frame, theme, isDecayEnabled)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
-    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
 
-    if self.attendanceFrame then
-        self.attendanceFrame:Hide()
-    end
-
-    local frame = NativeGUI:CreateWindow("DLCAttendanceFrame", titleText, 640, 480, "Attendance")
-    self.attendanceFrame = frame
-
-    DesolateLootcouncil:MakeMovableWithSave(frame, "Attendance")
-
-    -- 3. Top Label
-    local topLabel = NativeGUI:CreateLabel(frame, L["Review attendance before ending session. Click names to move them between lists."], "GameFontHighlightSmall", 600)
-    topLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -45)
-
-    -- 4. Left Column (Attended)
+    -- Left Column (Attended)
     local leftPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     leftPanel:SetSize(296, 330)
     leftPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -65)
@@ -114,8 +76,11 @@ function UI_Attendance:ShowAttendanceWindow()
     scrollAbsent:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 8, -30)
     scrollAbsent:SetPoint("BOTTOMRIGHT", rightPanel, "BOTTOMRIGHT", -8, 8)
     self.scrollContentAbsent = scrollContentAbsent
+end
 
-    -- 5. Bottom Controls
+local function CreateAttendanceBottomControls(self, frame, isDecayEnabled)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
     if isDecayEnabled then
         local stepper = NativeGUI:CreateStepper(frame, L["Decay Amount"], 240, 0, 3, 1, currentDecayAmount, function(val)
             currentDecayAmount = val
@@ -137,11 +102,58 @@ function UI_Attendance:ShowAttendanceWindow()
             RefreshSettingsUI()
         end)
     end
+end
+
+function UI_Attendance:ShowAttendanceWindow()
+    local config = DesolateLootcouncil.API:GetAttendanceConfig()
+    if not config.sessionActive then
+        DesolateLootcouncil:DLC_Log(L["No active session to review."], true)
+        return
+    end
+
+    -- 1. Initialize Temp Lists
+    tempAttended = {}
+    tempAbsent = {}
+    currentDecayAmount = config.defaultPenalty or 1
+
+    local roster = DesolateLootcouncil.API:GetMainRoster()
+    for name, _ in pairs(roster) do
+        if config.currentAttendees[name] then
+            tempAttended[name] = true
+        else
+            tempAbsent[name] = true
+        end
+    end
+
+    -- 2. Create Frame
+    local isDecayEnabled = config.enabled
+    local titleText = isDecayEnabled and L["Session Attendance & Decay Review"] or L["Session Attendance Review (Decay Disabled)"]
+
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+
+    if self.attendanceFrame then
+        self.attendanceFrame:Hide()
+    end
+
+    local frame = NativeGUI:CreateWindow("DLCAttendanceFrame", titleText, 640, 480, "Attendance")
+    self.attendanceFrame = frame
+
+    DesolateLootcouncil:MakeMovableWithSave(frame, "Attendance")
+
+    -- 3. Top Label
+    local topLabel = NativeGUI:CreateLabel(frame, L["Review attendance before ending session. Click names to move them between lists."], "GameFontHighlightSmall", 600)
+    topLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -45)
+
+    -- 4. Columns & Controls (Extracted Helpers)
+    CreateAttendanceColumns(self, frame, theme, isDecayEnabled)
+    CreateAttendanceBottomControls(self, frame, isDecayEnabled)
 
     -- Initial Render
     self:UpdateAttendanceLists()
     frame:Show()
 end
+
 
 function UI_Attendance:UpdateAttendanceLists()
     if not self.attendanceFrame then return end
@@ -237,54 +249,6 @@ function UI_Attendance:UpdateAttendanceLists()
     self.scrollContentAbsent:SetHeight(offsetAbs + 10)
 end
 
---- Bottom-to-top bubble-down algorithm for a single priority list.
---- Absent players are each moved `penalty` positions toward the bottom.
---- Processing back-to-front prevents earlier shifts from corrupting later indices.
----@param listObj table   A PriorityList object { name, players, ... }
----@param penalty  number Positions to decay each absent player
-function UI_Attendance:CalculateListDecay(listObj, penalty)
-    local DLC      = DesolateLootcouncil
-    local listName = listObj.name
-
-    -- Shallow-copy so we can iterate safely while mutating
-    local newList = {}
-    for _, name in ipairs(listObj.players) do
-        table.insert(newList, name)
-    end
-
-    DLC:DLC_Log("Processing List Category: [" .. listName .. "] with " .. #newList .. " entries.")
-
-    -- Iterate backwards: bottom → top
-    for i = #newList, 1, -1 do
-        local name = newList[i]
-        if tempAbsent[name] then
-            local targetIdx = i + penalty
-
-            table.remove(newList, i)
-
-            -- Cap to the last valid insertion position
-            if targetIdx > #newList + 1 then
-                targetIdx = #newList + 1
-            end
-
-            table.insert(newList, targetIdx, name)
-        end
-    end
-
-    -- Diagnostic logging (top 5 slots)
-    if #newList > 0 then
-        DLC:DLC_Log(" >> Sort Winner Rank 1: " .. DLC:GetDisplayName(newList[1]))
-    end
-    DLC:DLC_Log(" --- Final Standings for [" .. listName .. "] ---")
-    for k = 1, math.min(5, #newList) do
-        local stateStr = tempAbsent[newList[k]] and "(Absent)" or "(Present)"
-        DLC:DLC_Log("#" .. k .. ": " .. DLC:GetDisplayName(newList[k]) .. " " .. stateStr)
-    end
-
-    -- Write the sorted result back into the DB object in-place
-    listObj.players = newList
-end
-
 --- Persists the reviewed attendance map into DecayConfig, notifies the UI,
 --- and triggers session stop via the Roster module.
 ---@param attendedMap table  Map of { [playerName] = true } for attended players
@@ -318,7 +282,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
         end
 
         for _, listObj in ipairs(dbLists) do
-            self:CalculateListDecay(listObj, currentDecayAmount)
+            DesolateLootcouncil.API:CalculateListDecay(listObj, currentDecayAmount, tempAbsent)
         end
 
         DLC:DLC_Log(string.format(L["Applied +%d Position Decay to all lists for absent players."], currentDecayAmount))
@@ -328,6 +292,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
 
     self:CommitAttendanceToHistory(tempAttended)
 end
+
 
 function UI_Attendance:DeleteHistoryEntry(index)
     if not index or index == "CURRENT" then return end
@@ -430,7 +395,7 @@ function UI_Attendance:GetRaidHistoryOptions(config)
                 if config.sessionActive then
                     local activeCount = 0
                     for _ in pairs(config.currentAttendees) do activeCount = activeCount + 1 end
-                    list["CURRENT"] = string.format("|cff00ff00[ACTIVE]|r %s (%d Players)", date("%Y-%m-%d"), activeCount)
+                    list["CURRENT"] = string.format("  |cff00ff00[ACTIVE]|r %s (%d Players)", date("%Y-%m-%d"), activeCount)
                 end
 
                 for i, entry in ipairs(history) do
@@ -438,7 +403,7 @@ function UI_Attendance:GetRaidHistoryOptions(config)
                     if entry.attendees then
                         for _ in pairs(entry.attendees) do count = count + 1 end
                     end
-                    list[i] = string.format("%s - %s (%d Players)", entry.date or "N/A", entry.zone or "Unknown", count)
+                    list[i] = string.format("[%d] %s - %s (%d Players)", i, entry.date or "N/A", entry.zone or "Unknown", count)
                 end
                 return list
             end,

@@ -33,6 +33,104 @@ local function FormatTime(seconds)
     return string.format("%d:%02d", m, s)
 end
 
+-- Thresholds at which a countdown reminder is sent (seconds remaining)
+local VOTE_REMINDER_THRESHOLDS = { 240, 180, 120, 60, 30 }
+
+--- Start a background milestone ticker that fires reminder messages at defined
+--- countdown thresholds (4min, 3min, 2min, 1min, 30sec). Safe to call multiple
+--- times — a no-op if the ticker is already running.
+function UI_Voting:StartMilestoneChecker()
+    if self.milestoneTicker then return end
+
+    -- Per-item threshold announcement tracking and global dedup timestamp
+    self.announcedMilestones = self.announcedMilestones or {}
+    self.lastReminderSentAt  = self.lastReminderSentAt  or 0
+
+    self.milestoneTicker = C_Timer.NewTicker(5, function()
+        local items = self.cachedVotingItems
+        if not items or #items == 0 then
+            if self.milestoneTicker then
+                self.milestoneTicker:Cancel()
+                self.milestoneTicker = nil
+            end
+            return
+        end
+
+        local now            = GetServerTime()
+        local API            = DesolateLootcouncil.API
+        local pendingItems   = {}   -- unvoted items crossing a threshold this tick
+        local lowestThreshold = nil -- most urgent threshold crossed
+
+        for _, item in ipairs(items) do
+            local guid     = item.sourceGUID or item.link
+            local isClosed = API:IsItemClosed(guid)
+            local hasVoted = self.myVotes and self.myVotes[guid]
+
+            if not isClosed and item.expiry and item.expiry > 0 then
+                local remaining = item.expiry - now
+                self.announcedMilestones[guid] = self.announcedMilestones[guid] or {}
+
+                -- Background Autopass evaluation (when window is closed/hidden)
+                local isPending = (API:GetOutboundVote(guid) ~= nil)
+                if remaining <= -3 and not hasVoted and not isPending then
+                    self.myVotes = self.myVotes or {}
+                    self.myVotes[guid] = 5
+                    API:SendVote(guid, 5, "")
+                    hasVoted = 5
+                end
+
+                for _, threshold in ipairs(VOTE_REMINDER_THRESHOLDS) do
+                    if remaining > 0 and remaining <= threshold
+                            and not self.announcedMilestones[guid][threshold] then
+                        -- Always mark as announced so we never re-fire this threshold
+                        self.announcedMilestones[guid][threshold] = true
+
+                        if not hasVoted then
+                            if not lowestThreshold or threshold < lowestThreshold then
+                                lowestThreshold = threshold
+                            end
+                            table.insert(pendingItems, item)
+                        end
+                        break -- only the first unannounced threshold per item per tick
+                    end
+                end
+            end
+        end
+
+        -- Emit one combined message for this tick, respecting the 30s dedup window
+        if #pendingItems > 0 and (now - self.lastReminderSentAt) >= 30 then
+            local timeLabel
+            if lowestThreshold >= 60 then
+                timeLabel = string.format("|cffff8000%d %s|r",
+                    lowestThreshold / 60, L["min"])
+            else
+                timeLabel = string.format("|cffff0000%d %s|r",
+                    lowestThreshold, L["sec"])
+            end
+
+            local links = {}
+            for _, item in ipairs(pendingItems) do
+                table.insert(links, item.link or "???")
+            end
+            DesolateLootcouncil:Print(string.format(
+                L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"],
+                timeLabel, table.concat(links, ", ")
+            ))
+            self.lastReminderSentAt = now
+        end
+    end)
+end
+
+--- Stop and discard the milestone ticker and its state.
+function UI_Voting:StopMilestoneChecker()
+    if self.milestoneTicker then
+        self.milestoneTicker:Cancel()
+        self.milestoneTicker = nil
+    end
+    self.announcedMilestones = nil
+    self.lastReminderSentAt  = nil
+end
+
 function UI_Voting:CreateVotingFrame()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local frame = NativeGUI:CreateWindow("DLCVotingFrame", L["Loot Vote"], 800, 450, "Voting")
@@ -41,64 +139,23 @@ function UI_Voting:CreateVotingFrame()
         if self.votingTicker then self.votingTicker:Cancel() end
         self:CancelAllTimers()
 
-        -- Outstanding votes check and repeating ticker
-        if self.reminderTicker then
-            self.reminderTicker:Cancel()
-            self.reminderTicker = nil
-        end
-
+        -- Immediate one-time message if the player closes with unvoted items still open
         local items = self.cachedVotingItems
-        if not items or #items == 0 then return end
-
-        local hasUnvoted = false
-        local now = GetServerTime()
-        local API = DesolateLootcouncil.API
-        for _, item in ipairs(items) do
-            local guid = item.sourceGUID or item.link
-            local remaining = (item.expiry or 0) - now
-            local isClosed = API:IsItemClosed(guid)
-            local isExpired = (item.expiry and item.expiry > 0) and (remaining <= 0)
-            if not self.myVotes[guid] and not isClosed and not isExpired then
-                hasUnvoted = true
-                break
+        if items and #items > 0 then
+            local now = GetServerTime()
+            local API = DesolateLootcouncil.API
+            for _, item in ipairs(items) do
+                local guid      = item.sourceGUID or item.link
+                local remaining = (item.expiry or 0) - now
+                local isClosed  = API:IsItemClosed(guid)
+                local isExpired = (item.expiry and item.expiry > 0) and (remaining <= 0)
+                if not self.myVotes[guid] and not isClosed and not isExpired then
+                    DesolateLootcouncil:Print(L["You have outstanding loot votes! Type /dlc vote to reopen."])
+                    break
+                end
             end
         end
-
-        if hasUnvoted then
-            DesolateLootcouncil:Print(L["You have outstanding loot votes! Type /dlc vote to reopen."])
-            
-            self.reminderTicker = C_Timer.NewTicker(60, function()
-                if not self.cachedVotingItems or #self.cachedVotingItems == 0 then
-                    if self.reminderTicker then
-                        self.reminderTicker:Cancel()
-                        self.reminderTicker = nil
-                    end
-                    return
-                end
-
-                local stillUnvoted = false
-                local nowSec = GetServerTime()
-                for _, item in ipairs(self.cachedVotingItems) do
-                    local g = item.sourceGUID or item.link
-                    local remaining = (item.expiry or 0) - nowSec
-                    local isClosed = API:IsItemClosed(g)
-                    local isExpired = (item.expiry and item.expiry > 0) and (remaining <= 0)
-                    if not self.myVotes[g] and not isClosed and not isExpired then
-                        stillUnvoted = true
-                        break
-                    end
-                end
-
-                if stillUnvoted then
-                    DesolateLootcouncil:Print(L["REMINDER: You still have outstanding loot votes! Type /dlc vote to reopen."])
-                else
-                    if self.reminderTicker then
-                        self.reminderTicker:Cancel()
-                        self.reminderTicker = nil
-                    end
-                end
-            end)
-        end
+        -- Milestone ticker keeps running in the background
     end)
 
     self.votingFrame = frame
@@ -124,22 +181,24 @@ function UI_Voting:RemoveVotingItem(guid)
         for i, item in ipairs(self.cachedVotingItems) do
             if (item.sourceGUID or item.link) == guid then
                 table.remove(self.cachedVotingItems, i)
+                -- Clear milestone state for this item so thresholds won't fire for it
+                if self.announcedMilestones then
+                    self.announcedMilestones[guid] = nil
+                end
                 break
             end
         end
     end
     if self.cachedVotingItems and #self.cachedVotingItems == 0 then
         if self.votingFrame then self.votingFrame:Hide() end
+        self:StopMilestoneChecker()
         return
     end
     self:ShowVotingWindow(nil, true)
 end
 
 function UI_Voting:ResetVoting()
-    if self.reminderTicker then
-        self.reminderTicker:Cancel()
-        self.reminderTicker = nil
-    end
+    self:StopMilestoneChecker()
     self.myVotes = {}
     self.myNotes = {}
     self.noteExpanded = {}
@@ -150,11 +209,40 @@ function UI_Voting:ResetVoting()
     end
 end
 
-function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
-    if self.reminderTicker then
-        self.reminderTicker:Cancel()
-        self.reminderTicker = nil
+local function SetupVotingTicker(self, API)
+    if self.votingTicker then self.votingTicker:Cancel() end
+    self.votingTicker = C_Timer.NewTicker(0.5, function()
+        local now = GetServerTime()
+        for guid, info in pairs(self.timerLabels) do
+            if info.fontString then
+                local remaining = (info.expiry or 0) - now
+                local isClosed  = API:IsItemClosed(guid)
+
+                if isClosed or remaining <= 0 then
+                    info.fontString:SetText("|cffff0000" .. L["Closed"] .. "|r")
+                else
+                    info.fontString:SetText(FormatTime(remaining))
+                end
+            end
+        end
+    end)
+end
+
+local function RebuildScrollLayout(self, rowCount)
+    local totalHeight = 0
+    for k = 1, rowCount do
+        local r = self.rowPool[k]
+        if r and r:IsShown() then
+            totalHeight = totalHeight + r:GetHeight() + 10
+        end
     end
+    if self.scrollContent then
+        self.scrollContent:SetHeight(totalHeight)
+    end
+end
+
+function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
+    -- Milestone checker is purely data-driven; never touch it here.
     if not self.votingFrame then self:CreateVotingFrame() end
 
     local API = DesolateLootcouncil.API
@@ -166,6 +254,10 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     if lootTable then
         self.cachedVotingItems = lootTable
         self.myVotes = self.myVotes or {}
+        -- New session: reset milestone state so all thresholds fire fresh
+        self.announcedMilestones = {}
+        self.lastReminderSentAt  = 0
+        self:StartMilestoneChecker()
     end
     local awardedGUIDs = API:GetAwardedGUIDs()
 
@@ -198,21 +290,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     self.scrollContent:Show()
     NativeGUI:StyleScrollBar(self.scrollFrame)
 
-    self.votingTicker = C_Timer.NewTicker(0.5, function()
-        local now = GetServerTime()
-        for guid, info in pairs(self.timerLabels) do
-            if info.fontString then
-                local remaining = (info.expiry or 0) - now
-                local isClosed  = API:IsItemClosed(guid)
-
-                if isClosed or remaining <= 0 then
-                    info.fontString:SetText("|cffff0000" .. L["Closed"] .. "|r")
-                else
-                    info.fontString:SetText(FormatTime(remaining))
-                end
-            end
-        end
-    end)
+    SetupVotingTicker(self, API)
 
     local now = GetServerTime()
     local rowCount = 0
@@ -251,16 +329,243 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         end
     end
 
-    -- Set total scroll content height based on the total height of all displayed rows
-    local totalHeight = 0
-    for k = 1, rowCount do
-        local r = self.rowPool[k]
-        if r and r:IsShown() then
-            totalHeight = totalHeight + r:GetHeight() + 10
+    RebuildScrollLayout(self, rowCount)
+end
+
+function UI_Voting:CreateItemIcon(row, data, rowHeight)
+    if not row.itemIcon then
+        local icon = CreateFrame("Button", nil, row)
+        icon:SetSize(28, 28)
+        
+        local tex = icon:CreateTexture(nil, "BACKGROUND")
+        tex:SetAllPoints()
+        icon.texture = tex
+        
+        row.itemIcon = icon
+    end
+    row.itemIcon:ClearAllPoints()
+    row.itemIcon:SetPoint("LEFT", 12, (rowHeight == 92) and 24 or 0)
+    row.itemIcon.texture:SetTexture(data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400)
+
+    local function ShowTip()
+        GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
+        GameTooltip:SetHyperlink(data.link)
+        GameTooltip:Show()
+    end
+    row.itemIcon:SetScript("OnClick", ShowTip)
+    row.itemIcon:SetScript("OnEnter", ShowTip)
+    row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+function UI_Voting:StyleClosedExpiredState(row, theme, currentVote)
+    row.timerLbl:Hide()
+
+    local votedText = L["You voted: |cffaaaaaaAuto Pass|r"]
+    if currentVote then
+        local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
+        local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
+        votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText)
+    end
+
+    row.statusBtn:SetText(L["Closed"])
+    row.statusBtn:SetEnabled(false)
+    row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
+    row.statusBtn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
+    row.statusBtn:SetScript("OnClick", nil)
+    row.statusBtn:Show()
+
+    row.statusText:SetText(votedText)
+    row.statusText:SetPoint("LEFT", row.actionFrame, "LEFT", 0, 0)
+    row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
+    row.statusText:Show()
+end
+
+function UI_Voting:StylePendingState(row, theme, guid)
+    row.timerLbl:Show()
+
+    local outbound   = DesolateLootcouncil.API:GetOutboundVote(guid)
+    local pendingType = outbound and outbound.type
+    local vText  = pendingType and VOTE_TEXT[pendingType]  or "?"
+    local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
+    local noteText = self.myNotes[guid] and self.myNotes[guid] ~= "" and (" (" .. self.myNotes[guid] .. ")") or ""
+
+    row.statusBtn:SetText(L["Syncing..."])
+    row.statusBtn:SetEnabled(false)
+    row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
+    row.statusBtn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
+    row.statusBtn:SetScript("OnClick", nil)
+    row.statusBtn:Show()
+
+    row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", vColor, vText, noteText))
+    row.statusText:SetPoint("LEFT", row.timerLbl, "RIGHT", 8, 0)
+    row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
+    row.statusText:Show()
+end
+
+function UI_Voting:StyleVotedChangeState(row, theme, guid, currentVote)
+    row.timerLbl:Show()
+
+    local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
+    local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
+
+    row.statusBtn:SetText(L["Change"])
+    row.statusBtn:SetEnabled(true)
+    local btnTheme = row.statusBtn.themeBorder or theme.border
+    row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
+    row.statusBtn:SetBackdropBorderColor(unpack(btnTheme))
+    row.statusBtn:SetScript("OnClick", function()
+        self.myVotes[guid] = nil
+        DesolateLootcouncil.API:CancelVote(guid)
+        self:ShowVotingWindow(nil, true)
+    end)
+    row.statusBtn:Show()
+
+    row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText))
+    row.statusText:SetPoint("LEFT", row.timerLbl, "RIGHT", 8, 0)
+    row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
+    row.statusText:Show()
+end
+
+function UI_Voting:StyleActiveVoteState(row, theme, guid)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    row.timerLbl:Show()
+
+    local function CastVote(val)
+        self.myVotes[guid] = val
+        local note = self.myNotes[guid] or ""
+        DesolateLootcouncil.API:SendVote(guid, val, note)
+        self:ShowVotingWindow(nil, true)
+    end
+
+    local w = 60
+    local spacing = 4
+    local BUTTONS = {
+        { VOTE_TEXT[1], 1, "Bid" }, { VOTE_TEXT[2], 2, "Roll" },
+        { VOTE_TEXT[3], 3, "Offspec" }, { VOTE_TEXT[4], 4, "T-Mog" }, { VOTE_TEXT[5], 5, "Pass" }
+    }
+
+    -- Modern Notepad Icon-Based Private Note Button
+    if not row.actionFrame.noteBtn then
+        local noteBtn = CreateFrame("Button", nil, row.actionFrame, "BackdropTemplate")
+        noteBtn:SetSize(24, 24)
+        noteBtn:SetPoint("RIGHT", 0, 0)
+        noteBtn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+
+        local noteTex = noteBtn:CreateTexture(nil, "OVERLAY")
+        noteTex:SetSize(16, 16)
+        noteTex:SetPoint("CENTER")
+        noteTex:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
+        noteBtn.icon = noteTex
+
+        row.actionFrame.noteBtn = noteBtn
+    end
+    local noteBtn = row.actionFrame.noteBtn
+    noteBtn:Show()
+    noteBtn:SetBackdropColor(unpack(theme.buttonBg))
+    noteBtn:SetBackdropBorderColor(unpack(theme.border))
+
+    noteBtn:SetScript("OnEnter", function()
+        noteBtn:SetBackdropColor(unpack(theme.buttonHover))
+        GameTooltip:SetOwner(noteBtn, "ANCHOR_TOP")
+        GameTooltip:SetText(L["Add Private Note"], 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    noteBtn:SetScript("OnLeave", function()
+        noteBtn:SetBackdropColor(unpack(theme.buttonBg))
+        GameTooltip:Hide()
+    end)
+    noteBtn:SetScript("OnClick", function()
+        self.noteExpanded[guid] = not self.noteExpanded[guid]
+        self:ShowVotingWindow(nil, true)
+    end)
+
+    row.votingButtons = row.votingButtons or {}
+    for idx, bd in ipairs(BUTTONS) do
+        local btn = row.votingButtons[idx]
+        if not btn then
+            btn = NativeGUI:CreateButton(row.actionFrame, bd[1], w, 24, bd[3])
+            row.votingButtons[idx] = btn
+        end
+        btn:Show()
+        btn:ClearAllPoints()
+        btn:SetPoint("RIGHT", -24 - spacing - (5 - idx) * (w + spacing), 0)
+        btn:SetScript("OnClick", function() CastVote(bd[2]) end)
+    end
+end
+
+function UI_Voting:StyleNoteBox(row, theme, guid, isClosed, isExpired, isPending, currentVote)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    if not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid] then
+        if not row.noteBox then
+            local noteBox, edit = NativeGUI:CreateEditBox(row, L["Add note to Loot Master..."])
+            row.noteBox = noteBox
+            row.noteEdit = edit
+        end
+        row.noteBox:ClearAllPoints()
+        row.noteBox:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -45)
+        row.noteBox:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -12, 5)
+        row.noteBox:Show()
+        row.noteEdit:SetText(self.myNotes[guid] or "")
+        -- Dynamically update EditBox theme colors to prevent stale theme borders/backgrounds
+        row.noteEdit:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
+        row.noteEdit:SetBackdropBorderColor(unpack(theme.border))
+        row.noteEdit:SetScript("OnTextChanged", function(sb)
+            self.myNotes[guid] = sb:GetText()
+        end)
+    elseif row.noteBox then
+        row.noteBox:Hide()
+    end
+end
+
+local function PositionRow(self, index, row, scrollContent)
+    local topOffset = 0
+    for k = 1, index - 1 do
+        local prevRow = self.rowPool[k]
+        if prevRow and prevRow:IsShown() then
+            topOffset = topOffset + prevRow:GetHeight() + 10
         end
     end
-    if self.scrollContent then
-        self.scrollContent:SetHeight(totalHeight)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", 0, -topOffset)
+    row:SetPoint("TOPRIGHT", scrollContent, "TOPRIGHT", -12, -topOffset)
+end
+
+local function StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isExpired, isPending)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    -- Setup reusable status elements to prevent memory leaks
+    if not row.statusBtn then
+        row.statusBtn = NativeGUI:CreateButton(row.actionFrame, "", 100, 24, "Pass")
+    end
+    row.statusBtn:Hide()
+    row.statusBtn:ClearAllPoints()
+    row.statusBtn:SetPoint("RIGHT", 0, 0)
+
+    if not row.statusText then
+        local fs = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetJustifyH("LEFT")
+        row.statusText = fs
+    end
+    row.statusText:Hide()
+    row.statusText:ClearAllPoints()
+
+    -- Explicitly hide active voting buttons to prevent overlapping layouts
+    if row.actionFrame.noteBtn then row.actionFrame.noteBtn:Hide() end
+    if row.votingButtons then
+        for _, btn in ipairs(row.votingButtons) do btn:Hide() end
+    end
+
+    if isClosed or isExpired then
+        self:StyleClosedExpiredState(row, theme, currentVote)
+    elseif isPending then
+        self:StylePendingState(row, theme, guid)
+    elseif currentVote then
+        self:StyleVotedChangeState(row, theme, guid, currentVote)
+    else
+        self:StyleActiveVoteState(row, theme, guid)
     end
 end
 
@@ -290,39 +595,9 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
     local rowHeight = (not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid]) and 92 or 44
     row:SetHeight(rowHeight)
 
-    local topOffset = 0
-    for k = 1, index - 1 do
-        local prevRow = self.rowPool[k]
-        if prevRow and prevRow:IsShown() then
-            topOffset = topOffset + prevRow:GetHeight() + 10
-        end
-    end
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
-    row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
+    PositionRow(self, index, row, self.scrollContent)
 
-    if not row.itemIcon then
-        local icon = CreateFrame("Button", nil, row)
-        icon:SetSize(28, 28)
-        
-        local tex = icon:CreateTexture(nil, "BACKGROUND")
-        tex:SetAllPoints()
-        icon.texture = tex
-        
-        row.itemIcon = icon
-    end
-    row.itemIcon:ClearAllPoints()
-    row.itemIcon:SetPoint("LEFT", 12, (rowHeight == 92) and 24 or 0)
-    row.itemIcon.texture:SetTexture(data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400)
-
-    local function ShowTip()
-        GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(data.link)
-        GameTooltip:Show()
-    end
-    row.itemIcon:SetScript("OnClick", ShowTip)
-    row.itemIcon:SetScript("OnEnter", ShowTip)
-    row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    self:CreateItemIcon(row, data, rowHeight)
 
     if not row.actionFrame then
         row.actionFrame = CreateFrame("Frame", nil, row)
@@ -361,185 +636,9 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
     row.timerLbl:SetPoint("LEFT", row.actionFrame, "LEFT", 0, 0)
     self.timerLabels[guid] = { fontString = row.timerLbl, expiry = data.expiry }
 
-    -- Setup reusable status elements to prevent memory leaks
-    if not row.statusBtn then
-        row.statusBtn = NativeGUI:CreateButton(row.actionFrame, "", 100, 24, "Pass")
-    end
-    row.statusBtn:Hide()
-    row.statusBtn:ClearAllPoints()
-    row.statusBtn:SetPoint("RIGHT", 0, 0)
+    StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isExpired, isPending)
 
-    if not row.statusText then
-        local fs = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        fs:SetJustifyH("LEFT")
-        row.statusText = fs
-    end
-    row.statusText:Hide()
-    row.statusText:ClearAllPoints()
-
-    -- Explicitly hide active voting buttons to prevent overlapping layouts
-    if row.actionFrame.noteBtn then row.actionFrame.noteBtn:Hide() end
-    if row.votingButtons then
-        for _, btn in ipairs(row.votingButtons) do btn:Hide() end
-    end
-
-    if isClosed or isExpired then
-        row.timerLbl:Hide()
-
-        local votedText = L["You voted: |cffaaaaaaAuto Pass|r"]
-        if currentVote then
-            local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
-            local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
-            votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText)
-        end
-
-        row.statusBtn:SetText(L["Closed"])
-        row.statusBtn:SetEnabled(false)
-        row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
-        row.statusBtn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
-        row.statusBtn:SetScript("OnClick", nil)
-        row.statusBtn:Show()
-
-        row.statusText:SetText(votedText)
-        row.statusText:SetPoint("LEFT", row.actionFrame, "LEFT", 0, 0)
-        row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
-        row.statusText:Show()
-
-    elseif isPending then
-        row.timerLbl:Show()
-
-        local outbound   = DesolateLootcouncil.API:GetOutboundVote(guid)
-        local pendingType = outbound and outbound.type
-        local vText  = pendingType and VOTE_TEXT[pendingType]  or "?"
-        local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
-        local noteText = self.myNotes[guid] and self.myNotes[guid] ~= "" and (" (" .. self.myNotes[guid] .. ")") or ""
-
-        row.statusBtn:SetText(L["Syncing..."])
-        row.statusBtn:SetEnabled(false)
-        row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
-        row.statusBtn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
-        row.statusBtn:SetScript("OnClick", nil)
-        row.statusBtn:Show()
-
-        row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", vColor, vText, noteText))
-        row.statusText:SetPoint("LEFT", row.timerLbl, "RIGHT", 8, 0)
-        row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
-        row.statusText:Show()
-
-    elseif currentVote then
-        row.timerLbl:Show()
-
-        local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
-        local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
-
-        row.statusBtn:SetText(L["Change"])
-        row.statusBtn:SetEnabled(true)
-        local btnTheme = row.statusBtn.themeBorder or theme.border
-        row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
-        row.statusBtn:SetBackdropBorderColor(unpack(btnTheme))
-        row.statusBtn:SetScript("OnClick", function()
-            self.myVotes[guid] = nil
-            DesolateLootcouncil.API:CancelVote(guid)
-            self:ShowVotingWindow(nil, true)
-        end)
-        row.statusBtn:Show()
-
-        row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText))
-        row.statusText:SetPoint("LEFT", row.timerLbl, "RIGHT", 8, 0)
-        row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
-        row.statusText:Show()
-
-    else
-        row.timerLbl:Show()
-
-        local function CastVote(val)
-            self.myVotes[guid] = val
-            local note = self.myNotes[guid] or ""
-            DesolateLootcouncil.API:SendVote(guid, val, note)
-            self:ShowVotingWindow(nil, true)
-        end
-
-        local w = 60
-        local spacing = 4
-        local BUTTONS = {
-            { VOTE_TEXT[1], 1, "Bid" }, { VOTE_TEXT[2], 2, "Roll" },
-            { VOTE_TEXT[3], 3, "Offspec" }, { VOTE_TEXT[4], 4, "T-Mog" }, { VOTE_TEXT[5], 5, "Pass" }
-        }
-
-        -- Modern Notepad Icon-Based Private Note Button
-        if not row.actionFrame.noteBtn then
-            local noteBtn = CreateFrame("Button", nil, row.actionFrame, "BackdropTemplate")
-            noteBtn:SetSize(24, 24)
-            noteBtn:SetPoint("RIGHT", 0, 0)
-            noteBtn:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
-            })
-
-            local noteTex = noteBtn:CreateTexture(nil, "OVERLAY")
-            noteTex:SetSize(16, 16)
-            noteTex:SetPoint("CENTER")
-            noteTex:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
-            noteBtn.icon = noteTex
-
-            row.actionFrame.noteBtn = noteBtn
-        end
-        local noteBtn = row.actionFrame.noteBtn
-        noteBtn:Show()
-        noteBtn:SetBackdropColor(unpack(theme.buttonBg))
-        noteBtn:SetBackdropBorderColor(unpack(theme.border))
-
-        noteBtn:SetScript("OnEnter", function()
-            noteBtn:SetBackdropColor(unpack(theme.buttonHover))
-            GameTooltip:SetOwner(noteBtn, "ANCHOR_TOP")
-            GameTooltip:SetText(L["Add Private Note"], 1, 1, 1)
-            GameTooltip:Show()
-        end)
-        noteBtn:SetScript("OnLeave", function()
-            noteBtn:SetBackdropColor(unpack(theme.buttonBg))
-            GameTooltip:Hide()
-        end)
-        noteBtn:SetScript("OnClick", function()
-            self.noteExpanded[guid] = not self.noteExpanded[guid]
-            self:ShowVotingWindow(nil, true)
-        end)
-
-        row.votingButtons = row.votingButtons or {}
-        for idx, bd in ipairs(BUTTONS) do
-            local btn = row.votingButtons[idx]
-            if not btn then
-                btn = NativeGUI:CreateButton(row.actionFrame, bd[1], w, 24, bd[3])
-                row.votingButtons[idx] = btn
-            end
-            btn:Show()
-            btn:ClearAllPoints()
-            btn:SetPoint("RIGHT", -24 - spacing - (5 - idx) * (w + spacing), 0)
-            btn:SetScript("OnClick", function() CastVote(bd[2]) end)
-        end
-    end
-
-    if not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid] then
-        if not row.noteBox then
-            local noteBox, edit = NativeGUI:CreateEditBox(row, L["Add note to Loot Master..."])
-            row.noteBox = noteBox
-            row.noteEdit = edit
-        end
-        row.noteBox:ClearAllPoints()
-        row.noteBox:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -45)
-        row.noteBox:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -12, 5)
-        row.noteBox:Show()
-        row.noteEdit:SetText(self.myNotes[guid] or "")
-        -- Dynamically update EditBox theme colors to prevent stale theme borders/backgrounds
-        row.noteEdit:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
-        row.noteEdit:SetBackdropBorderColor(unpack(theme.border))
-        row.noteEdit:SetScript("OnTextChanged", function(sb)
-            self.myNotes[guid] = sb:GetText()
-        end)
-    elseif row.noteBox then
-        row.noteBox:Hide()
-    end
-
+    self:StyleNoteBox(row, theme, guid, isClosed, isExpired, isPending, currentVote)
 end
 
 

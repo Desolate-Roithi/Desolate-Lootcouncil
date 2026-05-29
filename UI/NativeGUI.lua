@@ -20,35 +20,14 @@ UI_NativeGUI.VOTE_COLORS = {
     Pass    = { hex = "|cff9d9d9d", r = 0.62, g = 0.62, b = 0.62 },
 }
 
-
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 
---- Creates a beautiful, persistent, Midnight-themed native WoW window.
----@param name string  global frame name (can be nil)
----@param titleText string  text displayed in the header
----@param width number  default frame width
----@param height number  default frame height
----@param windowName string  key for position saving
----@return Frame frame
-function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
-    local frame = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
-    frame:SetSize(width, height)
-    frame:SetFrameStrata("HIGH")
-    frame:SetToplevel(true)
-    frame:SetMovable(true)
-    frame:SetResizable(true)
-    if frame.SetResizeBounds then
-        frame:SetResizeBounds(250, 150)
-    else
-        frame:SetMinResize(250, 150)
-    end
-    frame:SetClampedToScreen(true)
-    frame:EnableMouse(true)
-    frame:Hide()
+-- ============================================================================
+-- Local UI Creation Helpers (Extracted to keep core methods extremely short)
+-- ============================================================================
 
-    -- Style backdrop
-    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+local function StyleWindowBackdrop(frame, theme)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
@@ -59,9 +38,68 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
     })
     frame:SetBackdropColor(unpack(theme.bg))
     frame:SetBackdropBorderColor(unpack(theme.border))
+end
 
-    -- Draggable Title Bar Header
-    local titleBar = CreateFrame("Frame", nil, frame)
+--- Collapse a window down to its title bar height and a compact width.
+local function CollapseWindow(frame, windowName)
+    frame.isCollapsed = true
+    frame._expandedHeight = frame:GetHeight()
+    frame._expandedWidth  = frame:GetWidth()
+
+    -- Snapshot which children were visible so we only restore those on expand
+    frame._collapseSnapshot = {}
+    for _, child in ipairs({ frame:GetChildren() }) do
+        frame._collapseSnapshot[child] = child:IsShown()
+        if child ~= frame.titleBar and child ~= frame.closeButton then
+            child:Hide()
+        end
+    end
+
+    -- Shrink to title bar only — narrow so it barely takes any screen space
+    frame:SetHeight(42)
+    frame:SetWidth(220)
+    if frame.grabber then frame.grabber:Hide() end
+
+    -- Rotate arrow texture to point right (collapsed)
+    if frame.collapseArrow then
+        frame.collapseArrow:SetRotation(-math.pi / 2)
+    end
+
+    if windowName then
+        DesolateLootcouncil:SaveFramePosition(frame, windowName)
+    end
+end
+
+--- Restore a previously collapsed window to its original size.
+local function ExpandWindow(frame, windowName)
+    frame.isCollapsed = false
+
+    frame:SetHeight(frame._expandedHeight or 400)
+    frame:SetWidth(frame._expandedWidth   or 650)
+
+    -- Only restore children that were actually visible before collapse
+    local snap = frame._collapseSnapshot or {}
+    for _, child in ipairs({ frame:GetChildren() }) do
+        if snap[child] then
+            child:Show()
+        end
+    end
+    frame._collapseSnapshot = nil
+
+    if frame.grabber then frame.grabber:Show() end
+
+    -- Rotate arrow texture back to point down (expanded)
+    if frame.collapseArrow then
+        frame.collapseArrow:SetRotation(0)
+    end
+
+    if windowName then
+        DesolateLootcouncil:SaveFramePosition(frame, windowName)
+    end
+end
+
+local function CreateTitleBar(frame, titleText, theme, windowName)
+    local titleBar = CreateFrame("Button", nil, frame)
     titleBar:SetHeight(38)
     titleBar:SetPoint("TOPLEFT", 2, -2)
     titleBar:SetPoint("TOPRIGHT", -36, -2)
@@ -73,13 +111,41 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
         DesolateLootcouncil:SaveFramePosition(frame, windowName)
     end)
 
-    -- Header Title Typography
+    -- Collapse / Expand on double-click
+    titleBar:SetScript("OnDoubleClick", function()
+        if frame.isCollapsed then
+            ExpandWindow(frame, windowName)
+        else
+            CollapseWindow(frame, windowName)
+        end
+    end)
+
+    -- Hover highlight so the user knows the title bar is clickable
+    titleBar:SetScript("OnEnter", function()
+        titleBar:SetAlpha(0.85)
+    end)
+    titleBar:SetScript("OnLeave", function()
+        titleBar:SetAlpha(1.0)
+    end)
+
     local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("LEFT", 14, 0)
     title:SetText(titleText)
     title:SetTextColor(unpack(theme.textHeader))
 
-    -- Minimalist top-right Close button "X"
+    -- Arrow indicator: texture rotated down (expanded) or right (collapsed)
+    local arrow = titleBar:CreateTexture(nil, "OVERLAY")
+    arrow:SetSize(12, 12)
+    arrow:SetPoint("RIGHT", -8, 0)
+    arrow:SetAtlas("minimal-scrollbar-arrow-bottom")
+    arrow:SetVertexColor(theme.textHeader[1], theme.textHeader[2], theme.textHeader[3], 0.5)
+
+    frame.titleBar      = titleBar
+    frame.titleText     = title
+    frame.collapseArrow = arrow
+end
+
+local function CreateCloseButton(frame, theme)
     local close = CreateFrame("Button", nil, frame, "BackdropTemplate")
     close:SetSize(20, 20)
     close:SetPoint("TOPRIGHT", -12, -12)
@@ -110,7 +176,10 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
         close:SetBackdropColor(activeTheme.bg[1] * 1.5, activeTheme.bg[2] * 1.5, activeTheme.bg[3] * 1.5, 0.8)
     end)
 
-    -- Elegant Neon Purple Sizing Handle in bottom-right corner
+    frame.closeButton = close
+end
+
+local function CreateResizeGrabber(frame, theme, windowName)
     local grabber = CreateFrame("Button", nil, frame)
     grabber:SetSize(16, 16)
     grabber:SetPoint("BOTTOMRIGHT", -2, 2)
@@ -131,11 +200,187 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
         end
     end)
 
-    frame.titleBar = titleBar
-    frame.titleText = title
-    frame.closeButton = close
     frame.grabber = grabber
     frame.grabberTex = grabberTex
+end
+
+local function StyleScrollThumbAndTrack(scrollBar, theme)
+    local thumb = scrollBar:GetThumbTexture()
+
+    for i = 1, scrollBar:GetNumRegions() do
+        local r = select(i, scrollBar:GetRegions())
+        if r and r:GetObjectType() == "Texture" then
+            if r ~= scrollBar.trackBg and r ~= thumb then
+                r:SetTexture(nil)
+                r:SetAlpha(0)
+            end
+        end
+    end
+
+    if not scrollBar.trackBg then
+        local trackBg = scrollBar:CreateTexture(nil, "BACKGROUND")
+        trackBg:SetAllPoints(scrollBar)
+        scrollBar.trackBg = trackBg
+    end
+    scrollBar.trackBg:SetColorTexture(theme.bg[1] * 1.2, theme.bg[2] * 1.2, theme.bg[3] * 1.2, 0.7)
+    scrollBar.trackBg:SetAlpha(0.7)
+
+    if thumb then
+        thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
+        thumb:SetColorTexture(unpack(theme.border))
+        thumb:SetSize(12, 24)
+        thumb:SetAlpha(1.0)
+    end
+end
+
+local function StyleScrollArrowButton(btn, theme, arrowAtlas)
+    if not btn then return end
+    btn:ClearAllPoints()
+    if btn.GetParent then
+        local p = btn:GetParent()
+        if p then
+            if arrowAtlas == "minimal-scrollbar-arrow-top" then
+                btn:SetPoint("BOTTOM", p, "TOP", 0, 2)
+            else
+                btn:SetPoint("TOP", p, "BOTTOM", 0, -2)
+            end
+        end
+    end
+    btn:SetSize(16, 11)
+
+    if btn.SetNormalTexture then btn:SetNormalTexture("") end
+    if btn.SetPushedTexture then btn:SetPushedTexture("") end
+    if btn.SetDisabledTexture then btn:SetDisabledTexture("") end
+
+    for i = 1, btn:GetNumRegions() do
+        local r = select(i, btn:GetRegions())
+        if r and r:GetObjectType() == "Texture" then
+            if r ~= btn.customArrow then
+                r:SetTexture(nil)
+                r:SetAlpha(0)
+            end
+        end
+    end
+
+    if not btn.customArrow then
+        local customArrow = btn:CreateTexture(nil, "OVERLAY")
+        customArrow:SetSize(16, 11)
+        customArrow:SetPoint("CENTER", 0, 0)
+        customArrow:SetAtlas(arrowAtlas)
+        btn.customArrow = customArrow
+    end
+    btn.customArrow:SetVertexColor(unpack(theme.border))
+    btn.customArrow:SetAlpha(1.0)
+
+    btn:SetScript("OnEnter", function()
+        btn.customArrow:SetVertexColor(theme.border[1] * 1.2, theme.border[2] * 1.2, theme.border[3] * 1.2, 1.0)
+    end)
+    btn:SetScript("OnLeave", function()
+        btn.customArrow:SetVertexColor(unpack(theme.border))
+    end)
+end
+
+local function StyleDropdownButton(btn, theme)
+    btn:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    btn:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
+    btn:SetBackdropBorderColor(unpack(theme.border))
+end
+
+local function PopulateDropdownMenu(container, menu, btn, currentList, callback, customSort, theme, itemRows, HideMenu)
+    menu:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
+    menu:SetWidth(btn:GetWidth())
+
+    for _, r in ipairs(itemRows) do r:Hide() end
+
+    local keys = {}
+    for k in pairs(currentList) do table.insert(keys, k) end
+    if customSort then
+        table.sort(keys, function(a, b) return customSort(a, b, currentList) end)
+    else
+        table.sort(keys, function(a, b) return tostring(currentList[a]) < tostring(currentList[b]) end)
+    end
+
+    local rowHeight = 20
+    local menuHeight = 6
+    for idx, key in ipairs(keys) do
+        local val = currentList[key]
+        if not itemRows[idx] then
+            local row = CreateFrame("Button", nil, menu, "BackdropTemplate")
+            row:SetHeight(rowHeight)
+            row:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+            })
+            row:SetBackdropColor(0, 0, 0, 0)
+            local rText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            rText:SetPoint("LEFT", 8, 0)
+            rText:SetPoint("RIGHT", -8, 0)
+            rText:SetJustifyH("LEFT")
+            rText:SetWordWrap(false)
+            rText:SetNonSpaceWrap(false)
+            row.text = rText
+
+            row:SetScript("OnEnter", function(self)
+                self:SetBackdropColor(unpack(theme.buttonHover))
+            end)
+            row:SetScript("OnLeave", function(self)
+                self:SetBackdropColor(0, 0, 0, 0)
+            end)
+            itemRows[idx] = row
+        end
+        local row = itemRows[idx]
+        row:SetWidth(btn:GetWidth() - 4)
+        row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(idx - 1) * rowHeight - 3)
+        row.text:SetText(tostring(val))
+        row:Show()
+
+        row:SetScript("OnClick", function()
+            container:SetValue(key)
+            HideMenu()
+            if callback then callback(key) end
+        end)
+
+        menuHeight = menuHeight + rowHeight
+    end
+    menu:SetHeight(menuHeight)
+    menu:Show()
+end
+
+-- ============================================================================
+-- Core Public API
+-- ============================================================================
+
+--- Creates a beautiful, persistent, Midnight-themed native WoW window.
+---@param name string  global frame name (can be nil)
+---@param titleText string  text displayed in the header
+---@param width number  default frame width
+---@param height number  default frame height
+---@param windowName string  key for position saving
+---@return Frame frame
+function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
+    local frame = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
+    frame:SetSize(width, height)
+    frame:SetFrameStrata("HIGH")
+    frame:SetToplevel(true)
+    frame:SetMovable(true)
+    frame:SetResizable(true)
+    if frame.SetResizeBounds then
+        frame:SetResizeBounds(250, 150)
+    else
+        frame:SetMinResize(250, 150)
+    end
+    frame:SetClampedToScreen(true)
+    frame:EnableMouse(true)
+    frame:Hide()
+
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+    StyleWindowBackdrop(frame, theme)
+    CreateTitleBar(frame, titleText, theme, windowName)
+    CreateCloseButton(frame, theme)
+    CreateResizeGrabber(frame, theme, windowName)
 
     -- Persistence Integration
     DesolateLootcouncil:RestoreFramePosition(frame, windowName)
@@ -143,11 +388,6 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
     return frame
 end
 
---- Creates a modern, native scroll frame with stripped retro textures and a flat scrollbar thumb.
----@param parent Frame  parent native Frame
----@param topOffset number  Y offset relative to the top of the parent
----@param bottomOffset number  Y offset relative to the bottom of the parent (usually negative)
----@return ScrollFrame scrollFrame, Frame scrollContent
 --- Styles a scrollbar dynamically using the active UI theme, replacing retro gold arrows with modern flat vertex-colored ones.
 ---@param scrollFrame ScrollFrame
 function UI_NativeGUI:StyleScrollBar(scrollFrame)
@@ -156,121 +396,17 @@ function UI_NativeGUI:StyleScrollBar(scrollFrame)
     if scrollBarName then
         local scrollBar = _G[scrollBarName]
         if scrollBar then
-            -- Clean and style the track
             scrollBar:ClearAllPoints()
             scrollBar:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 6, -16)
             scrollBar:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 6, 16)
 
-            local thumb = scrollBar:GetThumbTexture()
+            StyleScrollThumbAndTrack(scrollBar, theme)
 
-            for i = 1, scrollBar:GetNumRegions() do
-                local r = select(i, scrollBar:GetRegions())
-                if r and r:GetObjectType() == "Texture" then
-                    -- Do NOT hide/nil our custom trackBg or active thumb texture
-                    if r ~= scrollBar.trackBg and r ~= thumb then
-                        r:SetTexture(nil)
-                        r:SetAlpha(0)
-                    end
-                end
-            end
-
-            -- Modern dark track background matching active theme
-            if not scrollBar.trackBg then
-                local trackBg = scrollBar:CreateTexture(nil, "BACKGROUND")
-                trackBg:SetAllPoints(scrollBar)
-                scrollBar.trackBg = trackBg
-            end
-            scrollBar.trackBg:SetColorTexture(theme.bg[1] * 1.2, theme.bg[2] * 1.2, theme.bg[3] * 1.2, 0.7)
-            scrollBar.trackBg:SetAlpha(0.7)
-
-            -- Sleek flat thumb matching active theme border
-            if thumb then
-                thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
-                thumb:SetColorTexture(unpack(theme.border))
-                thumb:SetSize(12, 24)
-                thumb:SetAlpha(1.0)
-            end
-
-            -- Strip retro arrow button textures and apply modern atlas arrows
             local upBtn = scrollBar.ScrollUpButton or _G[scrollBarName .. "ScrollUpButton"]
-            if upBtn then
-                upBtn:ClearAllPoints()
-                upBtn:SetPoint("BOTTOM", scrollBar, "TOP", 0, 2)
-                upBtn:SetSize(16, 11)
-
-                if upBtn.SetNormalTexture then upBtn:SetNormalTexture("") end
-                if upBtn.SetPushedTexture then upBtn:SetPushedTexture("") end
-                if upBtn.SetDisabledTexture then upBtn:SetDisabledTexture("") end
-
-                for i = 1, upBtn:GetNumRegions() do
-                    local r = select(i, upBtn:GetRegions())
-                    if r and r:GetObjectType() == "Texture" then
-                        if r ~= upBtn.customArrow then
-                            r:SetTexture(nil)
-                            r:SetAlpha(0)
-                        end
-                    end
-                end
-
-                if not upBtn.customArrow then
-                    local customArrow = upBtn:CreateTexture(nil, "OVERLAY")
-                    customArrow:SetSize(16, 11)
-                    customArrow:SetPoint("CENTER", 0, 0)
-                    customArrow:SetAtlas("minimal-scrollbar-arrow-top")
-                    upBtn.customArrow = customArrow
-                end
-                upBtn.customArrow:SetVertexColor(unpack(theme.border))
-                upBtn.customArrow:SetAlpha(1.0)
-
-                -- Sleek micro-interactions on hover
-                upBtn:SetScript("OnEnter", function()
-                    upBtn.customArrow:SetVertexColor(theme.border[1] * 1.2, theme.border[2] * 1.2, theme.border[3] * 1.2,
-                        1.0)
-                end)
-                upBtn:SetScript("OnLeave", function()
-                    upBtn.customArrow:SetVertexColor(unpack(theme.border))
-                end)
-            end
+            StyleScrollArrowButton(upBtn, theme, "minimal-scrollbar-arrow-top")
 
             local downBtn = scrollBar.ScrollDownButton or _G[scrollBarName .. "ScrollDownButton"]
-            if downBtn then
-                downBtn:ClearAllPoints()
-                downBtn:SetPoint("TOP", scrollBar, "BOTTOM", 0, -2)
-                downBtn:SetSize(16, 11)
-
-                if downBtn.SetNormalTexture then downBtn:SetNormalTexture("") end
-                if downBtn.SetPushedTexture then downBtn:SetPushedTexture("") end
-                if downBtn.SetDisabledTexture then downBtn:SetDisabledTexture("") end
-
-                for i = 1, downBtn:GetNumRegions() do
-                    local r = select(i, downBtn:GetRegions())
-                    if r and r:GetObjectType() == "Texture" then
-                        if r ~= downBtn.customArrow then
-                            r:SetTexture(nil)
-                            r:SetAlpha(0)
-                        end
-                    end
-                end
-
-                if not downBtn.customArrow then
-                    local customArrow = downBtn:CreateTexture(nil, "OVERLAY")
-                    customArrow:SetSize(16, 11)
-                    customArrow:SetPoint("CENTER", 0, 0)
-                    customArrow:SetAtlas("minimal-scrollbar-arrow-bottom")
-                    downBtn.customArrow = customArrow
-                end
-                downBtn.customArrow:SetVertexColor(unpack(theme.border))
-                downBtn.customArrow:SetAlpha(1.0)
-
-                -- Sleek micro-interactions on hover
-                downBtn:SetScript("OnEnter", function()
-                    downBtn.customArrow:SetVertexColor(theme.border[1] * 1.2, theme.border[2] * 1.2,
-                        theme.border[3] * 1.2, 1.0)
-                end)
-                downBtn:SetScript("OnLeave", function()
-                    downBtn.customArrow:SetVertexColor(unpack(theme.border))
-                end)
-            end
+            StyleScrollArrowButton(downBtn, theme, "minimal-scrollbar-arrow-bottom")
         end
     end
 end
@@ -279,9 +415,6 @@ function UI_NativeGUI:CreateScrollFrame(parent, topOffset, bottomOffset)
     local frameName = parent:GetName() and (parent:GetName() .. "Scroll") or nil
     local scrollFrame = CreateFrame("ScrollFrame", frameName, parent, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, topOffset)
-    -- BOTTOMRIGHT: positive Y = upward from parent's bottom edge (inside window).
-    -- Callers pass negative values like -16 meaning "16px padding from bottom",
-    -- so we negate to convert to the correct upward offset.
     scrollFrame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -36, -bottomOffset)
 
     -- Hide ugly default scrollbar textures and apply modern styling
@@ -466,15 +599,9 @@ function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValu
     local btn = CreateFrame("Button", nil, container, "BackdropTemplate")
     btn:SetPoint("TOPLEFT", 0, -16)
     btn:SetPoint("BOTTOMRIGHT", 0, 2)
-    btn:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-    })
 
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
-    btn:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
-    btn:SetBackdropBorderColor(unpack(theme.border))
+    StyleDropdownButton(btn, theme)
 
     local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     fs:ClearAllPoints()
@@ -483,8 +610,6 @@ function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValu
     fs:SetJustifyH("LEFT")
     fs:SetWordWrap(false)
     fs:SetNonSpaceWrap(false)
-    -- Do NOT call btn:SetFontString(fs) — WoW resets anchor points on SetText
-    -- Track fs directly and use fs:SetText() for safe clipping
 
     local arrow = btn:CreateTexture(nil, "OVERLAY")
     arrow:SetSize(14, 8)
@@ -524,63 +649,7 @@ function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValu
         if menu:IsShown() then
             HideMenu()
         else
-            menu:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
-            menu:SetWidth(btn:GetWidth())
-
-            for _, r in ipairs(itemRows) do r:Hide() end
-
-            local keys = {}
-            for k in pairs(currentList) do table.insert(keys, k) end
-            if customSort then
-                table.sort(keys, function(a, b) return customSort(a, b, currentList) end)
-            else
-                table.sort(keys, function(a, b) return tostring(currentList[a]) < tostring(currentList[b]) end)
-            end
-
-            local rowHeight = 20
-            local menuHeight = 6
-            for idx, key in ipairs(keys) do
-                local val = currentList[key]
-                if not itemRows[idx] then
-                    local row = CreateFrame("Button", nil, menu, "BackdropTemplate")
-                    row:SetHeight(rowHeight)
-                    row:SetBackdrop({
-                        bgFile = "Interface\\Buttons\\WHITE8X8",
-                    })
-                    row:SetBackdropColor(0, 0, 0, 0)
-                    local rText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                    rText:SetPoint("LEFT", 8, 0)
-                    rText:SetPoint("RIGHT", -8, 0)
-                    rText:SetJustifyH("LEFT")
-                    rText:SetWordWrap(false)
-                    rText:SetNonSpaceWrap(false)
-                    row.text = rText
-
-                    row:SetScript("OnEnter", function(self)
-                        self:SetBackdropColor(unpack(theme.buttonHover))
-                    end)
-                    row:SetScript("OnLeave", function(self)
-                        self:SetBackdropColor(0, 0, 0, 0)
-                    end)
-                    itemRows[idx] = row
-                end
-                local row = itemRows[idx]
-                row:SetWidth(btn:GetWidth() - 4)
-                row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(idx - 1) * rowHeight - 3)
-                row.text:SetText(tostring(val))
-                row:Show()
-
-                row:SetScript("OnClick", function()
-                    currentValue = key
-                    fs:SetText(tostring(val))
-                    HideMenu()
-                    if callback then callback(key) end
-                end)
-
-                menuHeight = menuHeight + rowHeight
-            end
-            menu:SetHeight(menuHeight)
-            menu:Show()
+            PopulateDropdownMenu(container, menu, btn, currentList, callback, customSort, theme, itemRows, HideMenu)
         end
     end
 
@@ -752,4 +821,85 @@ function UI_NativeGUI:CreateLabel(parent, text, fontObject)
     local lbl = parent:CreateFontString(nil, "OVERLAY", fontObject or "GameFontHighlightSmall")
     lbl:SetText(text or "")
     return lbl
+end
+
+local CLASS_COORDS = {
+    WARRIOR     = {0, 0.25, 0, 0.25},
+    MAGE        = {0.25, 0.5, 0, 0.25},
+    ROGUE       = {0.5, 0.75, 0, 0.25},
+    DRUID       = {0.75, 1, 0, 0.25},
+    HUNTER      = {0, 0.25, 0.25, 0.5},
+    SHAMAN      = {0.25, 0.5, 0.25, 0.5},
+    PRIEST      = {0.5, 0.75, 0.25, 0.5},
+    WARLOCK     = {0.75, 1, 0.25, 0.5},
+    PALADIN     = {0, 0.25, 0.5, 0.75},
+    DEATHKNIGHT = {0.25, 0.5, 0.5, 0.75},
+    MONK        = {0.5, 0.75, 0.5, 0.75},
+    DEMONHUNTER = {0.75, 1, 0.5, 0.75},
+    EVOKER      = {0, 0.25, 0.75, 1.0},
+}
+
+--- Returns the robust class color hex string (8 characters, with leading alpha 'ff').
+---@param class string|nil
+---@return string hex
+function UI_NativeGUI:GetClassColorHex(class)
+    if not class then return "ffffffff" end
+    local num = tonumber(class)
+    if num and GetClassInfo then
+        local _, englishName = GetClassInfo(num)
+        class = englishName
+    end
+    if not class then return "ffffffff" end
+    local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class:upper()]
+    if c then
+        if c.colorStr then
+            if c.colorStr:len() == 8 then
+                return c.colorStr
+            else
+                return "ff" .. c.colorStr
+            end
+        else
+            return string.format("ff%02x%02x%02x", c.r*255, c.g*255, c.b*255)
+        end
+    end
+    return "ffffffff"
+end
+
+--- Returns a class-colored string wrapped in |cff...|r tags.
+---@param class string|nil
+---@param text string
+---@return string wrappedText
+function UI_NativeGUI:FormatClassColor(class, text)
+    local hex = self:GetClassColorHex(class)
+    return "|c" .. hex .. text .. "|r"
+end
+
+--- Returns a class icon in |T...|t markup form.
+---@param class string|nil
+---@param size number?
+---@return string markup
+function UI_NativeGUI:GetClassIconMarkup(class, size)
+    if not class then return "" end
+    local num = tonumber(class)
+    if num and GetClassInfo then
+        local _, englishName = GetClassInfo(num)
+        class = englishName
+    end
+    if not class then return "" end
+    size = size or 14
+    local coords = CLASS_COORDS[class:upper()]
+    if coords then
+        local l, r, t, b = coords[1]*256, coords[2]*256, coords[3]*256, coords[4]*256
+        return string.format("|TInterface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes:%d:%d:0:0:256:256:%d:%d:%d:%d|t", size, size, l, r, t, b)
+    end
+    return ""
+end
+
+--- Formats a timestamp into a short time string.
+---@param ts number|nil
+---@param fmt string?
+---@return string formattedTime
+function UI_NativeGUI:FormatTime(ts, fmt)
+    if not ts then return "" end
+    return date(fmt or "%H:%M", ts)
 end
