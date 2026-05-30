@@ -40,6 +40,7 @@ local VOTE_REMINDER_THRESHOLDS = { 240, 180, 120, 60, 30 }
 --- countdown thresholds (4min, 3min, 2min, 1min, 30sec). Safe to call multiple
 --- times — a no-op if the ticker is already running.
 function UI_Voting:StartMilestoneChecker()
+    if DesolateLootcouncil:AmILootMaster() then return end
     if self.milestoneTicker then return end
 
     -- Per-item threshold announcement tracking and global dedup timestamp
@@ -68,7 +69,16 @@ function UI_Voting:StartMilestoneChecker()
 
             if not isClosed and item.expiry and item.expiry > 0 then
                 local remaining = item.expiry - now
-                self.announcedMilestones[guid] = self.announcedMilestones[guid] or {}
+
+                if not self.announcedMilestones[guid] then
+                    self.announcedMilestones[guid] = {}
+                    -- Pre-initialize already-passed thresholds on first track / reload
+                    for _, threshold in ipairs(VOTE_REMINDER_THRESHOLDS) do
+                        if remaining < threshold then
+                            self.announcedMilestones[guid][threshold] = true
+                        end
+                    end
+                end
 
                 -- Background Autopass evaluation (when window is closed/hidden)
                 local isPending = (API:GetOutboundVote(guid) ~= nil)
@@ -133,7 +143,7 @@ end
 
 function UI_Voting:CreateVotingFrame()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
-    local frame = NativeGUI:CreateWindow("DLCVotingFrame", L["Loot Vote"], 800, 450, "Voting")
+    local frame = NativeGUI:CreateWindow("DLCVotingFrame", L["Loot Vote"], "Voting")
 
     frame:HookScript("OnHide", function()
         if self.votingTicker then self.votingTicker:Cancel() end

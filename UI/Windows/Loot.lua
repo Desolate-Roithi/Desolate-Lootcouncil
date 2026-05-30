@@ -26,7 +26,7 @@ function UI_Loot:ShowLootWindow(lootTable)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.lootFrame then
-        local frame = NativeGUI:CreateWindow("DLCLootFrame", "Desolate Loot Council", 400, 500, "Loot")
+        local frame = NativeGUI:CreateWindow("DLCLootFrame", "Desolate Loot Council", "Loot")
         self.lootFrame = frame
         self.rowPool = {}
 

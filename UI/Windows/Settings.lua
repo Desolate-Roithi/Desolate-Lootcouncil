@@ -23,7 +23,7 @@ function UI_Settings:ShowSettingsWindow()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.settingsFrame then
-        local frame = NativeGUI:CreateWindow("DLCSettingsFrame", L["Desolate Loot Council Settings"], 650, 480, "Settings")
+        local frame = NativeGUI:CreateWindow("DLCSettingsFrame", L["Desolate Loot Council Settings"], "Config")
         self.settingsFrame = frame
 
         -- Left Sidebar tab container

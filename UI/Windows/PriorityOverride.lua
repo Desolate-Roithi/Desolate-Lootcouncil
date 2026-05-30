@@ -25,10 +25,8 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
     local frame = NativeGUI:CreateWindow(
         "DLCPriorityOverride",
         string.format(L["Override: %s"], (list.name or listKey)),
-        320, 500,
         "PriorityOverride"
     )
-    frame:SetPoint("CENTER")
 
     -- Drag-and-drop priority list scroll area
     local scrollFrame = CreateFrame("ScrollFrame", "DLCPriorityScroll", frame, "UIPanelScrollFrameTemplate")

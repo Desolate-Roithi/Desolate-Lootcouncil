@@ -2,7 +2,7 @@
 
 A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
 
-**Latest Version:** v1.0.0-Alpha  
+**Latest Version:** v1.0.1-Alpha  
 **Last Updated:** 2026-05-30  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
@@ -44,6 +44,18 @@ A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages biddi
 ---
 
 ## 📝 Recent Changes
+
+### v1.0.1-Alpha
+* **Single Source of Truth Window Layout**:
+    - Refactored all 13 addon windows to use a clean 3-argument `NativeGUI:CreateWindow(name, title, layoutKey)` signature, resolving default sizes and positions from `UI/Layouts.lua` `DefaultLayouts` registry.
+    - Eliminated all hardcoded inline width/height arguments across every window file.
+* **Voting Countdown & Loot Master Chat Fixes**:
+    - Fixed a bug where reloading mid-session caused the vote countdown to reset to 4 minutes and incorrectly re-announce already-passed milestones.
+    - Suppressed "still need your vote" reminder warnings for the Loot Master, who does not participate in the Raider voting panel.
+* **Award Window Hoverable Note Icon**:
+    - Replaced the raw note text label in each award row with a conditional note icon button.
+    - The icon only appears when a custom note is present. Hovering displays the full unabbreviated note via `GameTooltip`.
+* **Verification Integrity**: Full linter compliance (0 errors / 0 warnings across 79 files) and all unit + integration tests passing.
 
 ### v1.0.0-Alpha
 * **UI Refactoring & Maintainability**:

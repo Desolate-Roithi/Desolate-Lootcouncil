@@ -238,7 +238,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.monitorFrame then
-        local frame = NativeGUI:CreateWindow("DLCMonitorFrame", L["Session Monitor"], 650, 400, "Monitor")
+        local frame = NativeGUI:CreateWindow("DLCMonitorFrame", L["Session Monitor"], "Monitor")
         frame:HookScript("OnHide", function()
             self.userClosedMonitor = true
         end)

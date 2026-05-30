@@ -150,7 +150,7 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.frame then
-        local frame = NativeGUI:CreateWindow("DLCRaidHistoryFrame", L["Raid History"], 680, 520, "RaidHistory")
+        local frame = NativeGUI:CreateWindow("DLCRaidHistoryFrame", L["Raid History"], "RaidHistory")
         self.frame = frame
 
         -- Collapsed state per section (false = expanded)

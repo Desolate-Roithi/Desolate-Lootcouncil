@@ -133,6 +133,12 @@ function Session:SendSessionHeartbeat()
     if channel then
         self:SendCommMessage("DLC_Loot", self.sessionPayloadCache, channel)
     end
+
+    -- Auto-Sync Item Manager lists automatically on heartbeat
+    local API = DesolateLootcouncil.API
+    if API and API.AutoSyncItemManager then
+        API:AutoSyncItemManager()
+    end
 end
 
 function Session:SaveSessionState()
@@ -322,6 +328,12 @@ end
 function Session:StartSession(lootTable)
     if not DesolateLootcouncil:AmILootMaster() then return end
 
+    -- Wipe previous session's awarded items database to start completely fresh
+    local session = DesolateLootcouncil.db.profile.session
+    if session then
+        session.awarded = {}
+    end
+
     ---@type Loot
     local Loot = DesolateLootcouncil:GetModule("Loot")
     if Loot and Loot.ScanDisenchanters then
@@ -335,6 +347,7 @@ function Session:StartSession(lootTable)
 
     -- 1. Filter junk, stamp expiry, persist to bidding storage.
     local cleanList, itemCount, duration, endTime = self:FilterBiddingLoot(lootTable)
+    self.clientLootList = cleanList
 
     if itemCount == 0 then
         Loot:ClearLootBacklog()
@@ -347,8 +360,13 @@ function Session:StartSession(lootTable)
     Loot:ClearLootBacklog()
     self:SendMessage("DLC_LOOT_WINDOW_UPDATE", nil)
 
-    -- 3. Broadcast session start and sync Autopass state.
     self:BroadcastSessionStart(cleanList, itemCount, duration, endTime)
+
+    -- Auto-Sync Item Manager lists automatically when starting a session
+    local API = DesolateLootcouncil.API
+    if API and API.AutoSyncItemManager then
+        API:AutoSyncItemManager()
+    end
 
     -- 4. Open LM windows.
     self:OpenActiveSessionUIs(cleanList)
@@ -578,6 +596,13 @@ function Session:HandleStartSession(payload, sender)
         end
         self:SaveSessionState()
         return
+    end
+
+    if not isHeartbeat then
+        local db = DesolateLootcouncil.db.profile
+        if db.session then
+            db.session.awarded = {}
+        end
     end
 
     -- Full session start (or late-joiner receiving heartbeat for the first time)

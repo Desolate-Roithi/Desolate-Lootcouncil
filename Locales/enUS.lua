@@ -140,6 +140,8 @@ L["Remove"] = true
 L["Assigned Items"] = true
 L["Select List to View"] = true
 L["Removed item ID: %s"] = true
+L["No assigned items."] = true
+
 
 -- TradeList.lua
 L["Trade"] = true

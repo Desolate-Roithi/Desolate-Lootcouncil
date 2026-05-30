@@ -33,7 +33,7 @@ function UI_Version:ShowVersionWindow(isTest)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.versionFrame then
-        local frame = NativeGUI:CreateWindow("DLCVersionFrame", L["Desolate Loot Council - Versions"], 320, 400, "Version")
+        local frame = NativeGUI:CreateWindow("DLCVersionFrame", L["Desolate Loot Council - Versions"], "Version")
         self.versionFrame = frame
         self.rowPool = {}
 

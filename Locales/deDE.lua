@@ -140,6 +140,8 @@ L["Remove"] = "Entfernen"
 L["Assigned Items"] = "Zugewiesene Gegenstände"
 L["Select List to View"] = "Liste zum Anzeigen auswählen"
 L["Removed item ID: %s"] = "Gegenstands-ID entfernt: %s"
+L["No assigned items."] = "Keine zugewiesenen Gegenstände."
+
 
 -- TradeList.lua
 L["Trade"] = "Handeln"

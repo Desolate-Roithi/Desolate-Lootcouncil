@@ -129,7 +129,7 @@ function UI_TradeList:ShowTradeListWindow()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.tradeListFrame then
-        local frame = NativeGUI:CreateWindow("DLCTradeFrame", L["Pending Trades"], 500, 350, "Trade")
+        local frame = NativeGUI:CreateWindow("DLCTradeFrame", L["Pending Trades"], "Trade")
         self.tradeListFrame = frame
         self.rowPool = {}
     end

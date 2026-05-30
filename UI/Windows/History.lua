@@ -101,7 +101,7 @@ function UI_History:ShowSessionLootHistory()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.sessionFrame then
-        local frame = NativeGUI:CreateWindow("DLCSessionHistoryFrame", L["Session Loot History"], 520, 420, "SessionHistory")
+        local frame = NativeGUI:CreateWindow("DLCSessionHistoryFrame", L["Session Loot History"], "SessionHistory")
         self.sessionFrame = frame
         self.rowPool = {}
     end
@@ -122,7 +122,9 @@ function UI_History:ShowSessionLootHistory()
     self.scrollFrame:Show()
     self.scrollContent:Show()
 
-    local awarded = DesolateLootcouncil.API:GetAwardedList()
+    local bidding = DesolateLootcouncil.API:GetBiddingList()
+    local isSessionActive = bidding and #bidding > 0
+    local awarded = isSessionActive and DesolateLootcouncil.API:GetAwardedList() or {}
 
     local hasItems  = false
     local topOffset = 0

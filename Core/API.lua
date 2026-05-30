@@ -292,7 +292,7 @@ function DLC_API:AddManagedItem(rawLink, listIndex)
     if l and l.AddItemToList then l:AddItemToList(rawLink, listIndex) end
 end
 
---- Broadcasts the current Item Manager lists to the raid (IM_SYNC).
+--- Broadcasts the current Item Manager lists to the raid (IM_SYNC) as a manual synchronization request.
 function DLC_API:SyncItemManagerToRaid()
     local c = Comm()
     local db = DesolateLootcouncil.db.profile
@@ -301,8 +301,21 @@ function DLC_API:SyncItemManagerToRaid()
     for _, list in ipairs(db.PriorityLists) do
         syncData[list.name] = list.items
     end
-    c:SendComm("IM_SYNC", syncData)
+    c:SendComm("IM_SYNC", { lists = syncData, isManual = true })
 end
+
+--- Automatically broadcasts the current Item Manager lists to the raid (IM_SYNC) in active raid context.
+function DLC_API:AutoSyncItemManager()
+    local c = Comm()
+    local db = DesolateLootcouncil.db.profile
+    if not c or not db.PriorityLists then return end
+    local syncData = {}
+    for _, list in ipairs(db.PriorityLists) do
+        syncData[list.name] = list.items
+    end
+    c:SendComm("IM_SYNC", { lists = syncData, isManual = false })
+end
+
 
 --- Sends a version-check ping to all addon users in the group.
 ---@return boolean success

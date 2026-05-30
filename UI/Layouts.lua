@@ -10,54 +10,54 @@ DesolateLootcouncil.DefaultLayouts = {
         relativePoint = "CENTER",
         x = 0,
         y = 0,
-        width = 790,
-        height = 500
+        width = 800,
+        height = 600
     },
     ["Loot"] = {
         point = "CENTER",
         relativePoint = "CENTER",
         x = 0,
-        y = 200,
+        y = 250,
         width = 400,
-        height = 300
+        height = 500
     },
     ["Monitor"] = {
         point = "TOPRIGHT",
         relativePoint = "CENTER",
-        x = 700,
-        y = 200,
-        width = 600,
-        height = 350
+        x = 900,
+        y = 400,
+        width = 650,
+        height = 400
     },
     ["Trade"] = {
-        point = "CENTER",
+        point = "TOPRIGHT",
         relativePoint = "CENTER",
-        x = -160,
-        y = 25,
-        width = 500,
+        x = 250,
+        y = 400,
+        width = 400,
         height = 350
     },
     ["Voting"] = {
         point = "LEFT",
         relativePoint = "CENTER",
-        x = -900,
-        y = 0,
-        width = 700,
-        height = 250
+        x = -1000,
+        y = 250,
+        width = 800,
+        height = 350
     },
-    ["History"] = {
-        point = "CENTER",
+    ["SessionHistory"] = {
+        point = "TOPRIGHT",
         relativePoint = "CENTER",
-        x = -450,
-        y = 0,
-        width = 600,
-        height = 400
+        x = 900,
+        y = -0,
+        width = 400,
+        height = 300
     },
     ["PriorityOverride"] = {
         point = "CENTER",
         relativePoint = "CENTER",
-        x = 500,
-        y = 0,
+        x = 550,
+        y = 100,
         width = 300,
         height = 400
     },
@@ -66,8 +66,8 @@ DesolateLootcouncil.DefaultLayouts = {
         relativePoint = "CENTER",
         x = 0,
         y = 0,
-        width = 300,
-        height = 350
+        width = 370,
+        height = 400
     },
     ["Attendance"] = {
         point = "CENTER",
@@ -75,22 +75,22 @@ DesolateLootcouncil.DefaultLayouts = {
         x = 0,
         y = 0,
         width = 640,
-        height = 450
+        height = 480
     },
     ["Award"] = {
-        point = "CENTER",
+        point = "TOPRIGHT",
         relativePoint = "CENTER",
-        x = -60,
-        y = 75,
-        width = 300,
-        height = 250
+        x = 250,
+        y = 400,
+        width = 500,
+        height = 350
     },
     ["PriorityHistory"] = {
         point = "CENTER",
         relativePoint = "CENTER",
-        x = 650,
-        y = 0,
-        width = 500,
+        x = 700,
+        y = 100,
+        width = 600,
         height = 400
     },
     ["ItemManager"] = {
@@ -100,5 +100,13 @@ DesolateLootcouncil.DefaultLayouts = {
         y = 0,
         width = 600,
         height = 500
+    },
+    ["RaidHistory"] = {
+        point = "CENTER",
+        relativePoint = "CENTER",
+        x = 0,
+        y = 0,
+        width = 680,
+        height = 520
     },
 }

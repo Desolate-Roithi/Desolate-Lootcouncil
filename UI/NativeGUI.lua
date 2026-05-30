@@ -360,9 +360,31 @@ end
 ---@param height number  default frame height
 ---@param windowName string  key for position saving
 ---@return Frame frame
-function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
+--- Creates a standardized frame with standard title, drag, close, and resize handlers.
+--- Can be called with either:
+---   1. (name, title, windowName) -> Resolves width and height automatically from UI/Layouts.lua
+---   2. (name, title, width, height, windowName) -> Traditional fallback signature
+---@param name string  global frame name
+---@param titleText string  displayed header text
+---@param widthOrWindowName number|string  default frame width or layout key
+---@param height number?  default frame height (nil if using layout key)
+---@param windowName string?  layout key for persistence (nil if using layout key)
+---@return Frame frame
+function UI_NativeGUI:CreateWindow(name, titleText, widthOrWindowName, height, windowName)
+    local w, h, winName
+    if type(widthOrWindowName) == "string" then
+        winName = widthOrWindowName
+        local defaultLayout = DesolateLootcouncil.DefaultLayouts and DesolateLootcouncil.DefaultLayouts[winName]
+        w = defaultLayout and defaultLayout.width or 400
+        h = defaultLayout and defaultLayout.height or 300
+    else
+        w = widthOrWindowName or 400
+        h = height or 300
+        winName = windowName
+    end
+
     local frame = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
-    frame:SetSize(width, height)
+    frame:SetSize(w, h)
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
     frame:SetMovable(true)
@@ -378,12 +400,12 @@ function UI_NativeGUI:CreateWindow(name, titleText, width, height, windowName)
 
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
     StyleWindowBackdrop(frame, theme)
-    CreateTitleBar(frame, titleText, theme, windowName)
+    CreateTitleBar(frame, titleText, theme, winName)
     CreateCloseButton(frame, theme)
-    CreateResizeGrabber(frame, theme, windowName)
+    CreateResizeGrabber(frame, theme, winName)
 
     -- Persistence Integration
-    DesolateLootcouncil:RestoreFramePosition(frame, windowName)
+    DesolateLootcouncil:RestoreFramePosition(frame, winName)
 
     return frame
 end

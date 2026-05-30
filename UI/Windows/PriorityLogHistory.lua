@@ -9,7 +9,7 @@ function UI_PriorityLogHistory:ShowLogWindow()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.logFrame then
-        local frame = NativeGUI:CreateWindow("DLCPriorityHistoryFrame", L["Priority Log History"], 600, 400, "PriorityHistory")
+        local frame = NativeGUI:CreateWindow("DLCPriorityHistoryFrame", L["Priority Log History"], "PriorityHistory")
         self.logFrame = frame
         self.labelPool = {}
     end

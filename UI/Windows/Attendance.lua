@@ -136,7 +136,7 @@ function UI_Attendance:ShowAttendanceWindow()
         self.attendanceFrame:Hide()
     end
 
-    local frame = NativeGUI:CreateWindow("DLCAttendanceFrame", titleText, 640, 480, "Attendance")
+    local frame = NativeGUI:CreateWindow("DLCAttendanceFrame", titleText, "Attendance")
     self.attendanceFrame = frame
 
     DesolateLootcouncil:MakeMovableWithSave(frame, "Attendance")

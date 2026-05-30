@@ -198,19 +198,33 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
     end
     row.lblRank:SetText(rankText)
 
-    -- 5. Voter Custom Note (sandwiched dynamically)
-    if not row.lblNote then
-        local lblNote = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        lblNote:SetJustifyH("LEFT")
-        row.lblNote = lblNote
+    -- 5. Voter Custom Note Icon (shown only if a note is present, with hover tooltip)
+    if not row.noteBtn then
+        local btn = CreateFrame("Button", nil, row)
+        btn:SetSize(18, 18)
+        local tex = btn:CreateTexture(nil, "OVERLAY")
+        tex:SetAllPoints()
+        tex:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
+        btn.texture = tex
+        row.noteBtn = btn
     end
-    row.lblNote:ClearAllPoints()
-    row.lblNote:SetPoint("LEFT", row.lblRank, "RIGHT", 10, 0)
-    row.lblNote:SetPoint("RIGHT", (isLM and row.btnGive or row), (isLM and "LEFT" or "RIGHT"), -10, 0)
+    row.noteBtn:ClearAllPoints()
+    row.noteBtn:SetPoint("LEFT", row.lblRank, "RIGHT", 15, 0)
+
     if v.note and v.note ~= "" then
-        row.lblNote:SetText("|cffc79c6e" .. v.note .. "|r")
+        row.noteBtn:Show()
+        row.noteBtn:SetScript("OnEnter", function(selfBtn)
+            GameTooltip:SetOwner(selfBtn, "ANCHOR_TOP")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine(L["Voter Note"], 1, 0.85, 0)
+            GameTooltip:AddLine(v.note, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        row.noteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     else
-        row.lblNote:SetText("")
+        row.noteBtn:Hide()
+        row.noteBtn:SetScript("OnEnter", nil)
+        row.noteBtn:SetScript("OnLeave", nil)
     end
 
     scroll:SetHeight(topOffset + rowHeight + 10)
@@ -457,7 +471,7 @@ function UI_Award:ShowAwardWindow(itemData)
     local isLM = DesolateLootcouncil.API:IsLootMaster()
 
     if not self.awardFrame then
-        local frame = NativeGUI:CreateWindow("DLCAwardFrame", L["Award Item"], 700, 500, "Award")
+        local frame = NativeGUI:CreateWindow("DLCAwardFrame", L["Award Item"], "Award")
         self.awardFrame = frame
     end
 

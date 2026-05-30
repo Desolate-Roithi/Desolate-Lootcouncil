@@ -9,7 +9,7 @@ function UI_ItemManager:ShowItemManagerWindow()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.frame then
-        local frame = NativeGUI:CreateWindow("DLCItemManagerFrame", L["Item Manager"], 600, 500, "ItemManager")
+        local frame = NativeGUI:CreateWindow("DLCItemManagerFrame", L["Item Manager"], "ItemManager")
         self.frame = frame
         self.rowPool = {}
     end
