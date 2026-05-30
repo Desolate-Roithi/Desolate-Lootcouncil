@@ -124,6 +124,7 @@ L["Toggle Disenchanters Sidebar"] = true
 L["You voted: %s%s|r%s"] = true
 L["Add Private Note"] = true
 L["Add note to Loot Master..."] = true
+L["Voter Note"] = true
 L["min"] = true
 L["sec"] = true
 L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"] = true
@@ -201,5 +202,7 @@ L["Enable"] = true
 L["A previous Loot Session is still active. Do you want to close it?"] = true
 L["Yes (Close Session)"] = true
 L["No (Keep Active)"] = true
+L["Are you sure you want to perform this action?"] = true
+
 
 

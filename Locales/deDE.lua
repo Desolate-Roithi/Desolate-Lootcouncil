@@ -128,6 +128,7 @@ L["You voted: %s%s|r"] = "Du hast abgestimmt: %s%s|r"
 L["Voted: %s%s|r"] = "Abgestimmt: %s%s|r"
 L["Add Private Note"] = "Private Notiz hinzufügen"
 L["Add note to Loot Master..."] = "Notiz an Plündermeister hinzufügen..."
+L["Voter Note"] = "Wählernotiz"
 
 -- ItemManager.lua
 L["Item Manager"] = "Gegenstands-Manager"
@@ -203,6 +204,8 @@ L["A previous Loot Session is still active. Do you want to close it?"] =
 "Eine vorherige Lootsession ist noch aktiv. Möchtest du sie schließen?"
 L["Yes (Close Session)"] = "Ja (Sitzung schließen)"
 L["No (Keep Active)"] = "Nein (Aktiv lassen)"
+L["Are you sure you want to perform this action?"] = "Bist du sicher, dass du diese Aktion ausführen möchtest?"
+
 
 L["Award Log"] = "Vergabe-Log"
 L["Loot Log"] = "Loot-Log"
