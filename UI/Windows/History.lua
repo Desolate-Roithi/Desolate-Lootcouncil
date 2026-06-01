@@ -98,6 +98,11 @@ end
 --- Opens a lightweight loot history window scoped to the CURRENT raid session.
 --- Allows the Loot Master to quickly re-award items from this session.
 function UI_History:ShowSessionLootHistory()
+    if not DesolateLootcouncil:AmIRaidAssistOrLM() then
+        if self.sessionFrame then self.sessionFrame:Hide() end
+        return
+    end
+
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.sessionFrame then
@@ -122,9 +127,7 @@ function UI_History:ShowSessionLootHistory()
     self.scrollFrame:Show()
     self.scrollContent:Show()
 
-    local bidding = DesolateLootcouncil.API:GetBiddingList()
-    local isSessionActive = bidding and #bidding > 0
-    local awarded = isSessionActive and DesolateLootcouncil.API:GetAwardedList() or {}
+    local awarded = DesolateLootcouncil.API:GetAwardedList()
 
     local hasItems  = false
     local topOffset = 0

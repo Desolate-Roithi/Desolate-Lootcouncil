@@ -11,6 +11,7 @@ if AT.abortLoad then return end
 ---@class DLC_API
 local DLC_API = {}
 DesolateLootcouncil.API = DLC_API
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- ---------------------------------------------------------------------------
 -- Internal helpers (not part of the public API surface)
@@ -205,7 +206,7 @@ end
 --- Returns the loot backlog (items waiting to be distributed) for the LM window.
 ---@return table items  Array of item data tables from db.profile.
 function DLC_API:GetLootBacklog()
-    return DesolateLootcouncil.db.profile
+    return DesolateLootcouncil.db.profile.session and DesolateLootcouncil.db.profile.session.loot or {}
 end
 
 --- Returns the ordered list of priority list names for dropdowns.
@@ -292,27 +293,43 @@ function DLC_API:AddManagedItem(rawLink, listIndex)
     if l and l.AddItemToList then l:AddItemToList(rawLink, listIndex) end
 end
 
---- Broadcasts the current Item Manager lists to the raid (IM_SYNC) as a manual synchronization request.
-function DLC_API:SyncItemManagerToRaid()
-    local c = Comm()
+function DLC_API:_GetItemManagerSyncData()
+    if IsInRaid() and GetNumGroupMembers() < 10 then
+        return nil
+    end
     local db = DesolateLootcouncil.db.profile
-    if not c or not db.PriorityLists then return end
+    if not db.PriorityLists then return nil end
     local syncData = {}
     for _, list in ipairs(db.PriorityLists) do
         syncData[list.name] = list.items
     end
+    return syncData
+end
+
+--- Broadcasts the current Item Manager lists to the raid (IM_SYNC) as a manual synchronization request.
+function DLC_API:SyncItemManagerToRaid()
+    local c = Comm()
+    if not c then return end
+    
+    local syncData = self:_GetItemManagerSyncData()
+    if not syncData then
+        if IsInRaid() and GetNumGroupMembers() < 10 then
+            DesolateLootcouncil:DLC_Log("Item Manager Sync blocked: less than 10 players in raid.")
+        end
+        return
+    end
+
     c:SendComm("IM_SYNC", { lists = syncData, isManual = true })
 end
 
 --- Automatically broadcasts the current Item Manager lists to the raid (IM_SYNC) in active raid context.
 function DLC_API:AutoSyncItemManager()
     local c = Comm()
-    local db = DesolateLootcouncil.db.profile
-    if not c or not db.PriorityLists then return end
-    local syncData = {}
-    for _, list in ipairs(db.PriorityLists) do
-        syncData[list.name] = list.items
-    end
+    if not c then return end
+    
+    local syncData = self:_GetItemManagerSyncData()
+    if not syncData then return end
+
     c:SendComm("IM_SYNC", { lists = syncData, isManual = false })
 end
 
@@ -555,7 +572,7 @@ end
 function DLC_API:ResetWindowLayout()
     if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ResetPositions then
         DesolateLootcouncil.Persistence:ResetPositions()
-        DesolateLootcouncil:Print("All window positions have been reset.")
+        DesolateLootcouncil:Print(L["All window positions have been reset."])
     end
 end
 
@@ -692,7 +709,7 @@ end
 --- Returns the priority history change log lines.
 ---@return string[]
 function DLC_API:GetPriorityLog()
-    return DesolateLootcouncil.PriorityLog or {}
+    return DesolateLootcouncil.db.profile.PriorityLog or {}
 end
 
 -- Decay / Attendance Options Helpers

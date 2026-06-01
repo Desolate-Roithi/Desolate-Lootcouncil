@@ -22,6 +22,7 @@ function Comm:OnEnable()
     self.playerVersions = {}
     self.playerEnchantingSkill = {}
     self.lastVersionCheck = 0
+    self.rosterSyncTimer = nil
 
     DesolateLootcouncil:DLC_Log("Systems/Comm Loaded")
 end
@@ -111,26 +112,27 @@ local function IsItemManagerDesynced(incomingData)
     for _ in pairs(incomingData) do incomingListsCount = incomingListsCount + 1 end
     if #db.PriorityLists ~= incomingListsCount then return true end
 
+    local localLists = {}
+    for _, localList in ipairs(db.PriorityLists) do
+        localLists[localList.name] = localList
+    end
+
     for listName, items in pairs(incomingData) do
-        local found = false
-        for _, localList in ipairs(db.PriorityLists) do
-            if localList.name == listName then
-                found = true
-                local localCount = 0
-                for _ in pairs(localList.items or {}) do localCount = localCount + 1 end
-                local incomingCount = 0
-                for _ in pairs(items or {}) do incomingCount = incomingCount + 1 end
+        local localList = localLists[listName]
+        if not localList then return true end
 
-                if localCount ~= incomingCount then return true end
+        local localCount = 0
+        for _ in pairs(localList.items or {}) do localCount = localCount + 1 end
+        local incomingCount = 0
+        for _ in pairs(items or {}) do incomingCount = incomingCount + 1 end
 
-                for id, val in pairs(items or {}) do
-                    if not localList.items or localList.items[id] ~= val then
-                        return true
-                    end
-                end
+        if localCount ~= incomingCount then return true end
+
+        for id, val in pairs(items or {}) do
+            if not localList.items or localList.items[id] ~= val then
+                return true
             end
         end
-        if not found then return true end
     end
     return false
 end
@@ -385,7 +387,7 @@ function Comm:ShareDataWithAssists(dataType)
             local playersCopy = {}
             for i, p in ipairs(listObj.players or {}) do playersCopy[i] = p end
             local itemsCopy = {}
-            for i, item in ipairs(listObj.items or {}) do itemsCopy[i] = item end
+            for id, val in pairs(listObj.items or {}) do itemsCopy[id] = val end
             table.insert(lists, { name = listObj.name, players = playersCopy, items = itemsCopy })
         end
         payload = lists

@@ -204,5 +204,24 @@ L["Yes (Close Session)"] = true
 L["No (Keep Active)"] = true
 L["Are you sure you want to perform this action?"] = true
 
+-- New Keys
+L["All window positions have been reset."] = true
+L["Warning: No Loot Master configured. Use /dlc config to set one."] = true
+L["Role Update: You are Loot Master."] = true
+L["Role Update: You are Raider."] = true
+L["Loot Master"] = true
+L["Raider"] = true
+L["Role Update: You are %s (LM: %s)"] = true
+L["Added item: %s"] = true
+L["Added new Priority List: %s (Initialized with shuffled roster)"] = true
+L["Removed Priority List: %s"] = true
+L["Renamed list to: %s"] = true
+L["Only the Loot Master or Raid Assists can view the Loot History."] = true
+L["Only the Loot Master can add items to the session."] = true
+L["Open the configuration window to manage settings, priority lists, and rosters."] = true
+L["Open Settings Window"] = true
+
+
+
 
 

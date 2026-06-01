@@ -328,13 +328,12 @@ end
 function Session:StartSession(lootTable)
     if not DesolateLootcouncil:AmILootMaster() then return end
 
-    -- Wipe previous session's awarded items database to start completely fresh
+    -- Wipe previous session's awarded items database to start completely fresh ONLY if not in an active raid session
     local session = DesolateLootcouncil.db.profile.session
-    if session then
+    local config = DesolateLootcouncil.db.profile.DecayConfig
+    if session and not (config and config.sessionActive) then
         session.awarded = {}
     end
-
-    ---@type Loot
     local Loot = DesolateLootcouncil:GetModule("Loot")
     if Loot and Loot.ScanDisenchanters then
         Loot:ScanDisenchanters()
@@ -499,11 +498,6 @@ function Session:RemoveSessionItem(guid)
     DesolateLootcouncil:DLC_Log("Removed item from session and pending trades.")
 end
 
---- Returns true if `sender` is permitted to set the LM identity via a session packet.
---- Two authorized roles:
----   1. The current activeLootMaster — they are starting/heartbeating their own session.
----   2. The group leader (rank 2 in raid / party leader) — corrects late-joiners who
----      receive the heartbeat before SYNC_LM has established activeLootMaster locally.
 local function IsAuthorizedSessionSender(sender)
     -- 1. Sender is the current known LM
     local currentLM = DesolateLootcouncil.activeLootMaster
@@ -511,29 +505,46 @@ local function IsAuthorizedSessionSender(sender)
         if DesolateLootcouncil:SmartCompare(sender, currentLM) then return true end
     end
     -- 2. Sender is the group leader
+    local groupLeader = DesolateLootcouncil:GetGroupLeader()
+    if groupLeader and DesolateLootcouncil:SmartCompare(sender, groupLeader) then
+        return true
+    end
+
+    -- 3. If we are the group leader, also check if the sender is the defined LM in our own config
+    local amILeader = false
     if IsInRaid() then
         for i = 1, GetNumGroupMembers() do
             local name, rank = GetRaidRosterInfo(i)
-            if name and rank == 2 and DesolateLootcouncil:SmartCompare(name, sender) then
-                return true
+            if rank == 2 and DesolateLootcouncil:SmartCompare(name, "player") then
+                amILeader = true
+                break
             end
         end
     elseif IsInGroup() then
-        return UnitIsGroupLeader(sender) == true
+        amILeader = UnitIsGroupLeader("player")
     else
-        -- Solo / test mode: accept self-packets
-        return DesolateLootcouncil:SmartCompare(sender, "player")
+        amILeader = true
     end
+
+    if amILeader then
+        local configuredLM = DesolateLootcouncil.db.profile.configuredLM
+        if configuredLM and configuredLM ~= "" and DesolateLootcouncil:SmartCompare(sender, configuredLM) then
+            return true
+        end
+    end
+
+    -- 4. Solo / test mode: accept self-packets
+    if not IsInGroup() and DesolateLootcouncil:SmartCompare(sender, "player") then
+        return true
+    end
+
     return false
 end
 
-function Session:HandleStartSession(payload, sender)
-    local newItems = payload.data
-    local count = newItems and #newItems or 0
-    local duration = payload.duration or 300
-    local expiry = payload.endTime or (GetServerTime() + duration)
-    local isHeartbeat = payload.isHeartbeat == true
-
+--- Handles automatic pass roll evaluations.
+---@param payload table
+---@param isHeartbeat boolean
+function Session:_ApplyAutopassState(payload, isHeartbeat)
     if payload.autopassActive ~= nil then
         local changed = (DesolateLootcouncil.sessionAutopassActive ~= payload.autopassActive)
         DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
@@ -545,13 +556,12 @@ function Session:HandleStartSession(payload, sender)
             end
         end
     end
+end
 
-    -- Apply authoritative LM identity from payload.
-    -- Guard: only accept from the current activeLootMaster (they are the authoritative
-    -- source) or the group leader (bootstrap fallback for late-joiners before
-    -- SYNC_LM has established activeLootMaster locally).
-    -- NOTE: The LM is not required to be the group leader — they are any player
-    -- designated via the leader's configuredLM setting.
+--- Authenticates and updates the Loot Master identity.
+---@param payload table
+---@param sender string
+function Session:_ApplyLMLateJoinerIdentity(payload, sender)
     if payload.activeLM and payload.activeLM ~= "" and IsAuthorizedSessionSender(sender) then
         DesolateLootcouncil.activeLootMaster = payload.activeLM
         DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(payload.activeLM, "player")
@@ -562,6 +572,42 @@ function Session:HandleStartSession(payload, sender)
             "WARN: Ignored activeLM '%s' from unauthorized sender '%s'.",
             DesolateLootcouncil:GetDisplayName(payload.activeLM), tostring(sender)))
     end
+end
+
+--- Filters duplicates and populates local loot lists.
+---@param newItems table
+---@param expiry number
+---@return number hydratedCount
+function Session:_HydrateSessionItems(newItems, expiry)
+    local hydratedCount = 0
+    if newItems then
+        for _, item in ipairs(newItems) do
+            item.expiry = expiry
+            -- Avoid duplicates when reconnecting mid-session
+            local alreadyHave = false
+            for _, existing in ipairs(self.clientLootList) do
+                if (existing.sourceGUID or existing.link) == (item.sourceGUID or item.link) then
+                    alreadyHave = true
+                    break
+                end
+            end
+            if not alreadyHave then
+                table.insert(self.clientLootList, item)
+                hydratedCount = hydratedCount + 1
+            end
+        end
+    end
+    return hydratedCount
+end
+
+function Session:HandleStartSession(payload, sender)
+    local newItems = payload.data
+    local duration = payload.duration or 300
+    local expiry = payload.endTime or (GetServerTime() + duration)
+    local isHeartbeat = payload.isHeartbeat == true
+
+    self:_ApplyAutopassState(payload, isHeartbeat)
+    self:_ApplyLMLateJoinerIdentity(payload, sender)
 
     self.clientLootList = self.clientLootList or {}
     self.myLocalVotes = self.myLocalVotes or {}
@@ -598,32 +644,11 @@ function Session:HandleStartSession(payload, sender)
         return
     end
 
-    if not isHeartbeat then
-        local db = DesolateLootcouncil.db.profile
-        if db.session then
-            db.session.awarded = {}
-        end
-    end
+    -- Receiver client does not wipe awarded history on session start (LM side manages lifecycle)
 
     -- Full session start (or late-joiner receiving heartbeat for the first time)
-    if newItems then
-        for _, item in ipairs(newItems) do
-            item.expiry = expiry
-            -- Avoid duplicates when reconnecting mid-session
-            local alreadyHave = false
-            for _, existing in ipairs(self.clientLootList) do
-                if (existing.sourceGUID or existing.link) == (item.sourceGUID or item.link) then
-                    alreadyHave = true
-                    break
-                end
-            end
-            if not alreadyHave then
-                table.insert(self.clientLootList, item)
-            end
-        end
-    end
-
-    DesolateLootcouncil:DLC_Log("Added " .. count .. " items to the session.")
+    local hydratedCount = self:_HydrateSessionItems(newItems, expiry)
+    DesolateLootcouncil:DLC_Log("Added " .. hydratedCount .. " items to the session.")
 
     self:SendMessage("DLC_SESSION_STARTED", self.clientLootList, DesolateLootcouncil:AmIRaidAssistOrLM())
 
@@ -665,7 +690,10 @@ function Session:HandleCloseItem(payload)
 end
 
 function Session:HandleHistoryUpdate(payload)
-    -- Bug 4: All players (not just LM) store the history entry
+    -- Gate: Only LM or Assists store history. LM already stored it locally during award,
+    -- so this handler only inserts it for Assistants who are not LM. Normal Raiders do not store history.
+    if not DesolateLootcouncil:AmIRaidAssistOrLM() then return end
+
     local data = payload.data
     if data and data.link then
         local session = DesolateLootcouncil.db.profile.session
@@ -855,10 +883,7 @@ function Session:SendSyncLM(targetLM)
     end
 end
 
-function Session:SendSyncVotes()
-    -- This function is no longer required due to Approach B's pub/sub architecture.
-    -- Use SendSessionHeartbeat() for full state resync instead.
-end
+
 
 function Session:SendVote(itemGUID, voteType, note)
     self.myLocalVotes = self.myLocalVotes or {}

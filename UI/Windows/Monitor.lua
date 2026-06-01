@@ -480,4 +480,3 @@ function UI_Monitor:CloseMasterLootWindow()
     if self.monitorFrame then self.monitorFrame:Hide() end
 end
 
-UI_Monitor.ShowMasterLootWindow = UI_Monitor.ShowMonitorWindow

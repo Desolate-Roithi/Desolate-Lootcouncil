@@ -17,6 +17,7 @@ local Priority = DesolateLootcouncil:NewModule("Priority", "AceConsole-3.0", "Ac
 
 ---@type DLC_Ref_Priority
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Priority]]
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function Priority:OnEnable()
     -- Ensure list structure exists in DB (Strict Persistence)
@@ -36,7 +37,7 @@ function Priority:OnEnable()
         { name = "Collectables", players = {}, items = {}, buttons = { "Need", "Greed", "Pass" } }
     }
 
-    if db.PriorityLists then
+    if db.PriorityLists and not db.migrated_priority_v2 then
         -- DATA MIGRATION: Convert Key-Value to Array of Objects
         -- Check if it's the old format (Table with string keys)
         local isOldFormat = false
@@ -60,6 +61,7 @@ function Priority:OnEnable()
             -- Rescue any other keys? (Unlikely, but let's stick to standard 4 for now)
             db.PriorityLists = new
         end
+        db.migrated_priority_v2 = true
     end
 
     -- History Log Initialization
@@ -121,7 +123,7 @@ function Priority:AddPriorityList(name)
     DesolateLootcouncil.Math.ShuffleTable(newList)
 
     table.insert(db.PriorityLists, { name = name, players = newList, items = {} })
-    local msg = "Added new Priority List: " .. name .. " (Initialized with shuffled roster)"
+    local msg = string.format(L["Added new Priority List: %s (Initialized with shuffled roster)"], name)
     DesolateLootcouncil:DLC_Log(msg)
     self:LogPriorityChange(msg)
     self:SyncMissingPlayers() -- Auto-populate (and notifies change internally)
@@ -133,7 +135,7 @@ function Priority:RemovePriorityList(index)
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] then
         local removed = table.remove(db.PriorityLists, index)
-        local msg = "Removed Priority List: " .. removed.name
+        local msg = string.format(L["Removed Priority List: %s"], removed.name)
         DesolateLootcouncil:DLC_Log(msg)
         self:LogPriorityChange(msg)
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
@@ -145,7 +147,7 @@ function Priority:RenamePriorityList(index, newName)
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] and newName ~= "" then
         db.PriorityLists[index].name = newName
-        local msg = "Renamed list to: " .. newName
+        local msg = string.format(L["Renamed list to: %s"], newName)
         DesolateLootcouncil:DLC_Log(msg)
         self:LogPriorityChange(msg)
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
@@ -384,12 +386,12 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
         if savedIndex < 1 then savedIndex = 1 end
         if savedIndex > #players + 1 then savedIndex = #players + 1 end
 
-        table.insert(players, savedIndex, playerName)
+        table.insert(players, savedIndex, targetMain)
 
         -- 4. Generate & Output Log Message (Sanitized)
         local sIndex = tonumber(savedIndex) or -1
         local cIndex = tonumber(currentIndex) or -1
-        local pName = tostring(playerName or "Unknown")
+        local pName = tostring(targetMain or "Unknown")
         local lName = tostring(listName or "Unknown List")
 
         local logMsg = string.format("Reverting %s to position %d from position %d in %s.",
@@ -402,7 +404,7 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
             time = time(),
             type = "RESTORE",
             list = listName,
-            player = playerName,
+            player = targetMain,
             from = currentIndex,
             to = savedIndex
         })

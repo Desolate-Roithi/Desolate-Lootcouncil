@@ -54,6 +54,14 @@ function Roster:OnEnable()
     DesolateLootcouncil:DLC_Log("Systems/Roster Loaded")
 end
 
+function Roster:OnDisable()
+    self:UnregisterEvent("ZONE_CHANGED_NEW_AREA")
+    self:UnregisterEvent("ENCOUNTER_END")
+    self:UnregisterEvent("PLAYER_LOGIN")
+    self:UnregisterEvent("GROUP_ROSTER_UPDATE")
+    self:UnregisterMessage("DLC_VERSION_UPDATE")
+end
+
 function Roster:UpdateScoreMap()
     if not DesolateLootcouncil.db then return end
     local profile = DesolateLootcouncil.db.profile
@@ -137,6 +145,12 @@ function Roster:StartRaidSession()
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.lastActivity = time()
+
+    -- Wipe previous overarching session's awarded items database to start completely fresh
+    local session = DesolateLootcouncil.db.profile.session
+    if session then
+        session.awarded = {}
+    end
 
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
 

@@ -10,85 +10,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
 
-local function GetPlayerClass(name)
-    local targetName = DesolateLootcouncil:NormalizeName(name)
-    
-    local classKey
-    if DesolateLootcouncil:SmartCompare(targetName, "player") then
-        local _, englishClass = UnitClass("player")
-        if englishClass and englishClass ~= "" then
-            classKey = englishClass
-        end
-    end
 
-    if not classKey then
-        if IsInRaid() then
-            for i = 1, GetNumGroupMembers() do
-                local unit = "raid" .. i
-                local uName = UnitName(unit)
-                if uName and DesolateLootcouncil:SmartCompare(uName, targetName) then
-                    local _, englishClass = UnitClass(unit)
-                    if englishClass and englishClass ~= "" then
-                        classKey = englishClass
-                        break
-                    end
-                end
-            end
-        elseif IsInGroup() then
-            for i = 1, GetNumSubgroupMembers() do
-                local unit = "party" .. i
-                local uName = UnitName(unit)
-                if uName and DesolateLootcouncil:SmartCompare(uName, targetName) then
-                    local _, englishClass = UnitClass(unit)
-                    if englishClass and englishClass ~= "" then
-                        classKey = englishClass
-                        break
-                    end
-                end
-            end
-        end
-    end
-
-    if not classKey then
-        local R = DesolateLootcouncil:GetModule("Roster", true)
-        local main = R and R:GetMain(targetName) or targetName
-        local rosterData = DesolateLootcouncil.db.profile.MainRoster[main]
-        if rosterData and rosterData.class and rosterData.class ~= "" then
-            classKey = rosterData.class
-        end
-    end
-
-    if not classKey then
-        for mainName, data in pairs(DesolateLootcouncil.db.profile.MainRoster) do
-            if DesolateLootcouncil:SmartCompare(mainName, targetName) then
-                if data.class and data.class ~= "" then
-                    classKey = data.class
-                    break
-                end
-            end
-            if data.alts then
-                for _, alt in ipairs(data.alts) do
-                    if DesolateLootcouncil:SmartCompare(alt, targetName) then
-                        if data.class and data.class ~= "" then
-                            classKey = data.class
-                            break
-                        end
-                    end
-                end
-            end
-            if classKey then break end
-        end
-    end
-
-    if classKey then
-        local formatted = string.upper(classKey):gsub("%s+", ""):gsub("_+", ""):gsub("%-+", "")
-        if _G.CLASS_ICON_TCOORDS[formatted] then
-            return formatted
-        end
-    end
-
-    return "WARRIOR"
-end
 
 function UI_Award:OnInitialize()
     self.awardRowPool = {}
@@ -144,7 +66,8 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         classIcon:SetPoint("LEFT", 12, 0)
         row.classIcon = classIcon
     end
-    local class = GetPlayerClass(v.name)
+    local Roster = DesolateLootcouncil:GetModule("Roster", true)
+    local class = Roster and Roster:GetUnitClass(v.name) or "WARRIOR"
     if _G.CLASS_ICON_TCOORDS then
         local coords = _G.CLASS_ICON_TCOORDS[class]
         if coords then
@@ -273,7 +196,8 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
         classIcon:SetPoint("LEFT", 12, 0)
         row.classIcon = classIcon
     end
-    local class = GetPlayerClass(de.name)
+    local Roster = DesolateLootcouncil:GetModule("Roster", true)
+    local class = Roster and Roster:GetUnitClass(de.name) or "WARRIOR"
     if _G.CLASS_ICON_TCOORDS then
         local coords = _G.CLASS_ICON_TCOORDS[class]
         if coords then
@@ -475,6 +399,12 @@ function UI_Award:ShowAwardWindow(itemData)
         self.awardFrame = frame
     end
 
+    if not self.awardScroll then
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.awardFrame, -75, -16)
+        self.awardScroll = scrollFrame
+        self.awardScrollContent = scrollContent
+    end
+
     self.awardFrame:Show()
 
     -- Reset pools
@@ -498,8 +428,7 @@ function UI_Award:ShowAwardWindow(itemData)
         H = 18 + 8 + contentHeight
     end
 
-    -- Render Votes List
-    RenderVoteList(self, {}, isLM, itemData, NativeGUI)
+
 
     -- Dynamically push votes list upwards if the bottom disenchant dock is visible
     self.awardScroll:ClearAllPoints()

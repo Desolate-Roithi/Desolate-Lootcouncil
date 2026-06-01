@@ -4,6 +4,7 @@ if AT.abortLoad then return end
 ---@class SlashCommands
 local SlashCommands = {}
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function SlashCommands.Handle(input)
     if not input or input:trim() == "" then
@@ -67,8 +68,12 @@ function SlashCommands.Handle(input)
 
         -- History
     elseif cmd == "history" then
-        local UI = DesolateLootcouncil:GetModule("UI")
-        if UI and UI.ShowHistoryWindow then UI:ShowHistoryWindow() end
+        if DesolateLootcouncil:AmIRaidAssistOrLM() then
+            local UI = DesolateLootcouncil:GetModule("UI")
+            if UI and UI.ShowHistoryWindow then UI:ShowHistoryWindow() end
+        else
+            DesolateLootcouncil:Print(L["Only the Loot Master or Raid Assists can view the Loot History."])
+        end
 
         -- Trade List (LM Only)
     elseif cmd == "trade" then
@@ -92,12 +97,16 @@ function SlashCommands.Handle(input)
 
         -- Manual Add
     elseif cmd == "add" then
-        local arg = args[2]
-        if arg then
-            local Loot = DesolateLootcouncil:GetModule("Loot")
-            if Loot and Loot.AddManualItem then Loot:AddManualItem(arg) end
+        if DesolateLootcouncil:AmILootMaster() then
+            local arg = args[2]
+            if arg then
+                local Loot = DesolateLootcouncil:GetModule("Loot")
+                if Loot and Loot.AddManualItem then Loot:AddManualItem(arg) end
+            else
+                DesolateLootcouncil:Print("Usage: /dlc add [ItemLink]")
+            end
         else
-            DesolateLootcouncil:Print("Usage: /dlc add [ItemLink]")
+            DesolateLootcouncil:Print(L["Only the Loot Master can add items to the session."])
         end
 
         -- Session Management

@@ -65,11 +65,21 @@ function UI_Settings:RenderTabs()
 
     local sortedTabs = {}
     for key, data in pairs(options.args) do
-        table.insert(sortedTabs, { key = key, data = data, order = data.order or 99 })
+        local isAdminTab = (key == "roster" or key == "priority" or key == "attendance" or key == "items")
+        if not isAdminTab or DesolateLootcouncil:AmIRaidAssistOrLM() then
+            table.insert(sortedTabs, { key = key, data = data, order = data.order or 99 })
+        end
     end
     table.sort(sortedTabs, function(a, b) return a.order < b.order end)
 
-    if not self.activeTab and #sortedTabs > 0 then
+    local activeTabExists = false
+    for _, tab in ipairs(sortedTabs) do
+        if tab.key == self.activeTab then
+            activeTabExists = true
+            break
+        end
+    end
+    if (not self.activeTab or not activeTabExists) and #sortedTabs > 0 then
         self.activeTab = sortedTabs[1].key
     end
 

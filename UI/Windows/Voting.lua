@@ -37,6 +37,58 @@ end
 local VOTE_REMINDER_THRESHOLDS = { 240, 180, 120, 60, 30 }
 
 --- Start a background milestone ticker that fires reminder messages at defined
+--- Processes background autopass and countdown reminders for a single item.
+---@param item table  The item being processed
+---@param now number  The current absolute server timestamp
+---@return number|nil lowestThreshold  The crossed reminder threshold, if any
+---@return boolean shouldAddPending  True if the player hasn't voted and a threshold was crossed
+function UI_Voting:_ProcessMilestoneItem(item, now)
+    local API = DesolateLootcouncil.API
+    local guid = item.sourceGUID or item.link
+    local isClosed = API:IsItemClosed(guid)
+    local hasVoted = self.myVotes and self.myVotes[guid]
+
+    if isClosed or not item.expiry or item.expiry <= 0 then
+        return nil, false
+    end
+
+    local remaining = item.expiry - now
+
+    if not self.announcedMilestones[guid] then
+        self.announcedMilestones[guid] = {}
+        -- Pre-initialize already-passed thresholds on first track / reload
+        for _, threshold in ipairs(VOTE_REMINDER_THRESHOLDS) do
+            if remaining < threshold then
+                self.announcedMilestones[guid][threshold] = true
+            end
+        end
+    end
+
+    -- Background Autopass evaluation (when window is closed/hidden)
+    local isPending = (API:GetOutboundVote(guid) ~= nil)
+    if remaining <= -3 and not hasVoted and not isPending then
+        self.myVotes = self.myVotes or {}
+        self.myVotes[guid] = 5
+        API:SendVote(guid, 5, "")
+        hasVoted = 5
+    end
+
+    for _, threshold in ipairs(VOTE_REMINDER_THRESHOLDS) do
+        if remaining > 0 and remaining <= threshold
+                and not self.announcedMilestones[guid][threshold] then
+            -- Always mark as announced so we never re-fire this threshold
+            self.announcedMilestones[guid][threshold] = true
+
+            if not hasVoted then
+                return threshold, true
+            end
+            break -- only the first unannounced threshold per item per tick
+        end
+    end
+
+    return nil, false
+end
+
 --- countdown thresholds (4min, 3min, 2min, 1min, 30sec). Safe to call multiple
 --- times — a no-op if the ticker is already running.
 function UI_Voting:StartMilestoneChecker()
@@ -58,75 +110,42 @@ function UI_Voting:StartMilestoneChecker()
         end
 
         local now            = GetServerTime()
-        local API            = DesolateLootcouncil.API
         local pendingItems   = {}   -- unvoted items crossing a threshold this tick
         local lowestThreshold = nil -- most urgent threshold crossed
 
         for _, item in ipairs(items) do
-            local guid     = item.sourceGUID or item.link
-            local isClosed = API:IsItemClosed(guid)
-            local hasVoted = self.myVotes and self.myVotes[guid]
-
-            if not isClosed and item.expiry and item.expiry > 0 then
-                local remaining = item.expiry - now
-
-                if not self.announcedMilestones[guid] then
-                    self.announcedMilestones[guid] = {}
-                    -- Pre-initialize already-passed thresholds on first track / reload
-                    for _, threshold in ipairs(VOTE_REMINDER_THRESHOLDS) do
-                        if remaining < threshold then
-                            self.announcedMilestones[guid][threshold] = true
-                        end
-                    end
+            local threshold, shouldAdd = self:_ProcessMilestoneItem(item, now)
+            if shouldAdd and threshold then
+                if not lowestThreshold or threshold < lowestThreshold then
+                    lowestThreshold = threshold
                 end
-
-                -- Background Autopass evaluation (when window is closed/hidden)
-                local isPending = (API:GetOutboundVote(guid) ~= nil)
-                if remaining <= -3 and not hasVoted and not isPending then
-                    self.myVotes = self.myVotes or {}
-                    self.myVotes[guid] = 5
-                    API:SendVote(guid, 5, "")
-                    hasVoted = 5
-                end
-
-                for _, threshold in ipairs(VOTE_REMINDER_THRESHOLDS) do
-                    if remaining > 0 and remaining <= threshold
-                            and not self.announcedMilestones[guid][threshold] then
-                        -- Always mark as announced so we never re-fire this threshold
-                        self.announcedMilestones[guid][threshold] = true
-
-                        if not hasVoted then
-                            if not lowestThreshold or threshold < lowestThreshold then
-                                lowestThreshold = threshold
-                            end
-                            table.insert(pendingItems, item)
-                        end
-                        break -- only the first unannounced threshold per item per tick
-                    end
-                end
+                table.insert(pendingItems, item)
             end
         end
 
         -- Emit one combined message for this tick, respecting the 30s dedup window
         if #pendingItems > 0 and (now - self.lastReminderSentAt) >= 30 then
-            local timeLabel
-            if lowestThreshold >= 60 then
-                timeLabel = string.format("|cffff8000%d %s|r",
-                    lowestThreshold / 60, L["min"])
-            else
-                timeLabel = string.format("|cffff0000%d %s|r",
-                    lowestThreshold, L["sec"])
-            end
+            local frameShown = self.votingFrame and self.votingFrame:IsShown()
+            if not frameShown then
+                local timeLabel
+                if lowestThreshold >= 60 then
+                    timeLabel = string.format("|cffff8000%d %s|r",
+                        lowestThreshold / 60, L["min"])
+                else
+                    timeLabel = string.format("|cffff0000%d %s|r",
+                        lowestThreshold, L["sec"])
+                end
 
-            local links = {}
-            for _, item in ipairs(pendingItems) do
-                table.insert(links, item.link or "???")
+                local links = {}
+                for _, item in ipairs(pendingItems) do
+                    table.insert(links, item.link or "???")
+                end
+                DesolateLootcouncil:Print(string.format(
+                    L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"],
+                    timeLabel, table.concat(links, ", ")
+                ))
+                self.lastReminderSentAt = now
             end
-            DesolateLootcouncil:Print(string.format(
-                L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"],
-                timeLabel, table.concat(links, ", ")
-            ))
-            self.lastReminderSentAt = now
         end
     end)
 end
@@ -251,6 +270,46 @@ local function RebuildScrollLayout(self, rowCount)
     end
 end
 
+--- Processes the layout, timer tracking, and auto-pass logic for a single voting row.
+---@param index number  The sequential row index to display this item at
+---@param data table  The item data table
+---@param guid string  The unique identifier for the item
+---@param now number  The current absolute server timestamp
+---@param awardedGUIDs table<string, boolean>  A map of already awarded item GUIDs
+---@return boolean laidOut  True if the row was successfully processed and laid out
+function UI_Voting:_LayoutVotingRow(index, data, guid, now, awardedGUIDs)
+    if awardedGUIDs[guid] then return false end
+
+    local API = DesolateLootcouncil.API
+    local currentVote = self.myVotes[guid]
+    local isClosed    = API:IsItemClosed(guid)
+    local expiry      = data.expiry or 0
+    local remaining   = expiry - now
+    local isExpired   = (expiry > 0) and (remaining <= 0)
+    local shouldAutoPass = (expiry > 0) and (remaining <= -3)
+    local isPending   = (API:GetOutboundVote(guid) ~= nil)
+
+    if shouldAutoPass and not currentVote and not isPending and not isClosed then
+        -- Automatically send an Auto Pass vote to the Loot Master
+        self.myVotes[guid] = 5
+        DesolateLootcouncil.API:SendVote(guid, 5, "")
+        currentVote = 5
+    end
+
+    if not isClosed and not isExpired and expiry > 0 and remaining > 0 then
+        local t = C_Timer.NewTimer(remaining, function()
+            self:ShowVotingWindow(nil, true)
+        end)
+        table.insert(self.expirationTimers, t)
+    end
+
+    self:CreateItemRow(
+        index, data, guid,
+        currentVote, isClosed, isExpired, isPending
+    )
+    return true
+end
+
 function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     -- Milestone checker is purely data-driven; never touch it here.
     if not self.votingFrame then self:CreateVotingFrame() end
@@ -308,34 +367,8 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     for i = #items, 1, -1 do
         local data = items[i]
         local guid = data.sourceGUID or data.link
-        if not awardedGUIDs[guid] then
-            local currentVote = self.myVotes[guid]
-            local isClosed    = API:IsItemClosed(guid)
-            local expiry      = data.expiry or 0
-            local remaining   = expiry - now
-            local isExpired   = (expiry > 0) and (remaining <= 0)
-            local shouldAutoPass = (expiry > 0) and (remaining <= -3)
-            local isPending   = (API:GetOutboundVote(guid) ~= nil)
-
-            if shouldAutoPass and not currentVote and not isPending and not isClosed then
-                -- Automatically send an Auto Pass vote to the Loot Master
-                self.myVotes[guid] = 5
-                DesolateLootcouncil.API:SendVote(guid, 5, "")
-                currentVote = 5
-            end
-
-            if not isClosed and not isExpired and expiry > 0 and remaining > 0 then
-                local t = C_Timer.NewTimer(remaining, function()
-                    self:ShowVotingWindow(nil, true)
-                end)
-                table.insert(self.expirationTimers, t)
-            end
-
+        if self:_LayoutVotingRow(rowCount + 1, data, guid, now, awardedGUIDs) then
             rowCount = rowCount + 1
-            self:CreateItemRow(
-                rowCount, data, guid,
-                currentVote, isClosed, isExpired, isPending
-            )
         end
     end
 

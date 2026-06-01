@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- --- Conflict Prevention (Dev vs Prod) ---
 -- IsAddOnLoaded() is NOT reliable during main-chunk execution — it only returns
@@ -117,11 +118,12 @@ function DesolateLootcouncil:OnInitialize()
     self.sessionAutopassActive  = self.db.profile.DecayConfig.sessionAutopassActive or false
     self.sessionAutopassAnswered = self.db.profile.DecayConfig.sessionAutopassAnswered or false
     self.amILM                  = false  -- explicit init; starts nil otherwise, breaks wasLM guard in UpdateLootMasterStatus
+    self.lastLeader             = nil
 
 
     -- 6. Validate/Notify
     if self.db.profile.configuredLM == "" then
-        self:DLC_Log("Warning: No Loot Master configured. Use /dlc config to set one.")
+        self:DLC_Log(L["Warning: No Loot Master configured. Use /dlc config to set one."])
     end
     self:UpdateLootMasterStatus()
 
@@ -148,6 +150,80 @@ end
 
 local REFRESH_TIMER = nil
 
+function DesolateLootcouncil:_RepairItemCache(session)
+    if not session then return false end
+    local repaired = false
+    local function repairList(list)
+        if not list then return end
+        for _, item in ipairs(list) do
+            if item.itemID then
+                local ok, _, link, _, _, _, _, _, _, _, icon = pcall(C_Item.GetItemInfo, item.itemID)
+                if not ok or not link then link, icon = "", 0 end
+                local isPlaceholder = item.link == nil or string.find(item.link, "^Item %d+") or
+                    string.find(item.link, "Item %[%d+%] ")
+                if link and (isPlaceholder) then
+                    item.link = link
+                    repaired = true
+                end
+                if icon and item.texture == "Interface\\Icons\\INV_Misc_QuestionMark" then
+                    item.texture = icon
+                    repaired = true
+                end
+            end
+        end
+    end
+
+    repairList(session.loot)
+    repairList(session.bidding)
+    repairList(session.awarded)
+
+    if repaired then
+        self:DLC_Log("Item Cache Engine repaired uncached session items.")
+    end
+    return repaired
+end
+
+function DesolateLootcouncil:_RefreshOpenWindows(session)
+    if session then
+        -- Global auto-refresh for any open frames to pull the updated UI data
+        ---@type UI_Loot
+        local LootUI = self:GetModule("UI_Loot") --[[@as UI_Loot]]
+        if LootUI and LootUI.lootFrame and LootUI.lootFrame:IsShown() then
+            LootUI:ShowLootWindow(session.loot)
+        end
+
+        ---@type UI_Monitor
+        local MonitorUI = self:GetModule("UI_Monitor") --[[@as UI_Monitor]]
+        if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
+            MonitorUI:ShowMonitorWindow(true)
+        end
+
+        ---@type UI_Voting
+        local VotingUI = self:GetModule("UI_Voting") --[[@as UI_Voting]]
+        if VotingUI and VotingUI.votingFrame and VotingUI.votingFrame:IsShown() then
+            VotingUI:ShowVotingWindow(self:GetModule("Session").clientLootList, true)
+        end
+
+        ---@type UI_TradeList
+        local TradeUI = self:GetModule("UI_TradeList") --[[@as UI_TradeList]]
+        if TradeUI and TradeUI.tradeListFrame and TradeUI.tradeListFrame:IsShown() then
+            TradeUI:ShowTradeListWindow()
+        end
+
+        ---@type UI_History
+        local HistoryUI = self:GetModule("UI_History") --[[@as UI_History]]
+        if HistoryUI and HistoryUI.sessionFrame and HistoryUI.sessionFrame:IsShown() then
+            HistoryUI:ShowHistoryWindow()
+        end
+    end
+
+    ---@type UI_ItemManager
+    local ItemMgr = self:GetModule("UI_ItemManager") --[[@as UI_ItemManager]]
+    if ItemMgr and ItemMgr.frame and ItemMgr.frame:IsShown() then
+        ItemMgr:RefreshWindow()
+    end
+end
+
 function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
     if REFRESH_TIMER then
         self:CancelTimer(REFRESH_TIMER)
@@ -157,79 +233,38 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
 
         local session = self.db and self.db.profile and self.db.profile.session
         if session then
-            local repaired = false
-            local function repairList(list)
-                if not list then return end
-                for _, item in ipairs(list) do
-                    if item.itemID then
-                        local ok, _, link, _, _, _, _, _, _, _, icon = pcall(C_Item.GetItemInfo, item.itemID)
-                        if not ok or not link then link, icon = "", 0 end
-                        local isPlaceholder = item.link == nil or string.find(item.link, "^Item %d+") or
-                            string.find(item.link, "Item %[%d+%] ")
-                        if link and (isPlaceholder) then
-                            item.link = link
-                            repaired = true
-                        end
-                        if icon and item.texture == "Interface\\Icons\\INV_Misc_QuestionMark" then
-                            item.texture = icon
-                            repaired = true
-                        end
-                    end
-                end
-            end
-
-            repairList(session.loot)
-            repairList(session.bidding)
-            repairList(session.awarded)
-
-            -- If items were successfully repaired, trigger UI refreshes
-            if repaired then
-                self:DLC_Log("Item Cache Engine repaired uncached session items.")
-            end
-
-            -- Global auto-refresh for any open frames to pull the updated UI data
-            ---@type UI_Loot
-            local LootUI = self:GetModule("UI_Loot") --[[@as UI_Loot]]
-            if LootUI and LootUI.lootFrame and LootUI.lootFrame:IsShown() then
-                LootUI:ShowLootWindow(session.loot)
-            end
-
-            ---@type UI_Monitor
-            local MonitorUI = self:GetModule("UI_Monitor") --[[@as UI_Monitor]]
-            if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
-                MonitorUI:ShowMonitorWindow(true)
-            end
-
-            ---@type UI_Voting
-            local VotingUI = self:GetModule("UI_Voting") --[[@as UI_Voting]]
-            if VotingUI and VotingUI.votingFrame and VotingUI.votingFrame:IsShown() then
-                VotingUI:ShowVotingWindow(self:GetModule("Session").clientLootList, true)
-            end
-
-            ---@type UI_TradeList
-            local TradeUI = self:GetModule("UI_TradeList") --[[@as UI_TradeList]]
-            if TradeUI and TradeUI.tradeListFrame and TradeUI.tradeListFrame:IsShown() then
-                TradeUI:ShowTradeListWindow()
-            end
-
-            ---@type UI_History
-            local HistoryUI = self:GetModule("UI_History") --[[@as UI_History]]
-            if HistoryUI and HistoryUI.sessionFrame and HistoryUI.sessionFrame:IsShown() then
-                HistoryUI:ShowHistoryWindow()
-            end
+            self:_RepairItemCache(session)
         end
-
-        ---@type UI_ItemManager
-        local ItemMgr = self:GetModule("UI_ItemManager") --[[@as UI_ItemManager]]
-        if ItemMgr and ItemMgr.frame and ItemMgr.frame:IsShown() then
-            ItemMgr:RefreshWindow()
-        end
+        self:_RefreshOpenWindows(session)
 
         REFRESH_TIMER = nil
     end, 0.5)
 end
 
 -- --- Loot Master Logic ---
+
+function DesolateLootcouncil:GetGroupLeader()
+    if not IsInGroup() then return UnitName("player") end
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, rank = GetRaidRosterInfo(i)
+            if name and rank == 2 then return name end
+        end
+    else
+        if UnitIsGroupLeader("player") then
+            return UnitName("player")
+        end
+        for i = 1, GetNumSubgroupMembers() do
+            local unit = "party" .. i
+            if UnitIsGroupLeader(unit) then
+                local pName, pRealm = UnitName(unit)
+                if pRealm and pRealm ~= "" then return pName .. "-" .. pRealm:gsub("%s+", "") end
+                return pName
+            end
+        end
+    end
+    return nil
+end
 
 function DesolateLootcouncil:DetermineLootMaster()
     local myName = UnitName("player")
@@ -297,6 +332,13 @@ end
 
 function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
+    
+    local leader = self:GetGroupLeader()
+    if leader and not self:SmartCompare(leader, self.lastLeader) then
+        self.activeLootMaster = nil
+        self.lastLeader = leader
+    end
+
     local targetLM = self:DetermineLootMaster()
     local wasLM = self.amILM
     self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
@@ -309,8 +351,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
         end
     end
 
-    self:DLC_Log("Role Update: You are " .. (self.amILM and "Loot Master" or "Raider") ..
-        " (LM: " .. tostring(self:GetDisplayName(targetLM)) .. ")")
+    self:DLC_Log(string.format(L["Role Update: You are %s (LM: %s)"], self.amILM and L["Loot Master"] or L["Raider"], tostring(self:GetDisplayName(targetLM))))
 
     -- Always broadcast LM identity when in a group, regardless of our own role.
     -- This ensures late-joiners are corrected even before the session heartbeat fires (30s).
@@ -319,7 +360,8 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     if IsInGroup() then
         ---@type Session
         local Session = self:GetModule("Session") --[[@as Session]]
-        if self.amILM and Session and Session.SendSyncLM then
+        local amILeader = self:SmartCompare(self:GetGroupLeader(), "player")
+        if (self.amILM or amILeader) and Session and Session.SendSyncLM then
             Session:SendSyncLM(targetLM)
         end
     end

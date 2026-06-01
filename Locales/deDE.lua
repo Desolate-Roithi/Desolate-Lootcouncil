@@ -214,6 +214,27 @@ L["Toggle Disenchanters Sidebar"] = "Entzauberer-Seitenleiste umschalten"
 L["You voted: %s%s|r%s"] = "Du hast abgestimmt: %s%s|r%s"
 L["min"] = "Min."
 L["sec"] = "Sek."
-L["You have outstanding loot votes! Type /dlc vote to reopen."] = "Du hast noch ausstehende Loot-Abstimmungen! Gib /dlc vote ein, um sie wieder zu öffnen."
-L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"] = "|cffff8000Abstimmung schließt in %s \226\128\148 deine Stimme wird noch benötigt:|r %s"
+L["You have outstanding loot votes! Type /dlc vote to reopen."] =
+"Du hast noch ausstehende Loot-Abstimmungen! Gib /dlc vote ein, um sie wieder zu öffnen."
+L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"] =
+"|cffff8000Abstimmung schließt in %s \226\128\148 deine Stimme wird noch benötigt:|r %s"
 
+-- New Keys
+L["All window positions have been reset."] = "Alle Fensterpositionen wurden zurückgesetzt."
+L["Warning: No Loot Master configured. Use /dlc config to set one."] =
+"Warnung: Kein Plündermeister konfiguriert. Nutze /dlc config, um einen festzulegen."
+L["Role Update: You are Loot Master."] = "Rollen-Update: Du bist Plündermeister."
+L["Role Update: You are Raider."] = "Rollen-Update: Du bist Raider."
+L["Loot Master"] = "Plündermeister"
+L["Raider"] = "Raider"
+L["Role Update: You are %s (LM: %s)"] = "Rollen-Update: Du bist %s (PM: %s)"
+L["Added item: %s"] = "Gegenstand hinzugefügt: %s"
+L["Added new Priority List: %s (Initialized with shuffled roster)"] =
+"Neue Prioritätsliste hinzugefügt: %s (Mit geshuffelten Roster initialisiert)"
+L["Removed Priority List: %s"] = "Prioritätsliste entfernt: %s"
+L["Renamed list to: %s"] = "Liste umbenannt in: %s"
+L["Only the Loot Master or Raid Assists can view the Loot History."] =
+"Nur der Plündermeister oder Schlachtzugsassistenten können den Plünderungsverlauf einsehen."
+L["Only the Loot Master can add items to the session."] = "Nur der Plündermeister kann Gegenstände zur Sitzung hinzufügen."
+L["Open the configuration window to manage settings, priority lists, and rosters."] = "Öffne das Konfigurationsfenster, um Einstellungen, Prioritätslisten und Roster zu verwalten."
+L["Open Settings Window"] = "Konfigurationsfenster öffnen"

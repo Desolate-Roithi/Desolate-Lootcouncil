@@ -184,7 +184,7 @@ function Loot:ProcessLootSlot(i, session)
         local uniqueKey = sourceGUID .. "-" .. itemID .. "-" .. i
         if self:AddSessionItem(itemLink, uniqueKey, texture, quantity, category, itemID) then
             session.lootedMobs[sourceGUID] = true
-            DesolateLootcouncil:DLC_Log("ADDED: " .. itemName)
+            DesolateLootcouncil:DLC_Log(string.format(L["Added item: %s"], itemName))
 
             self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
         end
@@ -280,6 +280,7 @@ function Loot:ClearLootBacklog()
 end
 
 function Loot:AddManualItem(rawLink)
+    if not DesolateLootcouncil:AmILootMaster() then return end
     local itemID = self:GetItemIDFromLink(rawLink)
     if itemID then
         local category = self:GetItemCategory(itemID)

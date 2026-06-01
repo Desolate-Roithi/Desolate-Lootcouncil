@@ -26,6 +26,7 @@ if AT.abortLoad then return end
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UI]]
 ---@type UI
 local UI = DesolateLootcouncil:NewModule("UI", "AceConsole-3.0", "AceEvent-3.0", "AceTimer-3.0")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 ---@diagnostic disable-next-line: inject-field
 function UI:OnEnable()
@@ -40,6 +41,38 @@ function UI:OnEnable()
             self.updateTimer = nil
         end, 2) -- 2 second debounce
     end)
+
+    -- Register Blizzard Settings Panel Category
+    local blizzOptionsFrame = CreateFrame("Frame", "DesolateLootcouncilBlizOptions", UIParent)
+    blizzOptionsFrame.name = "Desolate Loot Council"
+
+    local title = blizzOptionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("Desolate Loot Council")
+
+    local desc = blizzOptionsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    desc:SetText(L["Open the configuration window to manage settings, priority lists, and rosters."])
+
+    local btn = CreateFrame("Button", nil, blizzOptionsFrame, "UIPanelButtonTemplate")
+    btn:SetSize(180, 26)
+    btn:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -16)
+    btn:SetText(L["Open Settings Window"])
+    btn:SetScript("OnClick", function()
+        if SettingsPanel and SettingsPanel:IsShown() then
+            SettingsPanel:Hide()
+        elseif InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then
+            InterfaceOptionsFrame:Hide()
+        end
+        DesolateLootcouncil:OpenConfig()
+    end)
+
+    if Settings and Settings.RegisterCanvasLayoutCategory then
+        local category = Settings.RegisterCanvasLayoutCategory(blizzOptionsFrame, "Desolate Loot Council")
+        Settings.RegisterAddOnCategory(category)
+    else
+        InterfaceOptions_AddCategory(blizzOptionsFrame)
+    end
 end
 
 -- ============================================================================
