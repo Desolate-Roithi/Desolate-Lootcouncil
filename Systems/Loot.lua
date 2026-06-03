@@ -537,6 +537,7 @@ function Loot:AddTestItems()
         "item:19136:::::::20:257::::::", -- Rest (Mana Igniting Cord)
         "item:13335:::::::20:257::::::", -- Collectables (Deathcharger's Reins)
         "item:19019:::::::20:257::::::", -- Extra (Thunderfury)
+        "item:16223:::::::20:257::::::", -- Recipe (Formula: Enchant Weapon - Crusader)
     }
     for _, itemLink in ipairs(testItems) do
         self:AddManualItem(itemLink)

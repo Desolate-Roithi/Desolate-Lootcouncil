@@ -47,6 +47,15 @@ function DLC_API:IsLootMaster()
     return DesolateLootcouncil:AmILootMaster()
 end
 
+--- Returns true if the item (by link, itemID, or item string) is categorized as a recipe.
+---@param item string|number|nil
+---@return boolean
+function DLC_API:IsRecipe(item)
+    if not item then return false end
+    local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(item)
+    return classID == 9
+end
+
 --- Returns the full name of the active Loot Master, or nil.
 ---@return string|nil
 function DLC_API:GetActiveLootMaster()

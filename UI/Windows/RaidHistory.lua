@@ -11,6 +11,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local SECTION_ICONS = {
     loot      = "Interface\\Icons\\INV_Misc_Bag_11",
+    boss      = "Interface\\Icons\\inv_misc_skull_02",
     attend    = "Interface\\Icons\\Achievement_General_StayClassy",
     decay     = "Interface\\Icons\\ability_warlock_fireandbrimstone",
     positions = "Interface\\Icons\\inv_misc_scrollunrolled01d",
@@ -89,6 +90,25 @@ local function FactoryNameTag(parent)
     return row
 end
 
+-- ---- Factory: boss row ----
+local function FactoryBossRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetHeight(20)
+    row:EnableMouse(true)
+
+    local iconTex = row:CreateTexture(nil, "OVERLAY")
+    iconTex:SetSize(14, 14)
+    iconTex:SetPoint("LEFT", 4, 0)
+    row.iconTex = iconTex
+
+    local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    lbl:SetPoint("LEFT", 22, 0)
+    lbl:SetPoint("RIGHT", -10, 0)
+    lbl:SetJustifyH("LEFT")
+    row.lbl = lbl
+    return row
+end
+
 -- ---- Factory: loot item row ----
 local function FactoryLootRow(parent)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
@@ -154,13 +174,14 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
         self.frame = frame
 
         -- Collapsed state per section (false = expanded)
-        self.collapsed = { loot = false, attend = false, positions = false, decay = false }
+        self.collapsed = { loot = false, boss = false, attend = false, positions = false, decay = false }
 
         -- Widget pools (grow lazily; cleared on each Refresh)
         self.pHeaders  = {}   -- section header frames
         self.pTextRows = {}   -- plain text rows
         self.pNameTags = {}   -- attendee name tags
         self.pLootRows = {}   -- loot item rows
+        self.pBossRows = {}   -- boss rows
 
         -- Dropdown
         local drop, dropBtn = NativeGUI:CreateDropdown(frame, L["Select Session"], 320, {}, nil, function(key)
@@ -314,6 +335,78 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
 
         if lootCount == 0 then
             AddText(L["No loot awarded in this session."], 14, { 0.5, 0.5, 0.5 })
+        end
+    end
+
+    layoutState.yOffset = layoutState.yOffset + 6
+end
+
+function UI_RaidHistory:RenderBossSection(sc, theme, NativeGUI, sessionEntry, layoutState, NextBossRow, AddText, AddHeader)
+    local bossCollapsed = AddHeader("boss", SECTION_ICONS.boss, L["Bosses & Pulls"])
+
+    if not bossCollapsed then
+        local bossLogs = sessionEntry.bossLogs
+        if not bossLogs or #bossLogs == 0 then
+            AddText(L["No boss logs recorded for this session."], 14, { 0.5, 0.5, 0.5 })
+        else
+            for _, b in ipairs(bossLogs) do
+                local row = NextBossRow()
+                row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  14, -layoutState.yOffset)
+                row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
+
+                -- Icon: boss skull
+                row.iconTex:SetTexture("Interface\\Icons\\inv_misc_skull_02")
+
+                -- Construct display text
+                local statusStr, statusColor
+                if b.killed then
+                    local timeStr = b.killedTime and date("%H:%M", b.killedTime) or "?"
+                    statusStr = string.format("Defeated at %s", timeStr)
+                    statusColor = "|cff20ff20" -- green
+                else
+                    statusStr = "Wiped"
+                    statusColor = "|cffff3030" -- red
+                end
+
+                local displayName = string.format("%s - Pulls: %d (%s%s|r)", b.name, b.pulls or 1, statusColor, statusStr)
+                row.lbl:SetText(displayName)
+
+                -- Tooltip for the kill roster
+                if b.killed and b.roster and #b.roster > 0 then
+                    row:SetScript("OnEnter", function()
+                        GameTooltip:SetOwner(row, "ANCHOR_TOP")
+                        GameTooltip:ClearLines()
+                        GameTooltip:AddLine(b.name .. " Kill Roster", 1, 1, 1)
+                        GameTooltip:AddLine(" ", 1, 1, 1)
+                        GameTooltip:AddLine(string.format("Players Present (%d):", #b.roster), 0.93, 0.65, 0.37)
+                        for _, player in ipairs(b.roster) do
+                            local classColorHex = NativeGUI:GetClassColorHex(player.class)
+                            local disp = player.name
+                            if player.main and player.main ~= player.name then
+                                disp = disp .. " (Alt of " .. player.main .. ")"
+                            end
+                            GameTooltip:AddLine(string.format("• |c%s%s|r (%s)", classColorHex, disp, player.class), 0.8, 0.8, 0.8)
+                        end
+                        GameTooltip:Show()
+                    end)
+                    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                else
+                    row:SetScript("OnEnter", function()
+                        GameTooltip:SetOwner(row, "ANCHOR_TOP")
+                        GameTooltip:ClearLines()
+                        GameTooltip:AddLine(b.name, 1, 1, 1)
+                        if not b.killed then
+                            GameTooltip:AddLine("No kill roster available (Boss not defeated).", 0.5, 0.5, 0.5)
+                        else
+                            GameTooltip:AddLine("No kill roster data recorded.", 0.5, 0.5, 0.5)
+                        end
+                        GameTooltip:Show()
+                    end)
+                    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                end
+
+                layoutState.yOffset = layoutState.yOffset + 20
+            end
         end
     end
 
@@ -519,9 +612,10 @@ function UI_RaidHistory:Refresh()
     PoolReset(self.pTextRows)
     PoolReset(self.pNameTags)
     PoolReset(self.pLootRows)
+    PoolReset(self.pBossRows)
 
     -- Pool cursors
-    local hN, tN, nN, lN = 0, 0, 0, 0
+    local hN, tN, nN, lN, bN = 0, 0, 0, 0, 0
 
     local sc     = self.scrollContent
     local API    = DesolateLootcouncil.API
@@ -556,6 +650,12 @@ function UI_RaidHistory:Refresh()
     local function NextLootRow()
         lN = lN + 1
         return PoolGet(self.pLootRows, lN, FactoryLootRow, sc)
+    end
+
+    -- ---- Helper: next pooled boss row ----
+    local function NextBossRow()
+        bN = bN + 1
+        return PoolGet(self.pBossRows, bN, FactoryBossRow, sc)
     end
 
     -- ---- Helper: add a plain text row ----
@@ -622,6 +722,7 @@ function UI_RaidHistory:Refresh()
             zone      = GetRealZoneText() or "Unknown",
             attendees = config.currentAttendees or {},
             sessionID = config.currentSessionID,
+            bossLogs  = config.bossLogs or {},
         }
     else
         sessionEntry = hist[idx]
@@ -637,7 +738,12 @@ function UI_RaidHistory:Refresh()
     self:RenderLootSection(sc, theme, NativeGUI, sessionEntry, isCurrent, layoutState, NextLootRow, AddText, AddHeader)
 
     -- ================================================================
-    -- SECTION 2 — PLAYERS ATTENDED
+    -- SECTION 2 — BOSSES & PULLS
+    -- ================================================================
+    self:RenderBossSection(sc, theme, NativeGUI, sessionEntry, layoutState, NextBossRow, AddText, AddHeader)
+
+    -- ================================================================
+    -- SECTION 3 — PLAYERS ATTENDED
     -- ================================================================
     self:RenderAttendanceSection(sc, theme, NativeGUI, sessionEntry, layoutState, NextNameTag, AddText, AddHeader)
 

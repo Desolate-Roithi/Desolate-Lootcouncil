@@ -158,10 +158,10 @@ function DesolateLootcouncil:_RepairItemCache(session)
         for _, item in ipairs(list) do
             if item.itemID then
                 local ok, _, link, _, _, _, _, _, _, _, icon = pcall(C_Item.GetItemInfo, item.itemID)
-                if not ok or not link then link, icon = "", 0 end
-                local isPlaceholder = item.link == nil or string.find(item.link, "^Item %d+") or
-                    string.find(item.link, "Item %[%d+%] ")
-                if link and (isPlaceholder) then
+                if not ok or not link or link == "" then link = nil end
+                local isPlaceholder = not item.link or not string.find(item.link, "|Hitem") or
+                    string.find(item.link, "^Item %d+") or string.find(item.link, "Item %[%d+%] ")
+                if link and isPlaceholder then
                     item.link = link
                     repaired = true
                 end

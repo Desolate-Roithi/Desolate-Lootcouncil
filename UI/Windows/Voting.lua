@@ -15,6 +15,57 @@ local VOTE_COLOR = setmetatable({}, {
     end
 })
 
+local function GetVoteText(guid, voteVal)
+    if not voteVal then return "?" end
+    local isRecipe = false
+    local session = DesolateLootcouncil.db.profile.session
+    local bidding = session and session.bidding
+    local itemID
+    if bidding then
+        for _, item in ipairs(bidding) do
+            if (item.sourceGUID or item.link) == guid then
+                itemID = item.link or item.itemID
+                break
+            end
+        end
+    end
+    if not itemID then
+        local SessionInfo = DesolateLootcouncil:GetModule("Session")
+        local clientList = SessionInfo and SessionInfo.clientLootList
+        if clientList then
+            for _, item in ipairs(clientList) do
+                if (item.sourceGUID or item.link) == guid then
+                    itemID = item.link or item.itemID
+                    break
+                end
+            end
+        end
+    end
+    if not itemID then
+        local cached = UI_Voting.cachedVotingItems
+        if cached then
+            for _, item in ipairs(cached) do
+                if (item.sourceGUID or item.link) == guid then
+                    itemID = item.link or item.itemID
+                    break
+                end
+            end
+        end
+    end
+    if itemID and DesolateLootcouncil.API:IsRecipe(itemID) then
+        isRecipe = true
+    end
+
+    if isRecipe then
+        if voteVal == 2 then
+            return L["Ready to Craft"]
+        elseif voteVal == 3 then
+            return L["Unskilled"]
+        end
+    end
+    return VOTE_TEXT[voteVal] or "?"
+end
+
 ---@class (partial) DLC_Ref_UIVoting : AceAddon
 ---@field db table
 ---@field RestoreFramePosition fun(self: DLC_Ref_UIVoting, frame: any, windowName: string)
@@ -400,14 +451,14 @@ function UI_Voting:CreateItemIcon(row, data, rowHeight)
     row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-function UI_Voting:StyleClosedExpiredState(row, theme, currentVote)
+function UI_Voting:StyleClosedExpiredState(row, theme, currentVote, guid)
     row.timerLbl:Hide()
 
     local votedText = L["You voted: |cffaaaaaaAuto Pass|r"]
     if currentVote then
         local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
         local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
-        votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText)
+        votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), GetVoteText(guid, voteVal), noteText)
     end
 
     row.statusBtn:SetText(L["Closed"])
@@ -428,7 +479,7 @@ function UI_Voting:StylePendingState(row, theme, guid)
 
     local outbound   = DesolateLootcouncil.API:GetOutboundVote(guid)
     local pendingType = outbound and outbound.type
-    local vText  = pendingType and VOTE_TEXT[pendingType]  or "?"
+    local vText  = pendingType and GetVoteText(guid, pendingType)  or "?"
     local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
     local noteText = self.myNotes[guid] and self.myNotes[guid] ~= "" and (" (" .. self.myNotes[guid] .. ")") or ""
 
@@ -463,13 +514,13 @@ function UI_Voting:StyleVotedChangeState(row, theme, guid, currentVote)
     end)
     row.statusBtn:Show()
 
-    row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", (VOTE_COLOR[voteVal] or "|cffffffff"), (VOTE_TEXT[voteVal] or "?"), noteText))
+    row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", (VOTE_COLOR[voteVal] or "|cffffffff"), GetVoteText(guid, voteVal), noteText))
     row.statusText:SetPoint("LEFT", row.timerLbl, "RIGHT", 8, 0)
     row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
     row.statusText:Show()
 end
 
-function UI_Voting:StyleActiveVoteState(row, theme, guid)
+function UI_Voting:StyleActiveVoteState(row, theme, guid, data)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     row.timerLbl:Show()
 
@@ -480,12 +531,28 @@ function UI_Voting:StyleActiveVoteState(row, theme, guid)
         self:ShowVotingWindow(nil, true)
     end
 
+    local itemID = data and (data.link or data.itemID)
+    local isRecipe = itemID and DesolateLootcouncil.API:IsRecipe(itemID) or false
+
+    local BUTTONS
     local w = 60
     local spacing = 4
-    local BUTTONS = {
-        { VOTE_TEXT[1], 1, "Bid" }, { VOTE_TEXT[2], 2, "Roll" },
-        { VOTE_TEXT[3], 3, "Offspec" }, { VOTE_TEXT[4], 4, "T-Mog" }, { VOTE_TEXT[5], 5, "Pass" }
-    }
+    if isRecipe then
+        w = 100
+        BUTTONS = {
+            { L["Ready to Craft"], 2, "Roll", L["Roll to receive this recipe because you have the profession and required skill to craft it."] },
+            { L["Unskilled"], 3, "Offspec", L["Roll for this recipe even though you do not meet the skill or profession requirements yet."] },
+            { L["Pass"], 5, "Pass", L["Pass on this recipe."] }
+        }
+    else
+        BUTTONS = {
+            { VOTE_TEXT[1], 1, "Bid", L["Bid priority points on this item."] },
+            { VOTE_TEXT[2], 2, "Roll", L["Roll for main spec usage."] },
+            { VOTE_TEXT[3], 3, "Offspec", L["Roll for offspec usage."] },
+            { VOTE_TEXT[4], 4, "T-Mog", L["Roll for transmogrification collection."] },
+            { VOTE_TEXT[5], 5, "Pass", L["Pass on this item."] }
+        }
+    end
 
     -- Modern Notepad Icon-Based Private Note Button
     if not row.actionFrame.noteBtn then
@@ -529,14 +596,36 @@ function UI_Voting:StyleActiveVoteState(row, theme, guid)
     row.votingButtons = row.votingButtons or {}
     for idx, bd in ipairs(BUTTONS) do
         local btn = row.votingButtons[idx]
+        if btn and (btn.buttonType ~= bd[3] or math.abs(btn:GetWidth() - w) > 1) then
+            btn:Hide()
+            btn:SetParent(nil)
+            btn = nil
+            row.votingButtons[idx] = nil
+        end
         if not btn then
             btn = NativeGUI:CreateButton(row.actionFrame, bd[1], w, 24, bd[3])
             row.votingButtons[idx] = btn
         end
         btn:Show()
         btn:ClearAllPoints()
-        btn:SetPoint("RIGHT", -24 - spacing - (5 - idx) * (w + spacing), 0)
+        btn:SetPoint("RIGHT", -24 - spacing - (#BUTTONS - idx) * (w + spacing), 0)
         btn:SetScript("OnClick", function() CastVote(bd[2]) end)
+        btn:SetScript("OnEnter", function(selfBtn)
+            if selfBtn.themeHover then
+                selfBtn:SetBackdropColor(unpack(selfBtn.themeHover))
+            end
+            if bd[4] then
+                GameTooltip:SetOwner(selfBtn, "ANCHOR_TOP")
+                GameTooltip:SetText(bd[4], 1, 1, 1, nil, true)
+                GameTooltip:Show()
+            end
+        end)
+        btn:SetScript("OnLeave", function(selfBtn)
+            if selfBtn.themeBg then
+                selfBtn:SetBackdropColor(unpack(selfBtn.themeBg))
+            end
+            GameTooltip:Hide()
+        end)
     end
 end
 
@@ -577,7 +666,7 @@ local function PositionRow(self, index, row, scrollContent)
     row:SetPoint("TOPRIGHT", scrollContent, "TOPRIGHT", -12, -topOffset)
 end
 
-local function StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isExpired, isPending)
+local function StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isExpired, isPending, data)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     -- Setup reusable status elements to prevent memory leaks
     if not row.statusBtn then
@@ -602,13 +691,13 @@ local function StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isE
     end
 
     if isClosed or isExpired then
-        self:StyleClosedExpiredState(row, theme, currentVote)
+        self:StyleClosedExpiredState(row, theme, currentVote, guid)
     elseif isPending then
         self:StylePendingState(row, theme, guid)
     elseif currentVote then
         self:StyleVotedChangeState(row, theme, guid, currentVote)
     else
-        self:StyleActiveVoteState(row, theme, guid)
+        self:StyleActiveVoteState(row, theme, guid, data)
     end
 end
 
@@ -679,7 +768,7 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
     row.timerLbl:SetPoint("LEFT", row.actionFrame, "LEFT", 0, 0)
     self.timerLabels[guid] = { fontString = row.timerLbl, expiry = data.expiry }
 
-    StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isExpired, isPending)
+    StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isExpired, isPending, data)
 
     self:StyleNoteBox(row, theme, guid, isClosed, isExpired, isPending, currentVote)
 end
@@ -712,4 +801,14 @@ end
 
 function UI_Voting:OnItemRemoved(eventName, guid)
     self:RemoveVotingItem(guid)
+end
+
+if _G.DLC_TEST_MODE then
+    UI_Voting.GetVoteText = function(self, guid, voteVal)
+        if type(self) == "string" then
+            -- Shift arguments if called via dot syntax: Voting.GetVoteText(guid, voteVal)
+            return GetVoteText(self, guid)
+        end
+        return GetVoteText(guid, voteVal)
+    end
 end

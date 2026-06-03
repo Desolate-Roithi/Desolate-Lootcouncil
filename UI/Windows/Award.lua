@@ -51,7 +51,20 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         row.btnGive:Show()
         row.btnGive:SetScript("OnClick", function()
             self.awardFrame:Hide()
-            local voteDesc = VOTE_TEXT[v.type] or "Unknown"
+            local itemLink = itemData and itemData.link
+            local isRecipe = itemLink and DesolateLootcouncil.API:IsRecipe(itemLink) or false
+            local voteDesc
+            if isRecipe then
+                if v.type == 2 then
+                    voteDesc = "Ready to Craft"
+                elseif v.type == 3 then
+                    voteDesc = "Unskilled"
+                else
+                    voteDesc = VOTE_TEXT[v.type] or "Unknown"
+                end
+            else
+                voteDesc = VOTE_TEXT[v.type] or "Unknown"
+            end
             DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, v.name, voteDesc)
         end)
     elseif row.btnGive then
@@ -101,7 +114,20 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
     end
     local vc = NativeGUI.VOTE_COLORS[v.type]
     local color = vc and vc.hex or ""
-    local txt = VOTE_TEXT[v.type] or "?"
+    local itemLink = itemData and itemData.link
+    local isRecipe = itemLink and DesolateLootcouncil.API:IsRecipe(itemLink) or false
+    local txt
+    if isRecipe then
+        if v.type == 2 then
+            txt = L["Ready"]
+        elseif v.type == 3 then
+            txt = L["Unskilled"]
+        else
+            txt = VOTE_TEXT[v.type] or "?"
+        end
+    else
+        txt = VOTE_TEXT[v.type] or "?"
+    end
     row.lblResp:SetText(color .. txt .. "|r")
 
     -- 4. Rank / Roll value

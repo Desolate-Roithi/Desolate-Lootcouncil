@@ -221,6 +221,21 @@ L["Only the Loot Master can add items to the session."] = true
 L["Open the configuration window to manage settings, priority lists, and rosters."] = true
 L["Open Settings Window"] = true
 
+L["Bosses & Pulls"] = true
+L["No boss logs recorded for this session."] = true
+
+L["Ready to Craft"] = true
+L["Unskilled"] = true
+L["Ready"] = true
+L["Roll to receive this recipe because you have the profession and required skill to craft it."] = true
+L["Roll for this recipe even though you do not meet the skill or profession requirements yet."] = true
+L["Pass on this recipe."] = true
+L["Bid priority points on this item."] = true
+L["Roll for main spec usage."] = true
+L["Roll for offspec usage."] = true
+L["Roll for transmogrification collection."] = true
+L["Pass on this item."] = true
+
 
 
 

@@ -238,3 +238,18 @@ L["Only the Loot Master or Raid Assists can view the Loot History."] =
 L["Only the Loot Master can add items to the session."] = "Nur der Plündermeister kann Gegenstände zur Sitzung hinzufügen."
 L["Open the configuration window to manage settings, priority lists, and rosters."] = "Öffne das Konfigurationsfenster, um Einstellungen, Prioritätslisten und Roster zu verwalten."
 L["Open Settings Window"] = "Konfigurationsfenster öffnen"
+
+L["Bosses & Pulls"] = "Bosse & Versuche"
+L["No boss logs recorded for this session."] = "Keine Boss-Logs für diese Sitzung aufgezeichnet."
+
+L["Ready to Craft"] = "Bereit zum Herstellen"
+L["Unskilled"] = "Fehlender Skill"
+L["Ready"] = "Bereit"
+L["Roll to receive this recipe because you have the profession and required skill to craft it."] = "Würfeln, um dieses Rezept zu erhalten, da du den Beruf und die benötigte Fertigkeit besitzt, um es herzustellen."
+L["Roll for this recipe even though you do not meet the skill or profession requirements yet."] = "Für dieses Rezept würfeln, obwohl du die Fertigkeits- oder Berufsanforderungen noch nicht erfüllst."
+L["Pass on this recipe."] = "Auf dieses Rezept passen."
+L["Bid priority points on this item."] = "Prioritätspunkte auf diesen Gegenstand bieten."
+L["Roll for main spec usage."] = "Für Hauptspezialisierung würfeln."
+L["Roll for offspec usage."] = "Für Nebenspezialisierung würfeln."
+L["Roll for transmogrification collection."] = "Für Transmogrifikationssammlung würfeln."
+L["Pass on this item."] = "Auf diesen Gegenstand passen."

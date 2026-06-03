@@ -463,8 +463,10 @@ function UI_Settings:RenderActiveSettings(tabData)
 
                     eb:SetScript("OnEnterPressed", function(selfEdit)
                         selfEdit:ClearFocus()
-                        if d.set then d.set(info, selfEdit:GetText()) end
                         C_Timer.After(0.05, function() UI_Settings:RenderTabs() end)
+                    end)
+                    eb:SetScript("OnEditFocusLost", function(selfEdit)
+                        if d.set then d.set(info, selfEdit:GetText()) end
                     end)
                     itemHeight = 42
 
