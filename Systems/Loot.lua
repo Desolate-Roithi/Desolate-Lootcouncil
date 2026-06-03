@@ -521,9 +521,8 @@ function Loot:ReawardItem(index)
         end
     end
 
-    -- 6. Refresh windows
-    local History = DesolateLootcouncil:GetModule("UI_History")
-    if History then History:ShowHistoryWindow() end
+    -- 6. Broadcast history update (automatically refreshes UI_History, UI_RaidHistory, and UI_TradeList if shown)
+    self:SendMessage("DLC_HISTORY_UPDATED")
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
     if Monitor then Monitor:ShowMonitorWindow() end
 

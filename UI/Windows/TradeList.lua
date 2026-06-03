@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_TradeList : AceModule
-local UI_TradeList = DesolateLootcouncil:NewModule("UI_TradeList")
+local UI_TradeList = DesolateLootcouncil:NewModule("UI_TradeList", "AceEvent-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local function GetUnitIDForName(playerName)
@@ -168,5 +168,15 @@ function UI_TradeList:ShowTradeListWindow()
     else
         if self.emptyLabel then self.emptyLabel:Hide() end
         self.scrollContent:SetHeight(topOffset + 10)
+    end
+end
+
+function UI_TradeList:OnEnable()
+    self:RegisterMessage("DLC_HISTORY_UPDATED", "OnHistoryUpdated")
+end
+
+function UI_TradeList:OnHistoryUpdated()
+    if self.tradeListFrame and self.tradeListFrame:IsShown() then
+        self:ShowTradeListWindow()
     end
 end
