@@ -143,7 +143,6 @@ end
 --- countdown thresholds (4min, 3min, 2min, 1min, 30sec). Safe to call multiple
 --- times — a no-op if the ticker is already running.
 function UI_Voting:StartMilestoneChecker()
-    if DesolateLootcouncil:AmILootMaster() then return end
     if self.milestoneTicker then return end
 
     -- Per-item threshold announcement tracking and global dedup timestamp

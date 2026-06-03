@@ -135,6 +135,196 @@ function UI_Settings:RenderTabs()
     self:RenderActiveSettings(options.args[self.activeTab])
 end
 
+local function RenderFullWidthItem(parent, argInfo, theme, NativeGUI, topOffset, innerW, colPad, colGap, sidebarModule)
+    local d = argInfo.data
+    local info = argInfo.path
+
+    if argInfo.type == "group_header" then
+        -- Section Sub-Header Strip
+        local headerFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        headerFrame:SetHeight(24)
+        headerFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -topOffset)
+        headerFrame:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -topOffset)
+        headerFrame:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+        })
+        headerFrame:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.4)
+
+        local title = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        title:SetPoint("LEFT", 8, 0)
+        title:SetText(argInfo.name or "")
+        title:SetTextColor(unpack(theme.textHeader))
+        return 30
+
+    elseif d.type == "header" then
+        -- Section Header Strip
+        local headerFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        headerFrame:SetHeight(24)
+        headerFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -topOffset)
+        headerFrame:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -topOffset)
+        headerFrame:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+        })
+        headerFrame:SetBackdropColor(theme.bg[1] + 0.05, theme.bg[2] + 0.05, theme.bg[3] + 0.05, 0.9)
+
+        local title = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("LEFT", 8, 0)
+        title:SetText(d.name or "")
+        title:SetTextColor(unpack(theme.textHeader))
+        return 30
+
+    elseif d.type == "description" then
+        -- Simple Text block
+        local container = CreateFrame("Frame", nil, parent)
+        container:SetPoint("TOPLEFT", parent, "TOPLEFT", colPad, -topOffset)
+        container:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -topOffset)
+
+        local label = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetAllPoints(container)
+        label:SetJustifyH("LEFT")
+
+        local textStr = (type(d.name) == "function") and d.name() or (d.name or "")
+        label:SetText(textStr)
+
+        local textHeight = label:GetStringHeight()
+        if textHeight == 0 then textHeight = 12 end
+        container:SetHeight(textHeight)
+        return textHeight + 10
+
+    elseif d.type == "multiselect" then
+        -- Multiselect rendered as a 2-column set of checkboxes side-by-side
+        local values = (type(d.values) == "function") and d.values(info) or d.values or {}
+
+        local container = CreateFrame("Frame", nil, parent)
+        container:SetSize(innerW, 18)
+        container:SetPoint("TOPLEFT", parent, "TOPLEFT", colPad, -topOffset)
+
+        local multiselectLabel = container:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        multiselectLabel:SetAllPoints(container)
+        multiselectLabel:SetJustifyH("LEFT")
+        multiselectLabel:SetText(d.name or "")
+
+        local subOffset = 22
+        local sortedKeys = {}
+        for k in pairs(values) do table.insert(sortedKeys, k) end
+        table.sort(sortedKeys)
+
+        local colWidth = math.floor((innerW - colGap) / 2)
+        local multiRowHeight = 24
+        local currentCol = 0
+
+        for _, valKey in ipairs(sortedKeys) do
+            local valName = values[valKey]
+            local isChecked = d.get and d.get(info, valKey) or false
+            local cb = NativeGUI:CreateCheckBox(parent, valName, isChecked, function(checked)
+                if d.set then d.set(info, valKey, checked) end
+            end)
+
+            local left = currentCol * (colWidth + colGap) + colPad
+            cb:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -(topOffset + subOffset))
+
+            currentCol = currentCol + 1
+            if currentCol == 2 then
+                currentCol = 0
+                subOffset = subOffset + multiRowHeight
+            end
+        end
+
+        if currentCol > 0 then
+            subOffset = subOffset + multiRowHeight
+        end
+        return subOffset + 6
+    end
+    return 0
+end
+
+local function RenderColumnItem(parent, argInfo, NativeGUI, itemL, topOffset, offsetY, itemW, sidebarModule)
+    local key = argInfo.key
+    local d = argInfo.data
+    local info = argInfo.path
+
+    if d.type == "toggle" then
+        -- Checkbox
+        local defaultVal = d.get and d.get(info) or false
+        local cb = NativeGUI:CreateCheckBox(parent, d.name, defaultVal, function(checked)
+            if d.set then d.set(info, checked) end
+            C_Timer.After(0.05, function() sidebarModule:RenderTabs() end)
+        end)
+        cb:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset - offsetY)
+        return 24 + offsetY
+
+    elseif d.type == "select" then
+        -- Dropdown / Stepper
+        local currentVal = d.get and d.get(info)
+        local values = (type(d.values) == "function") and d.values(info) or d.values or {}
+
+        if key == "defaultPenalty" or key == "decayPenalty" then
+            local stepper = NativeGUI:CreateStepper(parent, d.name, itemW, 0, 3, 1, tonumber(currentVal) or 1, function(val)
+                if d.set then d.set(info, val) end
+            end)
+            stepper:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset)
+            return 36
+        else
+            local dropContainer, _ = NativeGUI:CreateDropdown(parent, d.name, itemW, values, currentVal, function(itemKey)
+                if d.set then d.set(info, itemKey) end
+                C_Timer.After(0.05, function() sidebarModule:RenderTabs() end)
+            end)
+            dropContainer:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset)
+            return 42
+        end
+
+    elseif d.type == "range" then
+        -- Stepper
+        local minVal = d.min or 0
+        local maxVal = d.max or 3
+        local step = d.step or 1
+        local currentVal = d.get and d.get(info) or minVal
+        local stepper = NativeGUI:CreateStepper(parent, d.name, itemW, minVal, maxVal, step, tonumber(currentVal) or minVal, function(val)
+            if d.set then d.set(info, val) end
+        end)
+        stepper:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset)
+        return 36
+
+    elseif d.type == "input" then
+        -- Text Box
+        local currentVal = d.get and d.get(info) or ""
+        local container, eb = NativeGUI:CreateEditBox(parent, d.name)
+        container:SetWidth(itemW)
+        container:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset)
+        eb:SetText(tostring(currentVal))
+
+        eb:SetScript("OnEnterPressed", function(selfEdit)
+            selfEdit:ClearFocus()
+            C_Timer.After(0.05, function() sidebarModule:RenderTabs() end)
+        end)
+        eb:SetScript("OnEditFocusLost", function(selfEdit)
+            if d.set then d.set(info, selfEdit:GetText()) end
+        end)
+        return 42
+
+    elseif d.type == "execute" then
+        -- Button
+        local btn = NativeGUI:CreateButton(parent, d.name or "", itemW, 24, "Pass")
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset - offsetY)
+
+        btn:SetScript("OnClick", function()
+            if d.confirm then
+                StaticPopupDialogs["DLC_SETTINGS_CONFIRM"].text = d.confirmText or L["Are you sure you want to perform this action?"]
+                StaticPopupDialogs["DLC_SETTINGS_CONFIRM"].OnAccept = function()
+                    if d.func then d.func() end
+                    sidebarModule:RenderTabs()
+                end
+                StaticPopup_Show("DLC_SETTINGS_CONFIRM")
+            else
+                if d.func then d.func() end
+                sidebarModule:RenderTabs()
+            end
+        end)
+        return 24 + offsetY
+    end
+    return 0
+end
+
 function UI_Settings:RenderActiveSettings(tabData)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
@@ -256,109 +446,8 @@ function UI_Settings:RenderActiveSettings(tabData)
     for _, row in ipairs(rows) do
         if row.type == "full" then
             local argInfo = row.data
-            local d = argInfo.data
-            local info = argInfo.path
-
-            if argInfo.type == "group_header" then
-                -- Section Sub-Header Strip
-                local headerFrame = CreateFrame("Frame", nil, self.scrollContent, "BackdropTemplate")
-                headerFrame:SetHeight(24)
-                headerFrame:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
-                headerFrame:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
-                headerFrame:SetBackdrop({
-                    bgFile = "Interface\\Buttons\\WHITE8X8",
-                })
-                headerFrame:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.4)
-
-                local title = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                title:SetPoint("LEFT", 8, 0)
-                title:SetText(argInfo.name or "")
-                title:SetTextColor(unpack(theme.textHeader))
-
-                topOffset = topOffset + 30
-
-            elseif d.type == "header" then
-                -- Section Header Strip
-                local headerFrame = CreateFrame("Frame", nil, self.scrollContent, "BackdropTemplate")
-                headerFrame:SetHeight(24)
-                headerFrame:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
-                headerFrame:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
-                headerFrame:SetBackdrop({
-                    bgFile = "Interface\\Buttons\\WHITE8X8",
-                })
-                headerFrame:SetBackdropColor(theme.bg[1] + 0.05, theme.bg[2] + 0.05, theme.bg[3] + 0.05, 0.9)
-
-                local title = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                title:SetPoint("LEFT", 8, 0)
-                title:SetText(d.name or "")
-                title:SetTextColor(unpack(theme.textHeader))
-
-                topOffset = topOffset + 30
-
-            elseif d.type == "description" then
-                -- Simple Text block
-                local container = CreateFrame("Frame", nil, self.scrollContent)
-                container:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", colPad, -topOffset)
-                container:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
-
-                local label = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                label:SetAllPoints(container)
-                label:SetJustifyH("LEFT")
-                
-                local textStr = (type(d.name) == "function") and d.name() or (d.name or "")
-                label:SetText(textStr)
-                
-                local textHeight = label:GetStringHeight()
-                if textHeight == 0 then textHeight = 12 end
-                container:SetHeight(textHeight)
-                
-                topOffset = topOffset + textHeight + 10
-
-            elseif d.type == "multiselect" then
-                -- Multiselect rendered as a 2-column set of checkboxes side-by-side
-                local values = (type(d.values) == "function") and d.values(info) or d.values or {}
-                
-                local container = CreateFrame("Frame", nil, self.scrollContent)
-                container:SetSize(innerW, 18)
-                container:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", colPad, -topOffset)
-
-                local multiselectLabel = container:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                multiselectLabel:SetAllPoints(container)
-                multiselectLabel:SetJustifyH("LEFT")
-                multiselectLabel:SetText(d.name or "")
-                
-                topOffset = topOffset + 22
-
-                local sortedKeys = {}
-                for k in pairs(values) do table.insert(sortedKeys, k) end
-                table.sort(sortedKeys)
-
-                local colWidth = math.floor((innerW - colGap) / 2)
-                local multiRowHeight = 24
-                local currentCol = 0
-
-                for _, valKey in ipairs(sortedKeys) do
-                    local valName = values[valKey]
-                    local isChecked = d.get and d.get(info, valKey) or false
-                    local cb = NativeGUI:CreateCheckBox(self.scrollContent, valName, isChecked, function(checked)
-                        if d.set then d.set(info, valKey, checked) end
-                    end)
-
-                    local left = currentCol * (colWidth + colGap) + colPad
-                    cb:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", left, -topOffset)
-
-                    currentCol = currentCol + 1
-                    if currentCol == 2 then
-                        currentCol = 0
-                        topOffset = topOffset + multiRowHeight
-                    end
-                end
-
-                if currentCol > 0 then
-                    topOffset = topOffset + multiRowHeight
-                end
-                topOffset = topOffset + 6
-            end
+            local heightUsed = RenderFullWidthItem(self.scrollContent, argInfo, theme, NativeGUI, topOffset, innerW, colPad, colGap, self)
+            topOffset = topOffset + heightUsed
         else
             -- Columns row (packs 3 columns / total span 3)
             local rowHasLabel = false
@@ -380,18 +469,14 @@ function UI_Settings:RenderActiveSettings(tabData)
 
             for _, item in ipairs(row.items) do
                 local argInfo = item.arg
-                local key = argInfo.key
                 local d = argInfo.data
-                local info = argInfo.path
 
                 local itemW
                 if item.span == 3 then
                     itemW = colW3
                 elseif totalSpan == 2 then
-                    -- Two items sharing the full row: each gets half
                     itemW = math.floor((innerW - colGap) / 2)
                 elseif totalSpan == 1 then
-                    -- Single item: give it double-column width (50% wider than 1-col)
                     itemW = colW2
                 else
                     if item.span == 2 then
@@ -409,88 +494,7 @@ function UI_Settings:RenderActiveSettings(tabData)
                     offsetY = 16
                 end
 
-                local itemHeight = 0
-
-                if d.type == "toggle" then
-                    -- Checkbox
-                    local defaultVal = d.get and d.get(info) or false
-                    local cb = NativeGUI:CreateCheckBox(self.scrollContent, d.name, defaultVal, function(checked)
-                        if d.set then d.set(info, checked) end
-                        C_Timer.After(0.05, function() self:RenderTabs() end)
-                    end)
-                    cb:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", itemL, -topOffset - offsetY)
-                    itemHeight = 24 + offsetY
-
-                elseif d.type == "select" then
-                    -- Dropdown / Stepper
-                    local currentVal = d.get and d.get(info)
-                    local values = (type(d.values) == "function") and d.values(info) or d.values or {}
-
-                    if key == "defaultPenalty" or key == "decayPenalty" then
-                        local stepper = NativeGUI:CreateStepper(self.scrollContent, d.name, itemW, 0, 3, 1, tonumber(currentVal) or 1, function(val)
-                            if d.set then d.set(info, val) end
-                        end)
-                        stepper:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", itemL, -topOffset)
-                        itemHeight = 36
-                    else
-                        local dropContainer, _ = NativeGUI:CreateDropdown(self.scrollContent, d.name, itemW, values, currentVal, function(itemKey)
-                            if d.set then d.set(info, itemKey) end
-                            C_Timer.After(0.05, function() self:RenderTabs() end)
-                        end)
-                        dropContainer:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", itemL, -topOffset)
-                        itemHeight = 42
-                    end
-
-                elseif d.type == "range" then
-                    -- Stepper
-                    local minVal = d.min or 0
-                    local maxVal = d.max or 3
-                    local step = d.step or 1
-                    local currentVal = d.get and d.get(info) or minVal
-                    local stepper = NativeGUI:CreateStepper(self.scrollContent, d.name, itemW, minVal, maxVal, step, tonumber(currentVal) or minVal, function(val)
-                        if d.set then d.set(info, val) end
-                    end)
-                    stepper:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", itemL, -topOffset)
-                    itemHeight = 36
-
-                elseif d.type == "input" then
-                    -- Text Box
-                    local currentVal = d.get and d.get(info) or ""
-                    local container, eb = NativeGUI:CreateEditBox(self.scrollContent, d.name)
-                    container:SetWidth(itemW)
-                    container:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", itemL, -topOffset)
-                    eb:SetText(tostring(currentVal))
-
-                    eb:SetScript("OnEnterPressed", function(selfEdit)
-                        selfEdit:ClearFocus()
-                        C_Timer.After(0.05, function() UI_Settings:RenderTabs() end)
-                    end)
-                    eb:SetScript("OnEditFocusLost", function(selfEdit)
-                        if d.set then d.set(info, selfEdit:GetText()) end
-                    end)
-                    itemHeight = 42
-
-                elseif d.type == "execute" then
-                    -- Button
-                    local btn = NativeGUI:CreateButton(self.scrollContent, d.name or "", itemW, 24, "Pass")
-                    btn:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", itemL, -topOffset - offsetY)
-
-                    btn:SetScript("OnClick", function()
-                        if d.confirm then
-                            StaticPopupDialogs["DLC_SETTINGS_CONFIRM"].text = d.confirmText or L["Are you sure you want to perform this action?"]
-                            StaticPopupDialogs["DLC_SETTINGS_CONFIRM"].OnAccept = function()
-                                if d.func then d.func() end
-                                self:RenderTabs()
-                            end
-                            StaticPopup_Show("DLC_SETTINGS_CONFIRM")
-                        else
-                            if d.func then d.func() end
-                            self:RenderTabs()
-                        end
-                    end)
-                    itemHeight = 24 + offsetY
-                end
-
+                local itemHeight = RenderColumnItem(self.scrollContent, argInfo, NativeGUI, itemL, topOffset, offsetY, itemW, self)
                 if itemHeight > currentRowHeight then
                     currentRowHeight = itemHeight
                 end

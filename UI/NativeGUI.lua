@@ -566,6 +566,72 @@ function UI_NativeGUI:CreateRowContainer(parent, isActive)
     return row
 end
 
+local activeEditBox = nil
+local lastActiveEditBox = nil
+local lastActiveTime = 0
+local linkInsertedThisFrame = false
+
+local function HandleEditBoxInsertLink(text)
+    local target = activeEditBox
+    local needsFocus = false
+
+    if not target or not target:HasFocus() then
+        if lastActiveEditBox and lastActiveEditBox:IsVisible() and (GetTime() - lastActiveTime < 0.2) then
+            target = lastActiveEditBox
+            needsFocus = true
+        end
+    end
+
+    if target and target:IsVisible() then
+        target:Insert(text)
+        if needsFocus then
+            target:SetFocus()
+        end
+        linkInsertedThisFrame = true
+        RunNextFrame(function()
+            linkInsertedThisFrame = false
+        end)
+        return true
+    end
+    return false
+end
+
+-- luacheck: globals ChatEdit_InsertLink
+local orig_ChatEdit_InsertLink = ChatEdit_InsertLink
+ChatEdit_InsertLink = function(text)
+    if HandleEditBoxInsertLink(text) then
+        return true
+    end
+    if orig_ChatEdit_InsertLink then
+        return orig_ChatEdit_InsertLink(text)
+    end
+    return false
+end
+
+if ChatFrameUtil and ChatFrameUtil.InsertLink then
+    local orig_ChatFrameUtil_InsertLink = ChatFrameUtil.InsertLink
+    ChatFrameUtil.InsertLink = function(text)
+        if HandleEditBoxInsertLink(text) then
+            return true
+        end
+        return orig_ChatFrameUtil_InsertLink(text)
+    end
+end
+
+-- Hook HandleModifiedItemClick to ensure Shift-Clicks always insert links into custom inputs.
+-- luacheck: globals HandleModifiedItemClick IsModifiedClick
+if HandleModifiedItemClick then
+    hooksecurefunc("HandleModifiedItemClick", function(link)
+        if IsModifiedClick("CHATLINK") then
+            if linkInsertedThisFrame then
+                linkInsertedThisFrame = false
+                return
+            end
+            HandleEditBoxInsertLink(link)
+        end
+    end)
+end
+
 --- Creates a custom native text input EditBox with a styled background and title label.
 ---@param parent Frame  parent container
 ---@param labelText string  label displayed above the input field
@@ -596,6 +662,17 @@ function UI_NativeGUI:CreateEditBox(parent, labelText)
 
     eb:SetScript("OnEscapePressed", function(self)
         self:ClearFocus()
+    end)
+
+    eb:HookScript("OnEditFocusGained", function(selfEdit)
+        activeEditBox = selfEdit
+    end)
+    eb:HookScript("OnEditFocusLost", function(selfEdit)
+        if activeEditBox == selfEdit then
+            activeEditBox = nil
+        end
+        lastActiveEditBox = selfEdit
+        lastActiveTime = GetTime()
     end)
 
     container.editbox = eb

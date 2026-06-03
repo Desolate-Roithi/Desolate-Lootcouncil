@@ -251,6 +251,125 @@ end
 -- Section Renderers
 -- ============================================================
 
+local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme, lootCount)
+    -- Alternating stripe
+    if lootCount % 2 == 0 then
+        row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 0 })
+        row:SetBackdropColor(theme.bg[1] * 1.2, theme.bg[2] * 1.2, theme.bg[3] * 1.2, 0.3)
+    else
+        row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 0 })
+        row:SetBackdropColor(0, 0, 0, 0)
+    end
+
+    -- Icon
+    row.iconTex:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+    row.iconBtn:SetScript("OnEnter", function()
+        if item.link then
+            GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
+            GameTooltip:SetHyperlink(item.link)
+            GameTooltip:Show()
+        end
+    end)
+    row.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Re-award
+    row.btnReaward:ClearAllPoints()
+    row.btnReaward:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row.btnReaward:SetScript("OnClick", function()
+        DesolateLootcouncil.API:ReawardItem(awardIdx)
+        C_Timer.After(0.1, function()
+            historyModule:ShowRaidHistoryWindow(historyModule.selectedIndex)
+        end)
+    end)
+
+    -- Time
+    row.timeLbl:ClearAllPoints()
+    row.timeLbl:SetPoint("RIGHT", row.btnReaward, "LEFT", -6, 0)
+    row.timeLbl:SetText(NativeGUI:FormatTime(item.timestamp))
+
+    -- Vote type
+    local vt    = item.voteType or "?"
+    local vtCol = { 0.6, 0.6, 0.6 }
+    local vc = NativeGUI.VOTE_COLORS[vt]
+    if vc then vtCol = { vc.r, vc.g, vc.b } end
+    row.vtLbl:ClearAllPoints()
+    row.vtLbl:SetPoint("RIGHT", row.timeLbl, "LEFT", -4, 0)
+    row.vtLbl:SetText(vt)
+    row.vtLbl:SetTextColor(unpack(vtCol))
+
+    -- Info (item + winner)
+    local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
+    local colWinner  = NativeGUI:FormatClassColor(item.winnerClass, winnerDisp)
+    row.infoLbl:ClearAllPoints()
+    row.infoLbl:SetPoint("LEFT",  row.iconBtn, "RIGHT", 6, 0)
+    row.infoLbl:SetPoint("RIGHT", row.vtLbl,   "LEFT", -6, 0)
+    row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+end
+
+local function SetupBossTooltip(row, b, NativeGUI)
+    if b.killed and b.roster and #b.roster > 0 then
+        row:SetScript("OnEnter", function()
+            GameTooltip:SetOwner(row, "ANCHOR_TOP")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine(b.name .. " Kill Roster", 1, 1, 1)
+            GameTooltip:AddLine(" ", 1, 1, 1)
+            GameTooltip:AddLine(string.format("Players Present (%d):", #b.roster), 0.93, 0.65, 0.37)
+            for _, player in ipairs(b.roster) do
+                local classColorHex = NativeGUI:GetClassColorHex(player.class)
+                local disp = player.name
+                if player.main and player.main ~= player.name then
+                    disp = disp .. " (Alt of " .. player.main .. ")"
+                end
+                GameTooltip:AddLine(string.format("• |c%s%s|r (%s)", classColorHex, disp, player.class), 0.8, 0.8, 0.8)
+            end
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    else
+        row:SetScript("OnEnter", function()
+            GameTooltip:SetOwner(row, "ANCHOR_TOP")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine(b.name, 1, 1, 1)
+            if not b.killed then
+                GameTooltip:AddLine("No kill roster available (Boss not defeated).", 0.5, 0.5, 0.5)
+            else
+                GameTooltip:AddLine("No kill roster data recorded.", 0.5, 0.5, 0.5)
+            end
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+end
+
+local function SetupAttendeeTooltip(nt, displayName, attendedList, NativeGUI)
+    if attendedList and #attendedList > 0 then
+        nt:SetScript("OnEnter", function()
+            GameTooltip:SetOwner(nt, "ANCHOR_TOP")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine(displayName, 1, 1, 1)
+            GameTooltip:AddLine(" ", 1, 1, 1)
+            GameTooltip:AddLine("Characters Attended:", 0.93, 0.65, 0.37)
+            for _, char in ipairs(attendedList) do
+                local classColor = NativeGUI:GetClassColorHex(char.class)
+                local charDisp = "|c" .. classColor .. char.name .. "|r"
+                local killsStr = string.format("%d boss kills", char.kills)
+                GameTooltip:AddLine(string.format("• %s (%s, %s)", charDisp, char.class, killsStr), 0.7, 0.7, 0.7)
+            end
+            GameTooltip:Show()
+        end)
+        nt:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    else
+        nt:SetScript("OnEnter", function()
+            GameTooltip:SetOwner(nt, "ANCHOR_TOP")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine(displayName, 1, 1, 1)
+            GameTooltip:AddLine("No detailed character/boss kills data available.", 0.5, 0.5, 0.5)
+            GameTooltip:Show()
+        end)
+        nt:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+end
+
 function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, isCurrent, layoutState, NextLootRow, AddText, AddHeader)
     local lootCollapsed = AddHeader("loot", SECTION_ICONS.loot, L["Loot Awarded"])
 
@@ -275,59 +394,7 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
                 row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  0,   -layoutState.yOffset)
                 row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
 
-                -- Alternating stripe
-                if lootCount % 2 == 0 then
-                    row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 0 })
-                    row:SetBackdropColor(theme.bg[1] * 1.2, theme.bg[2] * 1.2, theme.bg[3] * 1.2, 0.3)
-                else
-                    row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 0 })
-                    row:SetBackdropColor(0, 0, 0, 0)
-                end
-
-                -- Icon
-                row.iconTex:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-                row.iconBtn:SetScript("OnEnter", function()
-                    if item.link then
-                        GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
-                        GameTooltip:SetHyperlink(item.link)
-                        GameTooltip:Show()
-                    end
-                end)
-                row.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-                -- Re-award
-                row.btnReaward:ClearAllPoints()
-                row.btnReaward:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-                local capturedIdx = awardIdx
-                row.btnReaward:SetScript("OnClick", function()
-                    DesolateLootcouncil.API:ReawardItem(capturedIdx)
-                    C_Timer.After(0.1, function()
-                        self:ShowRaidHistoryWindow(self.selectedIndex)
-                    end)
-                end)
-
-                -- Time
-                row.timeLbl:ClearAllPoints()
-                row.timeLbl:SetPoint("RIGHT", row.btnReaward, "LEFT", -6, 0)
-                row.timeLbl:SetText(NativeGUI:FormatTime(item.timestamp))
-
-                -- Vote type
-                local vt    = item.voteType or "?"
-                local vtCol = { 0.6, 0.6, 0.6 }
-                local vc = NativeGUI.VOTE_COLORS[vt]
-                if vc then vtCol = { vc.r, vc.g, vc.b } end
-                row.vtLbl:ClearAllPoints()
-                row.vtLbl:SetPoint("RIGHT", row.timeLbl, "LEFT", -4, 0)
-                row.vtLbl:SetText(vt)
-                row.vtLbl:SetTextColor(unpack(vtCol))
-
-                -- Info (item + winner)
-                local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
-                local colWinner  = NativeGUI:FormatClassColor(item.winnerClass, winnerDisp)
-                row.infoLbl:ClearAllPoints()
-                row.infoLbl:SetPoint("LEFT",  row.iconBtn, "RIGHT", 6, 0)
-                row.infoLbl:SetPoint("RIGHT", row.vtLbl,   "LEFT", -6, 0)
-                row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+                SetupLootRow(row, item, awardIdx, self, NativeGUI, theme, lootCount)
 
                 layoutState.yOffset = layoutState.yOffset + 32
             end
@@ -372,38 +439,7 @@ function UI_RaidHistory:RenderBossSection(sc, theme, NativeGUI, sessionEntry, la
                 row.lbl:SetText(displayName)
 
                 -- Tooltip for the kill roster
-                if b.killed and b.roster and #b.roster > 0 then
-                    row:SetScript("OnEnter", function()
-                        GameTooltip:SetOwner(row, "ANCHOR_TOP")
-                        GameTooltip:ClearLines()
-                        GameTooltip:AddLine(b.name .. " Kill Roster", 1, 1, 1)
-                        GameTooltip:AddLine(" ", 1, 1, 1)
-                        GameTooltip:AddLine(string.format("Players Present (%d):", #b.roster), 0.93, 0.65, 0.37)
-                        for _, player in ipairs(b.roster) do
-                            local classColorHex = NativeGUI:GetClassColorHex(player.class)
-                            local disp = player.name
-                            if player.main and player.main ~= player.name then
-                                disp = disp .. " (Alt of " .. player.main .. ")"
-                            end
-                            GameTooltip:AddLine(string.format("• |c%s%s|r (%s)", classColorHex, disp, player.class), 0.8, 0.8, 0.8)
-                        end
-                        GameTooltip:Show()
-                    end)
-                    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                else
-                    row:SetScript("OnEnter", function()
-                        GameTooltip:SetOwner(row, "ANCHOR_TOP")
-                        GameTooltip:ClearLines()
-                        GameTooltip:AddLine(b.name, 1, 1, 1)
-                        if not b.killed then
-                            GameTooltip:AddLine("No kill roster available (Boss not defeated).", 0.5, 0.5, 0.5)
-                        else
-                            GameTooltip:AddLine("No kill roster data recorded.", 0.5, 0.5, 0.5)
-                        end
-                        GameTooltip:Show()
-                    end)
-                    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                end
+                SetupBossTooltip(row, b, NativeGUI)
 
                 layoutState.yOffset = layoutState.yOffset + 20
             end
@@ -479,21 +515,7 @@ function UI_RaidHistory:RenderAttendanceSection(sc, theme, NativeGUI, sessionEnt
                             local colName = NativeGUI:FormatClassColor(bestClass or "WARRIOR", displayName)
                             nt.lbl:SetText("- " .. iconMarkups .. " " .. colName)
 
-                            nt:SetScript("OnEnter", function()
-                                GameTooltip:SetOwner(nt, "ANCHOR_TOP")
-                                GameTooltip:ClearLines()
-                                GameTooltip:AddLine(displayName, 1, 1, 1)
-                                GameTooltip:AddLine(" ", 1, 1, 1)
-                                GameTooltip:AddLine("Characters Attended:", 0.93, 0.65, 0.37)
-                                for _, char in ipairs(attendedList) do
-                                    local classColor = NativeGUI:GetClassColorHex(char.class)
-                                    local charDisp = "|c" .. classColor .. char.name .. "|r"
-                                    local killsStr = string.format("%d boss kills", char.kills)
-                                    GameTooltip:AddLine(string.format("• %s (%s, %s)", charDisp, char.class, killsStr), 0.7, 0.7, 0.7)
-                                end
-                                GameTooltip:Show()
-                            end)
-                            nt:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                            SetupAttendeeTooltip(nt, displayName, attendedList, NativeGUI)
                         else
                             local class = "WARRIOR"
                             local rData = db.MainRoster and db.MainRoster[rawName]
@@ -502,14 +524,7 @@ function UI_RaidHistory:RenderAttendanceSection(sc, theme, NativeGUI, sessionEnt
                             local colName = NativeGUI:FormatClassColor(class, displayName)
                             nt.lbl:SetText("- " .. icon .. " " .. colName)
 
-                            nt:SetScript("OnEnter", function()
-                                GameTooltip:SetOwner(nt, "ANCHOR_TOP")
-                                GameTooltip:ClearLines()
-                                GameTooltip:AddLine(displayName, 1, 1, 1)
-                                GameTooltip:AddLine("No detailed character/boss kills data available.", 0.5, 0.5, 0.5)
-                                GameTooltip:Show()
-                            end)
-                            nt:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                            SetupAttendeeTooltip(nt, displayName, nil, NativeGUI)
                         end
                     end
                 end

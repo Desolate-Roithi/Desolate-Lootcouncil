@@ -128,6 +128,26 @@ function Simulation:GetPendingVoters(guid, votedPlayers)
     return #pending > 0 and pending or nil
 end
 
+function Simulation:CreateSimulatedVotePayload(item, roll)
+    local actualRoll = roll
+    if not actualRoll then
+        actualRoll = math.random(1, 5)
+        local itemID = item.link or item.itemID
+        local isRecipe = itemID and DesolateLootcouncil.API:IsRecipe(itemID) or false
+        if isRecipe then
+            local recipeVotes = { 2, 3, 5 }
+            actualRoll = recipeVotes[math.random(#recipeVotes)]
+        end
+    end
+    return {
+        command = "VOTE",
+        data = {
+            guid = item.sourceGUID or item.link,
+            vote = actualRoll
+        }
+    }
+end
+
 function Simulation:SimulateVote()
     ---@type Session
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
@@ -143,20 +163,7 @@ function Simulation:SimulateVote()
     -- Iterate active SIMS only
     for name, _ in pairs(self.activeSims) do
         for _, item in ipairs(session.bidding) do
-            local roll = math.random(1, 5)
-            local itemID = item.link or item.itemID
-            local isRecipe = itemID and DesolateLootcouncil.API:IsRecipe(itemID) or false
-            if isRecipe then
-                local recipeVotes = { 2, 3, 5 }
-                roll = recipeVotes[math.random(#recipeVotes)]
-            end
-            local payload = {
-                command = "VOTE",
-                data = {
-                    guid = item.sourceGUID or item.link,
-                    vote = roll
-                }
-            }
+            local payload = self:CreateSimulatedVotePayload(item)
             -- Serialize and Inject into Session Module
             local serialized = Session:Serialize(payload)
             if Session.OnCommReceived then
