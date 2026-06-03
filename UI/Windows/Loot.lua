@@ -194,11 +194,7 @@ function UI_Loot:ShowLootWindow(lootTable)
         local link = data.link
         local guid = data.sourceGUID or link
 
-        if not self.rowPool[count] then
-            self.rowPool[count] = NativeGUI:CreateRowContainer(self.scrollContent, false)
-        end
-        local row = self.rowPool[count]
-        row:Show()
+        local row = NativeGUI:AcquireRow(self.rowPool, count, self.scrollContent, false)
         row:SetHeight(rowHeight)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
@@ -251,14 +247,7 @@ function UI_Loot:ShowLootWindow(lootTable)
 
         -- Link Label (sandwiched dynamically in-between LEFT and RIGHT anchors)
         if not row.itemLabel then
-            local btn = CreateFrame("Button", nil, row)
-            btn:SetHeight(20)
-            local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            txt:SetPoint("LEFT", 0, 0)
-            txt:SetPoint("RIGHT", 0, 0)
-            txt:SetJustifyH("LEFT")
-            btn.text = txt
-            row.itemLabel = btn
+            row.itemLabel = NativeGUI:CreateLinkLabel(row)
         end
         row.itemLabel:ClearAllPoints()
         row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 8, 0)

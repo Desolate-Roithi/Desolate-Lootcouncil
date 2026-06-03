@@ -283,11 +283,7 @@ function UI_ItemManager:UpdateScrollList()
         count = count + 1
         local itemID = self.sortedIDs[i]
 
-        if not self.rowPool[count] then
-            self.rowPool[count] = NativeGUI:CreateRowContainer(scrollContent, false)
-        end
-        local row = self.rowPool[count]
-        row:Show()
+        local row = NativeGUI:AcquireRow(self.rowPool, count, scrollContent, false)
         row:SetHeight(rowHeight)
         row:ClearAllPoints()
 

@@ -6,11 +6,7 @@ local UI_History = DesolateLootcouncil:NewModule("UI_History", "AceEvent-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeight, NativeGUI)
-    if not self.rowPool[count] then
-        self.rowPool[count] = NativeGUI:CreateRowContainer(self.scrollContent, false)
-    end
-    local row = self.rowPool[count]
-    row:Show()
+    local row = NativeGUI:AcquireRow(self.rowPool, count, self.scrollContent, false)
     row:SetHeight(rowHeight)
     row:ClearAllPoints()
     row:SetPoint("TOPLEFT",  self.scrollContent, "TOPLEFT",  0,   -topOffset)
@@ -30,13 +26,7 @@ local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeig
 
     -- Item icon
     if not row.iconBtn then
-        local btn = CreateFrame("Button", nil, row)
-        btn:SetSize(24, 24)
-        btn:SetPoint("LEFT", 8, 0)
-        local tex = btn:CreateTexture(nil, "BACKGROUND")
-        tex:SetAllPoints()
-        btn.texture = tex
-        row.iconBtn = btn
+        row.iconBtn = NativeGUI:CreateIcon(row, 24, 8)
     end
     row.iconBtn.texture:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
     row.iconBtn:Show()
@@ -63,15 +53,8 @@ local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeig
 
     -- Item link + winner label (fills space between icon and Re-award)
     if not row.itemLabel then
-        local btn = CreateFrame("Button", nil, row)
-        btn:SetHeight(20)
-        local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        txt:SetPoint("LEFT", 0, 0)
-        txt:SetPoint("RIGHT", 0, 0)
-        txt:SetJustifyH("LEFT")
-        txt:SetWordWrap(false)
-        btn.text = txt
-        row.itemLabel = btn
+        row.itemLabel = NativeGUI:CreateLinkLabel(row)
+        row.itemLabel.text:SetWordWrap(false)
     end
     row.itemLabel:ClearAllPoints()
     row.itemLabel:SetPoint("LEFT",  row.iconBtn,   "RIGHT", 8,  0)

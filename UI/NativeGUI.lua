@@ -420,6 +420,51 @@ function UI_NativeGUI:ResetRowPool(rowPool)
     end
 end
 
+--- Fetches a row container from the pool or creates it if needed, showing it.
+---@param rowPool table
+---@param index number
+---@param parent Frame
+---@param isActive boolean
+---@return Frame row
+function UI_NativeGUI:AcquireRow(rowPool, index, parent, isActive)
+    if not rowPool[index] then
+        rowPool[index] = self:CreateRowContainer(parent, isActive)
+    end
+    local row = rowPool[index]
+    row:Show()
+    return row
+end
+
+--- Creates a standard clickable icon button.
+---@param parent Frame
+---@param size number?
+---@param leftOffset number?
+---@return Button icon
+function UI_NativeGUI:CreateIcon(parent, size, leftOffset)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(size or 24, size or 24)
+    btn:SetPoint("LEFT", leftOffset or 8, 0)
+    local tex = btn:CreateTexture(nil, "BACKGROUND")
+    tex:SetAllPoints()
+    btn.texture = tex
+    return btn
+end
+
+--- Creates a clickable link label button.
+---@param parent Frame
+---@param font string?
+---@return Button linkLabel
+function UI_NativeGUI:CreateLinkLabel(parent, font)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetHeight(20)
+    local txt = btn:CreateFontString(nil, "OVERLAY", font or "GameFontHighlightSmall")
+    txt:SetPoint("LEFT", 0, 0)
+    txt:SetPoint("RIGHT", 0, 0)
+    txt:SetJustifyH("LEFT")
+    btn.text = txt
+    return btn
+end
+
 --- Styles a scrollbar dynamically using the active UI theme, replacing retro gold arrows with modern flat vertex-colored ones.
 ---@param scrollFrame ScrollFrame
 function UI_NativeGUI:StyleScrollBar(scrollFrame)

@@ -767,23 +767,24 @@ function Roster:DLC_VERSION_UPDATE()
     self:CheckForNewRaidMembers()
 end
 
+local function ResetAutopassSession()
+    if IsInRaid() then return end
+    if DesolateLootcouncil.sessionAutopassActive or DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive then
+        DesolateLootcouncil.sessionAutopassActive  = false
+        DesolateLootcouncil.sessionAutopassAnswered = false
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
+        DesolateLootcouncil:DLC_Log("Raid group disbanded. Autopass session reset.", true)
+    end
+end
+
 function Roster:GROUP_ROSTER_UPDATE()
     if gruResetTimer then gruResetTimer:Cancel() end
     gruResetTimer = C_Timer.NewTimer(0.5, function()
         gruResetTimer = nil
         if not IsInRaid() then
             -- Double check after 5 seconds to ensure this isn't a brief loading screen or portal blip
-            C_Timer.After(5.0, function()
-                if not IsInRaid() then
-                    if DesolateLootcouncil.sessionAutopassActive or DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive then
-                        DesolateLootcouncil.sessionAutopassActive  = false
-                        DesolateLootcouncil.sessionAutopassAnswered = false
-                        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
-                        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
-                        DesolateLootcouncil:DLC_Log("Raid group disbanded. Autopass session reset.", true)
-                    end
-                end
-            end)
+            C_Timer.After(5.0, ResetAutopassSession)
         else
             self:CheckForNewRaidMembers()
             -- Sync Autopass to newly joined members or after a group update (if LM)

@@ -119,14 +119,14 @@ function Trade:GetStageableSlot(targetItemID, isBoP)
                 local warbound = self:IsItemWarbound(bag, slot)
                 if boundOk and not warbound then
                     return bag, slot
-                else
-                    DesolateLootcouncil:DLC_Log(string.format(
-                        "DEBUG: Skipped slot [%d,%d] — isWarbound=%s isBound=%s isBoP=%s",
-                        bag, slot,
-                        tostring(warbound),
-                        tostring(info.isBound),
-                        tostring(isBoP)), true)
                 end
+
+                DesolateLootcouncil:DLC_Log(string.format(
+                    "DEBUG: Skipped slot [%d,%d] — isWarbound=%s isBound=%s isBoP=%s",
+                    bag, slot,
+                    tostring(warbound),
+                    tostring(info.isBound),
+                    tostring(isBoP)), true)
             end
         end
     end

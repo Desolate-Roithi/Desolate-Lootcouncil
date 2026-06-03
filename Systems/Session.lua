@@ -764,6 +764,17 @@ function Session:HandleVote(payload, sender)
     end
 end
 
+local function HasPlayerVotedInList(votesList, guid, playerScore)
+    local guidVotes = votesList and votesList[guid]
+    if not guidVotes then return false end
+    for voterName in pairs(guidVotes) do
+        if DesolateLootcouncil:GetScoreName(voterName) == playerScore then
+            return true
+        end
+    end
+    return false
+end
+
 function Session:HandleSyncVotes(payload)
     if payload.data and type(payload.data) == "table" then
         self.sessionVotes = payload.data.votes or payload.data -- Compatibility
@@ -773,25 +784,8 @@ function Session:HandleSyncVotes(payload)
         local confirmed   = payload.data.confirmedVoters or {}
 
         for guid, _ in pairs(self.outboundVotes) do
-            local foundInVotes = false
-            if self.sessionVotes[guid] then
-                for voterName in pairs(self.sessionVotes[guid]) do
-                    if DesolateLootcouncil:GetScoreName(voterName) == myScore then
-                        foundInVotes = true
-                        break
-                    end
-                end
-            end
-
-            local foundInConfirmed = false
-            if not foundInVotes and confirmed[guid] then
-                for voterName in pairs(confirmed[guid]) do
-                    if DesolateLootcouncil:GetScoreName(voterName) == myScore then
-                        foundInConfirmed = true
-                        break
-                    end
-                end
-            end
+            local foundInVotes = HasPlayerVotedInList(self.sessionVotes, guid, myScore)
+            local foundInConfirmed = not foundInVotes and HasPlayerVotedInList(confirmed, guid, myScore)
 
             if foundInConfirmed or foundInVotes then
                 self.outboundVotes[guid] = nil

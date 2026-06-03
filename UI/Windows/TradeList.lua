@@ -70,13 +70,7 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
 
     -- Icon
     if not row.iconBtn then
-        local btn = CreateFrame("Button", nil, row)
-        btn:SetSize(24, 24)
-        btn:SetPoint("LEFT", 8, 0)
-        local tex = btn:CreateTexture(nil, "BACKGROUND")
-        tex:SetAllPoints()
-        btn.texture = tex
-        row.iconBtn = btn
+        row.iconBtn = NativeGUI:CreateIcon(row, 24, 8)
     end
     row.iconBtn.texture:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
     row.iconBtn:Show()
@@ -101,14 +95,7 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
 
     -- Link Label (sandwiched dynamically)
     if not row.linkLabel then
-        local btn = CreateFrame("Button", nil, row)
-        btn:SetHeight(20)
-        local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        txt:SetPoint("LEFT", 0, 0)
-        txt:SetPoint("RIGHT", 0, 0)
-        txt:SetJustifyH("LEFT")
-        btn.text = txt
-        row.linkLabel = btn
+        row.linkLabel = NativeGUI:CreateLinkLabel(row)
     end
     row.linkLabel:ClearAllPoints()
     row.linkLabel:SetPoint("LEFT", row.iconBtn, "RIGHT", 8, 0)
@@ -157,11 +144,7 @@ function UI_TradeList:ShowTradeListWindow()
             if not item.traded then
                 pendingCount = pendingCount + 1
 
-                if not self.rowPool[pendingCount] then
-                    self.rowPool[pendingCount] = NativeGUI:CreateRowContainer(self.scrollContent, false)
-                end
-                local row = self.rowPool[pendingCount]
-                row:Show()
+                local row = NativeGUI:AcquireRow(self.rowPool, pendingCount, self.scrollContent, false)
                 row:SetHeight(rowHeight)
                 row:ClearAllPoints()
                 row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
