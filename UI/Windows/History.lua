@@ -114,10 +114,7 @@ function UI_History:ShowSessionLootHistory()
     self.sessionFrame:Show()
 
     -- Hide all pooled rows
-    for _, r in ipairs(self.rowPool) do
-        r:Hide()
-        r:ClearAllPoints()
-    end
+    NativeGUI:ResetRowPool(self.rowPool)
 
     if not self.scrollFrame then
         local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.sessionFrame, -50, -16)

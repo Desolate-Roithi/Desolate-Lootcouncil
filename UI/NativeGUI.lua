@@ -410,6 +410,16 @@ function UI_NativeGUI:CreateWindow(name, titleText, widthOrWindowName, height, w
     return frame
 end
 
+--- Hides and clears anchors for all rows in a pool.
+---@param rowPool table
+function UI_NativeGUI:ResetRowPool(rowPool)
+    if not rowPool then return end
+    for _, r in ipairs(rowPool) do
+        r:Hide()
+        r:ClearAllPoints()
+    end
+end
+
 --- Styles a scrollbar dynamically using the active UI theme, replacing retro gold arrows with modern flat vertex-colored ones.
 ---@param scrollFrame ScrollFrame
 function UI_NativeGUI:StyleScrollBar(scrollFrame)

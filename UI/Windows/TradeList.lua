@@ -136,10 +136,7 @@ function UI_TradeList:ShowTradeListWindow()
 
     self.tradeListFrame:Show()
 
-    for _, r in ipairs(self.rowPool) do
-        r:Hide()
-        r:ClearAllPoints()
-    end
+    NativeGUI:ResetRowPool(self.rowPool)
 
     if not self.scrollFrame then
         local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.tradeListFrame, -50, -16)

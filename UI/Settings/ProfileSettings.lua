@@ -4,6 +4,258 @@ if AT.abortLoad then return end
 ---@class UI_ProfileSettings : AceModule
 local ProfileSettings = DesolateLootcouncil:NewModule("UI_ProfileSettings")
 
+-- Helper functions
+local ValuesCurrentProfile = function()
+    local profiles = DesolateLootcouncil.API:GetProfiles()
+    local t = {}
+    for _, v in ipairs(profiles) do t[v] = v end
+    return t
+end
+
+local SetCurrentProfile = function(info, key)
+    DesolateLootcouncil.API:SetProfile(key)
+end
+
+local GetCurrentProfile = function()
+    return DesolateLootcouncil.API:GetCurrentProfile()
+end
+
+local NewProfileNameSet = function(info, val)
+    ProfileSettings.newProfileName = val
+end
+
+local NewProfileNameGet = function()
+    return ProfileSettings.newProfileName
+end
+
+local CreateNewProfile = function()
+    local name = ProfileSettings.newProfileName
+    if name and name ~= "" then
+        DesolateLootcouncil.API:SetProfile(name)
+        ProfileSettings.newProfileName = nil
+        DesolateLootcouncil:DLC_Log("Created/Switched to profile: " .. DesolateLootcouncil.API:GetCurrentProfile())
+    end
+end
+
+local ValuesCopyFrom = function()
+    local profiles = DesolateLootcouncil.API:GetProfiles()
+    local current = DesolateLootcouncil.API:GetCurrentProfile()
+    local t = {}
+    for _, v in ipairs(profiles) do
+        t[v] = (v ~= current) and v or nil
+    end
+    return t
+end
+
+local CopyTargetSet = function(info, val)
+    ProfileSettings.copyTarget = val
+end
+
+local CopyTargetGet = function()
+    return ProfileSettings.copyTarget
+end
+
+local CopyProfile = function()
+    if ProfileSettings.copyTarget then
+        DesolateLootcouncil.API:CopyProfile(ProfileSettings.copyTarget)
+        DesolateLootcouncil:DLC_Log("Copied data from: " .. ProfileSettings.copyTarget)
+        ProfileSettings.copyTarget = nil
+    end
+end
+
+local DeleteProfile = function()
+    local current = DesolateLootcouncil.API:GetCurrentProfile()
+    if current == "Default" then
+        DesolateLootcouncil:DLC_Log("Cannot delete Default profile.", true)
+        return
+    end
+    DesolateLootcouncil.API:SetProfile("Default")
+    DesolateLootcouncil.API:DeleteProfile(current)
+    DesolateLootcouncil:DLC_Log("Deleted profile: " .. current)
+end
+
+local ExportOptsSet = function(info, key, state)
+    ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+    ProfileSettings.exportSelection[key] = state
+end
+
+local ExportOptsGet = function(info, key)
+    return ProfileSettings.exportSelection and ProfileSettings.exportSelection[key]
+end
+
+local GenerateExportString = function()
+    ProfileSettings.generatedString = DesolateLootcouncil.API:ExportProfileData(ProfileSettings.exportSelection)
+end
+
+local GetExportString = function()
+    return ProfileSettings.generatedString or ""
+end
+
+local ImportStringSet = function(info, val)
+    ProfileSettings.importStringRaw = val
+end
+
+local ImportStringGet = function()
+    return ProfileSettings.importStringRaw
+end
+
+local ImportProfileNameSet = function(info, val)
+    ProfileSettings.importName = val
+end
+
+local ImportProfileNameGet = function()
+    return ProfileSettings.importName
+end
+
+local DoImport = function()
+    local success, err = DesolateLootcouncil.API:ImportProfileData(ProfileSettings.importStringRaw, ProfileSettings.importName)
+    if success then
+        DesolateLootcouncil:DLC_Log("Import succeeded!", true)
+        ProfileSettings.importStringRaw = nil
+        ProfileSettings.importName = nil
+    else
+        DesolateLootcouncil:DLC_Log(err, true)
+    end
+end
+
+-- Options Definitions
+local currentProfileOpt = {
+    type = "select",
+    name = "Current Profile",
+    desc = "Select an existing profile to switch to.",
+    width = 1.5,
+    order = 1,
+    values = ValuesCurrentProfile,
+    set = SetCurrentProfile,
+    get = GetCurrentProfile,
+}
+
+local newProfileNameOpt = {
+    type = "input",
+    name = "New Profile Name",
+    width = 1.0,
+    order = 2,
+    set = NewProfileNameSet,
+    get = NewProfileNameGet,
+}
+
+local createBtnOpt = {
+    type = "execute",
+    name = "Create / Reset",
+    desc = "Create a new profile with this name (or reset if it exists).",
+    width = 0.5,
+    order = 3,
+    func = CreateNewProfile,
+}
+
+local copyFromOpt = {
+    type = "select",
+    name = "Copy From Profile",
+    desc = "Select a profile to copy data FROM (overwrites current!).",
+    width = 1.5,
+    order = 4,
+    values = ValuesCopyFrom,
+    set = CopyTargetSet,
+    get = CopyTargetGet,
+}
+
+local copyBtnOpt = {
+    type = "execute",
+    name = "Copy",
+    desc = "Overwrite current profile with data from selected profile.",
+    width = 0.5,
+    order = 5,
+    confirm = true,
+    confirmText = "Are you sure you want to overwrite the CURRENT profile?",
+    func = CopyProfile,
+}
+
+local deleteBtnOpt = {
+    type = "execute",
+    name = "Delete Profile",
+    desc = "Delete the current profile (cannot delete Default).",
+    width = 1.0,
+    order = 6,
+    confirm = true,
+    confirmText = "Delete this profile forever?",
+    func = DeleteProfile,
+}
+
+local descOpt = {
+    type = "description",
+    name = "Export specific settings to share with others or move between profiles.\n",
+    order = 0,
+}
+
+local exportOptsOpt = {
+    type = "multiselect",
+    name = "Data to Export",
+    desc = "Select which sections to include.",
+    width = "full",
+    order = 1,
+    values = {
+        ["Roster"] = "Roster (Mains/Alts/Decay)",
+        ["PriorityLists"] = "Priority Lists (Names/Order)",
+        ["PriorityContent"] = "Priority List Content (Players/Items)",
+        ["History"] = "Loot History & Attendance",
+        ["Config"] = "General Config & Loot Rules",
+    },
+    set = ExportOptsSet,
+    get = ExportOptsGet,
+}
+
+local genExportOpt = {
+    type = "execute",
+    name = "Generate Export String",
+    width = 1.0,
+    order = 2,
+    func = GenerateExportString,
+}
+
+local exportStringOpt = {
+    type = "input",
+    name = "Export String",
+    width = "full",
+    multiline = 5,
+    order = 3,
+    set = function() end,
+    get = GetExportString,
+}
+
+local importHeaderOpt = {
+    type = "header",
+    name = "Import",
+    order = 10,
+}
+
+local importStringOpt = {
+    type = "input",
+    name = "Paste Import String",
+    width = "full",
+    multiline = 5,
+    order = 11,
+    set = ImportStringSet,
+    get = ImportStringGet,
+}
+
+local importProfileNameOpt = {
+    type = "input",
+    name = "New Profile Name (Import)",
+    desc = "Imports always create a new profile for safety.",
+    width = 1.5,
+    order = 12,
+    set = ImportProfileNameSet,
+    get = ImportProfileNameGet,
+}
+
+local doImportOpt = {
+    type = "execute",
+    name = "Import Data",
+    width = 1.0,
+    order = 13,
+    func = DoImport,
+}
+
 function ProfileSettings:OnInitialize()
     self.exportSelection = {}
     self.generatedString = ""
@@ -14,200 +266,41 @@ function ProfileSettings:OnInitialize()
 end
 
 function ProfileSettings:GetManagementOptions()
-    local API = DesolateLootcouncil.API
-    return {
+    local opts = {
         type = "group",
         name = "Profile Management",
         order = 1,
         inline = true,
-        args = {
-            currentProfile = {
-                type = "select",
-                name = "Current Profile",
-                desc = "Select an existing profile to switch to.",
-                width = 1.5,
-                order = 1,
-                values = function()
-                    local profiles = API:GetProfiles()
-                    local t = {}
-                    for _, v in ipairs(profiles) do t[v] = v end
-                    return t
-                end,
-                set = function(_, key) API:SetProfile(key) end,
-                get = function() return API:GetCurrentProfile() end,
-            },
-            newProfileName = {
-                type = "input",
-                name = "New Profile Name",
-                width = 1.0,
-                order = 2,
-                set = function(_, val) self.newProfileName = val end,
-                get = function() return self.newProfileName end,
-            },
-            createBtn = {
-                type = "execute",
-                name = "Create / Reset",
-                desc = "Create a new profile with this name (or reset if it exists).",
-                width = 0.5,
-                order = 3,
-                func = function()
-                    if self.newProfileName and self.newProfileName ~= "" then
-                        API:SetProfile(self.newProfileName)
-                        self.newProfileName = nil
-                        DesolateLootcouncil:DLC_Log("Created/Switched to profile: " .. API:GetCurrentProfile())
-                    end
-                end,
-            },
-            copyFrom = {
-                type = "select",
-                name = "Copy From Profile",
-                desc = "Select a profile to copy data FROM (overwrites current!).",
-                width = 1.5,
-                order = 4,
-                values = function()
-                    local profiles = API:GetProfiles()
-                    local current = API:GetCurrentProfile()
-                    local t = {}
-                    for _, v in ipairs(profiles) do
-                        if v ~= current then t[v] = v end
-                    end
-                    return t
-                end,
-                set = function(_, val) self.copyTarget = val end,
-                get = function() return self.copyTarget end,
-            },
-            copyBtn = {
-                type = "execute",
-                name = "Copy",
-                desc = "Overwrite current profile with data from selected profile.",
-                width = 0.5,
-                order = 5,
-                confirm = true,
-                confirmText = "Are you sure you want to overwrite the CURRENT profile?",
-                func = function()
-                    if self.copyTarget then
-                        API:CopyProfile(self.copyTarget)
-                        DesolateLootcouncil:DLC_Log("Copied data from: " .. self.copyTarget)
-                        self.copyTarget = nil
-                    end
-                end,
-            },
-            deleteBtn = {
-                type = "execute",
-                name = "Delete Profile",
-                desc = "Delete the current profile (cannot delete Default).",
-                width = 1.0,
-                order = 6,
-                confirm = true,
-                confirmText = "Delete this profile forever?",
-                func = function()
-                    local current = API:GetCurrentProfile()
-                    if current == "Default" then
-                        DesolateLootcouncil:DLC_Log("Cannot delete Default profile.", true)
-                        return
-                    end
-                    API:SetProfile("Default")
-                    API:DeleteProfile(current)
-                    DesolateLootcouncil:DLC_Log("Deleted profile: " .. current)
-                end,
-            }
-        }
+        args = {}
     }
+    local args = opts.args
+    args.currentProfile = currentProfileOpt
+    args.newProfileName = newProfileNameOpt
+    args.createBtn = createBtnOpt
+    args.copyFrom = copyFromOpt
+    args.copyBtn = copyBtnOpt
+    args.deleteBtn = deleteBtnOpt
+    return opts
 end
 
 function ProfileSettings:GetImportExportOptions()
-    local API = DesolateLootcouncil.API
-    return {
+    local opts = {
         type = "group",
         name = "Import / Export",
         order = 2,
         inline = true,
-        args = {
-            desc = {
-                type = "description",
-                name = "Export specific settings to share with others or move between profiles.\n",
-                order = 0,
-            },
-            exportOpts = {
-                type = "multiselect",
-                name = "Data to Export",
-                desc = "Select which sections to include.",
-                width = "full",
-                order = 1,
-                values = {
-                    ["Roster"] = "Roster (Mains/Alts/Decay)",
-                    ["PriorityLists"] = "Priority Lists (Names/Order)",
-                    ["PriorityContent"] = "Priority List Content (Players/Items)",
-                    ["History"] = "Loot History & Attendance",
-                    ["Config"] = "General Config & Loot Rules",
-                },
-                set = function(_, key, state)
-                    self.exportSelection = self.exportSelection or {}
-                    self.exportSelection[key] = state
-                end,
-                get = function(_, key)
-                    return self.exportSelection and self.exportSelection[key]
-                end,
-            },
-            genExport = {
-                type = "execute",
-                name = "Generate Export String",
-                width = 1.0,
-                order = 2,
-                func = function()
-                    self.generatedString = API:ExportProfileData(self.exportSelection)
-                end,
-            },
-            exportString = {
-                type = "input",
-                name = "Export String",
-                width = "full",
-                multiline = 5,
-                order = 3,
-                set = function() end,
-                get = function() return self.generatedString or "" end,
-            },
-            importHeader = {
-                type = "header",
-                name = "Import",
-                order = 10,
-            },
-            importString = {
-                type = "input",
-                name = "Paste Import String",
-                width = "full",
-                multiline = 5,
-                order = 11,
-                set = function(_, val) self.importStringRaw = val end,
-                get = function() return self.importStringRaw end,
-            },
-            importProfileName = {
-                type = "input",
-                name = "New Profile Name (Import)",
-                desc = "Imports always create a new profile for safety.",
-                width = 1.5,
-                order = 12,
-                set = function(_, val) self.importName = val end,
-                get = function() return self.importName end,
-            },
-            doImport = {
-                type = "execute",
-                name = "Import Data",
-                width = 1.0,
-                order = 13,
-                func = function()
-                    local success, err = API:ImportProfileData(self.importStringRaw, self.importName)
-                    if success then
-                        DesolateLootcouncil:DLC_Log("Import succeeded!", true)
-                        self.importStringRaw = nil
-                        self.importName = nil
-                    else
-                        DesolateLootcouncil:DLC_Log(err, true)
-                    end
-                end,
-            }
-        }
+        args = {}
     }
+    local args = opts.args
+    args.desc = descOpt
+    args.exportOpts = exportOptsOpt
+    args.genExport = genExportOpt
+    args.exportString = exportStringOpt
+    args.importHeader = importHeaderOpt
+    args.importString = importStringOpt
+    args.importProfileName = importProfileNameOpt
+    args.doImport = doImportOpt
+    return opts
 end
 
 function ProfileSettings:GetProfileOptions()

@@ -370,39 +370,88 @@ local function SetupAttendeeTooltip(nt, displayName, attendedList, NativeGUI)
     end
 end
 
+local function SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, db, API)
+    local displayName = API:GetDisplayName(rawName)
+    local chars = sessionEntry.attendeeDetails and sessionEntry.attendeeDetails[rawName]
+
+    if chars and next(chars) ~= nil then
+        local maxKills = -1
+        local bestClass = nil
+        local attendedList = {}
+        local iconMarkups = ""
+
+        local charNames = {}
+        for cName in pairs(chars) do
+            table.insert(charNames, cName)
+        end
+        table.sort(charNames)
+
+        for _, cName in ipairs(charNames) do
+            local cData = chars[cName]
+            local charClass = cData.class or "WARRIOR"
+            local kills = cData.kills or 0
+
+            iconMarkups = iconMarkups .. NativeGUI:GetClassIconMarkup(charClass, 13)
+
+            if kills > maxKills then
+                maxKills = kills
+                bestClass = charClass
+            end
+
+            table.insert(attendedList, { name = cName, class = charClass, kills = kills })
+        end
+
+        local colName = NativeGUI:FormatClassColor(bestClass or "WARRIOR", displayName)
+        nt.lbl:SetText("- " .. iconMarkups .. " " .. colName)
+
+        SetupAttendeeTooltip(nt, displayName, attendedList, NativeGUI)
+    else
+        local class = "WARRIOR"
+        local rData = db.MainRoster and db.MainRoster[rawName]
+        if rData and rData.class then class = rData.class end
+        local icon = NativeGUI:GetClassIconMarkup(class, 13)
+        local colName = NativeGUI:FormatClassColor(class, displayName)
+        nt.lbl:SetText("- " .. icon .. " " .. colName)
+
+        SetupAttendeeTooltip(nt, displayName, nil, NativeGUI)
+    end
+end
+
 function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, isCurrent, layoutState, NextLootRow, AddText, AddHeader)
     local lootCollapsed = AddHeader("loot", SECTION_ICONS.loot, L["Loot Awarded"])
+    if lootCollapsed then
+        layoutState.yOffset = layoutState.yOffset + 6
+        return
+    end
 
-    if not lootCollapsed then
-        local API = DesolateLootcouncil.API
-        local awarded           = API:GetAwardedList()
-        local lootCount         = 0
-        local sessionDatePrefix = sessionEntry.date and sessionEntry.date:sub(1, 10)
+    local API = DesolateLootcouncil.API
+    local awarded           = API:GetAwardedList()
+    local lootCount         = 0
+    local sessionDatePrefix = sessionEntry.date and sessionEntry.date:sub(1, 10)
 
-        for awardIdx, item in ipairs(awarded) do
-            local include
-            if isCurrent then
-                include = true
-            else
-                local d = item.timestamp and date("%Y-%m-%d", item.timestamp)
-                include = (d and sessionDatePrefix and d == sessionDatePrefix) or false
-            end
-
-            if include then
-                lootCount = lootCount + 1
-                local row = NextLootRow()
-                row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  0,   -layoutState.yOffset)
-                row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
-
-                SetupLootRow(row, item, awardIdx, self, NativeGUI, theme, lootCount)
-
-                layoutState.yOffset = layoutState.yOffset + 32
-            end
+    for awardIdx, item in ipairs(awarded) do
+        local include
+        if isCurrent then
+            include = true
+        else
+            local d = item.timestamp and date("%Y-%m-%d", item.timestamp)
+            include = (d and sessionDatePrefix and d == sessionDatePrefix) or false
         end
 
-        if lootCount == 0 then
-            AddText(L["No loot awarded in this session."], 14, { 0.5, 0.5, 0.5 })
+        if include then
+            lootCount = lootCount + 1
+            local row = NextLootRow()
+            row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  0,   -layoutState.yOffset)
+            row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
+
+            SetupLootRow(row, item, awardIdx, self, NativeGUI, theme, lootCount)
+
+            layoutState.yOffset = layoutState.yOffset + 32
         end
+    end
+
+    if lootCount == 0 then
+        AddText(L["No loot awarded in this session."], 14, { 0.5, 0.5, 0.5 })
     end
 
     layoutState.yOffset = layoutState.yOffset + 6
@@ -410,40 +459,44 @@ end
 
 function UI_RaidHistory:RenderBossSection(sc, theme, NativeGUI, sessionEntry, layoutState, NextBossRow, AddText, AddHeader)
     local bossCollapsed = AddHeader("boss", SECTION_ICONS.boss, L["Bosses & Pulls"])
+    if bossCollapsed then
+        layoutState.yOffset = layoutState.yOffset + 6
+        return
+    end
 
-    if not bossCollapsed then
-        local bossLogs = sessionEntry.bossLogs
-        if not bossLogs or #bossLogs == 0 then
-            AddText(L["No boss logs recorded for this session."], 14, { 0.5, 0.5, 0.5 })
+    local bossLogs = sessionEntry.bossLogs
+    if not bossLogs or #bossLogs == 0 then
+        AddText(L["No boss logs recorded for this session."], 14, { 0.5, 0.5, 0.5 })
+        layoutState.yOffset = layoutState.yOffset + 6
+        return
+    end
+
+    for _, b in ipairs(bossLogs) do
+        local row = NextBossRow()
+        row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  14, -layoutState.yOffset)
+        row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
+
+        -- Icon: boss skull
+        row.iconTex:SetTexture("Interface\\Icons\\inv_misc_skull_02")
+
+        -- Construct display text
+        local statusStr, statusColor
+        if b.killed then
+            local timeStr = b.killedTime and date("%H:%M", b.killedTime) or "?"
+            statusStr = string.format("Defeated at %s", timeStr)
+            statusColor = "|cff20ff20" -- green
         else
-            for _, b in ipairs(bossLogs) do
-                local row = NextBossRow()
-                row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  14, -layoutState.yOffset)
-                row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
-
-                -- Icon: boss skull
-                row.iconTex:SetTexture("Interface\\Icons\\inv_misc_skull_02")
-
-                -- Construct display text
-                local statusStr, statusColor
-                if b.killed then
-                    local timeStr = b.killedTime and date("%H:%M", b.killedTime) or "?"
-                    statusStr = string.format("Defeated at %s", timeStr)
-                    statusColor = "|cff20ff20" -- green
-                else
-                    statusStr = "Wiped"
-                    statusColor = "|cffff3030" -- red
-                end
-
-                local displayName = string.format("%s - Pulls: %d (%s%s|r)", b.name, b.pulls or 1, statusColor, statusStr)
-                row.lbl:SetText(displayName)
-
-                -- Tooltip for the kill roster
-                SetupBossTooltip(row, b, NativeGUI)
-
-                layoutState.yOffset = layoutState.yOffset + 20
-            end
+            statusStr = "Wiped"
+            statusColor = "|cffff3030" -- red
         end
+
+        local displayName = string.format("%s - Pulls: %d (%s%s|r)", b.name, b.pulls or 1, statusColor, statusStr)
+        row.lbl:SetText(displayName)
+
+        -- Tooltip for the kill roster
+        SetupBossTooltip(row, b, NativeGUI)
+
+        layoutState.yOffset = layoutState.yOffset + 20
     end
 
     layoutState.yOffset = layoutState.yOffset + 6
@@ -451,123 +504,85 @@ end
 
 function UI_RaidHistory:RenderAttendanceSection(sc, theme, NativeGUI, sessionEntry, layoutState, NextNameTag, AddText, AddHeader)
     local attendCollapsed = AddHeader("attend", SECTION_ICONS.attend, L["Players Attended"])
+    if attendCollapsed then
+        layoutState.yOffset = layoutState.yOffset + 6
+        return
+    end
 
-    if not attendCollapsed then
-        local API = DesolateLootcouncil.API
-        local db  = DesolateLootcouncil.db.profile
-        local attendees = {}
-        if sessionEntry.attendees then
-            for rawName in pairs(sessionEntry.attendees) do
-                table.insert(attendees, rawName)
-            end
-        end
-        table.sort(attendees, function(a, b)
-            return API:GetDisplayName(a) < API:GetDisplayName(b)
-        end)
-
-        if #attendees == 0 then
-            AddText(L["No attendees recorded."], 14, { 0.5, 0.5, 0.5 })
-        else
-            local COL_W    = 180
-            local COL_CNT  = 3
-            local ROW_H    = 18
-            local rowsNeed = math.ceil(#attendees / COL_CNT)
-
-            for r = 1, rowsNeed do
-                for c = 1, COL_CNT do
-                    local ni      = (r - 1) * COL_CNT + c
-                    local rawName = attendees[ni]
-                    if rawName then
-                        local nt = NextNameTag()
-                        nt:SetWidth(COL_W)
-                        nt:SetPoint("TOPLEFT", sc, "TOPLEFT", 14 + (c - 1) * COL_W, -layoutState.yOffset)
-
-                        local displayName = API:GetDisplayName(rawName)
-                        local chars = sessionEntry.attendeeDetails and sessionEntry.attendeeDetails[rawName]
-
-                        if chars and next(chars) ~= nil then
-                            local maxKills = -1
-                            local bestClass = nil
-                            local attendedList = {}
-                            local iconMarkups = ""
-
-                            local charNames = {}
-                            for cName in pairs(chars) do
-                                table.insert(charNames, cName)
-                            end
-                            table.sort(charNames)
-
-                            for _, cName in ipairs(charNames) do
-                                local cData = chars[cName]
-                                local charClass = cData.class or "WARRIOR"
-                                local kills = cData.kills or 0
-
-                                iconMarkups = iconMarkups .. NativeGUI:GetClassIconMarkup(charClass, 13)
-
-                                if kills > maxKills then
-                                    maxKills = kills
-                                    bestClass = charClass
-                                end
-
-                                table.insert(attendedList, { name = cName, class = charClass, kills = kills })
-                            end
-
-                            local colName = NativeGUI:FormatClassColor(bestClass or "WARRIOR", displayName)
-                            nt.lbl:SetText("- " .. iconMarkups .. " " .. colName)
-
-                            SetupAttendeeTooltip(nt, displayName, attendedList, NativeGUI)
-                        else
-                            local class = "WARRIOR"
-                            local rData = db.MainRoster and db.MainRoster[rawName]
-                            if rData and rData.class then class = rData.class end
-                            local icon = NativeGUI:GetClassIconMarkup(class, 13)
-                            local colName = NativeGUI:FormatClassColor(class, displayName)
-                            nt.lbl:SetText("- " .. icon .. " " .. colName)
-
-                            SetupAttendeeTooltip(nt, displayName, nil, NativeGUI)
-                        end
-                    end
-                end
-                layoutState.yOffset = layoutState.yOffset + ROW_H + 2
-            end
-            layoutState.yOffset = layoutState.yOffset + 4
+    local API = DesolateLootcouncil.API
+    local db  = DesolateLootcouncil.db.profile
+    local attendees = {}
+    if sessionEntry.attendees then
+        for rawName in pairs(sessionEntry.attendees) do
+            table.insert(attendees, rawName)
         end
     end
+    table.sort(attendees, function(a, b)
+        return API:GetDisplayName(a) < API:GetDisplayName(b)
+    end)
+
+    if #attendees == 0 then
+        AddText(L["No attendees recorded."], 14, { 0.5, 0.5, 0.5 })
+        layoutState.yOffset = layoutState.yOffset + 6
+        return
+    end
+
+    local COL_W    = 180
+    local COL_CNT  = 3
+    local ROW_H    = 18
+    local rowsNeed = math.ceil(#attendees / COL_CNT)
+
+    for r = 1, rowsNeed do
+        for c = 1, COL_CNT do
+            local ni      = (r - 1) * COL_CNT + c
+            local rawName = attendees[ni]
+            if rawName then
+                local nt = NextNameTag()
+                nt:SetWidth(COL_W)
+                nt:SetPoint("TOPLEFT", sc, "TOPLEFT", 14 + (c - 1) * COL_W, -layoutState.yOffset)
+                SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, db, API)
+            end
+        end
+        layoutState.yOffset = layoutState.yOffset + ROW_H + 2
+    end
+    layoutState.yOffset = layoutState.yOffset + 4
 
     layoutState.yOffset = layoutState.yOffset + 6
 end
 
 function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader)
     local posCollapsed = AddHeader("positions", SECTION_ICONS.positions, L["Position Changes"])
+    if posCollapsed then
+        layoutState.yOffset = layoutState.yOffset + 6
+        return
+    end
 
-    if not posCollapsed then
-        local db  = DesolateLootcouncil.db.profile
-        local posChanges = {}
-        local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
+    local db  = DesolateLootcouncil.db.profile
+    local posChanges = {}
+    local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
 
-        local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
-        if splBucket then
-            for _, e in ipairs(splBucket) do
-                table.insert(posChanges, e)
-            end
+    local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
+    if splBucket then
+        for _, e in ipairs(splBucket) do
+            table.insert(posChanges, e)
         end
+    end
 
-        if #posChanges > 0 then
-            -- Show newest-first, cap at 30
-            local startIdx = math.max(1, #posChanges - 29)
-            for i = #posChanges, startIdx, -1 do
-                AddText(posChanges[i], 14)
-            end
-            if #posChanges > 30 then
-                AddText(string.format(L["... and %d more entries"], #posChanges - 30),
-                    14, { 0.5, 0.5, 0.5 })
-            end
-        elseif not isCurrent and not sessionEntry.sessionID then
-            AddText(L["Position log not available (pre-dates session tracking)."],
+    if #posChanges > 0 then
+        -- Show newest-first, cap at 30
+        local startIdx = math.max(1, #posChanges - 29)
+        for i = #posChanges, startIdx, -1 do
+            AddText(posChanges[i], 14)
+        end
+        if #posChanges > 30 then
+            AddText(string.format(L["... and %d more entries"], #posChanges - 30),
                 14, { 0.5, 0.5, 0.5 })
-        else
-            AddText(L["No position changes recorded."], 14, { 0.5, 0.5, 0.5 })
         end
+    elseif not isCurrent and not sessionEntry.sessionID then
+        AddText(L["Position log not available (pre-dates session tracking)."],
+            14, { 0.5, 0.5, 0.5 })
+    else
+        AddText(L["No position changes recorded."], 14, { 0.5, 0.5, 0.5 })
     end
 
     layoutState.yOffset = layoutState.yOffset + 6
@@ -575,41 +590,43 @@ end
 
 function UI_RaidHistory:RenderDecaySection(sc, NativeGUI, sessionEntry, isCurrent, config, layoutState, AddText, AddHeader)
     local decayCollapsed = AddHeader("decay", SECTION_ICONS.decay, L["Decay Applied"])
+    if decayCollapsed then
+        layoutState.yOffset = layoutState.yOffset + 6
+        return
+    end
 
-    if not decayCollapsed then
-        local db  = DesolateLootcouncil.db.profile
-        local decayEntries = {}
+    local db  = DesolateLootcouncil.db.profile
+    local decayEntries = {}
 
-        -- Look for decay-tagged lines in the same session position log
-        local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
-        local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
-        if splBucket then
-            for _, entry in ipairs(splBucket) do
-                local lower = entry:lower()
-                if lower:find("decay") or lower:find("absent") then
-                    table.insert(decayEntries, entry)
-                end
+    -- Look for decay-tagged lines in the same session position log
+    local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
+    local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
+    if splBucket then
+        for _, entry in ipairs(splBucket) do
+            local lower = entry:lower()
+            if lower:find("decay") or lower:find("absent") then
+                table.insert(decayEntries, entry)
             end
         end
+    end
 
-        if #decayEntries > 0 then
-            for _, entry in ipairs(decayEntries) do
-                AddText(entry, 14, { 0.93, 0.65, 0.37 })
-            end
+    if #decayEntries > 0 then
+        for _, entry in ipairs(decayEntries) do
+            AddText(entry, 14, { 0.93, 0.65, 0.37 })
+        end
+    else
+        local decayEnabled = config.enabled
+        local penalty      = config.defaultPenalty or 0
+        local decayStr
+        if not decayEnabled then
+            decayStr = L["Decay disabled."]
+        elseif isCurrent then
+            decayStr = L["No decay applied yet."]
         else
-            local decayEnabled = config.enabled
-            local penalty      = config.defaultPenalty or 0
-            local decayStr
-            if not decayEnabled then
-                decayStr = L["Decay disabled."]
-            elseif isCurrent then
-                decayStr = L["No decay applied yet."]
-            else
-                decayStr = string.format(
-                    L["Decay of %d positions was applied when session ended."], penalty)
-            end
-            AddText(decayStr, 14, { 0.5, 0.5, 0.5 })
+            decayStr = string.format(
+                L["Decay of %d positions was applied when session ended."], penalty)
         end
+        AddText(decayStr, 14, { 0.5, 0.5, 0.5 })
     end
 
     layoutState.yOffset = layoutState.yOffset + 6

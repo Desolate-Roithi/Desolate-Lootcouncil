@@ -166,9 +166,7 @@ function UI_Voting:StartMilestoneChecker()
         for _, item in ipairs(items) do
             local threshold, shouldAdd = self:_ProcessMilestoneItem(item, now)
             if shouldAdd and threshold then
-                if not lowestThreshold or threshold < lowestThreshold then
-                    lowestThreshold = threshold
-                end
+                lowestThreshold = (not lowestThreshold or threshold < lowestThreshold) and threshold or lowestThreshold
                 table.insert(pendingItems, item)
             end
         end
@@ -220,18 +218,18 @@ function UI_Voting:CreateVotingFrame()
 
         -- Immediate one-time message if the player closes with unvoted items still open
         local items = self.cachedVotingItems
-        if items and #items > 0 then
-            local now = GetServerTime()
-            local API = DesolateLootcouncil.API
-            for _, item in ipairs(items) do
-                local guid      = item.sourceGUID or item.link
-                local remaining = (item.expiry or 0) - now
-                local isClosed  = API:IsItemClosed(guid)
-                local isExpired = (item.expiry and item.expiry > 0) and (remaining <= 0)
-                if not self.myVotes[guid] and not isClosed and not isExpired then
-                    DesolateLootcouncil:Print(L["You have outstanding loot votes! Type /dlc vote to reopen."])
-                    break
-                end
+        if not items or #items == 0 then return end
+
+        local now = GetServerTime()
+        local API = DesolateLootcouncil.API
+        for _, item in ipairs(items) do
+            local guid      = item.sourceGUID or item.link
+            local remaining = (item.expiry or 0) - now
+            local isClosed  = API:IsItemClosed(guid)
+            local isExpired = (item.expiry and item.expiry > 0) and (remaining <= 0)
+            if not self.myVotes[guid] and not isClosed and not isExpired then
+                DesolateLootcouncil:Print(L["You have outstanding loot votes! Type /dlc vote to reopen."])
+                break
             end
         end
         -- Milestone ticker keeps running in the background
@@ -256,19 +254,18 @@ function UI_Voting:CancelAllTimers()
 end
 
 function UI_Voting:RemoveVotingItem(guid)
-    if self.cachedVotingItems then
-        for i, item in ipairs(self.cachedVotingItems) do
-            if (item.sourceGUID or item.link) == guid then
-                table.remove(self.cachedVotingItems, i)
-                -- Clear milestone state for this item so thresholds won't fire for it
-                if self.announcedMilestones then
-                    self.announcedMilestones[guid] = nil
-                end
-                break
+    if not self.cachedVotingItems then return end
+    for i, item in ipairs(self.cachedVotingItems) do
+        if (item.sourceGUID or item.link) == guid then
+            table.remove(self.cachedVotingItems, i)
+            -- Clear milestone state for this item so thresholds won't fire for it
+            if self.announcedMilestones then
+                self.announcedMilestones[guid] = nil
             end
+            break
         end
     end
-    if self.cachedVotingItems and #self.cachedVotingItems == 0 then
+    if #self.cachedVotingItems == 0 then
         if self.votingFrame then self.votingFrame:Hide() end
         self:StopMilestoneChecker()
         return
@@ -296,12 +293,8 @@ local function SetupVotingTicker(self, API)
             if info.fontString then
                 local remaining = (info.expiry or 0) - now
                 local isClosed  = API:IsItemClosed(guid)
-
-                if isClosed or remaining <= 0 then
-                    info.fontString:SetText("|cffff0000" .. L["Closed"] .. "|r")
-                else
-                    info.fontString:SetText(FormatTime(remaining))
-                end
+                local txt = (isClosed or remaining <= 0) and ("|cffff0000" .. L["Closed"] .. "|r") or FormatTime(remaining)
+                info.fontString:SetText(txt)
             end
         end
     end)
@@ -613,11 +606,10 @@ function UI_Voting:StyleActiveVoteState(row, theme, guid, data)
             if selfBtn.themeHover then
                 selfBtn:SetBackdropColor(unpack(selfBtn.themeHover))
             end
-            if bd[4] then
-                GameTooltip:SetOwner(selfBtn, "ANCHOR_TOP")
-                GameTooltip:SetText(bd[4], 1, 1, 1, nil, true)
-                GameTooltip:Show()
-            end
+            if not bd[4] then return end
+            GameTooltip:SetOwner(selfBtn, "ANCHOR_TOP")
+            GameTooltip:SetText(bd[4], 1, 1, 1, nil, true)
+            GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", function(selfBtn)
             if selfBtn.themeBg then

@@ -29,6 +29,40 @@ local function CompareSemVer(v1, v2)
     return false
 end
 
+-- Helper functions to keep nesting flat
+local function OnVersionTimerTick()
+    if not UI_Version.versionFrame or not UI_Version.versionFrame:IsShown() then return end
+    local remaining = DesolateLootcouncil.API:GetVersionCheckCooldown()
+    if remaining > 0 then
+        UI_Version.btnRefresh:SetText(string.format(L["Wait %.0fs"], remaining))
+        UI_Version.btnRefresh:SetEnabled(false)
+    else
+        UI_Version.btnRefresh:SetText(L["Refresh / Ping"])
+        UI_Version.btnRefresh:SetEnabled(true)
+    end
+end
+
+local function OnVersionRefreshClicked(isTest)
+    local ok = DesolateLootcouncil.API:SendVersionCheck()
+    if not ok then return end
+
+    UI_Version.btnRefresh:SetEnabled(false)
+    UI_Version.btnRefresh:SetText(L["Pinging..."])
+    
+    C_Timer.After(1.5, function()
+        if UI_Version.versionFrame then
+            UI_Version:UpdateVersionList(isTest)
+        end
+    end)
+end
+
+local function OnVersionFrameHide()
+    if UI_Version.refreshTimer then
+        UI_Version:CancelTimer(UI_Version.refreshTimer)
+        UI_Version.refreshTimer = nil
+    end
+end
+
 function UI_Version:ShowVersionWindow(isTest)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
@@ -42,38 +76,11 @@ function UI_Version:ShowVersionWindow(isTest)
         self.btnRefresh = btnRefresh
 
         -- Repeating timer to handle button state and countdown text
-        self.refreshTimer = self:ScheduleRepeatingTimer(function()
-            if not self.versionFrame or not self.versionFrame:IsShown() then return end
-            local remaining = DesolateLootcouncil.API:GetVersionCheckCooldown()
-            if remaining > 0 then
-                btnRefresh:SetText(string.format(L["Wait %.0fs"], remaining))
-                btnRefresh:SetEnabled(false)
-            else
-                btnRefresh:SetText(L["Refresh / Ping"])
-                btnRefresh:SetEnabled(true)
-            end
-        end, 1)
+        self.refreshTimer = self:ScheduleRepeatingTimer(OnVersionTimerTick, 1)
 
-        btnRefresh:SetScript("OnClick", function()
-            local ok = DesolateLootcouncil.API:SendVersionCheck()
-            if not ok then return end
+        btnRefresh:SetScript("OnClick", function() OnVersionRefreshClicked(isTest) end)
 
-            btnRefresh:SetEnabled(false)
-            btnRefresh:SetText(L["Pinging..."])
-            
-            C_Timer.After(1.5, function()
-                if self.versionFrame then
-                    self:UpdateVersionList(isTest)
-                end
-            end)
-        end)
-
-        frame:HookScript("OnHide", function()
-            if self.refreshTimer then
-                self:CancelTimer(self.refreshTimer)
-                self.refreshTimer = nil
-            end
-        end)
+        frame:HookScript("OnHide", OnVersionFrameHide)
     end
 
     self.versionFrame:Show()
@@ -92,10 +99,7 @@ function UI_Version:UpdateVersionList(isTest)
     if not self.versionFrame then return end
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
-    for _, r in ipairs(self.rowPool) do
-        r:Hide()
-        r:ClearAllPoints()
-    end
+    NativeGUI:ResetRowPool(self.rowPool)
 
     if not self.scrollFrame then
         -- Leave space for footer button (bottomOffset = -46)

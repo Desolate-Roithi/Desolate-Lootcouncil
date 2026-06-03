@@ -5,6 +5,130 @@ if AT.abortLoad then return end
 local UI_ItemManager = DesolateLootcouncil:NewModule("UI_ItemManager")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
+-- Local helper functions
+local OnItemInputEnter = function(edit)
+    edit:ClearFocus()
+    local text = edit:GetText()
+    if text and text ~= "" and UI_ItemManager.tempList then
+        DesolateLootcouncil.API:AddManagedItem(text, UI_ItemManager.tempList)
+        edit:SetText("")
+        UI_ItemManager:RefreshWindow()
+    end
+end
+
+local OnTargetListChanged = function(value)
+    UI_ItemManager.tempList = value
+end
+
+local OnAddClicked = function()
+    local text = UI_ItemManager.itemEditBox:GetText()
+    if text and text ~= "" and UI_ItemManager.tempList then
+        DesolateLootcouncil.API:AddManagedItem(text, UI_ItemManager.tempList)
+        UI_ItemManager.itemEditBox:SetText("")
+        UI_ItemManager:RefreshWindow()
+    end
+end
+
+local OnSyncRaidClicked = function()
+    DesolateLootcouncil.API:SyncItemManagerToRaid()
+    DesolateLootcouncil:Print(L["Item Manager lists synced to raid."])
+end
+
+local OnViewListChanged = function(value)
+    UI_ItemManager.viewListKey = value
+    UI_ItemManager:RefreshWindow()
+end
+
+local OnRemoveItemClicked = function(list, itemID)
+    list.items[itemID] = nil
+    DesolateLootcouncil:DLC_Log(string.format(L["Removed item ID: %s"], itemID))
+    UI_ItemManager:RefreshWindow()
+end
+
+local OnLinkLabelClicked = function(itemLink)
+    if itemLink then
+        local chatbox = ChatEdit_ChooseBoxForSend()
+        ChatEdit_ActivateChat(chatbox)
+        chatbox:Insert(itemLink)
+    end
+end
+
+local OnItemLoadCallback = function()
+    if UI_ItemManager.frame and UI_ItemManager.frame:IsShown() then
+        UI_ItemManager:RefreshWindow()
+    end
+end
+
+local OnRowIconLeave = function()
+    GameTooltip:Hide()
+end
+
+local ShowItemTooltip = function(iconBtn, itemLink, itemID)
+    GameTooltip:SetOwner(iconBtn, "ANCHOR_CURSOR")
+    if itemLink then
+        GameTooltip:SetHyperlink(itemLink)
+    else
+        GameTooltip:SetItemByID(itemID)
+    end
+    GameTooltip:Show()
+end
+
+local PopulateRow = function(row, itemID, list)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    -- Fetch item information
+    local name, itemLink, _, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemID)
+    if not itemLink then
+        local itemObj = Item:CreateFromItemID(itemID)
+        if not itemObj:IsItemEmpty() then itemObj:ContinueOnItemLoad(OnItemLoadCallback) end
+        name = L["Loading..."]
+        itemTexture = C_Item.GetItemIconByID(itemID)
+    end
+
+    -- Remove Button
+    if not row.btnRemove then
+        row.btnRemove = NativeGUI:CreateButton(row, L["Remove"], 70, 24, "Stop")
+    end
+    row.btnRemove:ClearAllPoints()
+    row.btnRemove:SetPoint("RIGHT", -8, 0)
+    row.btnRemove:Show()
+    row.btnRemove:SetScript("OnClick", function() OnRemoveItemClicked(list, itemID) end)
+
+    -- Icon
+    if not row.iconBtn then
+        row.iconBtn = CreateFrame("Button", nil, row)
+        row.iconBtn:SetSize(24, 24)
+        row.iconBtn:SetPoint("LEFT", 8, 0)
+        row.iconBtn.texture = row.iconBtn:CreateTexture(nil, "BACKGROUND")
+        row.iconBtn.texture:SetAllPoints()
+    end
+    row.iconBtn.texture:SetTexture(itemTexture or 134400)
+    row.iconBtn:Show()
+
+    local ShowTip = function() ShowItemTooltip(row.iconBtn, itemLink, itemID) end
+    row.iconBtn:SetScript("OnClick", ShowTip)
+    row.iconBtn:SetScript("OnEnter", ShowTip)
+    row.iconBtn:SetScript("OnLeave", OnRowIconLeave)
+
+    -- Link Label
+    if not row.linkLabel then
+        row.linkLabel = CreateFrame("Button", nil, row)
+        row.linkLabel:SetHeight(20)
+        row.linkLabel.text = row.linkLabel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.linkLabel.text:SetPoint("LEFT", 0, 0)
+        row.linkLabel.text:SetPoint("RIGHT", 0, 0)
+        row.linkLabel.text:SetJustifyH("LEFT")
+    end
+    row.linkLabel:ClearAllPoints()
+    row.linkLabel:SetPoint("LEFT", row.iconBtn, "RIGHT", 8, 0)
+    row.linkLabel:SetPoint("RIGHT", row.btnRemove, "LEFT", -10, 0)
+    row.linkLabel.text:SetText(itemLink or name)
+    row.linkLabel:Show()
+    row.linkLabel:SetScript("OnClick", function() OnLinkLabelClicked(itemLink) end)
+    row.linkLabel:SetScript("OnEnter", ShowTip)
+    row.linkLabel:SetScript("OnLeave", OnRowIconLeave)
+end
+
 function UI_ItemManager:ShowItemManagerWindow()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
@@ -32,15 +156,7 @@ function UI_ItemManager:RefreshWindow()
         local container, eb = NativeGUI:CreateEditBox(self.frame, L["Item Name/Link/ID"])
         container:SetWidth(180)
         container:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 16, -42)
-        eb:SetScript("OnEnterPressed", function(edit)
-            edit:ClearFocus()
-            local text = edit:GetText()
-            if text and text ~= "" and self.tempList then
-                DesolateLootcouncil.API:AddManagedItem(text, self.tempList)
-                edit:SetText("")
-                self:RefreshWindow()
-            end
-        end)
+        eb:SetScript("OnEnterPressed", OnItemInputEnter)
         self.itemInput = container
         self.itemEditBox = eb
     end
@@ -48,9 +164,7 @@ function UI_ItemManager:RefreshWindow()
     -- 2. Target list dropdown
     self.tempList = self.tempList or 1
     if not self.listDrop then
-        local dropContainer = NativeGUI:CreateDropdown(self.frame, L["Target List"], 140, listNames, self.tempList, function(value)
-            self.tempList = value
-        end)
+        local dropContainer = NativeGUI:CreateDropdown(self.frame, L["Target List"], 140, listNames, self.tempList, OnTargetListChanged)
         dropContainer:SetPoint("TOPLEFT", self.itemInput, "TOPRIGHT", 8, 0)
         self.listDrop = dropContainer
     else
@@ -62,14 +176,7 @@ function UI_ItemManager:RefreshWindow()
     if not self.btnAdd then
         local btn = NativeGUI:CreateButton(self.frame, L["Add"], 60, 24, "Pass")
         btn:SetPoint("LEFT", self.listDrop, "RIGHT", 8, -8)
-        btn:SetScript("OnClick", function()
-            local text = self.itemEditBox:GetText()
-            if text and text ~= "" and self.tempList then
-                DesolateLootcouncil.API:AddManagedItem(text, self.tempList)
-                self.itemEditBox:SetText("")
-                self:RefreshWindow()
-            end
-        end)
+        btn:SetScript("OnClick", OnAddClicked)
         self.btnAdd = btn
     end
 
@@ -78,10 +185,7 @@ function UI_ItemManager:RefreshWindow()
         if not self.btnSync then
             local btn = NativeGUI:CreateButton(self.frame, L["Sync Raid"], 90, 24, "Bid")
             btn:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -16, -58)
-            btn:SetScript("OnClick", function()
-                DesolateLootcouncil.API:SyncItemManagerToRaid()
-                DesolateLootcouncil:Print(L["Item Manager lists synced to raid."])
-            end)
+            btn:SetScript("OnClick", OnSyncRaidClicked)
             self.btnSync = btn
         end
         self.btnSync:Show()
@@ -92,10 +196,7 @@ function UI_ItemManager:RefreshWindow()
     -- 5. Select list to view dropdown
     self.viewListKey = self.viewListKey or 1
     if not self.viewDrop then
-        local dropContainer = NativeGUI:CreateDropdown(self.frame, L["Select List to View"], 220, listNames, self.viewListKey, function(value)
-            self.viewListKey = value
-            self:RefreshWindow()
-        end)
+        local dropContainer = NativeGUI:CreateDropdown(self.frame, L["Select List to View"], 220, listNames, self.viewListKey, OnViewListChanged)
         dropContainer:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 16, -84)
         self.viewDrop = dropContainer
     else
@@ -103,127 +204,45 @@ function UI_ItemManager:RefreshWindow()
         self.viewDrop:SetValue(self.viewListKey)
     end
 
-    for _, r in ipairs(self.rowPool) do
-        r:Hide()
-        r:ClearAllPoints()
-    end
-
     if not self.scrollFrame then
         local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.frame, -125, -16)
         self.scrollFrame = scrollFrame
         self.scrollContent = scrollContent
+
+        local scrollbar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        local function OnScroll() self:UpdateScrollList() end
+        if scrollbar then
+            scrollbar:HookScript("OnValueChanged", OnScroll)
+        end
     end
 
     self.scrollFrame:Show()
     self.scrollContent:Show()
 
-    local topOffset = 0
-    local rowHeight = 32
-    local count = 0
-
-    if db.PriorityLists and self.viewListKey then
-        local list = db.PriorityLists[self.viewListKey]
-        if list and list.items then
-            -- Gather and sort itemIDs so list is deterministic
-            local sortedIDs = {}
-            for id in pairs(list.items) do table.insert(sortedIDs, id) end
-            table.sort(sortedIDs)
-
-            for _, itemID in ipairs(sortedIDs) do
-                count = count + 1
-                local name, itemLink, _, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemID)
-
-                if not itemLink then
-                    local itemObj = Item:CreateFromItemID(itemID)
-                    if not itemObj:IsItemEmpty() then
-                        itemObj:ContinueOnItemLoad(function()
-                            if self.frame and self.frame:IsShown() then
-                                self:RefreshWindow()
-                            end
-                        end)
-                    end
-                    name = L["Loading..."]
-                    itemTexture = C_Item.GetItemIconByID(itemID)
-                end
-
-                if not self.rowPool[count] then
-                    self.rowPool[count] = NativeGUI:CreateRowContainer(self.scrollContent, false)
-                end
-                local row = self.rowPool[count]
-                row:Show()
-                row:SetHeight(rowHeight)
-                row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
-                row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
-
-                -- Remove Button
-                if not row.btnRemove then
-                    local btn = NativeGUI:CreateButton(row, L["Remove"], 70, 24, "Stop")
-                    row.btnRemove = btn
-                end
-                row.btnRemove:ClearAllPoints()
-                row.btnRemove:SetPoint("RIGHT", -8, 0)
-                row.btnRemove:Show()
-                row.btnRemove:SetScript("OnClick", function()
-                    list.items[itemID] = nil
-                    DesolateLootcouncil:DLC_Log(string.format(L["Removed item ID: %s"], itemID))
-                    self:RefreshWindow()
-                end)
-
-                -- Icon
-                if not row.iconBtn then
-                    local btn = CreateFrame("Button", nil, row)
-                    btn:SetSize(24, 24)
-                    btn:SetPoint("LEFT", 8, 0)
-                    local tex = btn:CreateTexture(nil, "BACKGROUND")
-                    tex:SetAllPoints()
-                    btn.texture = tex
-                    row.iconBtn = btn
-                end
-                row.iconBtn.texture:SetTexture(itemTexture or 134400)
-                row.iconBtn:Show()
-
-                local function ShowTip()
-                    GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
-                    if itemLink then GameTooltip:SetHyperlink(itemLink) else GameTooltip:SetItemByID(itemID) end
-                    GameTooltip:Show()
-                end
-                row.iconBtn:SetScript("OnClick", ShowTip)
-                row.iconBtn:SetScript("OnEnter", ShowTip)
-                row.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-                -- Link Label (sandwiched dynamically)
-                if not row.linkLabel then
-                    local btn = CreateFrame("Button", nil, row)
-                    btn:SetHeight(20)
-                    local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                    txt:SetPoint("LEFT", 0, 0)
-                    txt:SetPoint("RIGHT", 0, 0)
-                    txt:SetJustifyH("LEFT")
-                    btn.text = txt
-                    row.linkLabel = btn
-                end
-                row.linkLabel:ClearAllPoints()
-                row.linkLabel:SetPoint("LEFT", row.iconBtn, "RIGHT", 8, 0)
-                row.linkLabel:SetPoint("RIGHT", row.btnRemove, "LEFT", -10, 0)
-                row.linkLabel.text:SetText(itemLink or name)
-                row.linkLabel:Show()
-                row.linkLabel:SetScript("OnClick", function()
-                    if itemLink then
-                        local chatbox = ChatEdit_ChooseBoxForSend()
-                        ChatEdit_ActivateChat(chatbox)
-                        chatbox:Insert(itemLink)
-                    end
-                end)
-                row.linkLabel:SetScript("OnEnter", ShowTip)
-                row.linkLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-                topOffset = topOffset + rowHeight + 8
-            end
+    -- Gather and sort itemIDs so list is deterministic
+    self.sortedIDs = {}
+    local list = (db.PriorityLists and self.viewListKey) and db.PriorityLists[self.viewListKey]
+    local items = list and list.items
+    if items then
+        for id in pairs(items) do
+            table.insert(self.sortedIDs, id)
         end
+        table.sort(self.sortedIDs)
     end
 
-    if count == 0 then
+    self:UpdateScrollList()
+end
+
+function UI_ItemManager:UpdateScrollList()
+    if not self.frame or not self.frame:IsShown() then return end
+
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local db = DesolateLootcouncil.API:GetItemManagerDB()
+    local list = (db.PriorityLists and self.viewListKey) and db.PriorityLists[self.viewListKey]
+
+    local totalItems = self.sortedIDs and #self.sortedIDs or 0
+    if totalItems == 0 then
+        NativeGUI:ResetRowPool(self.rowPool)
         if not self.emptyLabel then
             self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             self.emptyLabel:SetPoint("TOPLEFT", 10, -10)
@@ -231,8 +250,51 @@ function UI_ItemManager:RefreshWindow()
         self.emptyLabel:SetText(L["No assigned items."])
         self.emptyLabel:Show()
         self.scrollContent:SetHeight(40)
-    else
-        if self.emptyLabel then self.emptyLabel:Hide() end
-        self.scrollContent:SetHeight(topOffset + 10)
+        return
+    end
+
+    if self.emptyLabel then self.emptyLabel:Hide() end
+
+    local rowHeight = 32
+    local rowSpacing = 8
+    local rowStride = rowHeight + rowSpacing
+    local viewHeight = self.scrollFrame:GetHeight() or 350
+    local maxVisible = math.ceil(viewHeight / rowStride) + 1
+
+    local scrollContent = self.scrollContent
+    local scrollFrame = self.scrollFrame
+
+    local totalHeight = totalItems * rowStride - rowSpacing
+    scrollContent:SetHeight(math.max(1, totalHeight))
+
+    local offset = scrollFrame:GetVerticalScroll()
+    local startIndex = math.floor(offset / rowStride) + 1
+    if startIndex < 1 then startIndex = 1 end
+    local endIndex = startIndex + maxVisible - 1
+    if endIndex > totalItems then endIndex = totalItems end
+
+    -- Hide all rows first, we only show/position the ones we need
+    for _, row in ipairs(self.rowPool) do
+        row:Hide()
+    end
+
+    local count = 0
+    for i = startIndex, endIndex do
+        count = count + 1
+        local itemID = self.sortedIDs[i]
+
+        if not self.rowPool[count] then
+            self.rowPool[count] = NativeGUI:CreateRowContainer(scrollContent, false)
+        end
+        local row = self.rowPool[count]
+        row:Show()
+        row:SetHeight(rowHeight)
+        row:ClearAllPoints()
+
+        local topOffset = -((i - 1) * rowStride)
+        row:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", 0, topOffset)
+        row:SetPoint("TOPRIGHT", scrollContent, "TOPRIGHT", -12, topOffset)
+
+        PopulateRow(row, itemID, list)
     end
 end
