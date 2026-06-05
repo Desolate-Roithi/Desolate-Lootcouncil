@@ -734,7 +734,7 @@ end
 local gruResetTimer = nil
 
 function Roster:CheckForNewRaidMembers()
-    if not IsInGroup() or not DesolateLootcouncil:AmILootMaster() then return end
+    if not IsInRaid() or not DesolateLootcouncil:AmILootMaster() then return end
     
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config or not config.sessionActive then return end

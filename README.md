@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.0.2-Alpha  
-**Last Updated:** 2026-05-31  
+**Latest Version:** v1.0.5-Alpha  
+**Last Updated:** 2026-06-05  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
 ## Features
@@ -45,6 +45,30 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 
 ## Recent Changes
 
+### v1.0.5-Alpha
+* **Raid-Only Roster Gating**:
+    - Restricted the automatic scanning and adding of new players to the priority lists to Raid groups and Raid instances only. This prevents officers' databases from being altered and warnings about alts being printed in 5-man party groups.
+* **WoW 12.0.7 API Compatibility**:
+    - Checked all group management API shifts coming in Patch 12.0.7 (such as global functions migrating into `C_PartyInfo`) and verified full compatibility.
+
+### v1.0.4-Alpha
+* **Trade Window Auto-Refresh**:
+    - Added automatic refresh for the Pending Trades and History windows on item award/re-award, decoupling modules.
+* **UI Row Pooling & Virtual Scrolling**:
+    - Optimized rendering with virtual row pooling, reducing nested layout nesting levels, and enhancing the Item Manager.
+
+### v1.0.3-Alpha
+* **Group Leader & Loot Master Robustness**:
+    - Added leader change tracking to automatically reset and recalculate the Loot Master when the Group Leader changes.
+* **Item Manager Sync Gate**:
+    - Prevented automatic or manual item manager database syncing in raids with fewer than 10 players to avoid spamming small groups.
+* **History Retention**:
+    - Ensured that the awarded items database (`session.awarded`) is preserved and only wiped on starting a new raid session rather than individual voting sessions.
+* **Recipe Voting Options**:
+    - Added specialized recipe voting buttons (Item Class 9). Displays exactly 3 buttons on the Voting Window: "Ready to Craft" (for immediate learning), "Unskilled" (for missing profession skill levels), and "Pass".
+* **EditBox Shift-Click Link Insertion**:
+    - Allowed raiders to Shift-Click item links into custom EditBox input fields (e.g. the Item Manager's item name input) and restored keyboard focus.
+
 ### v1.0.2-Alpha
 * **Localization Auditing**:
     - Fixed a missing translation error for private voter notes inside the award window.
@@ -69,26 +93,13 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
     - Added detailed log outputs to help officers diagnose automatic pass decisions.
     - Added an automatic state synchronization check when raid members load zones or run version checks.
 
-### v0.9.2-Beta
-* **Roster Disband Spam Fix**:
-    - Fixed a bug where party roster changes in solo play or dungeons would print incorrect raid disband alerts. The alert now only displays when an active master loot session ends.
+---
 
-### v0.9.1-Beta
-* **Network Stability**:
-    - Improved packet routing and connection reliability under the current game client APIs.
+## Beta Releases (v0.8.5-Beta - v0.9.5-Beta)
 
-### v0.9.0-Beta
-* **Modular Code Separation**:
-    - Separated the background automatic passing system from the front-end user interface.
-    - Improved overall stability during periods of high server latency.
-
-### v0.8.6-Beta
-* **Encounter Widget Polish**:
-    - Added a coordinate widget tool to allow solo players to test and preview sequences.
-    - Roster management now automatically registers untracked addon users as mains during active sessions.
-    - Added trade safety checks to ensure items cannot be accidentally equipped while trading.
-
-### v0.8.5-Beta
-* **Multi-Language Preparations**:
-    - Structured all UI text blocks to support dynamic localization dictionaries.
-    - Hardened the database validation check logic before automated pass actions are triggered.
+Major features and stability improvements introduced during the Beta phase:
+* **Modular Architecture**: Separated the background automatic passing systems from the front-end interface to improve latency and stability.
+* **Alt and Roster Management**: Added automatic registration of mains, alt-character linking, and intelligent raid disband alert suppression.
+* **Encounter Tools**: Integrated a custom boss sequence widget (for Lu'Ra encounter) allowing coordination of raid markers.
+* **Network & Database Safety**: Improved packet routing, hardened database check validation, and added trade safeguards to prevent accidental item equipping.
+* **Localization Foundation**: Structured UI systems to support multi-language localizations.
