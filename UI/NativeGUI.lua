@@ -1085,3 +1085,7 @@ function UI_NativeGUI:FormatTime(ts, fmt)
     if not ts then return "" end
     return date(fmt or "%H:%M", ts)
 end
+
+function UI_NativeGUI:ExpandWindow(frame, windowName)
+    ExpandWindow(frame, windowName)
+end

@@ -33,6 +33,8 @@ function Persistence:SaveFramePosition(frame, windowName)
         target = frame.frame
     end
 
+    if frame.preventSave or target.preventSave then return end
+
     local w = target:GetWidth() or 0
     local h = target:GetHeight() or 0
 
@@ -293,7 +295,42 @@ end
 function Persistence:ResetPositions()
     local db = DesolateLootcouncil.db.profile
     db.positions = {}
-    DesolateLootcouncil:Print("Window positions reset to defaults. Please reload UI or re-open windows.")
+    
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local frameNames = {
+        DLCSettingsFrame = "Config",
+        DLCLootFrame = "Loot",
+        DLCMonitorFrame = "Monitor",
+        DLCTradeFrame = "Trade",
+        DLCVotingFrame = "Voting",
+        DLCSessionHistoryFrame = "SessionHistory",
+        DLCPriorityHistoryFrame = "PriorityHistory",
+        DLCRaidHistoryFrame = "RaidHistory",
+        DLCVersionFrame = "Version",
+        DLCAttendanceFrame = "Attendance",
+        DLCAwardFrame = "Award",
+        DLCItemManagerFrame = "ItemManager",
+        DLCPriorityOverride = "PriorityOverride"
+    }
+
+    for name, layoutKey in pairs(frameNames) do
+        local frame = _G[name]
+        if frame and type(frame) == "table" and frame.SetWidth then
+            frame.preventSave = true
+            -- 1. If collapsed, force expand
+            if frame.isCollapsed and NativeGUI and NativeGUI.ExpandWindow then
+                NativeGUI:ExpandWindow(frame, layoutKey)
+            end
+            -- 2. Clear any collapse flags
+            frame.isCollapsed = nil
+            frame.startCollapsed = nil
+            -- 3. Restore default size and position immediately
+            self:RestoreFramePosition(frame, layoutKey)
+            frame.preventSave = nil
+        end
+    end
+
+    DesolateLootcouncil:Print("Window positions reset to defaults.")
 end
 
 DesolateLootcouncil.Persistence = Persistence
