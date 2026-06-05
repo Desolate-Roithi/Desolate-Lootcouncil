@@ -132,6 +132,10 @@ function SlashCommands.Handle(input)
         if LuraWidget and LuraWidget.HandleSlash then
             LuraWidget:HandleSlash(string.lower(args[2] or ""))
         end
+    elseif cmd == "reset" or cmd == "resetpositions" then
+        if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ResetPositions then
+            DesolateLootcouncil.Persistence:ResetPositions()
+        end
     else
         DesolateLootcouncil:Print("Unknown command.")
         DesolateLootcouncil:Print("Available Commands:")
@@ -141,6 +145,7 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:Print("  |cff33ff99/dlc history|r - Open Loot History")
         DesolateLootcouncil:Print("  |cff33ff99/dlc version|r - Check versions")
         DesolateLootcouncil:Print("  |cff33ff99/dlc status|r - Show debug status")
+        DesolateLootcouncil:Print("  |cff33ff99/dlc reset|r - Reset all window positions to default")
         DesolateLootcouncil:Print("Loot Master (LM) Only:")
         DesolateLootcouncil:Print("  |cff33ff99/dlc monitor|r - Open Master Monitor")
         DesolateLootcouncil:Print("  |cff33ff99/dlc loot|r - Open Loot Drop Window")

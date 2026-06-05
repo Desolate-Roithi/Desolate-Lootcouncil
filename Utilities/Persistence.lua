@@ -88,6 +88,16 @@ function Persistence:RestoreFramePosition(frame, windowName)
         local safeWidth = config.width or default.width or 400
         local safeHeight = config.height or default.height or 300
         
+        -- If it was saved as collapsed with corrupted narrow dimensions, recover from defaults
+        if config.isCollapsed then
+            if safeWidth == 220 or safeWidth < 250 then
+                safeWidth = default.width or 400
+            end
+            if safeHeight == 42 or safeHeight < 150 then
+                safeHeight = default.height or 300
+            end
+        end
+
         if safeWidth < 50 then safeWidth = default.width or 400 end
         if safeHeight < 30 then safeHeight = default.height or 300 end
 
@@ -96,6 +106,10 @@ function Persistence:RestoreFramePosition(frame, windowName)
 
         if frame.SetHeight then frame:SetHeight(safeHeight) end
         target:SetHeight(safeHeight)
+
+        -- Initialize expanded properties on the target so NativeGUI knows the original sizes
+        target._expandedWidth = safeWidth
+        target._expandedHeight = safeHeight
 
         -- Store the collapsed state to apply AFTER the window is fully initialized
         if config.isCollapsed then

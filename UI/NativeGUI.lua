@@ -43,8 +43,25 @@ end
 --- Collapse a window down to its title bar height and a compact width.
 local function CollapseWindow(frame, windowName)
     frame.isCollapsed = true
-    frame._expandedHeight = frame:GetHeight()
-    frame._expandedWidth  = frame:GetWidth()
+    -- Only snapshot current size if it's not already collapsed/corrupted
+    local currentW = frame:GetWidth() or 0
+    local currentH = frame:GetHeight() or 0
+    if currentW > 220 then
+        frame._expandedWidth = currentW
+    end
+    if currentH > 42 then
+        frame._expandedHeight = currentH
+    end
+
+    -- Fallback to default layout size if expanded size is still invalid/missing
+    if not frame._expandedWidth or frame._expandedWidth <= 220 then
+        local defaultLayout = DesolateLootcouncil.DefaultLayouts and DesolateLootcouncil.DefaultLayouts[windowName]
+        frame._expandedWidth = defaultLayout and defaultLayout.width or 400
+    end
+    if not frame._expandedHeight or frame._expandedHeight <= 42 then
+        local defaultLayout = DesolateLootcouncil.DefaultLayouts and DesolateLootcouncil.DefaultLayouts[windowName]
+        frame._expandedHeight = defaultLayout and defaultLayout.height or 300
+    end
 
     -- Snapshot which children were visible so we only restore those on expand
     frame._collapseSnapshot = {}

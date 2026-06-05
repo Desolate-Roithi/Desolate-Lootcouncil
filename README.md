@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.0.6-Alpha  
+**Latest Version:** v1.0.7-Alpha  
 **Last Updated:** 2026-06-05  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
@@ -34,6 +34,7 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 | `/dlc history` | Open the session loot and attendance history window. |
 | `/dlc status` | Print current connection, session, and autopass statuses to chat. |
 | `/dlc version` | Query and verify addon versions installed by raid members. |
+| `/dlc reset` | Reset all window layout sizes and positions to defaults. |
 | `/dlc sim` | Developer tool to test simulated scenarios and players. |
 
 ## Installation
@@ -44,6 +45,12 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v1.0.7-Alpha
+* **Corrupted Layout Size Self-Healing**:
+    - Added an automatic repair layer that checks if pre-existing window configurations in the DB were saved in a squeezed/collapsed state. The layout engine now discards narrow sizes and forces safe recovery back to default expanded templates.
+* **Positions Reset Slash Command**:
+    - Implemented `/dlc reset` and `/dlc resetpositions` commands to clear all window coordinates and sizes immediately if a layout is corrupted or off-screen.
 
 ### v1.0.6-Alpha
 * **Settings Layout & NativeGUI Size Persistence**:
