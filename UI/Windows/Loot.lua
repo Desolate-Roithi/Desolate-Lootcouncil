@@ -20,7 +20,9 @@ local function OnConnectionTooltipEnter(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
     local active = DesolateLootcouncil:GetActiveUserCount()
     local total = GetNumGroupMembers()
-    if total == 0 then total = 1; active = 1 end
+    if total == 0 then
+        total = 1; active = 1
+    end
     GameTooltip:AddLine(string.format("Addon Connection: [%d] / [%d]", active, total), 1, 1, 1)
     GameTooltip:Show()
 end
@@ -38,6 +40,29 @@ local function OnRefreshConnectionsClicked()
     end
 end
 
+local function ParseSemVer(v)
+    if not v or v == "" then return 0, 0, 0, "" end
+    local major, minor, patch, suffix = string.match(v, "(%d+)%.(%d+)%.(%d+)%-?(.*)")
+    if not major then return 0, 0, 0, "" end
+    suffix = suffix or ""
+    if suffix == "SIM" then suffix = "" end
+    return tonumber(major), tonumber(minor), tonumber(patch), suffix
+end
+
+local function CompareSemVer(v1, v2)
+    local M1, m1, p1, s1 = ParseSemVer(v1)
+    local M2, m2, p2, s2 = ParseSemVer(v2)
+    if M1 ~= M2 then return M1 > M2 end
+    if m1 ~= m2 then return m1 > m2 end
+    if p1 ~= p2 then return p1 > p2 end
+    if s1 == "" and s2 ~= "" then return true end
+    if s1 ~= "" and s2 == "" then return false end
+    if s1 ~= "" and s2 ~= "" then
+        return s1:lower() > s2:lower()
+    end
+    return false
+end
+
 local function OnTimerTick()
     if not UI_Loot.lootFrame:IsShown() then return end
     local rem = DesolateLootcouncil.API:GetVersionCheckCooldown()
@@ -52,12 +77,40 @@ local function OnTimerTick()
     -- Update indicator light
     local activeC = DesolateLootcouncil:GetActiveUserCount()
     local totalC = GetNumGroupMembers()
-    if totalC == 0 then totalC = 1; activeC = 1 end
-    local ra, ga, ba = 1, 0, 0
+    if totalC == 0 then totalC = 1 end
+
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simCount = Sim and Sim:GetCount() or 0
+    if simCount > 0 then
+        totalC = totalC + simCount
+    end
+
+    local ra, ga, ba = 1, 0, 0 -- Red: at least one player missing addon
     if activeC >= totalC then
-        ra, ga, ba = 0, 1, 0
-    elseif activeC > 1 then
-        ra, ga, ba = 1, 1, 0
+        -- 100% have the addon, check versions
+        local playerVersions = DesolateLootcouncil.API:GetPlayerVersions()
+        local localVer = DesolateLootcouncil.version
+        local highestVerStr = localVer or "1.0.0"
+
+        for _, ver in pairs(playerVersions) do
+            if ver and CompareSemVer(ver, highestVerStr) then
+                highestVerStr = ver
+            end
+        end
+
+        local hasOutdated = false
+        for _, ver in pairs(playerVersions) do
+            if ver and CompareSemVer(highestVerStr, ver) then
+                hasOutdated = true
+                break
+            end
+        end
+
+        if hasOutdated then
+            ra, ga, ba = 1, 1, 0 -- Yellow: some are out of date
+        else
+            ra, ga, ba = 0, 1, 0 -- Green: all up-to-date
+        end
     end
     UI_Loot.statusLight:SetVertexColor(ra, ga, ba)
 end
@@ -145,7 +198,7 @@ function UI_Loot:ShowLootWindow(lootTable)
         -- Connection indicator light
         local light = frame:CreateTexture(nil, "OVERLAY")
         light:SetSize(12, 12)
-        light:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -45, -16)
+        light:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -55, -16)
         light:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
         self.statusLight = light
 
@@ -157,13 +210,18 @@ function UI_Loot:ShowLootWindow(lootTable)
 
         refreshBtn:SetScript("OnClick", OnRefreshConnectionsClicked)
 
-        self.refreshTimer = self:ScheduleRepeatingTimer(OnTimerTick, 1)
-
         frame:HookScript("OnHide", OnLootFrameHide)
     end
 
     self.activeLootTable = lootTable
     self.lootFrame:Show()
+
+    if not self.refreshTimer then
+        -- Seed local player once so the connection light counts us immediately
+        DesolateLootcouncil.API:SeedSelf()
+        self.refreshTimer = self:ScheduleRepeatingTimer(OnTimerTick, 1)
+        OnTimerTick()
+    end
 
     NativeGUI:ResetRowPool(self.rowPool)
 
@@ -235,7 +293,8 @@ function UI_Loot:ShowLootWindow(lootTable)
 
         if not row.catDrop then
             -- We create a custom native dropdown
-            row.catDrop, row.catDropBtn = NativeGUI:CreateDropdown(row, nil, 110, catList, nil, function(value) OnCategorySelected(row, value) end)
+            row.catDrop, row.catDropBtn = NativeGUI:CreateDropdown(row, nil, 110, catList, nil,
+                function(value) OnCategorySelected(row, value) end)
         end
         row.catDrop:ClearAllPoints()
         row.catDrop:SetPoint("RIGHT", row.removeBtn, "LEFT", -6, 7) -- Y offset compensates for dropdown container label layout
@@ -281,4 +340,10 @@ end
 
 function UI_Loot:OnLootWindowUpdate(eventName, lootTable)
     self:ShowLootWindow(lootTable)
+end
+
+if _G.DLC_TEST_MODE then
+    UI_Loot.ParseSemVer = ParseSemVer
+    UI_Loot.CompareSemVer = CompareSemVer
+    UI_Loot.OnTimerTick = OnTimerTick
 end

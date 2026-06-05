@@ -425,17 +425,28 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
     end
 
     local API = DesolateLootcouncil.API
-    local awarded           = API:GetAwardedList()
+    local awarded
+    local checkTimestamp = false
+    if isCurrent then
+        awarded = API:GetAwardedList()
+    else
+        if sessionEntry.awarded then
+            awarded = sessionEntry.awarded
+        else
+            awarded = API:GetAwardedList()
+            checkTimestamp = true
+        end
+    end
     local lootCount         = 0
     local sessionDatePrefix = sessionEntry.date and sessionEntry.date:sub(1, 10)
 
     for awardIdx, item in ipairs(awarded) do
         local include
-        if isCurrent then
-            include = true
-        else
+        if checkTimestamp then
             local d = item.timestamp and date("%Y-%m-%d", item.timestamp)
             include = (d and sessionDatePrefix and d == sessionDatePrefix) or false
+        else
+            include = true
         end
 
         if include then
@@ -753,6 +764,7 @@ function UI_RaidHistory:Refresh()
             date      = date("%Y-%m-%d %H:%M:%S"),
             zone      = GetRealZoneText() or "Unknown",
             attendees = config.currentAttendees or {},
+            attendeeDetails = config.attendeeDetails or {},
             sessionID = config.currentSessionID,
             bossLogs  = config.bossLogs or {},
         }

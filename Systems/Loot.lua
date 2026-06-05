@@ -40,6 +40,7 @@ function Loot:OnEnable()
 
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
     self:RegisterEvent("CHAT_MSG_LOOT", "OnLootMessage")
+    self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
 
     DesolateLootcouncil:DLC_Log(L["Systems/Loot Loaded"])
 
@@ -206,6 +207,28 @@ function Loot:OnLootOpened()
     DesolateLootcouncil:DLC_Log(L["--- SCAN END ---"])
 end
 
+function Loot:OnStartLootRoll(event, rollID)
+    if not DesolateLootcouncil:AmILootMaster() then return end
+
+    local link = GetLootRollItemLink(rollID)
+    if not link then return end
+
+    local itemID = self:GetItemIDFromLink(link)
+    if not itemID then return end
+
+    local texture, _, count, quality = GetLootRollItemInfo(rollID)
+    local category = self:CategorizeItem(link, quality)
+    local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
+
+    if quality >= minQuality or category ~= "Junk/Pass" then
+        local guid = "BlizRoll-" .. itemID .. "-" .. rollID
+        if self:AddSessionItem(link, guid, texture, count or 1, category, itemID) then
+            DesolateLootcouncil:DLC_Log(string.format(L["AUTO-ADDED from roll: %s"], link))
+            self:SendMessage("DLC_LOOT_WINDOW_UPDATE", DesolateLootcouncil.db.profile.session.loot)
+        end
+    end
+end
+
 function Loot:OnLootMessage(event, msg)
     if not DesolateLootcouncil:AmILootMaster() then return end
 
@@ -240,9 +263,60 @@ function Loot:OnLootMessage(event, msg)
                 local category = self:CategorizeItem(link, quality)
                 local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
 
-                local guid = "Roll-" .. itemID .. "-" .. GetServerTime()
-
                 if quality >= minQuality or category ~= "Junk/Pass" then
+                    local session = DesolateLootcouncil.db.profile.session
+                    local foundClaim = false
+
+                    -- Check session.loot
+                    if session.loot then
+                        for _, entry in ipairs(session.loot) do
+                            if entry.itemID == itemID and not entry.msgClaimed then
+                                local guid = entry.sourceGUID or ""
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                    entry.msgClaimed = true
+                                    foundClaim = true
+                                    DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (loot): %s (GUID: %s)", link, guid))
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    -- Check session.bidding
+                    if not foundClaim and session.bidding then
+                        for _, entry in ipairs(session.bidding) do
+                            if entry.itemID == itemID and not entry.msgClaimed then
+                                local guid = entry.sourceGUID or ""
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                    entry.msgClaimed = true
+                                    foundClaim = true
+                                    DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (bidding): %s (GUID: %s)", link, guid))
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    -- Check session.awarded
+                    if not foundClaim and session.awarded then
+                        for _, entry in ipairs(session.awarded) do
+                            if entry.itemID == itemID and not entry.msgClaimed then
+                                local guid = entry.sourceGUID or ""
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                    entry.msgClaimed = true
+                                    foundClaim = true
+                                    DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (awarded): %s (GUID: %s)", link, guid))
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    if foundClaim then
+                        return
+                    end
+
+                    local guid = "LootMsg-" .. itemID .. "-" .. GetServerTime()
                     if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
                         DesolateLootcouncil:DLC_Log(string.format(L["AUTO-ADDED from self-loot: %s"], link))
                         self:SendMessage("DLC_LOOT_WINDOW_UPDATE", DesolateLootcouncil.db.profile.session.loot)

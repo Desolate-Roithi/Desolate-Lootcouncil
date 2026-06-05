@@ -302,8 +302,8 @@ function DLC_API:AddManagedItem(rawLink, listIndex)
     if l and l.AddItemToList then l:AddItemToList(rawLink, listIndex) end
 end
 
-function DLC_API:_GetItemManagerSyncData()
-    if IsInRaid() and GetNumGroupMembers() < 10 then
+function DLC_API:_GetItemManagerSyncData(isManual)
+    if not isManual and IsInRaid() and GetNumGroupMembers() < 10 then
         return nil
     end
     local db = DesolateLootcouncil.db.profile
@@ -320,11 +320,8 @@ function DLC_API:SyncItemManagerToRaid()
     local c = Comm()
     if not c then return end
     
-    local syncData = self:_GetItemManagerSyncData()
+    local syncData = self:_GetItemManagerSyncData(true)
     if not syncData then
-        if IsInRaid() and GetNumGroupMembers() < 10 then
-            DesolateLootcouncil:DLC_Log("Item Manager Sync blocked: less than 10 players in raid.")
-        end
         return
     end
 
@@ -336,7 +333,7 @@ function DLC_API:AutoSyncItemManager()
     local c = Comm()
     if not c then return end
     
-    local syncData = self:_GetItemManagerSyncData()
+    local syncData = self:_GetItemManagerSyncData(false)
     if not syncData then return end
 
     c:SendComm("IM_SYNC", { lists = syncData, isManual = false })
@@ -485,6 +482,13 @@ end
 function DLC_API:GetPlayerVersions()
     local c = Comm()
     return (c and c.playerVersions) or {}
+end
+
+--- Seeds the local player's version into Comm's playerVersions table (once).
+--- Call this when a UI window that shows connection data first opens.
+function DLC_API:SeedSelf()
+    local c = Comm()
+    if c and c.SeedSelf then c:SeedSelf() end
 end
 
 --- Compares two character names for equality.

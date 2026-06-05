@@ -145,17 +145,22 @@ local function CreateTitleBar(frame, titleText, theme, windowName)
         titleBar:SetAlpha(1.0)
     end)
 
-    local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("LEFT", 14, 0)
-    title:SetText(titleText)
-    title:SetTextColor(unpack(theme.textHeader))
-
     -- Arrow indicator: texture rotated down (expanded) or right (collapsed)
+    -- Must be created BEFORE title so title can anchor its RIGHT edge to it
     local arrow = titleBar:CreateTexture(nil, "OVERLAY")
     arrow:SetSize(12, 12)
     arrow:SetPoint("RIGHT", -8, 0)
     arrow:SetAtlas("minimal-scrollbar-arrow-bottom")
     arrow:SetVertexColor(theme.textHeader[1], theme.textHeader[2], theme.textHeader[3], 0.5)
+
+    local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("LEFT", 14, 0)
+    -- Clamp to stop before the collapse arrow so text never overflows when collapsed
+    title:SetPoint("RIGHT", arrow, "LEFT", -6, 0)
+    title:SetJustifyH("LEFT")
+    title:SetWordWrap(false)
+    title:SetText(titleText)
+    title:SetTextColor(unpack(theme.textHeader))
 
     frame.titleBar      = titleBar
     frame.titleText     = title

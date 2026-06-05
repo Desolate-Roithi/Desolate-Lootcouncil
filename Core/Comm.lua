@@ -339,6 +339,18 @@ function Comm:GetVersionCheckRemaining()
     return remaining > 0 and remaining or 0
 end
 
+--- Seeds the local player into playerVersions if not already present.
+--- Call this once when a UI window that needs version data first opens.
+function Comm:SeedSelf()
+    local myName = UnitName("player")
+    if not myName or myName == "Unknown Entity" then return end
+    if self.playerVersions[myName] then return end -- already seeded
+    local myVersion = DesolateLootcouncil.version or "0.0.0"
+    local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
+    self:UpdatePlayerInfo(myName, myVersion, mySkill)
+    DesolateLootcouncil:DLC_Log("[Conn] Self-seeded " .. myName .. " as version " .. myVersion)
+end
+
 function Comm:GetActiveUserCount()
     local count = 0
     for _ in pairs(self.playerVersions) do

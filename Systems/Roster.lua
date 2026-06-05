@@ -132,8 +132,8 @@ end
 function Roster:StartRaidSession()
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if config.sessionActive then
-        self:Printf("Session already active (Started: %s)", date("%c", config.currentSessionID))
-        return
+        self:Printf("Session already active (Started: %s). Auto-saving and stopping previous session.", date("%c", config.currentSessionID))
+        self:StopRaidSession(true)
     end
 
     local _, instanceType = GetInstanceInfo()
@@ -191,8 +191,13 @@ function Roster:StopRaidSession(saveHistory)
             sessionID       = config.currentSessionID,
             attendees       = {},
             attendeeDetails = {},
-            bossLogs        = {}
+            bossLogs        = {},
+            awarded         = {}
         }
+        local session = db.session
+        if session and session.awarded then
+            entry.awarded = DesolateLootcouncil.Table.DeepCopy(session.awarded)
+        end
         -- Deep copy attendees
         for name, _ in pairs(config.currentAttendees) do
             entry.attendees[name] = true

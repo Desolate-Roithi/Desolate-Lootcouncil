@@ -9,7 +9,9 @@ local function ParseSemVer(v)
     if not v or v == "" then return 0, 0, 0, "" end
     local major, minor, patch, suffix = v:match("(%d+)%.(%d+)%.(%d+)%-?(.*)")
     if not major then return 0, 0, 0, "" end
-    return tonumber(major), tonumber(minor), tonumber(patch), (suffix or "")
+    suffix = suffix or ""
+    if suffix == "SIM" then suffix = "" end
+    return tonumber(major), tonumber(minor), tonumber(patch), suffix
 end
 
 local function CompareSemVer(v1, v2)
@@ -244,4 +246,9 @@ function UI_Version:UpdateVersionList(isTest)
     end
 
     self.scrollContent:SetHeight(topOffset + 10)
+end
+
+if _G.DLC_TEST_MODE then
+    UI_Version.ParseSemVer = ParseSemVer
+    UI_Version.CompareSemVer = CompareSemVer
 end

@@ -33,7 +33,7 @@ end
 
 function Trade:OnStaticPopup(name)
     -- Check for trade-related confirmation dialogs
-    local isTradePopup = (name == "LOOT_BIND" or name == "TRADE_POTENTIALLY_SOULBOUND_ITEM" or name == "TRADE_BOP" or name == "END_BOUND_TRADEABLE")
+    local isTradePopup = (name == "LOOT_BIND" or name == "TRADE_POTENTIALLY_SOULBOUND_ITEM" or name == "TRADE_BOP" or name == "END_BOUND_TRADEABLE" or name == "TRADE_POTENTIAL_REMOVE_TRANSMOG")
     if isTradePopup then
         -- Find the visible popup and click "Accept" (button 1)
         local popup = StaticPopup_FindVisible(name)
