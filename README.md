@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.0.5-Alpha  
+**Latest Version:** v1.0.6-Alpha  
 **Last Updated:** 2026-06-05  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
@@ -44,6 +44,10 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v1.0.6-Alpha
+* **Settings Layout & NativeGUI Size Persistence**:
+    - Resolved a layout issue where double-clicking the title bar to collapse a window (saving the collapsed 220x42 dimensions to the DB) caused the window to load at an extremely narrow width of 220 on next reload. The persistence engine now saves the original expanded dimensions when a window is collapsed, and the creation logic programmatically collapses windows on reload once all child elements are fully initialized.
 
 ### v1.0.5-Alpha
 * **Raid-Only Roster Gating**:

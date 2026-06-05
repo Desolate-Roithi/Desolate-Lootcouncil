@@ -407,6 +407,17 @@ function UI_NativeGUI:CreateWindow(name, titleText, widthOrWindowName, height, w
     -- Persistence Integration
     DesolateLootcouncil:RestoreFramePosition(frame, winName)
 
+    frame:HookScript("OnShow", function()
+        if frame.startCollapsed then
+            C_Timer.After(0.05, function()
+                if frame.startCollapsed and not frame.isCollapsed then
+                    CollapseWindow(frame, winName)
+                end
+                frame.startCollapsed = nil
+            end)
+        end
+    end)
+
     return frame
 end
 

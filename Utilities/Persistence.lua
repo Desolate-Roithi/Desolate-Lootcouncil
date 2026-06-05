@@ -33,14 +33,22 @@ function Persistence:SaveFramePosition(frame, windowName)
         target = frame.frame
     end
 
+    local w = target:GetWidth() or 0
     local h = target:GetHeight() or 0
-    -- If collapsed, save the height it was BEFORE collapsing
-    if target.isCollapsed and target.savedHeight then
-        h = target.savedHeight
+
+    -- If collapsed, save the dimensions it was BEFORE collapsing
+    if target.isCollapsed then
+        if target._expandedWidth then
+            w = target._expandedWidth
+        end
+        if target._expandedHeight then
+            h = target._expandedHeight
+        elseif target.savedHeight then
+            h = target.savedHeight
+        end
     end
 
     local point, _, relativePoint, xOfs, yOfs = target:GetPoint()
-    local width = target:GetWidth() or 0
     
     if not point then return end -- If anchor was already lost, abort saving entirely to preserve old state
 
@@ -50,7 +58,7 @@ function Persistence:SaveFramePosition(frame, windowName)
         x = xOfs,
         y = yOfs,
         -- Sanity check: Do not save collapsed/0-dimension artifacts that occur during OnHide UI disposal
-        width = (width >= 50) and width or nil,
+        width = (w >= 50) and w or nil,
         height = (h >= 30) and h or nil,
         isCollapsed = target.isCollapsed or false
     }
