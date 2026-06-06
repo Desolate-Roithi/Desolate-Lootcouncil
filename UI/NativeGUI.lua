@@ -483,6 +483,40 @@ function UI_NativeGUI:CreateIcon(parent, size, leftOffset)
     return btn
 end
 
+--- Sets up or creates an item icon button on a row with default tooltips.
+---@param row Frame
+---@param data table
+---@param size number?
+---@param offsetX number?
+---@param offsetY number?
+---@return Button icon
+function UI_NativeGUI:SetupItemIconButton(row, data, size, offsetX, offsetY)
+    if not row.itemIcon then
+        row.itemIcon = self:CreateIcon(row, size, offsetX)
+    end
+    row.itemIcon:SetSize(size or 24, size or 24)
+    row.itemIcon:ClearAllPoints()
+    row.itemIcon:SetPoint("LEFT", offsetX or 8, offsetY or 0)
+
+    local texture = data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400
+    row.itemIcon.texture:SetTexture(texture)
+
+    local function ShowTip()
+        GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
+        if data.link then
+            GameTooltip:SetHyperlink(data.link)
+        elseif data.itemID then
+            GameTooltip:SetItemByID(data.itemID)
+        end
+        GameTooltip:Show()
+    end
+
+    row.itemIcon:SetScript("OnClick", ShowTip)
+    row.itemIcon:SetScript("OnEnter", ShowTip)
+    row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return row.itemIcon
+end
+
 --- Creates a clickable link label button.
 ---@param parent Frame
 ---@param font string?

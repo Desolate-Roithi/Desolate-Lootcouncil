@@ -95,27 +95,7 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
 
     -- 1. Icon
-    if not row.itemIcon then
-        local icon = CreateFrame("Button", nil, row)
-        icon:SetSize(24, 24)
-        icon:SetPoint("LEFT", 8, 0)
-
-        local tex = icon:CreateTexture(nil, "BACKGROUND")
-        tex:SetAllPoints()
-        icon.texture = tex
-
-        row.itemIcon = icon
-    end
-    row.itemIcon.texture:SetTexture(C_Item.GetItemIconByID(item.itemID) or 134400)
-
-    local function ShowTip()
-        GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(item.link)
-        GameTooltip:Show()
-    end
-    row.itemIcon:SetScript("OnClick", ShowTip)
-    row.itemIcon:SetScript("OnEnter", ShowTip)
-    row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    NativeGUI:SetupItemIconButton(row, item, 24, 8, 0)
 
     -- 4. Action buttons (defined early for right anchoring target)
     if not row.actionFrame then

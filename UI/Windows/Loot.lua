@@ -23,7 +23,7 @@ local function OnConnectionTooltipEnter(self)
     if total == 0 then
         total = 1; active = 1
     end
-    GameTooltip:AddLine(string.format("Addon Connection: [%d] / [%d]", active, total), 1, 1, 1)
+    GameTooltip:AddLine(string.format(L["Addon Connection: [%d] / [%d]"], active, total), 1, 1, 1)
     GameTooltip:Show()
 end
 
@@ -36,41 +36,18 @@ local function OnRefreshConnectionsClicked()
     if success then
         DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
         UI_Loot.refreshBtn:SetEnabled(false)
-        UI_Loot.refreshBtn:SetText("Pinging...")
+        UI_Loot.refreshBtn:SetText(L["Pinging..."])
     end
-end
-
-local function ParseSemVer(v)
-    if not v or v == "" then return 0, 0, 0, "" end
-    local major, minor, patch, suffix = string.match(v, "(%d+)%.(%d+)%.(%d+)%-?(.*)")
-    if not major then return 0, 0, 0, "" end
-    suffix = suffix or ""
-    if suffix == "SIM" then suffix = "" end
-    return tonumber(major), tonumber(minor), tonumber(patch), suffix
-end
-
-local function CompareSemVer(v1, v2)
-    local M1, m1, p1, s1 = ParseSemVer(v1)
-    local M2, m2, p2, s2 = ParseSemVer(v2)
-    if M1 ~= M2 then return M1 > M2 end
-    if m1 ~= m2 then return m1 > m2 end
-    if p1 ~= p2 then return p1 > p2 end
-    if s1 == "" and s2 ~= "" then return true end
-    if s1 ~= "" and s2 == "" then return false end
-    if s1 ~= "" and s2 ~= "" then
-        return s1:lower() > s2:lower()
-    end
-    return false
 end
 
 local function OnTimerTick()
     if not UI_Loot.lootFrame:IsShown() then return end
     local rem = DesolateLootcouncil.API:GetVersionCheckCooldown()
     if rem > 0 then
-        UI_Loot.refreshBtn:SetText(string.format("Refresh (%.0fs)", rem))
+        UI_Loot.refreshBtn:SetText(string.format(L["Refresh (%.0fs)"], rem))
         UI_Loot.refreshBtn:SetEnabled(false)
     else
-        UI_Loot.refreshBtn:SetText("Refresh Connections")
+        UI_Loot.refreshBtn:SetText(L["Refresh Connections"])
         UI_Loot.refreshBtn:SetEnabled(true)
     end
 
@@ -93,14 +70,14 @@ local function OnTimerTick()
         local highestVerStr = localVer or "1.0.0"
 
         for _, ver in pairs(playerVersions) do
-            if ver and CompareSemVer(ver, highestVerStr) then
+            if ver and AT.CompareSemVer(ver, highestVerStr) then
                 highestVerStr = ver
             end
         end
 
         local hasOutdated = false
         for _, ver in pairs(playerVersions) do
-            if ver and CompareSemVer(highestVerStr, ver) then
+            if ver and AT.CompareSemVer(highestVerStr, ver) then
                 hasOutdated = true
                 break
             end
@@ -185,7 +162,7 @@ function UI_Loot:ShowLootWindow(lootTable)
         clearBtn:SetScript("OnClick", OnClearSessionClicked)
         self.clearBtn = clearBtn
 
-        local refreshBtn = NativeGUI:CreateButton(frame, "Refresh Connections", 175, 24, "Pass")
+        local refreshBtn = NativeGUI:CreateButton(frame, L["Refresh Connections"], 175, 24, "Pass")
         refreshBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -42)
         self.refreshBtn = refreshBtn
 
@@ -259,25 +236,7 @@ function UI_Loot:ShowLootWindow(lootTable)
         row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
 
         -- Icon
-        if not row.itemIcon then
-            local icon = CreateFrame("Button", nil, row)
-            icon:SetSize(28, 28)
-            icon:SetPoint("LEFT", 8, 0)
-            local tex = icon:CreateTexture(nil, "BACKGROUND")
-            tex:SetAllPoints()
-            icon.texture = tex
-            row.itemIcon = icon
-        end
-        row.itemIcon.texture:SetTexture(data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400)
-
-        local function ShowTip()
-            GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
-            if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
-            GameTooltip:Show()
-        end
-        row.itemIcon:SetScript("OnClick", ShowTip)
-        row.itemIcon:SetScript("OnEnter", ShowTip)
-        row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        NativeGUI:SetupItemIconButton(row, data, 28, 8, 0)
 
         -- Remove Button (X) (created early for right anchoring)
         if not row.removeBtn then
@@ -323,8 +282,8 @@ function UI_Loot:ShowLootWindow(lootTable)
             row.itemLabel.text:SetText(properLink)
             row.itemIcon.texture:SetTexture(C_Item.GetItemIconByID(data.itemID) or 134400)
         end
-        row.itemLabel:SetScript("OnClick", ShowTip)
-        row.itemLabel:SetScript("OnEnter", ShowTip)
+        row.itemLabel:SetScript("OnClick", function() row.itemIcon:GetScript("OnClick")(row.itemIcon) end)
+        row.itemLabel:SetScript("OnEnter", function() row.itemIcon:GetScript("OnEnter")(row.itemIcon) end)
         row.itemLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         topOffset = topOffset + rowHeight + 8
@@ -343,7 +302,7 @@ function UI_Loot:OnLootWindowUpdate(eventName, lootTable)
 end
 
 if _G.DLC_TEST_MODE then
-    UI_Loot.ParseSemVer = ParseSemVer
-    UI_Loot.CompareSemVer = CompareSemVer
+    UI_Loot.ParseSemVer = AT.ParseSemVer
+    UI_Loot.CompareSemVer = AT.CompareSemVer
     UI_Loot.OnTimerTick = OnTimerTick
 end

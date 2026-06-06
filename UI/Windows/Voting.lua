@@ -419,28 +419,9 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
 end
 
 function UI_Voting:CreateItemIcon(row, data, rowHeight)
-    if not row.itemIcon then
-        local icon = CreateFrame("Button", nil, row)
-        icon:SetSize(28, 28)
-        
-        local tex = icon:CreateTexture(nil, "BACKGROUND")
-        tex:SetAllPoints()
-        icon.texture = tex
-        
-        row.itemIcon = icon
-    end
-    row.itemIcon:ClearAllPoints()
-    row.itemIcon:SetPoint("LEFT", 12, (rowHeight == 92) and 24 or 0)
-    row.itemIcon.texture:SetTexture(data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400)
-
-    local function ShowTip()
-        GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(data.link)
-        GameTooltip:Show()
-    end
-    row.itemIcon:SetScript("OnClick", ShowTip)
-    row.itemIcon:SetScript("OnEnter", ShowTip)
-    row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local offsetY = (rowHeight == 92) and 24 or 0
+    NativeGUI:SetupItemIconButton(row, data, 28, 12, offsetY)
 end
 
 function UI_Voting:StyleClosedExpiredState(row, theme, currentVote, guid)

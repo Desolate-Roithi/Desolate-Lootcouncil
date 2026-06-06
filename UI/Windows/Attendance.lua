@@ -34,7 +34,7 @@ local function CreateAttendanceColumns(self, frame, theme, isDecayEnabled)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     -- Left Column (Attended)
-    local leftPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    local leftPanel = CreateFrame("Frame", "DLCAttendanceFrameLeftPanel", frame, "BackdropTemplate")
     leftPanel:SetSize(296, 330)
     leftPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -65)
     leftPanel:SetBackdrop({
@@ -56,7 +56,7 @@ local function CreateAttendanceColumns(self, frame, theme, isDecayEnabled)
     self.scrollContentAttended = scrollContentAttended
 
     -- Right Column (Absent)
-    local rightPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    local rightPanel = CreateFrame("Frame", "DLCAttendanceFrameRightPanel", frame, "BackdropTemplate")
     rightPanel:SetSize(296, 330)
     rightPanel:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -65)
     rightPanel:SetBackdrop({

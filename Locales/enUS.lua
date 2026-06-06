@@ -171,6 +171,9 @@ L["Priority Log History"] = true
 L["No history logs found."] = true
 
 -- Loot.lua (Systems)
+L["Addon Connection: [%d] / [%d]"] = true
+L["Refresh (%.0fs)"] = true
+L["Refresh Connections"] = true
 L["Systems/Loot Loaded"] = true
 L["Wiped stale loot backlog from previous session."] = true
 L["Added Item %d to '%s'"] = true
@@ -179,6 +182,7 @@ L["Skipped low quality item: %s"] = true
 L["--- LOOT SCAN START (%d slots) ---"] = true
 L["--- SCAN END ---"] = true
 L["AUTO-ADDED from self-loot: %s"] = true
+L["AUTO-ADDED from roll: %s"] = true
 L["Loot backlog cleared (dedup store preserved)."] = true
 L["Manually added: %s"] = true
 L["Winner of %s is %s! (%s)"] = true

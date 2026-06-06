@@ -3,6 +3,7 @@ if AT.abortLoad then return end
 
 ---@class UI_Sidebar : AceModule
 local UI_Sidebar = DesolateLootcouncil:NewModule("UI_Sidebar")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 ---@class (partial) DLC_Ref_UISidebar
 ---@field db table
@@ -35,7 +36,7 @@ function UI_Sidebar:AttachTo(parentFrame)
     -- Add Title
     local t = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     t:SetPoint("TOP", 0, -10)
-    t:SetText("Disenchanters")
+    t:SetText(L["Disenchanters"])
     t:SetTextColor(unpack(theme.border))
     f.titleText = t
 

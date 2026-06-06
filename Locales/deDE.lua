@@ -171,6 +171,9 @@ L["Priority Log History"] = "Prioritäts-Logverlauf"
 L["No history logs found."] = "Keine Verlaufs-Logs gefunden."
 
 -- Loot.lua (Systems)
+L["Addon Connection: [%d] / [%d]"] = "Addon-Verbindung: [%d] / [%d]"
+L["Refresh (%.0fs)"] = "Aktualisieren (%.0fs)"
+L["Refresh Connections"] = "Verbindungen aktualisieren"
 L["Systems/Loot Loaded"] = "Systeme/Loot geladen"
 L["Wiped stale loot backlog from previous session."] = "Veraltetes Loot aus vorheriger Lootsession gelöscht."
 L["Added Item %d to '%s'"] = "Gegenstand %d zu '%s' hinzugefügt"
@@ -179,6 +182,7 @@ L["Skipped low quality item: %s"] = "Gegenstände geringer Qualität übersprung
 L["--- LOOT SCAN START (%d slots) ---"] = "--- LOOT-SCAN START (%d Slots) ---"
 L["--- SCAN END ---"] = "--- SCAN ENDE ---"
 L["AUTO-ADDED from self-loot: %s"] = "AUTOM. HINZUGEFÜGT aus Eigenem Loot: %s"
+L["AUTO-ADDED from roll: %s"] = "AUTOM. HINZUGEFÜGT aus Wurf: %s"
 L["Loot backlog cleared (dedup store preserved)."] = "Loot-Rückstand bereinigt (Duplikatenspeicherung erhalten)."
 L["Manually added: %s"] = "Manuell hinzugefügt: %s"
 L["Winner of %s is %s! (%s)"] = "Gewinner von %s ist %s! (%s)"

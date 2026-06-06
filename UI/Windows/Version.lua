@@ -5,31 +5,7 @@ if AT.abortLoad then return end
 local UI_Version = DesolateLootcouncil:NewModule("UI_Version", "AceEvent-3.0", "AceTimer-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
-local function ParseSemVer(v)
-    if not v or v == "" then return 0, 0, 0, "" end
-    local major, minor, patch, suffix = v:match("(%d+)%.(%d+)%.(%d+)%-?(.*)")
-    if not major then return 0, 0, 0, "" end
-    suffix = suffix or ""
-    if suffix == "SIM" then suffix = "" end
-    return tonumber(major), tonumber(minor), tonumber(patch), suffix
-end
 
-local function CompareSemVer(v1, v2)
-    local M1, m1, p1, s1 = ParseSemVer(v1)
-    local M2, m2, p2, s2 = ParseSemVer(v2)
-
-    if M1 ~= M2 then return M1 > M2 end
-    if m1 ~= m2 then return m1 > m2 end
-    if p1 ~= p2 then return p1 > p2 end
-
-    if s1 == "" and s2 ~= "" then return true end
-    if s1 ~= "" and s2 == "" then return false end
-
-    if s1 ~= "" and s2 ~= "" then
-        return s1:lower() > s2:lower()
-    end
-    return false
-end
 
 -- Helper functions to keep nesting flat
 local function OnVersionTimerTick()
@@ -183,7 +159,7 @@ function UI_Version:UpdateVersionList(isTest)
 
     for _, entry in ipairs(roster) do
         if entry.version then
-            if CompareSemVer(entry.version, highestVerStr) then
+            if AT.CompareSemVer(entry.version, highestVerStr) then
                 highestVerStr = entry.version
             end
         end
@@ -233,7 +209,7 @@ function UI_Version:UpdateVersionList(isTest)
             row.verText:SetText(L["Not Installed / Missing"])
             row.verText:SetTextColor(0.5, 0.5, 0.5)
         else
-            if not CompareSemVer(highestVerStr, ver) then
+            if not AT.CompareSemVer(highestVerStr, ver) then
                 row.verText:SetText(string.format(L["%s (Current)"], ver))
                 row.verText:SetTextColor(0, 1, 0)
             else
@@ -249,6 +225,6 @@ function UI_Version:UpdateVersionList(isTest)
 end
 
 if _G.DLC_TEST_MODE then
-    UI_Version.ParseSemVer = ParseSemVer
-    UI_Version.CompareSemVer = CompareSemVer
+    UI_Version.ParseSemVer = AT.ParseSemVer
+    UI_Version.CompareSemVer = AT.CompareSemVer
 end
