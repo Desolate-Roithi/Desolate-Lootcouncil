@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.0.7-Alpha  
-**Last Updated:** 2026-06-05  
+**Latest Version:** v1.0.0  
+**Last Updated:** 2026-06-06  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
 ## Features
@@ -46,63 +46,24 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 
 ## Recent Changes
 
-### v1.0.7-Alpha
-* **Corrupted Layout Size Self-Healing**:
-    - Added an automatic repair layer that checks if pre-existing window configurations in the DB were saved in a squeezed/collapsed state. The layout engine now discards narrow sizes and forces safe recovery back to default expanded templates.
-* **Positions Reset Slash Command**:
-    - Implemented `/dlc reset` and `/dlc resetpositions` commands to clear all window coordinates and sizes immediately if a layout is corrupted or off-screen.
-
-### v1.0.6-Alpha
-* **Settings Layout & NativeGUI Size Persistence**:
-    - Resolved a layout issue where double-clicking the title bar to collapse a window (saving the collapsed 220x42 dimensions to the DB) caused the window to load at an extremely narrow width of 220 on next reload. The persistence engine now saves the original expanded dimensions when a window is collapsed, and the creation logic programmatically collapses windows on reload once all child elements are fully initialized.
-
-### v1.0.5-Alpha
-* **Raid-Only Roster Gating**:
-    - Restricted the automatic scanning and adding of new players to the priority lists to Raid groups and Raid instances only. This prevents officers' databases from being altered and warnings about alts being printed in 5-man party groups.
-* **WoW 12.0.7 API Compatibility**:
-    - Checked all group management API shifts coming in Patch 12.0.7 (such as global functions migrating into `C_PartyInfo`) and verified full compatibility.
-
-### v1.0.4-Alpha
-* **Trade Window Auto-Refresh**:
-    - Added automatic refresh for the Pending Trades and History windows on item award/re-award, decoupling modules.
-* **UI Row Pooling & Virtual Scrolling**:
-    - Optimized rendering with virtual row pooling, reducing nested layout nesting levels, and enhancing the Item Manager.
-
-### v1.0.3-Alpha
-* **Group Leader & Loot Master Robustness**:
-    - Added leader change tracking to automatically reset and recalculate the Loot Master when the Group Leader changes.
-* **Item Manager Sync Gate**:
-    - Prevented automatic or manual item manager database syncing in raids with fewer than 10 players to avoid spamming small groups.
-* **History Retention**:
-    - Ensured that the awarded items database (`session.awarded`) is preserved and only wiped on starting a new raid session rather than individual voting sessions.
-* **Recipe Voting Options**:
-    - Added specialized recipe voting buttons (Item Class 9). Displays exactly 3 buttons on the Voting Window: "Ready to Craft" (for immediate learning), "Unskilled" (for missing profession skill levels), and "Pass".
-* **EditBox Shift-Click Link Insertion**:
-    - Allowed raiders to Shift-Click item links into custom EditBox input fields (e.g. the Item Manager's item name input) and restored keyboard focus.
-
-### v1.0.2-Alpha
-* **Localization Auditing**:
-    - Fixed a missing translation error for private voter notes inside the award window.
-    - Added the missing settings action confirmation prompt.
-    - Verified all translation strings across the codebase are fully covered in English and German.
-
-### v1.0.1-Alpha
-* **Unified Window Management**:
-    - Standardized how all windows scale and position themselves, ensuring sizes are stored and restored consistently across reloads.
-    - Removed hardcoded window dimensions to support scaling naturally.
-* **Voting Frame Optimizations**:
-    - Fixed a bug where reloading a session would reset the active countdown timer or re-trigger completed milestone warnings.
-    - Blocked raider-only voting notifications from showing up for Loot Masters.
-* **Award Notes Tooltip**:
-    - Replaced raw note text displays in the award panel with a compact note icon. Hovering over the icon displays the player's private note.
-
-### v1.0.0-Alpha
-* **UI Themes**:
-    - Cleaned up the core theme engine logic to make styling custom controls (buttons, inputs, dropdowns) more modular.
-    - Reworked the main voting window layout to improve rendering speed and responsiveness.
-* **Autopass Syncing**:
-    - Added detailed log outputs to help officers diagnose automatic pass decisions.
-    - Added an automatic state synchronization check when raid members load zones or run version checks.
+### v1.0.0
+Official stable release of Desolate Lootcouncil, introducing a complete Native UI visual overhaul, a customizable theme engine, and significant stability enhancements:
+* **Custom UI & Theme Engine**:
+    - Replaced generic `AceGUI` windows with a premium custom Native UI framework.
+    - Added pre-packaged themes including `Fel`, `Classic`, `Midnight`, and `Minimalist`.
+    - Centralized all window sizing and layouts configuration under `UI/Layouts.lua`.
+* **Recipe-Specific Voting**:
+    - Introduced specialized buttons for recipe items (Item Class 9): *"Ready to Craft"* (immediate learning) and *"Unskilled"* (profession but insufficient skill).
+* **Link Insertion & EditBox Improvements**:
+    - Enabled Shift-Clicking item links from bags/chat directly into custom EditBox inputs (e.g. in the Item Manager).
+* **Layout Reset & Self-Healing**:
+    - Added the `/dlc reset` and `/dlc resetpositions` commands to clear and reset all coordinates in real-time.
+    - Implemented layout self-healing to automatically discard narrow/corrupted window dimensions saved during collapsed states.
+* **Automation & Stability**:
+    - Automatically refreshes the Pending Trades and History windows on item award/re-award.
+    - Gated roster scanning/alt alerts to actual raid groups of 10+ players.
+    - Hardened Loot Master tracking against group leader changes.
+    - Unified semantic versioning logic and resolved localization gaps in English and German.
 
 ---
 
