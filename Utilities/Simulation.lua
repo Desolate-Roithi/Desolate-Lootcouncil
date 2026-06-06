@@ -99,19 +99,53 @@ function Simulation:GetRoster()
     return list
 end
 
-function Simulation:GetPendingVoters(guid)
-    ---@type Session
-    local Session = DesolateLootcouncil:GetModule("Session")
-    if not Session or not Session.sessionVotes then return nil end
+function Simulation:GetPendingVoters(guid, votedPlayers)
+    -- If the caller already resolved voted scores, use that directly.
+    -- Otherwise fall back to reading Session.sessionVotes ourselves.
+    local votedScores = votedPlayers
+    if not votedScores then
+        ---@type Session
+        local Session = DesolateLootcouncil:GetModule("Session")
+        if not Session or not Session.sessionVotes then return nil end
 
-    local votes = Session.sessionVotes[guid] or {}
+        local votes = Session.sessionVotes[guid] or {}
+        votedScores = {}
+        for voterName in pairs(votes) do
+            local score = DesolateLootcouncil:GetScoreName(voterName)
+            if score then
+                votedScores[score] = true
+            end
+        end
+    end
+
     local pending = {}
     for name, _ in pairs(self.activeSims) do
-        if not votes[name] then
+        local simScore = DesolateLootcouncil:GetScoreName(name)
+        if simScore and not votedScores[simScore] then
             table.insert(pending, name .. " (Sim)")
         end
     end
     return #pending > 0 and pending or nil
+end
+
+function Simulation:CreateSimulatedVotePayload(item, roll)
+    local actualRoll = roll
+    if not actualRoll then
+        actualRoll = math.random(1, 5)
+        local itemID = item.link or item.itemID
+        local isRecipe = itemID and DesolateLootcouncil.API:IsRecipe(itemID) or false
+        if isRecipe then
+            local recipeVotes = { 2, 3, 5 }
+            actualRoll = recipeVotes[math.random(#recipeVotes)]
+        end
+    end
+    return {
+        command = "VOTE",
+        data = {
+            guid = item.sourceGUID or item.link,
+            vote = actualRoll
+        }
+    }
 end
 
 function Simulation:SimulateVote()
@@ -129,14 +163,7 @@ function Simulation:SimulateVote()
     -- Iterate active SIMS only
     for name, _ in pairs(self.activeSims) do
         for _, item in ipairs(session.bidding) do
-            local roll = math.random(1, 5) -- Random 1-5
-            local payload = {
-                command = "VOTE",
-                data = {
-                    guid = item.sourceGUID or item.link,
-                    vote = roll
-                }
-            }
+            local payload = self:CreateSimulatedVotePayload(item)
             -- Serialize and Inject into Session Module
             local serialized = Session:Serialize(payload)
             if Session.OnCommReceived then

@@ -11,6 +11,7 @@ if AT.abortLoad then return end
 ---@class DLC_API
 local DLC_API = {}
 DesolateLootcouncil.API = DLC_API
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- ---------------------------------------------------------------------------
 -- Internal helpers (not part of the public API surface)
@@ -44,6 +45,15 @@ end
 ---@return boolean
 function DLC_API:IsLootMaster()
     return DesolateLootcouncil:AmILootMaster()
+end
+
+--- Returns true if the item (by link, itemID, or item string) is categorized as a recipe.
+---@param item string|number|nil
+---@return boolean
+function DLC_API:IsRecipe(item)
+    if not item then return false end
+    local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(item)
+    return classID == 9
 end
 
 --- Returns the full name of the active Loot Master, or nil.
@@ -187,6 +197,12 @@ function DLC_API:GetDisenchanterList()
                 local shortName = Ambiguate(name, "none")
                 inGroup = UnitInRaid(shortName) or UnitInParty(shortName)
             end
+            if not inGroup then
+                local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+                if Sim and Sim:IsSimulated(name) then
+                    inGroup = true
+                end
+            end
             if inGroup then
                 table.insert(result, { name = name, skill = skill })
             end
@@ -199,7 +215,7 @@ end
 --- Returns the loot backlog (items waiting to be distributed) for the LM window.
 ---@return table items  Array of item data tables from db.profile.
 function DLC_API:GetLootBacklog()
-    return DesolateLootcouncil.db.profile
+    return DesolateLootcouncil.db.profile.session and DesolateLootcouncil.db.profile.session.loot or {}
 end
 
 --- Returns the ordered list of priority list names for dropdowns.
@@ -223,9 +239,10 @@ end
 --- Sends a vote for the given item.
 ---@param guid     string
 ---@param voteType number  1=Bid 2=Roll 3=OS 4=TM 5=Pass 0=Cancel
-function DLC_API:SendVote(guid, voteType)
+---@param note     string? optional custom note
+function DLC_API:SendVote(guid, voteType, note)
     local s = Session()
-    if s and s.SendVote then s:SendVote(guid, voteType) end
+    if s and s.SendVote then s:SendVote(guid, voteType, note) end
 end
 
 --- Cancels (retracts) the player's vote on the given item.
@@ -285,17 +302,43 @@ function DLC_API:AddManagedItem(rawLink, listIndex)
     if l and l.AddItemToList then l:AddItemToList(rawLink, listIndex) end
 end
 
---- Broadcasts the current Item Manager lists to the raid (IM_SYNC).
-function DLC_API:SyncItemManagerToRaid()
-    local c = Comm()
+function DLC_API:_GetItemManagerSyncData(isManual)
+    if not isManual and IsInRaid() and GetNumGroupMembers() < 10 then
+        return nil
+    end
     local db = DesolateLootcouncil.db.profile
-    if not c or not db.PriorityLists then return end
+    if not db.PriorityLists then return nil end
     local syncData = {}
     for _, list in ipairs(db.PriorityLists) do
         syncData[list.name] = list.items
     end
-    c:SendComm("IM_SYNC", syncData)
+    return syncData
 end
+
+--- Broadcasts the current Item Manager lists to the raid (IM_SYNC) as a manual synchronization request.
+function DLC_API:SyncItemManagerToRaid()
+    local c = Comm()
+    if not c then return end
+    
+    local syncData = self:_GetItemManagerSyncData(true)
+    if not syncData then
+        return
+    end
+
+    c:SendComm("IM_SYNC", { lists = syncData, isManual = true })
+end
+
+--- Automatically broadcasts the current Item Manager lists to the raid (IM_SYNC) in active raid context.
+function DLC_API:AutoSyncItemManager()
+    local c = Comm()
+    if not c then return end
+    
+    local syncData = self:_GetItemManagerSyncData(false)
+    if not syncData then return end
+
+    c:SendComm("IM_SYNC", { lists = syncData, isManual = false })
+end
+
 
 --- Sends a version-check ping to all addon users in the group.
 ---@return boolean success
@@ -441,6 +484,13 @@ function DLC_API:GetPlayerVersions()
     return (c and c.playerVersions) or {}
 end
 
+--- Seeds the local player's version into Comm's playerVersions table (once).
+--- Call this when a UI window that shows connection data first opens.
+function DLC_API:SeedSelf()
+    local c = Comm()
+    if c and c.SeedSelf then c:SeedSelf() end
+end
+
 --- Compares two character names for equality.
 ---@param name1 string
 ---@param name2 string
@@ -463,4 +513,377 @@ function DLC_API:GetActiveUserCount()
     local c = Comm()
     return c and c.GetActiveUserCount and c:GetActiveUserCount() or 0
 end
+
+-- ---------------------------------------------------------------------------
+-- SETTINGS & CONFIGURATION API SURFACE
+-- ---------------------------------------------------------------------------
+
+--- Returns the configured Loot Master name.
+---@return string
+function DLC_API:GetConfiguredLM()
+    return DesolateLootcouncil.db.profile.configuredLM or ""
+end
+
+--- Sets the configured Loot Master name and updates their status.
+---@param val string
+function DLC_API:SetConfiguredLM(val)
+    DesolateLootcouncil.db.profile.configuredLM = val
+    DesolateLootcouncil:UpdateLootMasterStatus()
+end
+
+--- Returns the minimum loot quality threshold.
+---@return number
+function DLC_API:GetMinLootQuality()
+    return DesolateLootcouncil.db.profile.minLootQuality or 3
+end
+
+--- Sets the minimum loot quality threshold.
+---@param val number
+function DLC_API:SetMinLootQuality(val)
+    DesolateLootcouncil.db.profile.minLootQuality = val
+end
+
+--- Returns whether automated rolling/passing is enabled.
+---@return boolean
+function DLC_API:GetEnableAutoLoot()
+    return DesolateLootcouncil.db.profile.enableAutoLoot
+end
+
+--- Sets whether automated rolling/passing is enabled.
+---@param val boolean
+function DLC_API:SetEnableAutoLoot(val)
+    DesolateLootcouncil.db.profile.enableAutoLoot = val
+end
+
+--- Returns whether debug mode is enabled.
+---@return boolean
+function DLC_API:GetDebugMode()
+    return DesolateLootcouncil.db.profile.debugMode
+end
+
+--- Sets whether debug mode is enabled.
+---@param val boolean
+function DLC_API:SetDebugMode(val)
+    DesolateLootcouncil.db.profile.debugMode = val
+end
+
+--- Returns the active UI theme name.
+---@return string
+function DLC_API:GetActiveTheme()
+    return DesolateLootcouncil.db.profile.activeTheme or "Midnight"
+end
+
+--- Sets the active UI theme name and triggers a redraw of all open windows.
+---@param val string
+function DLC_API:SetActiveTheme(val)
+    DesolateLootcouncil.db.profile.activeTheme = val
+    local UI_Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+    if UI_Theme then UI_Theme:ApplyThemeToAllOpenWindows() end
+end
+
+--- Resets the layout positions of all addon windows.
+function DLC_API:ResetWindowLayout()
+    if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ResetPositions then
+        DesolateLootcouncil.Persistence:ResetPositions()
+        DesolateLootcouncil:Print(L["All window positions have been reset."])
+    end
+end
+
+--- Reprompts the Loot Master to choose whether to enable autopass for this session.
+function DLC_API:RepromptAutopass()
+    StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+end
+
+--- Whispers the selected data type ("PRIORITY" or "ROSTER") to raid assists.
+---@param dataType string
+function DLC_API:ShareDataWithAssists(dataType)
+    local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+    if CommMod and CommMod.ShareDataWithAssists then
+        CommMod:ShareDataWithAssists(dataType)
+    end
+end
+
+-- Roster Options Helpers
+--- Adds a main character to the roster.
+---@param name string
+function DLC_API:AddMain(name)
+    local r = DesolateLootcouncil:GetModule("Roster", true)
+    if r and r.AddMain then r:AddMain(name) end
+end
+
+--- Adds an alt character linked to a main.
+---@param name string
+---@param main string
+function DLC_API:AddAlt(name, main)
+    local r = DesolateLootcouncil:GetModule("Roster", true)
+    if r and r.AddAlt then r:AddAlt(name, main) end
+end
+
+--- Removes a player (main or alt) from the roster.
+---@param name string
+function DLC_API:RemovePlayer(name)
+    local r = DesolateLootcouncil:GetModule("Roster", true)
+    if r and r.RemovePlayer then r:RemovePlayer(name) end
+end
+
+--- Returns the formatted roster list for display in the UI.
+---@return string
+function DLC_API:GetRosterText()
+    local db = DesolateLootcouncil.db.profile
+    if not db.MainRoster then return "No Roster Found." end
+
+    local text = ""
+    local sortedMains = {}
+    for name in pairs(db.MainRoster) do table.insert(sortedMains, name) end
+    table.sort(sortedMains)
+
+    for _, main in ipairs(sortedMains) do
+        text = text .. main
+        local alts = {}
+        if db.playerRoster and db.playerRoster.alts then
+            for alt, parent in pairs(db.playerRoster.alts) do
+                if parent == main then
+                    table.insert(alts, alt)
+                end
+            end
+        end
+
+        if #alts > 0 then
+            table.sort(alts)
+            text = text .. " -> " .. table.concat(alts, ", ")
+        end
+        text = text .. "\n"
+    end
+
+    return text
+end
+
+--- Returns a map of main character names for dropdown values.
+---@return table<string, string>
+function DLC_API:GetMainRosterList()
+    local list = {}
+    local db = DesolateLootcouncil.db.profile
+    if db.MainRoster then
+        for name, _ in pairs(db.MainRoster) do
+            list[name] = name
+        end
+    end
+    return list
+end
+
+--- Returns a map of all characters (mains and alts annotated) for dropdown selection.
+---@return table<string, string>
+function DLC_API:GetAllPlayersList()
+    local list = self:GetMainRosterList()
+    local db = DesolateLootcouncil.db.profile
+    if db.playerRoster and db.playerRoster.alts then
+        for alt, main in pairs(db.playerRoster.alts) do
+            list[alt] = alt .. " (Alt of " .. main .. ")"
+        end
+    end
+    return list
+end
+
+-- Priority Options Helpers
+--- Adds a new empty priority list.
+---@param name string
+function DLC_API:AddPriorityList(name)
+    local p = DesolateLootcouncil:GetModule("Priority", true)
+    if p and p.AddPriorityList then p:AddPriorityList(name) end
+end
+
+--- Renames an existing priority list by index.
+---@param idx number
+---@param name string
+function DLC_API:RenamePriorityList(idx, name)
+    local p = DesolateLootcouncil:GetModule("Priority", true)
+    if p and p.RenamePriorityList then p:RenamePriorityList(idx, name) end
+end
+
+--- Removes an existing priority list by index.
+---@param idx number
+function DLC_API:RemovePriorityList(idx)
+    local p = DesolateLootcouncil:GetModule("Priority", true)
+    if p and p.RemovePriorityList then p:RemovePriorityList(idx) end
+end
+
+--- Shuffles all priority lists (starts a new season).
+function DLC_API:ShuffleLists()
+    local p = DesolateLootcouncil:GetModule("Priority", true)
+    if p and p.ShuffleLists then p:ShuffleLists() end
+end
+
+--- Syncs missing roster members into existing priority lists.
+function DLC_API:SyncMissingPlayers()
+    local p = DesolateLootcouncil:GetModule("Priority", true)
+    if p and p.SyncMissingPlayers then p:SyncMissingPlayers() end
+end
+
+--- Returns the priority history change log lines.
+---@return string[]
+function DLC_API:GetPriorityLog()
+    return DesolateLootcouncil.db.profile.PriorityLog or {}
+end
+
+-- Decay / Attendance Options Helpers
+--- Returns whether raid attendance decay is enabled.
+---@return boolean
+function DLC_API:GetDecayEnabled()
+    return DesolateLootcouncil.db.profile.DecayConfig.enabled
+end
+
+--- Sets whether raid attendance decay is enabled.
+---@param val boolean
+function DLC_API:SetDecayEnabled(val)
+    DesolateLootcouncil.db.profile.DecayConfig.enabled = val
+end
+
+--- Returns the default decay penalty amount.
+---@return number
+function DLC_API:GetDecayPenalty()
+    return DesolateLootcouncil.db.profile.DecayConfig.defaultPenalty or 1
+end
+
+--- Sets the default decay penalty amount.
+---@param val number
+function DLC_API:SetDecayPenalty(val)
+    DesolateLootcouncil.db.profile.DecayConfig.defaultPenalty = val
+end
+
+-- Profile Options Helpers
+--- Returns the list of all profiles.
+---@return string[]
+function DLC_API:GetProfiles()
+    return DesolateLootcouncil.db:GetProfiles()
+end
+
+--- Returns the current profile name.
+---@return string
+function DLC_API:GetCurrentProfile()
+    return DesolateLootcouncil.db:GetCurrentProfile()
+end
+
+--- Sets the current active profile.
+---@param name string
+function DLC_API:SetProfile(name)
+    DesolateLootcouncil.db:SetProfile(name)
+end
+
+--- Copies data from the specified profile to the current profile.
+---@param fromProfile string
+function DLC_API:CopyProfile(fromProfile)
+    DesolateLootcouncil.db:CopyProfile(fromProfile)
+end
+
+--- Deletes the specified profile.
+---@param name string
+function DLC_API:DeleteProfile(name)
+    DesolateLootcouncil.db:DeleteProfile(name)
+end
+
+--- Generates a serialized profile export string based on selected category options.
+---@param selection table<string, boolean>
+---@return string
+function DLC_API:ExportProfileData(selection)
+    local p = DesolateLootcouncil.db.profile
+    local data = {}
+
+    if selection["Config"] then
+        data.config = {
+            minLootQuality = p.minLootQuality,
+            enableAutoLoot = p.enableAutoLoot,
+            DecayConfig = p.DecayConfig,
+        }
+    end
+    if selection["Roster"] then
+        data.Roster = {
+            MainRoster = p.MainRoster,
+            playerRoster = p.playerRoster
+        }
+    end
+    if selection["PriorityLists"] then
+        data.PriorityListsStructure = {}
+        if p.PriorityLists then
+            for _, list in ipairs(p.PriorityLists) do
+                table.insert(data.PriorityListsStructure, { name = list.name })
+            end
+        end
+    end
+    if selection["PriorityContent"] then
+        data.PriorityListsContent = p.PriorityLists
+    end
+    if selection["History"] then
+        data.History = {
+            session = p.session,
+            AttendanceHistory = p.AttendanceHistory,
+            PriorityLog = DesolateLootcouncil.PriorityLog
+        }
+    end
+
+    local serialized = DesolateLootcouncil:Serialize(data)
+    local encoded = DesolateLootcouncil.Base64 and DesolateLootcouncil.Base64:Encode(serialized) or serialized
+    return encoded
+end
+
+--- Imports profile data from a serialized string and switches to the new profile.
+---@param importStringRaw string
+---@param importName string
+---@return boolean success, string errorMsg
+function DLC_API:ImportProfileData(importStringRaw, importName)
+    if not importStringRaw or importStringRaw == "" then
+        return false, "Import Error: String is empty."
+    end
+    if not importName or importName == "" then
+        return false, "Import Error: Please specify a name for the new profile."
+    end
+
+    local decoded = importStringRaw
+    if DesolateLootcouncil.Base64 and not string.find(decoded, "^{") then
+        decoded = DesolateLootcouncil.Base64:Decode(importStringRaw)
+    end
+
+    local success, data = DesolateLootcouncil:Deserialize(decoded)
+    if not success then
+        return false, "Import Error: Invalid string format / Decode failed."
+    end
+
+    DesolateLootcouncil.db:SetProfile(importName)
+
+    local p = DesolateLootcouncil.db.profile
+    if data.config then
+        for k, v in pairs(data.config) do p[k] = v end
+    end
+    if data.Roster then
+        p.MainRoster = data.Roster.MainRoster
+        p.playerRoster = data.Roster.playerRoster
+    end
+    if data.PriorityListsContent then
+        p.PriorityLists = data.PriorityListsContent
+    elseif data.PriorityListsStructure then
+        local newLists = {}
+        for _, l in ipairs(data.PriorityListsStructure) do
+            table.insert(newLists, { name = l.name, players = {}, items = {} })
+        end
+        p.PriorityLists = newLists
+    end
+    if data.History then
+        if data.History.session then p.session = data.History.session end
+        if data.History.AttendanceHistory then p.AttendanceHistory = data.History.AttendanceHistory end
+    end
+
+    return true, ""
+end
+
+--- Calculates and applies decay to a priority list.
+---@param listObj table
+---@param penalty number
+---@param absentMap table
+function DLC_API:CalculateListDecay(listObj, penalty, absentMap)
+    local p = Priority()
+    if p and p.CalculateListDecay then
+        p:CalculateListDecay(listObj, penalty, absentMap)
+    end
+end
+
+
 

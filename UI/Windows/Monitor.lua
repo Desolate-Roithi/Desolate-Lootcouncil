@@ -3,37 +3,40 @@ if AT.abortLoad then return end
 
 ---@class UI_Monitor : AceModule
 local UI_Monitor = DesolateLootcouncil:NewModule("UI_Monitor", "AceEvent-3.0", "AceTimer-3.0")
-local AceGUI = LibStub("AceGUI-3.0")
 
 ---@type DesolateLootcouncil
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
+local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
--- [REMOVED] Redundant GetLinkedMain. Use DesolateLootcouncil:GetModule("Roster"):GetMain(name) instead.
-
-local VOTE_COLOR = { [1] = "|cff00ff00", [2] = "|cffffd700", [3] = "|cff00ffff", [4] = "|cffeda55f", [5] = "|cffaaaaaa" }
-local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
-
 function UI_Monitor:GetVoteInfo(guid)
-    local API = DesolateLootcouncil.API
-    local summary  = API:GetVoteSummary(guid)
-    local votes    = summary.votes
-    local isClosed = summary.isClosed
+    local API                       = DesolateLootcouncil.API
+    local summary                   = API:GetVoteSummary(guid)
+    local votes                     = summary.votes
+    local isClosed                  = summary.isClosed
 
     local bids, rolls, os, tm, pass = 0, 0, 0, 0, 0
-    local votedPlayers = {}
+    local votedPlayers              = {}
     for name, voteData in pairs(votes) do
         local vType = type(voteData) == "table" and voteData.type or voteData
-        if vType == 1 then bids = bids + 1
-        elseif vType == 2 then rolls = rolls + 1
-        elseif vType == 3 then os = os + 1
-        elseif vType == 4 then tm = tm + 1
-        elseif vType == 5 then pass = pass + 1 end
+        if vType == 1 then
+            bids = bids + 1
+        elseif vType == 2 then
+            rolls = rolls + 1
+        elseif vType == 3 then
+            os = os + 1
+        elseif vType == 4 then
+            tm = tm + 1
+        elseif vType == 5 then
+            pass = pass + 1
+        end
         local score = API:GetScoreName(name)
         if score then votedPlayers[score] = true end
     end
 
-    local countsText = string.format("|cff00ff00Bid:%d|r | |cffffd700Roll:%d|r | |cff00ffffOS:%d|r | |cffeda55fTM:%d|r | |cffaaaaaaPass:%d|r", bids, rolls, os, tm, pass)
+    local countsText = string.format(
+        "|cffff8000Bid:%d|r | |cffa335eeRoll:%d|r | |cff0070ddOS:%d|r | |cff1eff00TM:%d|r | |cff9d9d9dPass:%d|r",
+        bids, rolls, os, tm, pass
+    )
 
     if isClosed then return countsText .. " |cffff0000[Closed]|r", {} end
 
@@ -62,9 +65,9 @@ function UI_Monitor:GetVoteInfo(guid)
 
     local Sim = DesolateLootcouncil:GetModule("Simulation")
     if Sim and Sim.GetPendingVoters then
-        local simPending = Sim:GetPendingVoters(guid)
+        local simPending = Sim:GetPendingVoters(guid, votedPlayers)
         if simPending then
-            for _, sName in ipairs(simPending) do table.insert(pending, API:GetDisplayName(sName)) end
+            for _, sName in ipairs(simPending) do table.insert(pending, sName) end
         end
     end
 
@@ -72,70 +75,83 @@ function UI_Monitor:GetVoteInfo(guid)
     return countsText, pending
 end
 
-function UI_Monitor:BuildItemRow(scroll, item, isLM)
+function UI_Monitor:BuildItemRow(index, item, isLM)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local link = item.link
     local guid = item.sourceGUID or link
 
-    local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    group:SetLayout("Flow")
-    group:SetFullWidth(true)
-    scroll:AddChild(group)
-
-    local itemIcon = AceGUI:Create("Icon")
-    itemIcon:SetImage(C_Item.GetItemIconByID(item.itemID) or 134400)
-    itemIcon:SetImageSize(24, 24)
-    itemIcon:SetRelativeWidth(0.05)
-    itemIcon:SetCallback("OnClick", function()
-        GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(item.link)
-        GameTooltip:Show()
-    end)
-    itemIcon:SetCallback("OnEnter", function()
-        GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(item.link)
-        GameTooltip:Show()
-    end)
-    itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-    group:AddChild(itemIcon)
-
-    local labelLink = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-    local _, properLink = C_Item.GetItemInfo(link)
-    if not properLink then
-        local itemObj = Item:CreateFromItemID(item.itemID)
-        if not itemObj:IsItemEmpty() then
-            itemObj:ContinueOnItemLoad(function()
-                if self.monitorFrame and (self.monitorFrame --[[@as any]]).frame:IsShown() then
-                    if self.refreshTimer then self.refreshTimer:Cancel() end
-                    self.refreshTimer = C_Timer.NewTimer(0.15, function()
-                        self.refreshTimer = nil
-                        self:ShowMonitorWindow()
-                    end)
-                end
-            end)
-        end
-        labelLink:SetText(L["Loading..."])
-    else
-        labelLink:SetText(properLink)
-        itemIcon:SetImage(C_Item.GetItemIconByID(item.itemID) or 134400)
+    if not self.rowPool[index] then
+        self.rowPool[index] = NativeGUI:CreateRowContainer(self.scrollContent, false)
     end
-    labelLink:SetRelativeWidth(0.35)
-    labelLink:SetCallback("OnEnter", function(widget)
-        GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(item.link)
-        GameTooltip:Show()
-    end)
-    labelLink:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-    group:AddChild(labelLink)
+    local row = self.rowPool[index]
+    row:Show()
 
+    local rowHeight = 36
+    row:SetHeight(rowHeight)
+
+    local topOffset = (index - 1) * (rowHeight + 8)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
+    row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
+
+    -- 1. Icon
+    NativeGUI:SetupItemIconButton(row, item, 24, 8, 0)
+
+    -- 4. Action buttons (defined early for right anchoring target)
+    if not row.actionFrame then
+        row.actionFrame = CreateFrame("Frame", nil, row)
+    end
+    row.actionFrame:ClearAllPoints()
+    row.actionFrame:SetSize(115, 26)
+    row.actionFrame:SetPoint("RIGHT", row, "RIGHT", -12, 0)
+
+    local kids = { row.actionFrame:GetChildren() }
+    for _, kid in ipairs(kids) do
+        kid:Hide()
+        kid:ClearAllPoints()
+    end
+
+    local btnAward = NativeGUI:CreateButton(row.actionFrame, isLM and L["Award"] or L["View Rolls"], 75, 24, "Bid")
+    btnAward:SetPoint("LEFT", 0, 0)
+    btnAward:SetScript("OnClick", function()
+        local AwardUI = DesolateLootcouncil:GetModule("UI_Award", true)
+        if AwardUI then AwardUI:ShowAwardWindow(item) end
+    end)
+
+    if isLM then
+        local btnRemove = NativeGUI:CreateButton(row.actionFrame, "X", 32, 24, "Stop")
+        btnRemove:SetPoint("LEFT", 80, 0)
+        btnRemove:SetScript("OnClick", function()
+            C_Timer.After(0.05, function()
+                DesolateLootcouncil.API:RemoveSessionItem(guid)
+            end)
+        end)
+    end
+
+    -- 3. Vote Counts & Pending response
     local countsText, pendingList = self:GetVoteInfo(guid)
 
-    local labelCounts = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-    labelCounts:SetText(countsText)
-    labelCounts:SetRelativeWidth(0.35)
+    if not row.countsFrame then
+        local cf = CreateFrame("Frame", nil, row)
+        cf:SetSize(330, 20)
+
+        local text = cf:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        text:SetPoint("LEFT", 0, 0)
+        text:SetPoint("RIGHT", 0, 0)
+        text:SetJustifyH("RIGHT")
+        text:SetWordWrap(false)
+        cf.text = text
+
+        row.countsFrame = cf
+    end
+    row.countsFrame:ClearAllPoints()
+    row.countsFrame:SetPoint("RIGHT", row.actionFrame, "LEFT", -5, 0)
+    row.countsFrame.text:SetText(countsText)
 
     if #pendingList > 0 then
-        labelCounts:SetCallback("OnEnter", function(widget)
-            GameTooltip:SetOwner((widget --[[@as any]]).frame, "ANCHOR_CURSOR")
+        row.countsFrame:EnableMouse(true)
+        row.countsFrame:SetScript("OnEnter", function(w)
+            GameTooltip:SetOwner(w, "ANCHOR_CURSOR")
             GameTooltip:ClearLines()
             GameTooltip:AddLine(L["Still Pending Response:"], 1, 1, 1)
             for _, name in ipairs(pendingList) do
@@ -143,168 +159,226 @@ function UI_Monitor:BuildItemRow(scroll, item, isLM)
             end
             GameTooltip:Show()
         end)
-        labelCounts:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+        row.countsFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    else
+        row.countsFrame:EnableMouse(false)
+        row.countsFrame:SetScript("OnEnter", nil)
     end
-    group:AddChild(labelCounts)
 
-    local btnAward = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    btnAward:SetText(isLM and L["Award"] or L["View Rolls"])
-    btnAward:SetRelativeWidth(0.15)
-    btnAward:SetCallback("OnClick", function()
-        self:ShowAwardWindow(item)
-    end)
-    group:AddChild(btnAward)
+    -- 2. Link Label (sandwiched in-between LEFT and RIGHT anchors)
+    if not row.itemLabel then
+        local lbl = CreateFrame("Button", nil, row)
+        lbl:SetHeight(20)
 
-    local btnRemove = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    btnRemove:SetText("X")
-    btnRemove:SetRelativeWidth(0.10)
-    btnRemove:SetCallback("OnClick", function()
-        C_Timer.After(0.05, function()
-            DesolateLootcouncil.API:RemoveSessionItem(guid)
-        end)
-    end)
-    if isLM then group:AddChild(btnRemove) end
+        local text = lbl:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        text:SetPoint("LEFT", 0, 0)
+        text:SetPoint("RIGHT", 0, 0)
+        text:SetJustifyH("LEFT")
+        text:SetWordWrap(false)
+        lbl.text = text
+
+        row.itemLabel = lbl
+    end
+    row.itemLabel:ClearAllPoints()
+    row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 10, 0)
+    row.itemLabel:SetPoint("RIGHT", row.countsFrame, "LEFT", 2, 0)
+
+    local _, properLink = C_Item.GetItemInfo(link)
+    if not properLink then
+        local itemObj = Item:CreateFromItemID(item.itemID)
+        if not itemObj:IsItemEmpty() then
+            itemObj:ContinueOnItemLoad(function()
+                if self.monitorFrame and self.monitorFrame:IsShown() then
+                    if self.refreshTimer then self.refreshTimer:Cancel() end
+                    self.refreshTimer = C_Timer.NewTimer(0.15, function()
+                        self.refreshTimer = nil
+                        self:ShowMonitorWindow(true)
+                    end)
+                end
+            end)
+        end
+        row.itemLabel.text:SetText(L["Loading..."])
+    else
+        row.itemLabel.text:SetText(properLink)
+        row.itemIcon.texture:SetTexture(C_Item.GetItemIconByID(item.itemID) or 134400)
+    end
+    row.itemLabel:SetScript("OnClick", ShowTip)
+    row.itemLabel:SetScript("OnEnter", ShowTip)
+    row.itemLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    self.scrollContent:SetHeight(topOffset + rowHeight + 10)
 end
 
 function UI_Monitor:ShowMonitorWindow(isRefresh)
+    if not DesolateLootcouncil:AmIRaidAssistOrLM() then
+        if self.monitorFrame then self.monitorFrame:Hide() end
+        return
+    end
+
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
     if not self.monitorFrame then
-        ---@type AceGUIFrame
-        local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle(L["Session Monitor"])
-        frame:SetLayout("Flow")
-        frame:SetWidth(650)
-        frame:SetHeight(400)
-        frame:SetCallback("OnClose", function(widget)
-            self.userClosedMonitor = true -- B3: Track user-intent close vs system close
-            widget:Hide()
+        local frame = NativeGUI:CreateWindow("DLCMonitorFrame", L["Session Monitor"], "Monitor")
+        frame:HookScript("OnHide", function()
+            self.userClosedMonitor = true
         end)
         self.monitorFrame = frame
+        self.rowPool = {}
 
-        -- [NEW] Position Persistence
-        DesolateLootcouncil.Persistence:MakeMovableWithSave(frame, "Monitor")
+        -- Premium Disenchant Toggle Button next to Close (X) button
+        if frame.titleBar then
+            frame.titleBar:ClearAllPoints()
+            frame.titleBar:SetPoint("TOPLEFT", 2, -2)
+            frame.titleBar:SetPoint("TOPRIGHT", -64, -2)
+        end
+
+        local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+        local deBtn = CreateFrame("Button", nil, frame, "BackdropTemplate")
+        deBtn:SetSize(20, 20)
+        deBtn:SetPoint("TOPRIGHT", frame.closeButton, "TOPLEFT", -6, 0)
+        deBtn:SetFrameLevel(frame.closeButton:GetFrameLevel() + 5)
+        deBtn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        deBtn:SetBackdropColor(theme.bg[1] * 1.5, theme.bg[2] * 1.5, theme.bg[3] * 1.5, 0.8)
+        deBtn:SetBackdropBorderColor(unpack(theme.border))
+
+        local deIcon = deBtn:CreateTexture(nil, "OVERLAY")
+        deIcon:SetSize(14, 14)
+        deIcon:SetPoint("CENTER", 0, 0)
+        deIcon:SetTexture("Interface\\Icons\\spell_holy_removecurse")
+        deIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        deBtn.icon = deIcon
+
+        deBtn:SetScript("OnEnter", function()
+            local activeTheme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+            deBtn:SetBackdropColor(unpack(activeTheme.buttonHover))
+            deBtn:SetBackdropBorderColor(unpack(activeTheme.border))
+            if deBtn.icon then
+                deBtn.icon:SetDesaturated(false)
+                deBtn.icon:SetVertexColor(1, 1, 1, 1)
+            end
+            GameTooltip:SetOwner(deBtn, "ANCHOR_TOP")
+            GameTooltip:SetText(L["Toggle Disenchanters Sidebar"], 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        deBtn:SetScript("OnLeave", function()
+            self:UpdateDisenchantersButtonState()
+            GameTooltip:Hide()
+        end)
+        deBtn:SetScript("OnClick", function()
+            if self.deFrame and self.deFrame:IsShown() then
+                self.userClosedDE = true
+            else
+                self.userClosedDE = false
+            end
+            self:UpdateDisenchanters()
+        end)
+
+        self.deBtn = deBtn
     end
 
     if not isRefresh then
-        -- B3: Clear the user-close flag when a new session explicitly opens the window
         self.userClosedMonitor = false
         self.monitorFrame:Show()
-        -- Ensure window is maximized if it was previously collapsed
-        local frame = (self.monitorFrame --[[@as any]]).frame
-        if frame then
-            frame.startCollapsed = nil -- Cancel initial hook timer
-            if frame.isCollapsed then
-                DesolateLootcouncil.Persistence:ToggleWindowCollapse(self.monitorFrame)
-            end
-        end
     elseif self.userClosedMonitor then
-        return -- Respect user's explicit close during refresh cycles
-    elseif not (self.monitorFrame.frame and self.monitorFrame.frame:IsShown()) then
-        return -- Window hidden by system but not yet re-opened by new session
+        return
+    elseif not self.monitorFrame:IsShown() then
+        return
     end
 
-    self.monitorFrame:ReleaseChildren()
+    -- Hide sizers or old elements safely
+    for _, row in ipairs(self.rowPool) do
+        row:Hide()
+        row:ClearAllPoints()
+    end
 
     local API = DesolateLootcouncil.API
     local isLM = API:IsLootMaster()
     local items = API:GetBiddingList()
-    local parent = (self.monitorFrame --[[@as any]]).frame
 
-    ---@type AceGUIScrollFrame
-    local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
-    scroll:SetLayout("List")
-    scroll:SetFullWidth(true)
-    scroll:SetFullHeight(true)
-    self.monitorFrame:AddChild(scroll)
+    if not self.scrollFrame then
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.monitorFrame, -50, -46)
+        self.scrollFrame = scrollFrame
+        self.scrollContent = scrollContent
+    end
+    self.scrollFrame:Show()
+    self.scrollContent:Show()
 
     if items then
-        for _, item in ipairs(items) do
-            self:BuildItemRow(scroll, item, isLM)
+        for i, item in ipairs(items) do
+            self:BuildItemRow(i, item, isLM)
         end
     end
 
-    local mFrame = self.monitorFrame --[[@as any]]
-    local isCollapsed = mFrame.frame and mFrame.frame.isCollapsed
+    -- Control Hub Navigation (Footer Bar)
+    if not self.navGroup then
+        local nav = CreateFrame("Frame", nil, self.monitorFrame)
+        nav:SetHeight(38)
+        nav:SetPoint("BOTTOMLEFT", self.monitorFrame, "BOTTOMLEFT", 12, 6)
+        nav:SetPoint("BOTTOMRIGHT", self.monitorFrame, "BOTTOMRIGHT", -12, 6)
+        self.navGroup = nav
 
-    if not mFrame.btnTrades then
-        local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-        btn:SetText(L["Pending Trades"])
-        btn:SetWidth(120)
-        btn:SetHeight(24)
-        btn:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 20, 15)
-        btn:SetFrameLevel(parent:GetFrameLevel() + 10)
-        btn:SetScript("OnClick", function()
-            local Trade = DesolateLootcouncil:GetModule("UI_TradeList")
+        -- Reusable buttons
+        self.btnTrades = NativeGUI:CreateButton(nav, L["Pending Trades"], 105, 24, "Pass")
+        self.btnTrades:SetPoint("LEFT", 0, 0)
+        self.btnTrades:SetScript("OnClick", function()
+            local Trade = DesolateLootcouncil:GetModule("UI_TradeList", true)
             if Trade then Trade:ShowTradeListWindow() end
         end)
-        mFrame.btnTrades = btn
-    end
-    -- Bug 2: Only show footer buttons when not collapsed AND LM only for trades
-    if not isCollapsed and isLM then mFrame.btnTrades:Show() else mFrame.btnTrades:Hide() end
 
-    if not mFrame.btnEnd then
-        local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-        btn:SetText(L["Stop Session"])
-        btn:SetWidth(120)
-        btn:SetHeight(24)
-        btn:SetPoint("BOTTOM", parent, "BOTTOM", 0, 15)
-        btn:SetFrameLevel(parent:GetFrameLevel() + 10)
-        btn:SetScript("OnClick", function()
-            DesolateLootcouncil.API:StopSession()
+        self.btnLoot = NativeGUI:CreateButton(nav, L["Loot Backlog"], 90, 24, "Pass")
+        self.btnLoot:SetPoint("LEFT", 110, 0)
+        self.btnLoot:SetScript("OnClick", function()
+            local LootUI = DesolateLootcouncil:GetModule("UI_Loot", true)
+            if LootUI then LootUI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
         end)
-        mFrame.btnEnd = btn
-    end
-    -- Bug 2: Only show footer buttons when not collapsed
-    if not isCollapsed and isLM then mFrame.btnEnd:Show() else mFrame.btnEnd:Hide() end
 
-    local function LayoutMonitor()
-        local rawFrame = (self.monitorFrame --[[@as any]]).frame
-        local h = rawFrame:GetHeight()
-        local isCollapsedNow = rawFrame.isCollapsed
+        self.btnHist = NativeGUI:CreateButton(nav, L["Award Log"], 72, 24, "Pass")
+        self.btnHist:SetPoint("LEFT", 205, 0)
+        self.btnHist:SetScript("OnClick", function()
+            local History = DesolateLootcouncil:GetModule("UI_History", true)
+            if History then History:ShowSessionLootHistory() end
+        end)
 
-        -- Safety: If collapsed, don't try to layout the scroll frame with negative size
-        if h > 80 and not isCollapsedNow then
-            local scrollFrame = scroll and (scroll --[[@as any]]).frame
-            if scrollFrame then
-                scroll:SetHeight(h - 80)
-                scrollFrame:Show()
-            end
-        else
-            local scrollFrame = scroll and (scroll --[[@as any]]).frame
-            if scrollFrame then scrollFrame:Hide() end
-        end
+        self.btnAttend = NativeGUI:CreateButton(nav, L["Attendance"], 85, 24, "Pass")
+        self.btnAttend:SetPoint("LEFT", 282, 0)
+        self.btnAttend:SetScript("OnClick", function()
+            local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
+            if Attendance then Attendance:ShowAttendanceWindow() end
+        end)
 
-        self.monitorFrame:DoLayout()
-        -- Sync Sidebar: only drive visibility from collapsed state;
-        -- UpdateDisenchanters owns the show/hide when data is present.
-        if self.deFrame then
-            self.deFrame:SetHeight(h)
-            if isCollapsedNow then 
-                self.deFrame:Hide() 
-            else
-                self:UpdateDisenchanters()
-            end
+        self.btnVer = NativeGUI:CreateButton(nav, L["Version Check"], 100, 24, "Pass")
+        self.btnVer:SetPoint("LEFT", 372, 0)
+        self.btnVer:SetScript("OnClick", function()
+            local Version = DesolateLootcouncil:GetModule("UI_Version", true)
+            if Version then Version:ShowVersionWindow() end
+        end)
+
+        if isLM then
+            self.btnStop = NativeGUI:CreateButton(nav, L["Stop Session"], 105, 24, "Stop")
+            self.btnStop:SetPoint("RIGHT", 0, 0)
+            self.btnStop:SetScript("OnClick", function()
+                DesolateLootcouncil.API:StopSession()
+            end)
         end
     end
-    -- Store on self so Persistence.ToggleWindowCollapse can re-trigger it after expand.
-    self.layoutMonitor = LayoutMonitor
-    LayoutMonitor()
-    self.monitorFrame:SetCallback("OnResize", LayoutMonitor)
+    self.navGroup:Show()
 
-    -- [NEW] Disenchanter Sidebar (External Widget)
+    -- Disenchanter Sidebar Attachment
     if not self.deFrame then
-        local Sidebar = DesolateLootcouncil:GetModule("UI_Sidebar")
+        local Sidebar = DesolateLootcouncil:GetModule("UI_Sidebar", true)
         if Sidebar then
             self.deFrame = Sidebar:AttachTo(self.monitorFrame)
         end
     end
     self:UpdateDisenchanters()
-
-    -- PROBLEM 15: ALWAYS call :Show() to ensure the window reappears (for both LMs and Assistants!)
-    if self.monitorFrame then self.monitorFrame:Show() end
 end
 
 function UI_Monitor:OnEnable()
-    -- Refresh sidebar whenever a version-check response arrives (enchanting skill data)
+    self.userClosedDE = true
     self:RegisterMessage("DLC_VERSION_UPDATE", function()
         self:UpdateDisenchanters()
     end)
@@ -321,12 +395,7 @@ function UI_Monitor:OnSessionStarted(eventName, cleanList, isLM)
 end
 
 function UI_Monitor:OnSessionStopped()
-    if self.monitorFrame then
-        self.monitorFrame:Hide()
-    end
-    if self.awardFrame then
-        self.awardFrame:Hide()
-    end
+    if self.monitorFrame then self.monitorFrame:Hide() end
 end
 
 function UI_Monitor:OnSessionRestored(eventName, clientLootList, isLM)
@@ -339,194 +408,55 @@ function UI_Monitor:OnItemRemoved(eventName, guid)
     self:ShowMonitorWindow(true)
 end
 
+function UI_Monitor:UpdateDisenchantersButtonState()
+    if not self.deBtn then return end
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+    local isShown = self.deFrame and self.deFrame:IsShown()
+
+    if isShown then
+        -- Active state: Glowing border, slightly brightened button background
+        self.deBtn:SetBackdropBorderColor(unpack(theme.border))
+        self.deBtn:SetBackdropColor(theme.bg[1] * 2.0, theme.bg[2] * 2.0, theme.bg[3] * 2.0, 0.9)
+        if self.deBtn.icon then
+            self.deBtn.icon:SetDesaturated(false)
+            self.deBtn.icon:SetVertexColor(1, 1, 1, 1)
+        end
+    else
+        -- Inactive/Muted state: Grey border, darker background, desaturated icon
+        self.deBtn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.5)
+        self.deBtn:SetBackdropColor(theme.bg[1] * 1.0, theme.bg[2] * 1.0, theme.bg[3] * 1.0, 0.7)
+        if self.deBtn.icon then
+            self.deBtn.icon:SetDesaturated(true)
+            self.deBtn.icon:SetVertexColor(0.5, 0.5, 0.5, 0.6)
+        end
+    end
+end
+
 function UI_Monitor:UpdateDisenchanters()
     if not self.deFrame then return end
-    local Sidebar = DesolateLootcouncil:GetModule("UI_Sidebar")
+    local Sidebar = DesolateLootcouncil:GetModule("UI_Sidebar", true)
     if Sidebar then
         Sidebar:UpdateDisenchanters(self.deFrame)
     end
-    
-    -- Ensure the sidebar doesn't show up if the monitor is currently collapsed.
-    -- This defensive duplicate check is necessary to prevent direct callers (e.g. version checks)
-    -- from revealing the sidebar while the main monitor is hidden. The type cast to `any`
-    -- bypasses AceGUI's strict typing to access the underlying frame's custom `isCollapsed` state.
-    local mFrame = self.monitorFrame and (self.monitorFrame --[[@as any]]).frame
-    if mFrame and mFrame.isCollapsed then
+
+    if self.userClosedDE == true or (self.monitorFrame and self.monitorFrame.isCollapsed) then
         self.deFrame:Hide()
-    end
-end
-function UI_Monitor:CreateVoteRow(scroll, v, isLM, itemData)
-    local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    row:SetLayout("Flow")
-    row:SetFullWidth(true)
-    scroll:AddChild(row)
-
-    local lblName = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    lblName:SetText(DesolateLootcouncil:GetDisplayName(v.name))
-    lblName:SetRelativeWidth(0.30)
-    row:AddChild(lblName)
-
-    local rankText
-    if v.type == 1 then
-        rankText = (v.rank == 999) and "|cff9d9d9d" .. L["Unranked"] .. "|r" or ("#" .. v.rank)
-        if v.rank <= 5 then rankText = "|cffffd700" .. rankText .. "|r" end
+    elseif self.userClosedDE == false then
+        self.deFrame:Show()
     else
-        rankText = "Roll: " .. v.roll
-    end
-
-    local lblRank = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    lblRank:SetText(rankText)
-    lblRank:SetRelativeWidth(0.20)
-    row:AddChild(lblRank)
-
-    local lblResp = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    local color = VOTE_COLOR[v.type] or ""
-    local txt = VOTE_TEXT[v.type] or "?"
-    lblResp:SetText(color .. txt .. "|r")
-    lblResp:SetRelativeWidth(0.25)
-    row:AddChild(lblResp)
-
-    local btnGive = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    btnGive:SetText(L["Give"])
-    btnGive:SetRelativeWidth(0.25)
-    btnGive:SetCallback("OnClick", function()
-        self.awardFrame:Hide()
-        local voteDesc = VOTE_TEXT[v.type] or "Unknown"
-        DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, v.name, voteDesc)
-    end)
-    if isLM then row:AddChild(btnGive) end
-end
-
-function UI_Monitor:CreateDisenchanterRow(scroll, de, isLM, itemData)
-    local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    row:SetLayout("Flow")
-    row:SetFullWidth(true)
-    scroll:AddChild(row)
-
-    local lblName = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    lblName:SetText(DesolateLootcouncil:GetDisplayName(de.name))
-    lblName:SetRelativeWidth(0.30)
-    row:AddChild(lblName)
-
-    local lblSkill = AceGUI:Create("Label") --[[@as AceGUILabel]]
-    lblSkill:SetText(string.format(L["Lvl %d"], de.skill))
-    lblSkill:SetRelativeWidth(0.45)
-    row:AddChild(lblSkill)
-
-    local btnGive = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    btnGive:SetText(L["Give"])
-    btnGive:SetRelativeWidth(0.25)
-    btnGive:SetCallback("OnClick", function()
-        self.awardFrame:Hide()
-        DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
-    end)
-    if isLM then row:AddChild(btnGive) end
-end
-
-function UI_Monitor:ShowAwardWindow(itemData)
-    if not itemData then
-        if self.awardFrame then self.awardFrame:Hide() end
-        return
-    end
-
-    -- B15: Hoist isLM to function scope — it's stable and was re-declared 3 times below
-    local isLM = DesolateLootcouncil.API:IsLootMaster()
-
-    if not self.awardFrame then
-        ---@type AceGUIFrame
-        local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle(L["Award Item"])
-        frame:SetLayout("Flow")
-        frame:SetWidth(500)
-        frame:SetHeight(500)
-        frame:SetCallback("OnClose", function(widget) widget:Hide() end)
-        self.awardFrame = frame
-
-        -- [NEW] Position Persistence
-        DesolateLootcouncil.Persistence:MakeMovableWithSave(frame, "Award")
-    end
-    self.awardFrame:Show()
-    self.awardFrame:ReleaseChildren()
-
-    local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
-    ---@type AceGUILabel
-    local header = AceGUI:Create("Label") --[[@as AceGUILabel]]
-
-    local _, properLink = C_Item.GetItemInfo(itemData.link)
-    header:SetText((properLink or itemData.link) .. "|cffaaaaaa" .. catText .. "|r")
-    header:SetFullWidth(true)
-    header:SetJustifyH("CENTER")
-    header:SetFontObject(GameFontNormalLarge)
-    self.awardFrame:AddChild(header)
-
-    local API  = DesolateLootcouncil.API
-    local guid = itemData.sourceGUID or itemData.link
-    local summary = API:GetVoteSummary(guid)
-    local votes   = summary.votes
-
-    ---@type AceGUIScrollFrame
-    local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
-    scroll:SetLayout("List")
-    scroll:SetFullWidth(true)
-    self.awardFrame:AddChild(scroll)
-
-    local voteList = {}
-    if votes then
-        for voter, voteData in pairs(votes) do
-            local vType = type(voteData) == "table" and voteData.type or voteData
-            local vRoll = (type(voteData) == "table" and voteData.roll) or 0
-
-            if vType ~= 5 then
-                local rank = API:GetPlayerRankInList(voter, itemData.category)
-                table.insert(voteList, { name = voter, type = vType, roll = vRoll, rank = rank })
-            end
-        end
-
-        table.sort(voteList, function(a, b)
-            if a.type ~= b.type then return a.type < b.type end
-            if a.type == 1 then
-                if a.rank ~= b.rank then return a.rank < b.rank end
-                return a.roll > b.roll
-            end
-            return a.roll > b.roll
-        end)
-    end
-
-    if #voteList == 0 then
-        local lbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        lbl:SetText(L["No active votes."])
-        lbl:SetFullWidth(true)
-        scroll:AddChild(lbl)
-    else
-        for _, v in ipairs(voteList) do
-            self:CreateVoteRow(scroll, v, isLM, itemData)
+        -- Default scan-based visibility
+        local disenchanters = DesolateLootcouncil.API:GetDisenchanterList()
+        if #disenchanters > 0 then
+            self.deFrame:Show()
+        else
+            self.deFrame:Hide()
         end
     end
 
-    -- [NEW] Disenchanters Section
-    local API = DesolateLootcouncil.API
-    local disenchanters = API:GetDisenchanterList()
-    if DesolateLootcouncil.db.profile.debugMode then
-        DesolateLootcouncil:DLC_Log("Monitor: Disenchanters found: " .. #disenchanters)
-    end
-
-    if #disenchanters > 0 then
-        ---@type AceGUILabel
-        local deHeader = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        deHeader:SetText("\n|cffaaaaaa" .. L["Disenchanters"] .. "|r")
-        deHeader:SetFullWidth(true)
-        deHeader:SetJustifyH("CENTER")
-        deHeader:SetFontObject(GameFontNormal)
-        scroll:AddChild(deHeader)
-
-        for _, de in ipairs(disenchanters) do
-            self:CreateDisenchanterRow(scroll, de, isLM, itemData)
-        end
-    end
+    self:UpdateDisenchantersButtonState()
 end
 
 function UI_Monitor:CloseMasterLootWindow()
     if self.monitorFrame then self.monitorFrame:Hide() end
 end
 
-UI_Monitor.ShowMasterLootWindow = UI_Monitor.ShowMonitorWindow

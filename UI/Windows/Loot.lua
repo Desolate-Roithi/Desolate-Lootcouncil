@@ -1,196 +1,138 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
----@class UI_Loot : AceModule, AceConsole-3.0
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+
+---@class UI_Loot : AceModule, AceTimer-3.0
 local UI_Loot = DesolateLootcouncil:NewModule("UI_Loot", "AceConsole-3.0", "AceTimer-3.0", "AceEvent-3.0")
-local AceGUI = LibStub("AceGUI-3.0")
 
----@class (partial) UI_Loot : AceModule
----@field lootFrame LootFrame
----@field btnStart Button
-
----@class LootFrame : AceGUIFrame
----@field statusIcon Texture
----@field statusTooltip Button
----@field statusbg Frame
-
----@class (partial) DLC_Ref_UILoot
----@field db table
----@field NewModule fun(self: DLC_Ref_UILoot, name: string, ...): any
----@field GetModule fun(self: DLC_Ref_UILoot, name: string): any
----@field AmILootMaster fun(self: DLC_Ref_UILoot): boolean
----@field GetPriorityListNames fun(self: DLC_Ref_UILoot): table
----@field GetItemCategory fun(self: DLC_Ref_UILoot, item: any): string
----@field SetItemCategory fun(self: DLC_Ref_UILoot, itemID: number, listIndex: number)
----@field Print fun(self: DLC_Ref_UILoot, msg: string)
----@field UnassignItem fun(self: DLC_Ref_UILoot, itemID: number)
----@field GetActiveUserCount fun(self: DLC_Ref_UILoot): number
----@field RestoreFramePosition fun(self: DLC_Ref_UILoot, frame: any, windowName: string)
----@field SaveFramePosition fun(self: DLC_Ref_UILoot, frame: any, windowName: string)
----@field ApplyCollapseHook fun(self: DLC_Ref_UILoot, widget: any)
----@field DLC_Log fun(self: DLC_Ref_UILoot, msg: any, force?: boolean)
----@field Persistence any
-
----@type DLC_Ref_UILoot
-local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UILoot]]
-
-function UI_Loot:CreateLootFrame()
-    ---@type LootFrame
-    local frame = AceGUI:Create("Frame") --[[@as LootFrame]]
-    frame:SetTitle("Desolate Loot Council   ")
-    frame:SetLayout("Flow")
-    frame:SetWidth(400)
-    frame:SetHeight(500)
-
-    self.lootFrame = frame
-
-    -- [NEW] Position Persistence
-    DesolateLootcouncil.Persistence:RestoreFramePosition(frame, "Loot")
-    local function SavePos(f)
-        DesolateLootcouncil.Persistence:SaveFramePosition(f, "Loot")
-    end
-
-    local rawFrame = (frame --[[@as any]]).frame
-    rawFrame:HookScript("OnDragStop", function(f)
-        f:StopMovingOrSizing()
-        SavePos(frame)
-    end)
-    rawFrame:HookScript("OnHide", function() SavePos(frame) end)
-    DesolateLootcouncil.Persistence:ApplyCollapseHook(frame, "Loot")
-
-    -- Clean up handle on frame hide
-    frame:SetCallback("OnClose", function(widget)
-        if self.refreshTimer then
-            self:CancelTimer(self.refreshTimer)
-            self.refreshTimer = nil
-        end
-        -- Problem 6: Fix "Ghost Dot" on reused frames (Use widget instead of self.lootFrame to avoid nil error)
-        if widget.statusIcon then widget.statusIcon:Hide() end
-        if widget.statusTooltip then widget.statusTooltip:Hide() end
-
-        widget:Hide()
-        if self.btnStart then self.btnStart:Hide() end
-        AceGUI:Release(widget)
-        self.lootFrame = nil
-        self.btnStart = nil
-    end)
+-- Local helper functions to keep nesting flat
+local function OnClearSessionClicked()
+    DesolateLootcouncil.API:ClearLootBacklog()
+    UI_Loot:ShowLootWindow(nil)
 end
 
-function UI_Loot:CreateLootRow(scroll, data, lootTable, listIndexMap, catList)
-    local link = data.link
+local function OnStartBiddingClicked()
+    DesolateLootcouncil.API:StartSession(UI_Loot.activeLootTable)
+end
 
-    -- Row Container
-    ---@type AceGUISimpleGroup
-    local group = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    group:SetLayout("Flow")
-    group:SetFullWidth(true)
-    scroll:AddChild(group)
+local function OnConnectionTooltipEnter(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+    local active = DesolateLootcouncil:GetActiveUserCount()
+    local total = GetNumGroupMembers()
+    if total == 0 then
+        total = 1; active = 1
+    end
+    GameTooltip:AddLine(string.format(L["Addon Connection: [%d] / [%d]"], active, total), 1, 1, 1)
+    GameTooltip:Show()
+end
 
-    -- Item Icon
-    ---@type AceGUIIcon
-    local itemIcon = AceGUI:Create("Icon")
-    itemIcon:SetImage(data.texture or C_Item.GetItemIconByID(data.itemID) or 134400)
-    itemIcon:SetImageSize(24, 24)
-    itemIcon:SetRelativeWidth(0.08)
-    itemIcon:SetCallback("OnClick", function()
-        GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
-        if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
-        GameTooltip:Show()
-    end)
-    itemIcon:SetCallback("OnEnter", function()
-        GameTooltip:SetOwner((itemIcon --[[@as any]]).frame, "ANCHOR_CURSOR")
-        if data.link then GameTooltip:SetHyperlink(data.link) else GameTooltip:SetItemByID(data.itemID) end
-        GameTooltip:Show()
-    end)
-    itemIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-    group:AddChild(itemIcon)
+local function OnConnectionTooltipLeave()
+    GameTooltip:Hide()
+end
 
-    -- Item Link
-    ---@type AceGUIInteractiveLabel
-    local itemLabel = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
+local function OnRefreshConnectionsClicked()
+    local success = DesolateLootcouncil.API:PingVersionCheck()
+    if success then
+        DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
+        UI_Loot.refreshBtn:SetEnabled(false)
+        UI_Loot.refreshBtn:SetText(L["Pinging..."])
+    end
+end
 
-    local _, properLink = C_Item.GetItemInfo(data.link or data.itemID)
-    
-    if not properLink then
-        local itemObj = Item:CreateFromItemID(data.itemID)
-        if not itemObj:IsItemEmpty() then
-            itemObj:ContinueOnItemLoad(function()
-                if self.lootFrame and (self.lootFrame --[[@as any]]).frame:IsShown() then
-                    self:ShowLootWindow(lootTable)
-                end
-            end)
-        end
-        itemLabel:SetText("Loading...")
+local function OnTimerTick()
+    if not UI_Loot.lootFrame:IsShown() then return end
+    local rem = DesolateLootcouncil.API:GetVersionCheckCooldown()
+    if rem > 0 then
+        UI_Loot.refreshBtn:SetText(string.format(L["Refresh (%.0fs)"], rem))
+        UI_Loot.refreshBtn:SetEnabled(false)
     else
-        itemLabel:SetText(properLink or data.link)
-        itemIcon:SetImage(C_Item.GetItemIconByID(data.itemID) or 134400)
+        UI_Loot.refreshBtn:SetText(L["Refresh Connections"])
+        UI_Loot.refreshBtn:SetEnabled(true)
     end
 
-    itemLabel:SetRelativeWidth(0.42)
-    itemLabel:SetCallback("OnClick", function()
-        GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
-        if link then GameTooltip:SetHyperlink(link) else GameTooltip:SetItemByID(data.itemID) end
-        GameTooltip:Show()
-    end)
+    -- Update indicator light
+    local activeC = DesolateLootcouncil:GetActiveUserCount()
+    local totalC = GetNumGroupMembers()
+    if totalC == 0 then totalC = 1 end
 
-    itemLabel:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-    itemLabel:SetCallback("OnEnter", function()
-        GameTooltip:SetOwner((itemLabel --[[@as any]]).frame, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(link)
-        GameTooltip:Show()
-    end)
-
-    -- Category Dropdown
-    ---@type AceGUIDropdown
-    local catDropdown = AceGUI:Create("Dropdown") --[[@as AceGUIDropdown]]
-    catDropdown:SetRelativeWidth(0.32)
-    catDropdown:SetList(catList)
-
-    local API = DesolateLootcouncil.API
-    local savedCat = API:GetItemCategory(data.itemID)
-    if savedCat == "Junk/Pass" then
-        savedCat = data.category or "Junk/Pass"
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simCount = Sim and Sim:GetCount() or 0
+    if simCount > 0 then
+        totalC = totalC + simCount
     end
 
-    data.category = savedCat
-    catDropdown:SetValue(savedCat)
+    local ra, ga, ba = 1, 0, 0 -- Red: at least one player missing addon
+    if activeC >= totalC then
+        -- 100% have the addon, check versions
+        local playerVersions = DesolateLootcouncil.API:GetPlayerVersions()
+        local localVer = DesolateLootcouncil.version
+        local highestVerStr = localVer or "1.0.0"
 
-    catDropdown:SetCallback("OnValueChanged", function(_, _, value)
-        data.category = value
-        local idx = listIndexMap[value]
-        if idx then
-            API:SetItemCategory(data.itemID, idx)
-            DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
-        elseif value == "Junk/Pass" then
-            API:UnassignItem(data.itemID)
+        for _, ver in pairs(playerVersions) do
+            if ver and AT.CompareSemVer(ver, highestVerStr) then
+                highestVerStr = ver
+            end
         end
-    end)
 
-    -- Remove Button
-    ---@type AceGUIButton
-    local removeBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    removeBtn:SetText("X")
-    removeBtn:SetRelativeWidth(0.15)
-    removeBtn:SetCallback("OnClick", function()
-        local guid = data.sourceGUID or data.link
-        for idx = #lootTable, 1, -1 do
-            local entry = lootTable[idx]
-            if (entry.sourceGUID or entry.link) == guid then
-                table.remove(lootTable, idx)
+        local hasOutdated = false
+        for _, ver in pairs(playerVersions) do
+            if ver and AT.CompareSemVer(highestVerStr, ver) then
+                hasOutdated = true
                 break
             end
         end
-        DesolateLootcouncil:DLC_Log("Removed " .. (link or "item") .. " from session.")
-        self:ShowLootWindow(lootTable)
-    end)
 
-    group:AddChild(itemLabel)
-    group:AddChild(catDropdown)
-    group:AddChild(removeBtn)
+        if hasOutdated then
+            ra, ga, ba = 1, 1, 0 -- Yellow: some are out of date
+        else
+            ra, ga, ba = 0, 1, 0 -- Green: all up-to-date
+        end
+    end
+    UI_Loot.statusLight:SetVertexColor(ra, ga, ba)
+end
+
+local function OnLootFrameHide()
+    if UI_Loot.refreshTimer then
+        UI_Loot:CancelTimer(UI_Loot.refreshTimer)
+        UI_Loot.refreshTimer = nil
+    end
+end
+
+local function OnRemoveLootClicked(lootTable, guid, link)
+    for idx = #lootTable, 1, -1 do
+        local entry = lootTable[idx]
+        if (entry.sourceGUID or entry.link) == guid then
+            table.remove(lootTable, idx)
+            break
+        end
+    end
+    DesolateLootcouncil:DLC_Log("Removed " .. (link or "item") .. " from session.")
+    UI_Loot:ShowLootWindow(lootTable)
+end
+
+local function OnCategorySelected(row, value)
+    if row.catCallback then row.catCallback(value) end
+end
+
+local function OnCategoryCallback(data, listIndexMap, value)
+    data.category = value
+    local idx = listIndexMap[value]
+    if idx then
+        DesolateLootcouncil.API:SetItemCategory(data.itemID, idx)
+        DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
+    elseif value == "Junk/Pass" then
+        DesolateLootcouncil.API:UnassignItem(data.itemID)
+    end
+end
+
+local function OnLootItemLoadCallback(lootTable)
+    if UI_Loot.lootFrame and UI_Loot.lootFrame:IsShown() then
+        UI_Loot:ShowLootWindow(lootTable)
+    end
 end
 
 function UI_Loot:ShowLootWindow(lootTable)
-    -- Clean up existing timer to avoid overwriting pooled buttons (Problem 4)
     if self.refreshTimer then
         self:CancelTimer(self.refreshTimer)
         self.refreshTimer = nil
@@ -202,158 +144,72 @@ function UI_Loot:ShowLootWindow(lootTable)
         return
     end
 
-    -- NEW: Auto-close if empty
     if not lootTable or #lootTable == 0 then
         if self.lootFrame then self.lootFrame:Hide() end
         return
     end
 
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
     if not self.lootFrame then
-        self:CreateLootFrame()
+        local frame = NativeGUI:CreateWindow("DLCLootFrame", "Desolate Loot Council", "Loot")
+        self.lootFrame = frame
+        self.rowPool = {}
+
+        -- Top buttons: Clear & Refresh
+        local clearBtn = NativeGUI:CreateButton(frame, "Clear Session", 175, 24, "Pass")
+        clearBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
+        clearBtn:SetScript("OnClick", OnClearSessionClicked)
+        self.clearBtn = clearBtn
+
+        local refreshBtn = NativeGUI:CreateButton(frame, L["Refresh Connections"], 175, 24, "Pass")
+        refreshBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -42)
+        self.refreshBtn = refreshBtn
+
+        -- Pinned footer: Start Bidding
+        local startBtn = NativeGUI:CreateButton(frame, "Start Bidding", 200, 24, "Bid")
+        startBtn:SetPoint("BOTTOM", frame, "BOTTOM", 0, 12)
+        startBtn:SetScript("OnClick", OnStartBiddingClicked)
+        self.startBtn = startBtn
+
+        -- Connection indicator light
+        local light = frame:CreateTexture(nil, "OVERLAY")
+        light:SetSize(12, 12)
+        light:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -55, -16)
+        light:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+        self.statusLight = light
+
+        local ttFrame = CreateFrame("Button", nil, frame)
+        ttFrame:SetAllPoints(light)
+        ttFrame:SetFrameLevel(frame:GetFrameLevel() + 20)
+        ttFrame:SetScript("OnEnter", OnConnectionTooltipEnter)
+        ttFrame:SetScript("OnLeave", OnConnectionTooltipLeave)
+
+        refreshBtn:SetScript("OnClick", OnRefreshConnectionsClicked)
+
+        frame:HookScript("OnHide", OnLootFrameHide)
     end
 
-    -- PROBLEM 14: ALWAYS call :Show() to ensure the window reappears if hidden from previous use!
-    local lootFrame = self.lootFrame
-    lootFrame:Show()
-    lootFrame:ReleaseChildren() -- Clear previous items
+    self.activeLootTable = lootTable
+    self.lootFrame:Show()
 
-    -- 1. Hide the default Status Bar background
-    if (lootFrame --[[@as any]]).statusbg then
-        (lootFrame --[[@as any]]).statusbg:Hide()
+    if not self.refreshTimer then
+        -- Seed local player once so the connection light counts us immediately
+        DesolateLootcouncil.API:SeedSelf()
+        self.refreshTimer = self:ScheduleRepeatingTimer(OnTimerTick, 1)
+        OnTimerTick()
     end
 
-    -- 1.5 Addon Status Indicator Light (Top Right)
-    local parent = (lootFrame --[[@as any]]).frame
-    if not lootFrame.statusIcon then
-        local icon = parent:CreateTexture(nil, "OVERLAY")
-        icon:SetSize(12, 12)
-        icon:SetPoint("TOP", parent, "TOP", 78, -2) -- Move to corner
-        icon:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
-        icon:SetDrawLayer("OVERLAY", 7)             -- Force on top
-        lootFrame.statusIcon = icon
+    NativeGUI:ResetRowPool(self.rowPool)
 
-        -- Tooltip Frame (Invisible Hit Rect)
-        local ttFrame = CreateFrame("Button", nil, parent)
-        ttFrame:SetAllPoints(icon)
-        ttFrame:SetFrameLevel(parent:GetFrameLevel() + 20) -- Ensure above collapse-handle button
-        ttFrame.isTitleOverlay = true                      -- Protect from collapse-hider logic
-        lootFrame.statusTooltip = ttFrame
-
-        ttFrame:SetScript("OnEnter", function()
-            GameTooltip:SetOwner(ttFrame, "ANCHOR_BOTTOMLEFT")
-            local active = DesolateLootcouncil:GetActiveUserCount()
-            local total = GetNumGroupMembers()
-            if total == 0 then
-                total = 1; active = 1
-            end -- Solo Logic
-            GameTooltip:AddLine(string.format("Addon Connection: [%d] / [%d]", active, total), 1, 1, 1)
-            GameTooltip:Show()
-        end)
-        ttFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    if not self.scrollFrame then
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.lootFrame, -75, -46)
+        self.scrollFrame = scrollFrame
+        self.scrollContent = scrollContent
     end
 
-    -- Update Light Color
-    local activeCount = DesolateLootcouncil:GetActiveUserCount()
-    local totalCount = GetNumGroupMembers()
-    if totalCount == 0 then
-        totalCount = 1; activeCount = 1
-    end                     -- Solo safety
-
-    local r, g, b = 1, 0, 0 -- Red (Default/None)
-    if activeCount >= totalCount then
-        r, g, b = 0, 1, 0   -- Green (Full)
-    elseif activeCount > 1 then
-        r, g, b = 1, 1, 0   -- Yellow (Partial)
-    end
-    self.lootFrame.statusIcon:SetVertexColor(r, g, b)
-    self.lootFrame.statusIcon:Show()
-    if self.lootFrame.statusTooltip then self.lootFrame.statusTooltip:Show() end
-
-    -- 2. Top Button Row: Clear + Refresh
-    ---@type AceGUISimpleGroup
-    local topRow = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    topRow:SetLayout("Flow")
-    topRow:SetFullWidth(true)
-
-    ---@type AceGUIButton
-    local clearBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    clearBtn:SetText("Clear Session")
-    clearBtn:SetRelativeWidth(0.5)
-    clearBtn:SetHeight(25)
-    clearBtn:SetCallback("OnClick", function()
-        DesolateLootcouncil.API:ClearLootBacklog()
-        self:ShowLootWindow(nil)
-    end)
-
-    ---@type AceGUIButton
-    local refreshBtn = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    
-    -- Initial text and state (Problem 5: Avoid flickering "Check Connections")
-    local API = DesolateLootcouncil.API
-    local startRem = API:GetVersionCheckCooldown()
-    if startRem > 0 then
-        refreshBtn:SetText(string.format("Refresh (%.0fs)", startRem))
-        refreshBtn:SetDisabled(true)
-    else
-        refreshBtn:SetText("Refresh Connections")
-        refreshBtn:SetDisabled(false)
-    end
-    refreshBtn:SetRelativeWidth(0.5)
-    refreshBtn:SetHeight(25)
-
-    -- Function to update the status icon color/tooltip in-place
-    local function UpdateTopIndicator()
-        if not self.lootFrame or not self.lootFrame.statusIcon then return end
-        local activeC = DesolateLootcouncil:GetActiveUserCount()
-        local totalC = GetNumGroupMembers()
-        if totalC == 0 then totalC = 1; activeC = 1 end
-
-        local ra, ga, ba = 1, 0, 0
-        if activeC >= totalC then ra, ga, ba = 0, 1, 0
-        elseif activeC > 1 then ra, ga, ba = 1, 1, 0 end
-
-        self.lootFrame.statusIcon:SetVertexColor(ra, ga, ba)
-    end
-
-    refreshBtn:SetCallback("OnClick", function()
-        local success = API:PingVersionCheck()
-        if success then
-            DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
-            refreshBtn:SetDisabled(true)
-            refreshBtn:SetText("Pinging...")
-            UpdateTopIndicator()
-        end
-    end)
-
-    -- Timer for button text cooldown
-    self.refreshTimer = self:ScheduleRepeatingTimer(function()
-        if not (self.lootFrame --[[@as any]]).frame:IsShown() then return end
-        local rem = API:GetVersionCheckCooldown()
-        if rem > 0 then
-            refreshBtn:SetText(string.format("Refresh (%.0fs)", rem))
-            refreshBtn:SetDisabled(true)
-        else
-            refreshBtn:SetText("Refresh Connections")
-            refreshBtn:SetDisabled(false)
-        end
-        UpdateTopIndicator()
-    end, 1)
-
-    topRow:AddChild(clearBtn)
-    topRow:AddChild(refreshBtn)
-    self.lootFrame:AddChild(topRow)
-
-    -- 3. ScrollFrame (Middle)
-    ---@type AceGUIScrollFrame
-    local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
-    scroll:SetLayout("List")
-    scroll:SetFullWidth(true)
-    
-    -- [NEW] Persist Scroll Status
-    self.scrollStatus = self.scrollStatus or { scrollvalue = 0 }
-    scroll:SetStatusTable(self.scrollStatus)
-    
-    self.lootFrame:AddChild(scroll)
+    self.scrollFrame:Show()
+    self.scrollContent:Show()
 
     local catList = {}
     local listIndexMap = {}
@@ -363,63 +219,77 @@ function UI_Loot:ShowLootWindow(lootTable)
     end
     catList["Junk/Pass"] = "Junk/Pass"
 
+    local topOffset = 0
+    local rowHeight = 44
     local count = 0
-    if lootTable then
-        for i = #lootTable, 1, -1 do
-            local data = lootTable[i]
-            count = count + 1
-            self:CreateLootRow(scroll, data, lootTable, listIndexMap, catList)
+
+    for i = #lootTable, 1, -1 do
+        count = count + 1
+        local data = lootTable[i]
+        local link = data.link
+        local guid = data.sourceGUID or link
+
+        local row = NativeGUI:AcquireRow(self.rowPool, count, self.scrollContent, false)
+        row:SetHeight(rowHeight)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 0, -topOffset)
+        row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
+
+        -- Icon
+        NativeGUI:SetupItemIconButton(row, data, 28, 8, 0)
+
+        -- Remove Button (X) (created early for right anchoring)
+        if not row.removeBtn then
+            row.removeBtn = NativeGUI:CreateButton(row, "X", 26, 24, "Stop")
         end
+        row.removeBtn:ClearAllPoints()
+        row.removeBtn:SetPoint("RIGHT", -8, 0)
+        row.removeBtn:Show()
+        row.removeBtn:SetScript("OnClick", function() OnRemoveLootClicked(lootTable, guid, link) end)
+
+        -- Category Dropdown
+        row.catCallback = function(value) OnCategoryCallback(data, listIndexMap, value) end
+
+        if not row.catDrop then
+            -- We create a custom native dropdown
+            row.catDrop, row.catDropBtn = NativeGUI:CreateDropdown(row, nil, 110, catList, nil,
+                function(value) OnCategorySelected(row, value) end)
+        end
+        row.catDrop:ClearAllPoints()
+        row.catDrop:SetPoint("RIGHT", row.removeBtn, "LEFT", -6, 7) -- Y offset compensates for dropdown container label layout
+        row.catDrop:Show()
+
+        local savedCat = DesolateLootcouncil.API:GetItemCategory(data.itemID) or data.category or "Junk/Pass"
+        data.category = savedCat
+        row.catDrop:SetValue(savedCat)
+
+        -- Link Label (sandwiched dynamically in-between LEFT and RIGHT anchors)
+        if not row.itemLabel then
+            row.itemLabel = NativeGUI:CreateLinkLabel(row)
+        end
+        row.itemLabel:ClearAllPoints()
+        row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 8, 0)
+        row.itemLabel:SetPoint("RIGHT", row.catDrop, "LEFT", -10, 0)
+        row.itemLabel:Show()
+
+        local _, properLink = C_Item.GetItemInfo(data.link or data.itemID)
+        if not properLink then
+            local itemObj = Item:CreateFromItemID(data.itemID)
+            local function LoadCb() OnLootItemLoadCallback(lootTable) end
+            if not itemObj:IsItemEmpty() then itemObj:ContinueOnItemLoad(LoadCb) end
+            row.itemLabel.text:SetText(L["Loading..."])
+        else
+            row.itemLabel.text:SetText(properLink)
+            row.itemIcon.texture:SetTexture(C_Item.GetItemIconByID(data.itemID) or 134400)
+        end
+        row.itemLabel:SetScript("OnClick", function() row.itemIcon:GetScript("OnClick")(row.itemIcon) end)
+        row.itemLabel:SetScript("OnEnter", function() row.itemIcon:GetScript("OnEnter")(row.itemIcon) end)
+        row.itemLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        topOffset = topOffset + rowHeight + 8
     end
 
-    -- 4. Create Manual Start Button (Pinned to Footer)
-    -- Safety Check: If no items or window was closed during load, stop here.
-    if count == 0 or not self.lootFrame then return end
-
-    if not self.btnStart then
-        local containerFrame = (lootFrame --[[@as any]]).frame
-
-        ---@type Button
-        local btn = CreateFrame("Button", nil, containerFrame, "UIPanelButtonTemplate")
-        btn:SetText("Start Bidding")
-
-        -- Keep the FrameLevel fix
-        btn:SetFrameLevel(containerFrame:GetFrameLevel() + 10)
-
-        -- FIX 1: Alignment (Move UP to match Close button)
-        btn:SetPoint("BOTTOMLEFT", containerFrame, "BOTTOMLEFT", 15, 16)
-
-        -- FIX 2: Width
-        btn:SetWidth(200)
-        btn:SetHeight(24)
-
-        self.btnStart = btn
-    end
-
-    local startBtn = self.btnStart --[[@as Button]]
-    startBtn:SetScript("OnClick", function()
-        DesolateLootcouncil.API:StartSession(lootTable)
-    end)
-
-    -- Ensure visibility
-    startBtn:SetFrameLevel((lootFrame --[[@as any]]).frame:GetFrameLevel() + 10)
-    startBtn:Show()
-
-    -- 5. Update Resize Logic
-    local function LayoutScroll()
-        local windowHeight = (lootFrame --[[@as any]]).frame:GetHeight()
-        -- Title(30) + ClearBtn(25) + Footer(45) = ~100
-        local scrollHeight = windowHeight - 100
-
-        if scrollHeight < 50 then scrollHeight = 50 end
-
-        scroll:SetHeight(scrollHeight)
-        lootFrame:DoLayout()
-    end
-
-    LayoutScroll()
-    lootFrame:SetCallback("OnResize", LayoutScroll)
-
+    self.scrollContent:SetHeight(topOffset + 10)
     DesolateLootcouncil:DLC_Log(string.format("Loot Window Populated with %d items", count))
 end
 
@@ -431,3 +301,8 @@ function UI_Loot:OnLootWindowUpdate(eventName, lootTable)
     self:ShowLootWindow(lootTable)
 end
 
+if _G.DLC_TEST_MODE then
+    UI_Loot.ParseSemVer = AT.ParseSemVer
+    UI_Loot.CompareSemVer = AT.CompareSemVer
+    UI_Loot.OnTimerTick = OnTimerTick
+end

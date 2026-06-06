@@ -40,6 +40,7 @@ function Loot:OnEnable()
 
     self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
     self:RegisterEvent("CHAT_MSG_LOOT", "OnLootMessage")
+    self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
 
     DesolateLootcouncil:DLC_Log(L["Systems/Loot Loaded"])
 
@@ -184,7 +185,7 @@ function Loot:ProcessLootSlot(i, session)
         local uniqueKey = sourceGUID .. "-" .. itemID .. "-" .. i
         if self:AddSessionItem(itemLink, uniqueKey, texture, quantity, category, itemID) then
             session.lootedMobs[sourceGUID] = true
-            DesolateLootcouncil:DLC_Log("ADDED: " .. itemName)
+            DesolateLootcouncil:DLC_Log(string.format(L["Added item: %s"], itemName))
 
             self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
         end
@@ -204,6 +205,28 @@ function Loot:OnLootOpened()
         self:ProcessLootSlot(i, session)
     end
     DesolateLootcouncil:DLC_Log(L["--- SCAN END ---"])
+end
+
+function Loot:OnStartLootRoll(event, rollID)
+    if not DesolateLootcouncil:AmILootMaster() then return end
+
+    local link = GetLootRollItemLink(rollID)
+    if not link then return end
+
+    local itemID = self:GetItemIDFromLink(link)
+    if not itemID then return end
+
+    local texture, _, count, quality = GetLootRollItemInfo(rollID)
+    local category = self:CategorizeItem(link, quality)
+    local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
+
+    if quality >= minQuality or category ~= "Junk/Pass" then
+        local guid = "BlizRoll-" .. itemID .. "-" .. rollID
+        if self:AddSessionItem(link, guid, texture, count or 1, category, itemID) then
+            DesolateLootcouncil:DLC_Log(string.format(L["AUTO-ADDED from roll: %s"], link))
+            self:SendMessage("DLC_LOOT_WINDOW_UPDATE", DesolateLootcouncil.db.profile.session.loot)
+        end
+    end
 end
 
 function Loot:OnLootMessage(event, msg)
@@ -240,9 +263,60 @@ function Loot:OnLootMessage(event, msg)
                 local category = self:CategorizeItem(link, quality)
                 local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
 
-                local guid = "Roll-" .. itemID .. "-" .. GetServerTime()
-
                 if quality >= minQuality or category ~= "Junk/Pass" then
+                    local session = DesolateLootcouncil.db.profile.session
+                    local foundClaim = false
+
+                    -- Check session.loot
+                    if session.loot then
+                        for _, entry in ipairs(session.loot) do
+                            if entry.itemID == itemID and not entry.msgClaimed then
+                                local guid = entry.sourceGUID or ""
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                    entry.msgClaimed = true
+                                    foundClaim = true
+                                    DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (loot): %s (GUID: %s)", link, guid))
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    -- Check session.bidding
+                    if not foundClaim and session.bidding then
+                        for _, entry in ipairs(session.bidding) do
+                            if entry.itemID == itemID and not entry.msgClaimed then
+                                local guid = entry.sourceGUID or ""
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                    entry.msgClaimed = true
+                                    foundClaim = true
+                                    DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (bidding): %s (GUID: %s)", link, guid))
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    -- Check session.awarded
+                    if not foundClaim and session.awarded then
+                        for _, entry in ipairs(session.awarded) do
+                            if entry.itemID == itemID and not entry.msgClaimed then
+                                local guid = entry.sourceGUID or ""
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                    entry.msgClaimed = true
+                                    foundClaim = true
+                                    DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (awarded): %s (GUID: %s)", link, guid))
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    if foundClaim then
+                        return
+                    end
+
+                    local guid = "LootMsg-" .. itemID .. "-" .. GetServerTime()
                     if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
                         DesolateLootcouncil:DLC_Log(string.format(L["AUTO-ADDED from self-loot: %s"], link))
                         self:SendMessage("DLC_LOOT_WINDOW_UPDATE", DesolateLootcouncil.db.profile.session.loot)
@@ -280,6 +354,7 @@ function Loot:ClearLootBacklog()
 end
 
 function Loot:AddManualItem(rawLink)
+    if not DesolateLootcouncil:AmILootMaster() then return end
     local itemID = self:GetItemIDFromLink(rawLink)
     if itemID then
         local category = self:GetItemCategory(itemID)
@@ -355,7 +430,8 @@ function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, or
     if not session.awarded then return false end
 
     local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
-    local _, winnerClass = UnitClassBase(winnerName)
+    local R = DesolateLootcouncil:GetModule("Roster")
+    local winnerClass = R and R:GetUnitClass(winnerName) or "WARRIOR"
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
 
     local entry = {
@@ -519,9 +595,8 @@ function Loot:ReawardItem(index)
         end
     end
 
-    -- 6. Refresh windows
-    local History = DesolateLootcouncil:GetModule("UI_History")
-    if History then History:ShowHistoryWindow() end
+    -- 6. Broadcast history update (automatically refreshes UI_History, UI_RaidHistory, and UI_TradeList if shown)
+    self:SendMessage("DLC_HISTORY_UPDATED")
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
     if Monitor then Monitor:ShowMonitorWindow() end
 
@@ -535,6 +610,7 @@ function Loot:AddTestItems()
         "item:19136:::::::20:257::::::", -- Rest (Mana Igniting Cord)
         "item:13335:::::::20:257::::::", -- Collectables (Deathcharger's Reins)
         "item:19019:::::::20:257::::::", -- Extra (Thunderfury)
+        "item:16223:::::::20:257::::::", -- Recipe (Formula: Enchant Weapon - Crusader)
     }
     for _, itemLink in ipairs(testItems) do
         self:AddManualItem(itemLink)

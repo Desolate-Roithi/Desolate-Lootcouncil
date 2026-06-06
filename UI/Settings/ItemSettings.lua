@@ -1,11 +1,10 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
----@class ItemSettings : AceModule
-local ItemSettings = DesolateLootcouncil:NewModule("ItemSettings")
+---@class UI_ItemSettings : AceModule
+local ItemSettings = DesolateLootcouncil:NewModule("UI_ItemSettings")
 
 function ItemSettings:GetItemOptions()
-
     local args = {
         desc = {
             type = "description",
@@ -19,11 +18,14 @@ function ItemSettings:GetItemOptions()
             width = 1.5,
             order = 2,
             func = function()
-                local Manager = DesolateLootcouncil:GetModule("UI_ItemManager")
+                local Manager = DesolateLootcouncil:GetModule("UI_ItemManager", true)
                 if Manager then
                     Manager:ShowItemManagerWindow()
                 end
-                LibStub("AceConfigDialog-3.0"):Close("DesolateLootcouncil") -- Close options to focus on manager
+                local settingsFrame = DesolateLootcouncil:GetModule("UI_Settings", true)
+                if settingsFrame and settingsFrame.settingsFrame then
+                    settingsFrame.settingsFrame:Hide()
+                end
             end,
         }
     }

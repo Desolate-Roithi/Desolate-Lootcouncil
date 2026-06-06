@@ -1,10 +1,12 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
----@class LootSettings : AceModule
-local LootSettings = DesolateLootcouncil:NewModule("LootSettings")
+---@class UI_LootSettings : AceModule
+local LootSettings = DesolateLootcouncil:NewModule("UI_LootSettings")
 
 function LootSettings:GetOptions()
+    local API = DesolateLootcouncil.API
+
     return {
         name = "Loot Rules & Systems",
         type = "group",
@@ -25,8 +27,8 @@ function LootSettings:GetOptions()
                 name = "Enable Decay",
                 desc = "Turn the decay system on or off.",
                 order = 2,
-                get = function(info) return DesolateLootcouncil.db.profile.DecayConfig.enabled end,
-                set = function(info, val) DesolateLootcouncil.db.profile.DecayConfig.enabled = val end,
+                get = function() return API:GetDecayEnabled() end,
+                set = function(_, val) API:SetDecayEnabled(val) end,
             },
             decayPenalty = {
                 type = "range",
@@ -36,8 +38,8 @@ function LootSettings:GetOptions()
                 max = 3,
                 step = 0.5,
                 order = 3,
-                get = function(info) return DesolateLootcouncil.db.profile.DecayConfig.defaultPenalty end,
-                set = function(info, val) DesolateLootcouncil.db.profile.DecayConfig.defaultPenalty = val end,
+                get = function() return API:GetDecayPenalty() end,
+                set = function(_, val) API:SetDecayPenalty(val) end,
             },
         }
     }

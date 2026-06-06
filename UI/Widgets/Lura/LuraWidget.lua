@@ -1,6 +1,11 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TEMPORARY COMPONENT NOTICE:
+-- This widget is temporary/tier-specific. Do not refactor, optimize, or modify.
+-- ─────────────────────────────────────────────────────────────────────────────
+
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- UI_LuraWidget  —  Lu'Ra Memory Tracker  (Midnight S1 / Encounter 3183)
 -- ═══════════════════════════════════════════════════════════════════════════════

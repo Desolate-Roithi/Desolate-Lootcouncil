@@ -21,13 +21,13 @@
     <Script file="Core\SlashCommands.lua"/>
 
     <!-- 4. Settings -->
-    <Script file="Settings\Loader.lua"/>
-    <Script file="Settings\General.lua"/>
-    <Script file="Settings\ItemSettings.lua"/>
-    <Script file="Settings\PrioritySettings.lua"/>
-    <Script file="Settings\Roster.lua"/>
-    <Script file="Settings\LootRules.lua"/>
-    <Script file="Settings\ProfileSettings.lua"/>
+    <Script file="UI\Settings\Loader.lua"/>
+    <Script file="UI\Settings\General.lua"/>
+    <Script file="UI\Settings\ItemSettings.lua"/>
+    <Script file="UI\Settings\PrioritySettings.lua"/>
+    <Script file="UI\Settings\Roster.lua"/>
+    <Script file="UI\Settings\LootRules.lua"/>
+    <Script file="UI\Settings\ProfileSettings.lua"/>
 
     <!-- 5. Systems -->
     <Script file="Systems\Priority.lua"/>
@@ -42,6 +42,12 @@
 
     <!-- 7. UI -->
 
+    <Script file="UI\Theme.lua"/>
+    <Script file="UI\Themes\Midnight.lua"/>
+    <Script file="UI\Themes\Classic.lua"/>
+    <Script file="UI\Themes\Minimalist.lua"/>
+    <Script file="UI\Themes\Fel.lua"/>
+    <Script file="UI\NativeGUI.lua"/>
     <Script file="UI\Core.lua"/>
     <Script file="UI\Widgets\Sidebar.lua"/>
     <!-- [LURA] Remove line below to unload the Lura widget (see UI\Widgets\Lura\LuraWidget.lua removal guide) -->
@@ -50,11 +56,14 @@
     <Script file="UI\Windows\Attendance.lua"/>
     <Script file="UI\Windows\PriorityLogHistory.lua"/>
     <Script file="UI\Windows\History.lua"/>
+    <Script file="UI\Windows\RaidHistory.lua"/>
     <Script file="UI\Windows\Loot.lua"/>
     <Script file="UI\Windows\Monitor.lua"/>
+    <Script file="UI\Windows\Award.lua"/>
     <Script file="UI\Windows\PriorityOverride.lua"/>
     <Script file="UI\Windows\TradeList.lua"/>
     <Script file="UI\Windows\ItemManager.lua"/>
     <Script file="UI\Windows\Version.lua"/>
     <Script file="UI\Windows\Voting.lua"/>
+    <Script file="UI\Windows\Settings.lua"/>
 </Ui>

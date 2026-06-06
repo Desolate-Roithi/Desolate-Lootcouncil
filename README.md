@@ -1,144 +1,116 @@
 # Desolate Lootcouncil
 
-A Master Loot automation tool for WoW Retail. Desolate Lootcouncil manages bidding, priority, and item distribution on top of the standard Group Loot system.
+An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v0.9.2-Beta  
-**Last Updated:** 2026-05-20  
+**Latest Version:** v1.0.7-Alpha  
+**Last Updated:** 2026-06-05  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
-## 🚀 Features
+## Features
 
 ### For Loot Masters
-* **Automation:** Smart LM detection and automatic disenchanter assignment.
-* **Fairness:** Automatic Alt-to-Main linking ensures priority points and penalties apply to the account, not just the character.
-* **Control:** A unified Session Monitor to track live bids and an "Undo" system to revert mistaken awards.
-* **Security:** Server-side rolls for Transmog/Offspec to prevent client-side manipulation.
-* **Cross-Realm Support:** Robust name-realm handling for consistent tracking across connected realms.
+* **Automation:** Automatically detects the Loot Master and manages disenchanting assignments.
+* **Alt Linking:** Tracks alts and links them to main characters so priority rankings and penalties apply to the player's account.
+* **Session Control:** Monitor active bids in real time and revert mistaken item awards easily.
+* **Security:** Offspec and Transmog rolls are handled server-side to prevent manipulation.
+* **Cross-Realm:** Handles player name and realm formatting seamlessly.
 
 ### For Raiders
-* **Simple UI:** Clean buttons for Bid (Priority), Roll, Offspec, Transmog, or Pass.
-* **Autopass Automation:** Fully automated roll/pass logic based on item categories and session settings.
-* **Trade Helpers:** Automatic whispers when you win and a "Pending Queue" if you're out of range or offline during the award.
-* **Transparency:** Publicly accessible session history and priority logs.
+* **Clean Interface:** One-click options for Main Spec (Priority), Roll, Offspec, Transmog, or Pass.
+* **Automatic Passing:** Automatically passes or rolls on items depending on your settings and active priority lists.
+* **Trade Management:** Whispers winners automatically and queues items for trade if a player is out of range or offline.
+* **Logs:** View active priority logs and raid loot histories directly in-game.
 
-## 💻 Commands
+## Commands
 
 | Command | Description |
 | :--- | :--- |
-| `/dlc config` | Open configuration (Roster, Priority, Debug). |
-| `/dlc vote` | Re-open the Voting Window (if a session is active). |
-| `/dlc monitor` | **(LM/Assist)** Live session & award dashboard. |
-| `/dlc loot` | **(LM)** Inbox for new dropped items. |
-| `/dlc im` | Open Item Manager window. |
-| `/dlc trade` | **(LM)** Pending trades queue. |
-| `/dlc history` | View award logs and priority changes. |
-| `/dlc status` | View current LM, Autopass, and session status. |
-| `/dlc version` | Check addon versions across the raid. |
-| `/dlc sim` | **(Dev)** Manage simulated players and scenarios. |
+| `/dlc config` | Open the main configuration panel (Roster, Priority, Settings). |
+| `/dlc vote` | Re-open the voting frame if a loot session is currently active. |
+| `/dlc monitor` | Open the officer dashboard to track active bids and awards. |
+| `/dlc loot` | Open the loot inbox to view newly dropped items. |
+| `/dlc im` | Open the Item Manager to assign items to specific priority lists. |
+| `/dlc trade` | Open the pending trades queue. |
+| `/dlc history` | Open the session loot and attendance history window. |
+| `/dlc status` | Print current connection, session, and autopass statuses to chat. |
+| `/dlc version` | Query and verify addon versions installed by raid members. |
+| `/dlc reset` | Reset all window layout sizes and positions to defaults. |
+| `/dlc sim` | Developer tool to test simulated scenarios and players. |
 
-## 🛠️ Installation
+## Installation
 1. Download the latest release.
-2. Extract `Desolate_Lootcouncil` to `_retail_/Interface/AddOns/`.
-3. Restart WoW.
+2. Extract the folder into your `Interface/AddOns/` directory.
+3. Restart or reload World of Warcraft.
 
 ---
 
-## 📝 Recent Changes
+## Recent Changes
 
-### v0.9.2-Beta
-* **Autopass Disband Spam Suppression**:
-    - **Spammy Log Suppression**: Resolved an issue where `GROUP_ROSTER_UPDATE` executed its disband reset logic on any non-raid group update (including dungeon party spec changes and solo play) and printed `"Raid group disbanded. Autopass session reset."` even when no Autopass session was active.
-    - **Conditional Reset Guard**: Added an active check guard so that the disband reset warning only prints when transitioning from an active Autopass session to a disbanded state.
-* **Robust Testing**: Added comprehensive unit tests in `Roster_Test.lua` verifying spam suppression.
+### v1.0.7-Alpha
+* **Corrupted Layout Size Self-Healing**:
+    - Added an automatic repair layer that checks if pre-existing window configurations in the DB were saved in a squeezed/collapsed state. The layout engine now discards narrow sizes and forces safe recovery back to default expanded templates.
+* **Positions Reset Slash Command**:
+    - Implemented `/dlc reset` and `/dlc resetpositions` commands to clear all window coordinates and sizes immediately if a layout is corrupted or off-screen.
 
-### v0.9.1-Beta
-* **Communication Dispatcher Refactor**: Re-architected and refactored the communication backend dispatcher for higher reliability and cleaner routing under WoW 12.0.5.
+### v1.0.6-Alpha
+* **Settings Layout & NativeGUI Size Persistence**:
+    - Resolved a layout issue where double-clicking the title bar to collapse a window (saving the collapsed 220x42 dimensions to the DB) caused the window to load at an extremely narrow width of 220 on next reload. The persistence engine now saves the original expanded dimensions when a window is collapsed, and the creation logic programmatically collapses windows on reload once all child elements are fully initialized.
 
-### v0.9.0-Beta
-* **Loot & Autopass Separation**: Decoupled the Autopass logic from the core Loot module into separate backend and frontend systems, improving code clarity and maintainability.
-* **UI Decoupling**: Reworked UI windows to separate presentation layers from priority backend calculations.
-* **Autopass Hardiness**: Improved the reliability of automatic pass/roll operations under server latency.
+### v1.0.5-Alpha
+* **Raid-Only Roster Gating**:
+    - Restricted the automatic scanning and adding of new players to the priority lists to Raid groups and Raid instances only. This prevents officers' databases from being altered and warnings about alts being printed in 5-man party groups.
+* **WoW 12.0.7 API Compatibility**:
+    - Checked all group management API shifts coming in Patch 12.0.7 (such as global functions migrating into `C_PartyInfo`) and verified full compatibility.
 
-### v0.8.7-Beta
-* **Lua Error Fixes**: Resolved miscellaneous script errors encountered during live raid sessions.
+### v1.0.4-Alpha
+* **Trade Window Auto-Refresh**:
+    - Added automatic refresh for the Pending Trades and History windows on item award/re-award, decoupling modules.
+* **UI Row Pooling & Virtual Scrolling**:
+    - Optimized rendering with virtual row pooling, reducing nested layout nesting levels, and enhancing the Item Manager.
 
-### v0.8.6-Beta
-* **Lura Module Enhancements**:
-    - **Solo Testing**: Fixed the Lura Memory Widget picker bar logic to allow solo players to test and preview sequences.
-    - **Roster Auto-Append**: Automatically registers untracked addon users as Mains during active sessions to simplify roster management.
-    - **Trade & Autopass Hardening**: Integrated safety checks into auto-trade and autopass flows.
+### v1.0.3-Alpha
+* **Group Leader & Loot Master Robustness**:
+    - Added leader change tracking to automatically reset and recalculate the Loot Master when the Group Leader changes.
+* **Item Manager Sync Gate**:
+    - Prevented automatic or manual item manager database syncing in raids with fewer than 10 players to avoid spamming small groups.
+* **History Retention**:
+    - Ensured that the awarded items database (`session.awarded`) is preserved and only wiped on starting a new raid session rather than individual voting sessions.
+* **Recipe Voting Options**:
+    - Added specialized recipe voting buttons (Item Class 9). Displays exactly 3 buttons on the Voting Window: "Ready to Craft" (for immediate learning), "Unskilled" (for missing profession skill levels), and "Pass".
+* **EditBox Shift-Click Link Insertion**:
+    - Allowed raiders to Shift-Click item links into custom EditBox input fields (e.g. the Item Manager's item name input) and restored keyboard focus.
 
-### v0.8.5-Beta
-* **Localization & UI Polish**:
-    - Reworked UI text handling to support multiple languages seamlessly.
-    - Fixed trade window text and popups.
-    - Staging hardening: Enforced strict priority database authority checks for Autopass actions.
+### v1.0.2-Alpha
+* **Localization Auditing**:
+    - Fixed a missing translation error for private voter notes inside the award window.
+    - Added the missing settings action confirmation prompt.
+    - Verified all translation strings across the codebase are fully covered in English and German.
 
-### v0.8.4-Beta
-* **LM and Autopass Sync**:
-    - Hardened Loot Master synchronization and improved Autopass permission rules.
-    - Initial localization support structure.
+### v1.0.1-Alpha
+* **Unified Window Management**:
+    - Standardized how all windows scale and position themselves, ensuring sizes are stored and restored consistently across reloads.
+    - Removed hardcoded window dimensions to support scaling naturally.
+* **Voting Frame Optimizations**:
+    - Fixed a bug where reloading a session would reset the active countdown timer or re-trigger completed milestone warnings.
+    - Blocked raider-only voting notifications from showing up for Loot Masters.
+* **Award Notes Tooltip**:
+    - Replaced raw note text displays in the award panel with a compact note icon. Hovering over the icon displays the player's private note.
 
-### v0.8.3-Beta
-* **Lura Icons & Clarity**: Updated sequence preview icons to use clear raid markers and direct File IDs instead of relying on Blizzard chat code formatting.
+### v1.0.0-Alpha
+* **UI Themes**:
+    - Cleaned up the core theme engine logic to make styling custom controls (buttons, inputs, dropdowns) more modular.
+    - Reworked the main voting window layout to improve rendering speed and responsiveness.
+* **Autopass Syncing**:
+    - Added detailed log outputs to help officers diagnose automatic pass decisions.
+    - Added an automatic state synchronization check when raid members load zones or run version checks.
 
-### v0.8.2-Beta
-* **Raid Chat Communication**: Reworked the Lu'Ra sequence broadcasts to utilize public Raid/Party chat, bypassing combat-throttled private addon message channels.
+---
 
-### v0.8.1-Beta & v0.8.0-Beta
-* **Lu'Ra Memory Module**:
-    - Introduced the `UI_LuraWidget` to coordinate the Lu'Ra boss encounter (Midnight Falls).
-    - Provides a sequence picker bar for officers and a pentagon-based execution order radial preview for raiders.
+## Beta Releases (v0.8.5-Beta - v0.9.5-Beta)
 
-### v0.7.9-Beta
-* **Autopass Stability & Initialization**:
-    - **Initialization Fix**: Autopass state no longer reports as `nil` on cold-start; it now defaults to a deterministic `false` state until a session begins.
-    - **Persistence across Zones**: Resolved a critical issue where moving between wings in a raid (e.g., internal zone transitions) would reset the Autopass state. The LM is now intelligently re-prompted if the state becomes desynced mid-session.
-* **Trade Window Accuracy**:
-    - **Soulbound Guard**: Added a mandatory `isBound` check to the automated trade staging logic. This ensures that the addon correctly distinguishes between the fresh, tradeable drop and any soulbound copies the Loot Master may already have in their bags.
-
-### v0.7.8-Beta
-* **Loot Automation Stability**:
-    - Added a 0.05s delay to auto-roll/pass actions to ensure compatibility with Blizzard's internal UI state updates (RCLootCouncil parity).
-    - Restricted corpse scanning logic to the **Loot Master only**. This eliminates redundant network traffic and prevents raider backlog issues during large boss kills.
-    - Implemented a **Solo-Cleanup routine**: The addon now automatically wipes stale loot backlogs if you log in outside of a raid, ensuring the UI stays clean.
-* **Trade Management**:
-    - Introduced a 0.2s delay for trade item staging. This prevents race conditions with the WoW server that previously caused items to fail to move into the trade window.
-    - Added defensive guards to the Trade Frame to prevent accidental "self-equipping" of items during automated trade sessions.
-* **UI & Disenchanter Sidebar**:
-    - Fixed a visibility bug where the Disenchanter sidebar would "ghost" or fail to hide when the Session Monitor was collapsed or expanded.
-    - Optimized the sidebar refresh logic to correctly handle version-check data arrivals during active combat.
-
-### v0.7.5-Beta
-* **Communication & Synchronization**:
-    - **Heartbeat Autopass Sync**: Added the `sessionAutopass` state to the periodic heartbeat and `START_LOOT_ROLL` events to ensure late-joiners never miss the "Auto-Pass" signal.
-    - **Channel Safety**: Implemented a `GetBroadcastChannel` utility to safely route messages via `RAID` or `PARTY` depending on current group status.
-* **Loot Council Refactor**:
-    - **Re-award Restoration**: Completely reworked the `ReawardItem` function. It now correctly restores a player's original priority position and restores all previous voting data to the monitor.
-    - **Modular Awarding**: Split the massive `AwardItem` function into testable helper methods for broadcasting, recording, and cleanup.
-* **General UI Improvements**:
-    - Added a detailed `/dlc status` command to verify current LM, Autopass status, and session counts.
-    - Resolved a layout bug in the **Monitor UI** that caused the scroll frame to hide itself incorrectly when expanded from a collapsed state.
-    - Implemented `SmartCompare` for player names to handle 12.0.1 "Secret" (opaque) string returns safely.
-
-### v0.7.3-Beta
-* **Network Architecture Overhaul**: Optimized the entire communication engine by transitioning from whisper-based voting (which caused LM lag spikes) to a high-performance **RAID Channel Pub/Sub** model.
-* **Intelligent Heartbeats**: Replaced the constant 1.5s "Sync" pulse with a 30-second **Serialized Heartbeat**. This uses a pre-cached payload to resync the full item list and vote matrix to late-joiners and reloaders without overhead.
-* **UI Focus & Retention**: 
-    - **Newest on Top**: Both the Loot Backlog and Voting windows now display new additions at the top of the list for immediate visibility.
-    - **Scroll Stickiness**: Fixed the "Scroll Snap" bug; the windows now remember your exact scroll position during automated UI refreshes.
-* **Loot Collection Stability**: 
-    - **Duplicate Drop Fix**: Resolved a long-standing issue where identical items from the same boss were discarded. Keys now include slot indices (`sourceGUID-itemID-slot`).
-    - **Global Localization**: Switched to Blizzard global strings (`LOOT_ITEM_SELF`, etc.) to ensure LM loot detection works reliably on German, English, and other localized clients.
-    - **Reload Persistence**: The Boss Corpse deduplication store now resides in the database, preventing items from reappearing in the backlog after a UI reload.
-* **Network Throttling**: Enchanting skill data is now only broadcast once per session, and empty Skill 0 entries are dropped to reduce packet size.
-
-### v0.7.1-Beta
-* **Core UI Structural Refactor**: Successfully modularized monolithic functions across all primary UI windows (`Attendance`, `ItemManager`, `Monitor`, `PrioritySettings`).
-* **Arrow Code Elimination**: Eliminated deep layout nesting, significantly reducing complexity and potential for scope-related bugs.
-* **Encapsulated Configuration**: Configuration and profile management logic now reside in discrete, dedicated methods, improving AceConfig integration stability.
-* **Refactor Verified**: Full unit test suite (`Priority`, `Roster`, `Comm`) confirms 0% regression and 100% functional parity with 0.7.0.
-
-### v0.7.0-Beta
-* **Decay System Overhaul**: Replaced the Priority Decay algorithm with a mathematically sound Bottom-To-Top Bubble-Down algorithm. Priority penalties now correctly push absent players below present players without gap collision.
-* **Monitor Stabilization**: Resolved an AceGUI frame recycling bug that caused the Session Monitor to immediately hide itself during rapid UI window instantiation loops (`/dlc test`).
+Major features and stability improvements introduced during the Beta phase:
+* **Modular Architecture**: Separated the background automatic passing systems from the front-end interface to improve latency and stability.
+* **Alt and Roster Management**: Added automatic registration of mains, alt-character linking, and intelligent raid disband alert suppression.
+* **Encounter Tools**: Integrated a custom boss sequence widget (for Lu'Ra encounter) allowing coordination of raid markers.
+* **Network & Database Safety**: Improved packet routing, hardened database check validation, and added trade safeguards to prevent accidental item equipping.
+* **Localization Foundation**: Structured UI systems to support multi-language localizations.

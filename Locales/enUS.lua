@@ -4,6 +4,7 @@ if not L then return end
 -- Global
 L["Close"] = true
 L["Loading..."] = true
+L["Desolate Loot Council Settings"] = true
 
 -- Attendance.lua
 L["Are you sure you want to delete this attendance record? This cannot be undone."] = true
@@ -43,15 +44,33 @@ L["Select a session to view details."] = true
 L["Error: History entry not found or empty."] = true
 L["No attendees recorded."] = true
 L["Attendees (%d):"] = true
+L["Open Full History"] = true
+L["Open the combined raid history window for the selected session."] = true
 L["Attendance & Decay"] = true
 
 -- History.lua
 L["Session History"] = true
+L["Session Loot History"] = true
 L["Select Date"] = true
 L["Delete Date"] = true
 L["Re-award"] = true
 L["No entries for this date."] = true
 L["Removed %d entries for %s"] = true
+L["No loot awarded in this session."] = true
+
+-- RaidHistory.lua
+L["Raid History"] = true
+L["Loot Awarded"] = true
+L["Players Attended"] = true
+L["Position Changes"] = true
+L["Decay Applied"] = true
+L["No position changes recorded."] = true
+L["Position log not available (pre-dates session tracking)."] = true
+L["... and %d more entries"] = true
+L["Position log only available for current session."] = true
+L["Decay disabled."] = true
+L["No decay applied yet."] = true
+L["Decay of %d positions was applied when session ended."] = true
 
 -- Monitor.lua
 L["Loot Monitor"] = true
@@ -67,6 +86,11 @@ L["View Rolls"] = true
 L["Session Monitor"] = true
 L["Pending Trades"] = true
 L["Stop Session"] = true
+L["Loot Backlog"] = true
+L["History"] = true
+L["Session History"] = true
+L["Attendance"] = true
+L["Version Check"] = true
 L["Unranked"] = true
 L["Give"] = true
 L["Lvl %d"] = true
@@ -93,6 +117,18 @@ L["Pass"] = true
 L["You voted: %s%s|r"] = true
 L["Voted: %s%s|r"] = true
 L["You voted: |cffaaaaaaAuto Pass|r"] = true
+L["Award Log"] = true
+L["Loot Log"] = true
+L["ToDebugString"] = true
+L["Toggle Disenchanters Sidebar"] = true
+L["You voted: %s%s|r%s"] = true
+L["Add Private Note"] = true
+L["Add note to Loot Master..."] = true
+L["Voter Note"] = true
+L["min"] = true
+L["sec"] = true
+L["|cffff8000Vote closing in %s \226\128\148 still need your vote:|r %s"] = true
+L["You have outstanding loot votes! Type /dlc vote to reopen."] = true
 
 -- ItemManager.lua
 L["Item Manager"] = true
@@ -105,6 +141,8 @@ L["Remove"] = true
 L["Assigned Items"] = true
 L["Select List to View"] = true
 L["Removed item ID: %s"] = true
+L["No assigned items."] = true
+
 
 -- TradeList.lua
 L["Trade"] = true
@@ -133,6 +171,9 @@ L["Priority Log History"] = true
 L["No history logs found."] = true
 
 -- Loot.lua (Systems)
+L["Addon Connection: [%d] / [%d]"] = true
+L["Refresh (%.0fs)"] = true
+L["Refresh Connections"] = true
 L["Systems/Loot Loaded"] = true
 L["Wiped stale loot backlog from previous session."] = true
 L["Added Item %d to '%s'"] = true
@@ -141,6 +182,7 @@ L["Skipped low quality item: %s"] = true
 L["--- LOOT SCAN START (%d slots) ---"] = true
 L["--- SCAN END ---"] = true
 L["AUTO-ADDED from self-loot: %s"] = true
+L["AUTO-ADDED from roll: %s"] = true
 L["Loot backlog cleared (dedup store preserved)."] = true
 L["Manually added: %s"] = true
 L["Winner of %s is %s! (%s)"] = true
@@ -164,5 +206,41 @@ L["Enable"] = true
 L["A previous Loot Session is still active. Do you want to close it?"] = true
 L["Yes (Close Session)"] = true
 L["No (Keep Active)"] = true
+L["Are you sure you want to perform this action?"] = true
+
+-- New Keys
+L["All window positions have been reset."] = true
+L["Warning: No Loot Master configured. Use /dlc config to set one."] = true
+L["Role Update: You are Loot Master."] = true
+L["Role Update: You are Raider."] = true
+L["Loot Master"] = true
+L["Raider"] = true
+L["Role Update: You are %s (LM: %s)"] = true
+L["Added item: %s"] = true
+L["Added new Priority List: %s (Initialized with shuffled roster)"] = true
+L["Removed Priority List: %s"] = true
+L["Renamed list to: %s"] = true
+L["Only the Loot Master or Raid Assists can view the Loot History."] = true
+L["Only the Loot Master can add items to the session."] = true
+L["Open the configuration window to manage settings, priority lists, and rosters."] = true
+L["Open Settings Window"] = true
+
+L["Bosses & Pulls"] = true
+L["No boss logs recorded for this session."] = true
+
+L["Ready to Craft"] = true
+L["Unskilled"] = true
+L["Ready"] = true
+L["Roll to receive this recipe because you have the profession and required skill to craft it."] = true
+L["Roll for this recipe even though you do not meet the skill or profession requirements yet."] = true
+L["Pass on this recipe."] = true
+L["Bid priority points on this item."] = true
+L["Roll for main spec usage."] = true
+L["Roll for offspec usage."] = true
+L["Roll for transmogrification collection."] = true
+L["Pass on this item."] = true
+
+
+
 
 

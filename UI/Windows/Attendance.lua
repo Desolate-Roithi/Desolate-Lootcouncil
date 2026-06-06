@@ -3,7 +3,6 @@ if AT.abortLoad then return end
 
 ---@class UI_Attendance : AceModule
 local UI_Attendance = DesolateLootcouncil:NewModule("UI_Attendance")
-local AceGUI = LibStub("AceGUI-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- State for the Attendance Window
@@ -23,6 +22,87 @@ StaticPopupDialogs["DLC_CONFIRM_DELETE_HISTORY"] = {
     hideOnEscape = true,
     preferredIndex = 3,
 }
+
+local function RefreshSettingsUI()
+    local SettingsUI = DesolateLootcouncil:GetModule("UI_Settings", true)
+    if SettingsUI and SettingsUI.settingsFrame and SettingsUI.settingsFrame:IsShown() then
+        SettingsUI:RenderTabs()
+    end
+end
+
+local function CreateAttendanceColumns(self, frame, theme, isDecayEnabled)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    -- Left Column (Attended)
+    local leftPanel = CreateFrame("Frame", "DLCAttendanceFrameLeftPanel", frame, "BackdropTemplate")
+    leftPanel:SetSize(296, 330)
+    leftPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -65)
+    leftPanel:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    leftPanel:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.4)
+    leftPanel:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4, 0.4)
+
+    local leftTitle = leftPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    leftTitle:SetPoint("TOPLEFT", 10, -8)
+    leftTitle:SetText(L["Attended (Safe)"])
+    leftTitle:SetTextColor(0.2, 1.0, 0.2)
+
+    local scrollAttended, scrollContentAttended = NativeGUI:CreateScrollFrame(leftPanel, -30, -8)
+    scrollAttended:SetPoint("TOPLEFT", leftPanel, "TOPLEFT", 8, -30)
+    scrollAttended:SetPoint("BOTTOMRIGHT", leftPanel, "BOTTOMRIGHT", -8, 8)
+    self.scrollContentAttended = scrollContentAttended
+
+    -- Right Column (Absent)
+    local rightPanel = CreateFrame("Frame", "DLCAttendanceFrameRightPanel", frame, "BackdropTemplate")
+    rightPanel:SetSize(296, 330)
+    rightPanel:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -65)
+    rightPanel:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    rightPanel:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.4)
+    rightPanel:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4, 0.4)
+
+    local rightTitle = rightPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    rightTitle:SetPoint("TOPLEFT", 10, -8)
+    rightTitle:SetText(isDecayEnabled and L["Absent (Apply Decay)"] or L["Absent (Reference Only)"])
+    rightTitle:SetTextColor(1.0, 0.4, 0.4)
+
+    local scrollAbsent, scrollContentAbsent = NativeGUI:CreateScrollFrame(rightPanel, -30, -8)
+    scrollAbsent:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 8, -30)
+    scrollAbsent:SetPoint("BOTTOMRIGHT", rightPanel, "BOTTOMRIGHT", -8, 8)
+    self.scrollContentAbsent = scrollContentAbsent
+end
+
+local function CreateAttendanceBottomControls(self, frame, isDecayEnabled)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if isDecayEnabled then
+        local stepper = NativeGUI:CreateStepper(frame, L["Decay Amount"], 240, 0, 3, 1, currentDecayAmount, function(val)
+            currentDecayAmount = val
+        end)
+        stepper:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 16)
+
+        local btnApply = NativeGUI:CreateButton(frame, L["APPLY DECAY & END"], 200, 28, "Pass")
+        btnApply:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 16)
+        btnApply:SetScript("OnClick", function()
+            self:ApplyDecayAndEndSession()
+            frame:Hide()
+        end)
+    else
+        local btnEnd = NativeGUI:CreateButton(frame, L["End Session (Save History)"], 240, 28, "Pass")
+        btnEnd:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 16)
+        btnEnd:SetScript("OnClick", function()
+            DesolateLootcouncil.API:StopRaidSession(true)
+            frame:Hide()
+            RefreshSettingsUI()
+        end)
+    end
+end
 
 function UI_Attendance:ShowAttendanceWindow()
     local config = DesolateLootcouncil.API:GetAttendanceConfig()
@@ -47,218 +127,126 @@ function UI_Attendance:ShowAttendanceWindow()
 
     -- 2. Create Frame
     local isDecayEnabled = config.enabled
-    local frame = AceGUI:Create("Frame")
-    if isDecayEnabled then
-        frame:SetTitle(L["Session Attendance & Decay Review"])
-    else
-        frame:SetTitle(L["Session Attendance Review (Decay Disabled)"])
+    local titleText = isDecayEnabled and L["Session Attendance & Decay Review"] or L["Session Attendance Review (Decay Disabled)"]
+
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+
+    if self.attendanceFrame then
+        self.attendanceFrame:Hide()
     end
-    frame:SetLayout("Flow")
-    frame:SetWidth(650)
-    frame:SetHeight(500)
-    frame:SetCallback("OnClose", function(widget)
-        AceGUI:Release(widget)
-        self.attendanceFrame = nil
-    end)
+
+    local frame = NativeGUI:CreateWindow("DLCAttendanceFrame", titleText, "Attendance")
     self.attendanceFrame = frame
 
-    -- [NEW] Position Persistence
     DesolateLootcouncil:MakeMovableWithSave(frame, "Attendance")
 
     -- 3. Top Label
-    local label = AceGUI:Create("Label")
-    label:SetText(L["Review attendance before ending session. Click names to move them between lists."])
-    label:SetFullWidth(true)
-    frame:AddChild(label)
+    local topLabel = NativeGUI:CreateLabel(frame, L["Review attendance before ending session. Click names to move them between lists."], "GameFontHighlightSmall", 600)
+    topLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -45)
 
-    -- 4. Main Group (Horizontal Split)
-    local mainGroup = AceGUI:Create("SimpleGroup")
-    mainGroup:SetLayout("Flow")
-    mainGroup:SetFullWidth(true)
-    mainGroup:SetHeight(320)
-    frame:AddChild(mainGroup)
-
-    -- Left Column (Attended)
-    local leftGroup = AceGUI:Create("InlineGroup")
-    leftGroup:SetTitle(L["Attended (Safe)"])
-    leftGroup:SetLayout("Fill")
-    leftGroup:SetWidth(300)
-    leftGroup:SetHeight(300)
-    mainGroup:AddChild(leftGroup)
-
-    local scrollAttended = AceGUI:Create("ScrollFrame")
-    scrollAttended:SetLayout("List")
-    leftGroup:AddChild(scrollAttended)
-    self.scrollAttended = scrollAttended
-
-    -- Right Column (Absent)
-    local rightGroup = AceGUI:Create("InlineGroup")
-    if isDecayEnabled then
-        rightGroup:SetTitle(L["Absent (Apply Decay)"])
-    else
-        rightGroup:SetTitle(L["Absent (Reference Only)"])
-    end
-    rightGroup:SetLayout("Fill")
-    rightGroup:SetWidth(300)
-    rightGroup:SetHeight(300)
-    mainGroup:AddChild(rightGroup)
-
-    local scrollAbsent = AceGUI:Create("ScrollFrame")
-    scrollAbsent:SetLayout("List")
-    rightGroup:AddChild(scrollAbsent)
-    self.scrollAbsent = scrollAbsent
-
-    -- 5. Bottom Controls
-    local controls = AceGUI:Create("SimpleGroup")
-    controls:SetLayout("Flow")
-    controls:SetFullWidth(true)
-    frame:AddChild(controls)
-
-    -- Decay Amount Slider (Conditional)
-    if isDecayEnabled then
-        local slider = AceGUI:Create("Slider")
-        slider:SetLabel(L["Decay Amount"])
-        slider:SetValue(currentDecayAmount)
-        slider:SetSliderValues(0, 3, 1)
-        slider:SetCallback("OnValueChanged", function(widget, event, value)
-            currentDecayAmount = value
-        end)
-        slider:SetWidth(200)
-        controls:AddChild(slider)
-
-        -- Spacer
-        local spacer = AceGUI:Create("Label")
-        spacer:SetText("   ")
-        spacer:SetWidth(20)
-        controls:AddChild(spacer)
-    end
-
-    -- End Session (Only if Decay Disabled - otherwise we use the Apply button)
-    if not isDecayEnabled then
-        local btnEnd = AceGUI:Create("Button")
-        btnEnd:SetText(L["End Session (Save History)"])
-        btnEnd:SetWidth(200)
-        btnEnd:SetCallback("OnClick", function()
-            -- Call StopRaidSession(true) directly
-            DesolateLootcouncil.API:StopRaidSession(true)
-            frame:Hide()
-
-            -- Refresh Config
-            local Registry = LibStub("AceConfigRegistry-3.0", true)
-            if Registry then Registry:NotifyChange("DesolateLootcouncil") end
-        end)
-        controls:AddChild(btnEnd)
-    end
-
-    -- Apply Decay & End (Conditional)
-    if isDecayEnabled then
-        local btnApply = AceGUI:Create("Button")
-        btnApply:SetText(L["APPLY DECAY & END"])
-        btnApply:SetWidth(180)
-        btnApply:SetCallback("OnClick", function()
-            self:ApplyDecayAndEndSession()
-            frame:Hide()
-        end)
-        controls:AddChild(btnApply)
-    end
+    -- 4. Columns & Controls (Extracted Helpers)
+    CreateAttendanceColumns(self, frame, theme, isDecayEnabled)
+    CreateAttendanceBottomControls(self, frame, isDecayEnabled)
 
     -- Initial Render
     self:UpdateAttendanceLists()
+    frame:Show()
 end
 
-function UI_Attendance:CreateAttendedLabel(name)
-    local btn = AceGUI:Create("InteractiveLabel")
-    btn:SetText(DesolateLootcouncil:GetDisplayName(name))
-    btn:SetColor(0.2, 1.0, 0.2) -- Greenish
-    btn:SetCallback("OnClick", function()
-        tempAttended[name] = nil
-        tempAbsent[name] = true
-        self:UpdateAttendanceLists()
-    end)
-    return btn
-end
-
-function UI_Attendance:CreateAbsentLabel(name)
-    local btn = AceGUI:Create("InteractiveLabel")
-    btn:SetText(DesolateLootcouncil:GetDisplayName(name))
-    btn:SetColor(1.0, 0.4, 0.4) -- Reddish
-    btn:SetCallback("OnClick", function()
-        tempAbsent[name] = nil
-        tempAttended[name] = true
-        self:UpdateAttendanceLists()
-    end)
-    return btn
-end
 
 function UI_Attendance:UpdateAttendanceLists()
     if not self.attendanceFrame then return end
 
-    self.scrollAttended:ReleaseChildren()
-    self.scrollAbsent:ReleaseChildren()
+    -- Hide old children
+    local attKids = { self.scrollContentAttended:GetChildren() }
+    for _, kid in ipairs(attKids) do kid:Hide(); kid:ClearAllPoints() end
+    local absKids = { self.scrollContentAbsent:GetChildren() }
+    for _, kid in ipairs(absKids) do kid:Hide(); kid:ClearAllPoints() end
+
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
 
     local listAttended = {}
     for k in pairs(tempAttended) do table.insert(listAttended, k) end
     table.sort(listAttended)
 
+    local offsetAtt = 0
     for _, name in ipairs(listAttended) do
-        self.scrollAttended:AddChild(self:CreateAttendedLabel(name))
+        local btn = CreateFrame("Button", nil, self.scrollContentAttended, "BackdropTemplate")
+        btn:SetSize(260, 24)
+        btn:SetPoint("TOPLEFT", self.scrollContentAttended, "TOPLEFT", 4, -offsetAtt)
+        btn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        btn:SetBackdropColor(theme.bg[1] + 0.05, theme.bg[2] + 0.05, theme.bg[3] + 0.05, 0.3)
+        btn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.3)
+
+        local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("LEFT", 8, 0)
+        fs:SetText(DesolateLootcouncil:GetDisplayName(name))
+        fs:SetTextColor(0.2, 1.0, 0.2)
+        btn:SetFontString(fs)
+
+        btn:SetScript("OnEnter", function()
+            btn:SetBackdropColor(theme.buttonHover[1], theme.buttonHover[2], theme.buttonHover[3], 0.6)
+        end)
+        btn:SetScript("OnLeave", function()
+            btn:SetBackdropColor(theme.bg[1] + 0.05, theme.bg[2] + 0.05, theme.bg[3] + 0.05, 0.3)
+        end)
+
+        btn:SetScript("OnClick", function()
+            tempAttended[name] = nil
+            tempAbsent[name] = true
+            self:UpdateAttendanceLists()
+        end)
+
+        btn:Show()
+        offsetAtt = offsetAtt + 28
     end
+    self.scrollContentAttended:SetHeight(offsetAtt + 10)
 
     local listAbsent = {}
     for k in pairs(tempAbsent) do table.insert(listAbsent, k) end
     table.sort(listAbsent)
 
+    local offsetAbs = 0
     for _, name in ipairs(listAbsent) do
-        self.scrollAbsent:AddChild(self:CreateAbsentLabel(name))
+        local btn = CreateFrame("Button", nil, self.scrollContentAbsent, "BackdropTemplate")
+        btn:SetSize(260, 24)
+        btn:SetPoint("TOPLEFT", self.scrollContentAbsent, "TOPLEFT", 4, -offsetAbs)
+        btn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        btn:SetBackdropColor(theme.bg[1] + 0.05, theme.bg[2] + 0.05, theme.bg[3] + 0.05, 0.3)
+        btn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.3)
+
+        local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("LEFT", 8, 0)
+        fs:SetText(DesolateLootcouncil:GetDisplayName(name))
+        fs:SetTextColor(1.0, 0.4, 0.4)
+        btn:SetFontString(fs)
+
+        btn:SetScript("OnEnter", function()
+            btn:SetBackdropColor(theme.buttonHover[1], theme.buttonHover[2], theme.buttonHover[3], 0.6)
+        end)
+        btn:SetScript("OnLeave", function()
+            btn:SetBackdropColor(theme.bg[1] + 0.05, theme.bg[2] + 0.05, theme.bg[3] + 0.05, 0.3)
+        end)
+
+        btn:SetScript("OnClick", function()
+            tempAbsent[name] = nil
+            tempAttended[name] = true
+            self:UpdateAttendanceLists()
+        end)
+
+        btn:Show()
+        offsetAbs = offsetAbs + 28
     end
-end
-
---- Bottom-to-top bubble-down algorithm for a single priority list.
---- Absent players are each moved `penalty` positions toward the bottom.
---- Processing back-to-front prevents earlier shifts from corrupting later indices.
----@param listObj table   A PriorityList object { name, players, ... }
----@param penalty  number Positions to decay each absent player
-function UI_Attendance:CalculateListDecay(listObj, penalty)
-    local DLC      = DesolateLootcouncil
-    local listName = listObj.name
-
-    -- Shallow-copy so we can iterate safely while mutating
-    local newList = {}
-    for _, name in ipairs(listObj.players) do
-        table.insert(newList, name)
-    end
-
-    DLC:DLC_Log("Processing List Category: [" .. listName .. "] with " .. #newList .. " entries.")
-
-    -- Iterate backwards: bottom → top
-    for i = #newList, 1, -1 do
-        local name = newList[i]
-        if tempAbsent[name] then
-            local targetIdx = i + penalty
-
-            table.remove(newList, i)
-
-            -- Cap to the last valid insertion position
-            if targetIdx > #newList + 1 then
-                targetIdx = #newList + 1
-            end
-
-            table.insert(newList, targetIdx, name)
-        end
-    end
-
-    -- Diagnostic logging (top 5 slots)
-    if #newList > 0 then
-        DLC:DLC_Log(" >> Sort Winner Rank 1: " .. DLC:GetDisplayName(newList[1]))
-    end
-    DLC:DLC_Log(" --- Final Standings for [" .. listName .. "] ---")
-    for k = 1, math.min(5, #newList) do
-        local stateStr = tempAbsent[newList[k]] and "(Absent)" or "(Present)"
-        DLC:DLC_Log("#" .. k .. ": " .. DLC:GetDisplayName(newList[k]) .. " " .. stateStr)
-    end
-
-    -- Write the sorted result back into the DB object in-place
-    listObj.players = newList
+    self.scrollContentAbsent:SetHeight(offsetAbs + 10)
 end
 
 --- Persists the reviewed attendance map into DecayConfig, notifies the UI,
@@ -274,10 +262,8 @@ function UI_Attendance:CommitAttendanceToHistory(attendedMap)
         config.currentAttendees[name] = true
     end
 
-    -- Refresh the Config UI immediately.
     DLC:DLC_Log("Triggering UI Refresh...")
-    local Registry = LibStub("AceConfigRegistry-3.0", true)
-    if Registry then Registry:NotifyChange("DesolateLootcouncil") end
+    RefreshSettingsUI()
 
     DesolateLootcouncil.API:StopRaidSession(true)
 end
@@ -296,7 +282,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
         end
 
         for _, listObj in ipairs(dbLists) do
-            self:CalculateListDecay(listObj, currentDecayAmount)
+            DesolateLootcouncil.API:CalculateListDecay(listObj, currentDecayAmount, tempAbsent)
         end
 
         DLC:DLC_Log(string.format(L["Applied +%d Position Decay to all lists for absent players."], currentDecayAmount))
@@ -306,6 +292,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
 
     self:CommitAttendanceToHistory(tempAttended)
 end
+
 
 function UI_Attendance:DeleteHistoryEntry(index)
     if not index or index == "CURRENT" then return end
@@ -319,7 +306,7 @@ function UI_Attendance:DeleteHistoryEntry(index)
         self.selectedHistoryIndex = nil
 
         -- Refresh Config
-        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+        RefreshSettingsUI()
     end
 end
 
@@ -378,11 +365,10 @@ function UI_Attendance:GetSessionControlOptions(config)
                 if config.sessionActive then
                     if self.ShowAttendanceWindow then
                         self:ShowAttendanceWindow()
-                        LibStub("AceConfigDialog-3.0"):Close("DesolateLootcouncil")
                     end
                 else
                     DesolateLootcouncil.API:StartRaidSession()
-                    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+                    RefreshSettingsUI()
                 end
             end,
             order = 12,
@@ -409,7 +395,7 @@ function UI_Attendance:GetRaidHistoryOptions(config)
                 if config.sessionActive then
                     local activeCount = 0
                     for _ in pairs(config.currentAttendees) do activeCount = activeCount + 1 end
-                    list["CURRENT"] = string.format("|cff00ff00[ACTIVE]|r %s (%d Players)", date("%Y-%m-%d"), activeCount)
+                    list["CURRENT"] = string.format("  |cff00ff00[ACTIVE]|r %s (%d Players)", date("%Y-%m-%d"), activeCount)
                 end
 
                 for i, entry in ipairs(history) do
@@ -417,7 +403,7 @@ function UI_Attendance:GetRaidHistoryOptions(config)
                     if entry.attendees then
                         for _ in pairs(entry.attendees) do count = count + 1 end
                     end
-                    list[i] = string.format("%s - %s (%d Players)", entry.date or "N/A", entry.zone or "Unknown", count)
+                    list[i] = string.format("[%d] %s - %s (%d Players)", i, entry.date or "N/A", entry.zone or "Unknown", count)
                 end
                 return list
             end,
@@ -434,37 +420,20 @@ function UI_Attendance:GetRaidHistoryOptions(config)
             func = function() StaticPopup_Show("DLC_CONFIRM_DELETE_HISTORY") end,
             width = "half",
         },
-        historyDetails = {
-            type = "description",
-            name = function()
-                local idx = self.selectedHistoryIndex
-                if not idx then return L["Select a session to view details."] end
-                local attendees = {}
-
-                if idx == "CURRENT" then
-                    if config.currentAttendees then
-                        for name in pairs(config.currentAttendees) do 
-                            table.insert(attendees, DesolateLootcouncil:GetDisplayName(name)) 
-                        end
-                    end
-                else
-                    local history = DesolateLootcouncil.API:GetAttendanceHistory()
-                    local entry = history[idx]
-                    if entry and entry.attendees then
-                        for name in pairs(entry.attendees) do 
-                            table.insert(attendees, DesolateLootcouncil.API:GetDisplayName(name)) 
-                        end
-                    else
-                        return L["Error: History entry not found or empty."]
-                    end
+        viewBtn = {
+            type = "execute",
+            name = L["Open Full History"],
+            desc = L["Open the combined raid history window for the selected session."],
+            order = 24,
+            disabled = function() return not self.selectedHistoryIndex end,
+            func = function()
+                local RaidHistory = DesolateLootcouncil:GetModule("UI_RaidHistory", true)
+                if RaidHistory then
+                    RaidHistory:ShowRaidHistoryWindow(self.selectedHistoryIndex)
                 end
-
-                if #attendees == 0 then return "|cffffd700" .. L["No attendees recorded."] .. "|r" end
-                table.sort(attendees)
-                return "|cffffd700" .. string.format(L["Attendees (%d):"], #attendees) .. "|r\n" .. table.concat(attendees, ", ")
             end,
-            order = 22,
-        }
+            width = "normal",
+        },
     }
 end
 

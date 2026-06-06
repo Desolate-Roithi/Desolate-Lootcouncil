@@ -78,18 +78,12 @@ function Debug:SimulateVoting()
     local votedCount = 0
     -- Iterate all known addon users
     if DesolateLootcouncil.activeAddonUsers then
+        local SimModule = DesolateLootcouncil:GetModule("Simulation")
         for name in pairs(DesolateLootcouncil.activeAddonUsers) do
             -- Skip myself (I vote manually)
             if name ~= myName then
                 for _, item in ipairs(bidding) do
-                    local roll = math.random(1, 5) -- Random 1-5
-                    local payload = {
-                        command = "VOTE",
-                        data = {
-                            guid = item.sourceGUID or item.link,
-                            vote = roll
-                        }
-                    }
+                    local payload = SimModule:CreateSimulatedVotePayload(item)
 
 
                     -- Session module handles OnCommReceived with "DLC_Loot" prefix?

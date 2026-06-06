@@ -4,6 +4,7 @@ if AT.abortLoad then return end
 ---@class SlashCommands
 local SlashCommands = {}
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function SlashCommands.Handle(input)
     if not input or input:trim() == "" then
@@ -67,8 +68,12 @@ function SlashCommands.Handle(input)
 
         -- History
     elseif cmd == "history" then
-        local UI = DesolateLootcouncil:GetModule("UI")
-        if UI and UI.ShowHistoryWindow then UI:ShowHistoryWindow() end
+        if DesolateLootcouncil:AmIRaidAssistOrLM() then
+            local UI = DesolateLootcouncil:GetModule("UI")
+            if UI and UI.ShowHistoryWindow then UI:ShowHistoryWindow() end
+        else
+            DesolateLootcouncil:Print(L["Only the Loot Master or Raid Assists can view the Loot History."])
+        end
 
         -- Trade List (LM Only)
     elseif cmd == "trade" then
@@ -92,12 +97,16 @@ function SlashCommands.Handle(input)
 
         -- Manual Add
     elseif cmd == "add" then
-        local arg = args[2]
-        if arg then
-            local Loot = DesolateLootcouncil:GetModule("Loot")
-            if Loot and Loot.AddManualItem then Loot:AddManualItem(arg) end
+        if DesolateLootcouncil:AmILootMaster() then
+            local arg = args[2]
+            if arg then
+                local Loot = DesolateLootcouncil:GetModule("Loot")
+                if Loot and Loot.AddManualItem then Loot:AddManualItem(arg) end
+            else
+                DesolateLootcouncil:Print("Usage: /dlc add [ItemLink]")
+            end
         else
-            DesolateLootcouncil:Print("Usage: /dlc add [ItemLink]")
+            DesolateLootcouncil:Print(L["Only the Loot Master can add items to the session."])
         end
 
         -- Session Management
@@ -123,6 +132,10 @@ function SlashCommands.Handle(input)
         if LuraWidget and LuraWidget.HandleSlash then
             LuraWidget:HandleSlash(string.lower(args[2] or ""))
         end
+    elseif cmd == "reset" or cmd == "resetpositions" then
+        if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ResetPositions then
+            DesolateLootcouncil.Persistence:ResetPositions()
+        end
     else
         DesolateLootcouncil:Print("Unknown command.")
         DesolateLootcouncil:Print("Available Commands:")
@@ -132,6 +145,7 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:Print("  |cff33ff99/dlc history|r - Open Loot History")
         DesolateLootcouncil:Print("  |cff33ff99/dlc version|r - Check versions")
         DesolateLootcouncil:Print("  |cff33ff99/dlc status|r - Show debug status")
+        DesolateLootcouncil:Print("  |cff33ff99/dlc reset|r - Reset all window positions to default")
         DesolateLootcouncil:Print("Loot Master (LM) Only:")
         DesolateLootcouncil:Print("  |cff33ff99/dlc monitor|r - Open Master Monitor")
         DesolateLootcouncil:Print("  |cff33ff99/dlc loot|r - Open Loot Drop Window")

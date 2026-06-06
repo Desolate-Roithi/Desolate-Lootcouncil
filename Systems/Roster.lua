@@ -43,6 +43,7 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 
 function Roster:OnEnable()
     self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    self:RegisterEvent("ENCOUNTER_START")
     self:RegisterEvent("ENCOUNTER_END")
     self:RegisterEvent("PLAYER_LOGIN")
     self:RegisterEvent("GROUP_ROSTER_UPDATE")
@@ -52,6 +53,15 @@ function Roster:OnEnable()
     self:UpdateScoreMap()
 
     DesolateLootcouncil:DLC_Log("Systems/Roster Loaded")
+end
+
+function Roster:OnDisable()
+    self:UnregisterEvent("ZONE_CHANGED_NEW_AREA")
+    self:UnregisterEvent("ENCOUNTER_START")
+    self:UnregisterEvent("ENCOUNTER_END")
+    self:UnregisterEvent("PLAYER_LOGIN")
+    self:UnregisterEvent("GROUP_ROSTER_UPDATE")
+    self:UnregisterMessage("DLC_VERSION_UPDATE")
 end
 
 function Roster:UpdateScoreMap()
@@ -122,8 +132,8 @@ end
 function Roster:StartRaidSession()
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if config.sessionActive then
-        self:Printf("Session already active (Started: %s)", date("%c", config.currentSessionID))
-        return
+        self:Printf("Session already active (Started: %s). Auto-saving and stopping previous session.", date("%c", config.currentSessionID))
+        self:StopRaidSession(true)
     end
 
     local _, instanceType = GetInstanceInfo()
@@ -132,10 +142,25 @@ function Roster:StartRaidSession()
         return
     end
 
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    if not IsInRaid() and not simActive then
+        self:Printf("Sessions can only be started while in a Raid group.")
+        return
+    end
+
     config.sessionActive = true
     config.currentSessionID = time()
     config.currentAttendees = {}
+    config.attendeeDetails = {}
+    config.bossLogs = {}
     config.lastActivity = time()
+
+    -- Wipe previous overarching session's awarded items database to start completely fresh
+    local session = DesolateLootcouncil.db.profile.session
+    if session then
+        session.awarded = {}
+    end
 
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
 
@@ -161,13 +186,57 @@ function Roster:StopRaidSession(saveHistory)
         if not db.AttendanceHistory then db.AttendanceHistory = {} end
 
         local entry = {
-            date = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
-            zone = GetRealZoneText() or "Unknown",
-            attendees = {}
+            date            = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
+            zone            = GetRealZoneText() or "Unknown",
+            sessionID       = config.currentSessionID,
+            attendees       = {},
+            attendeeDetails = {},
+            bossLogs        = {},
+            awarded         = {}
         }
+        local session = db.session
+        if session and session.awarded then
+            entry.awarded = DesolateLootcouncil.Table.DeepCopy(session.awarded)
+        end
         -- Deep copy attendees
         for name, _ in pairs(config.currentAttendees) do
             entry.attendees[name] = true
+        end
+        -- Deep copy attendee details
+        if config.attendeeDetails then
+            for mainName, chars in pairs(config.attendeeDetails) do
+                entry.attendeeDetails[mainName] = {}
+                for charName, charData in pairs(chars) do
+                    entry.attendeeDetails[mainName][charName] = {
+                        class = charData.class,
+                        kills = charData.kills
+                    }
+                end
+            end
+        end
+        -- Deep copy boss logs
+        if config.bossLogs then
+            for _, b in ipairs(config.bossLogs) do
+                local bRoster = nil
+                if b.roster then
+                    bRoster = {}
+                    for _, p in ipairs(b.roster) do
+                        table.insert(bRoster, {
+                            name = p.name,
+                            main = p.main,
+                            class = p.class
+                        })
+                    end
+                end
+                table.insert(entry.bossLogs, {
+                    encounterID = b.encounterID,
+                    name = b.name,
+                    pulls = b.pulls,
+                    killed = b.killed,
+                    killedTime = b.killedTime,
+                    roster = bRoster
+                })
+            end
         end
         table.insert(db.AttendanceHistory, 1, entry) -- Insert at top (Newest)
 
@@ -193,6 +262,8 @@ function Roster:StopRaidSession(saveHistory)
     config.sessionActive = false
     config.currentSessionID = nil
     config.currentAttendees = {}
+    config.attendeeDetails = {}
+    config.bossLogs = {}
 
     DesolateLootcouncil.sessionAutopassActive = false
     DesolateLootcouncil.sessionAutopassAnswered = false
@@ -200,9 +271,46 @@ function Roster:StopRaidSession(saveHistory)
     DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
 end
 
+--- Helper to get a unit's class filename robustly
+---@param unitName string
+---@return string classFilename
+function Roster:GetUnitClass(unitName)
+    if DesolateLootcouncil:SmartCompare(unitName, "player") then
+        local _, classFilename = UnitClass("player")
+        return classFilename
+    end
+    if IsInRaid() and GetRaidRosterInfo then
+        for i = 1, GetNumGroupMembers() do
+            local name, _, _, _, _, fileName = GetRaidRosterInfo(i)
+            if name and DesolateLootcouncil:SmartCompare(name, unitName) then
+                return fileName
+            end
+        end
+    elseif IsInGroup() and GetNumSubgroupMembers then
+        for i = 1, GetNumSubgroupMembers() do
+            local name = GetUnitName("party" .. i, true)
+            if name and DesolateLootcouncil:SmartCompare(name, unitName) then
+                local _, fileName = UnitClass("party" .. i)
+                return fileName
+            end
+        end
+    end
+    -- Fallback: look up in MainRoster
+    local main = self:GetMain(unitName) or unitName
+    for mName, rData in pairs(DesolateLootcouncil.db.profile.MainRoster) do
+        if DesolateLootcouncil:SmartCompare(mName, main) then
+            if rData and rData.class and rData.class ~= "" then
+                return rData.class
+            end
+        end
+    end
+    return "WARRIOR"
+end
+
 --- Register a player (or their Main) as present
 ---@param unitName string
-function Roster:RegisterAttendance(unitName)
+---@param isEncounterKill boolean|nil
+function Roster:RegisterAttendance(unitName, isEncounterKill)
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config.sessionActive then return end
 
@@ -210,11 +318,31 @@ function Roster:RegisterAttendance(unitName)
 
     -- Verification: Does this main exist in our MainRoster?
     if DesolateLootcouncil.db.profile.MainRoster[mainName] then
+        if not config.currentAttendees then config.currentAttendees = {} end
         if not config.currentAttendees[mainName] then
             config.currentAttendees[mainName] = true
             DesolateLootcouncil:DLC_Log(string.format("Attendance Registered: %s (Main: %s)", 
                 DesolateLootcouncil:GetDisplayName(unitName), 
                 DesolateLootcouncil:GetDisplayName(mainName)))
+        end
+
+        -- Detailed multi-character tracking
+        if not config.attendeeDetails then config.attendeeDetails = {} end
+        if not config.attendeeDetails[mainName] then
+            config.attendeeDetails[mainName] = {}
+        end
+
+        local cleanUnitName = DesolateLootcouncil:GetDisplayName(unitName)
+        if not config.attendeeDetails[mainName][cleanUnitName] then
+            local class = self:GetUnitClass(unitName)
+            config.attendeeDetails[mainName][cleanUnitName] = {
+                class = class,
+                kills = 0
+            }
+        end
+
+        if isEncounterKill then
+            config.attendeeDetails[mainName][cleanUnitName].kills = config.attendeeDetails[mainName][cleanUnitName].kills + 1
         end
     else
         -- Show both the original unit name and the resolved main so the officer
@@ -229,7 +357,8 @@ function Roster:RegisterAttendance(unitName)
 end
 
 --- Captures current group members (or simulates if persistent group set)
-function Roster:SnapshotRoster()
+---@param isEncounterKill boolean|nil
+function Roster:SnapshotRoster(isEncounterKill)
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config.sessionActive then
         self:Printf("Error: No active session. Start one with /dlc session start")
@@ -245,7 +374,7 @@ function Roster:SnapshotRoster()
             for i = 1, members do
                 local name = GetRaidRosterInfo(i)
                 if name then
-                    self:RegisterAttendance(name)
+                    self:RegisterAttendance(name, isEncounterKill)
                 end
             end
         end
@@ -257,7 +386,7 @@ function Roster:SnapshotRoster()
     if Sim then
         local sims = Sim:GetRoster()
         for _, name in ipairs(sims) do
-            self:RegisterAttendance(name)
+            self:RegisterAttendance(name, isEncounterKill)
         end
         if #sims > 0 then
             DesolateLootcouncil:DLC_Log("Included " .. #sims .. " simulated players in roster snapshot.")
@@ -298,7 +427,10 @@ function Roster:AddMain(name)
     if not name or name == "" then return end
 
     local devDB = DesolateLootcouncil.db.profile
-    if not devDB or not devDB.MainRoster or not devDB.playerRoster then return end
+    if not devDB then return end
+    if not devDB.MainRoster then devDB.MainRoster = {} end
+    if not devDB.playerRoster then devDB.playerRoster = { alts = {}, decay = {} } end
+    if not devDB.playerRoster.alts then devDB.playerRoster.alts = {} end
 
     -- Normalize for storage: realmless if local realm
     local normalizedName = Ambiguate(name, "none")
@@ -316,6 +448,12 @@ function Roster:AddMain(name)
     devDB.playerRoster.alts[normalizedName] = nil           -- Ensure not an alt
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Added Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
+    
+    local Priority = DesolateLootcouncil:GetModule("Priority")
+    if Priority and Priority.SyncMissingPlayers then
+        Priority:SyncMissingPlayers()
+    end
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
 function Roster:AddAlt(altName, mainName)
@@ -332,7 +470,10 @@ function Roster:AddAlt(altName, mainName)
     end
 
     local profile = DesolateLootcouncil.db.profile
-    if not profile or not profile.playerRoster or not profile.playerRoster.alts then return end
+    if not profile then return end
+    if not profile.MainRoster then profile.MainRoster = {} end
+    if not profile.playerRoster then profile.playerRoster = { alts = {}, decay = {} } end
+    if not profile.playerRoster.alts then profile.playerRoster.alts = {} end
     local roster = profile.playerRoster
 
     -- 1. Check if the 'new alt' was previously a Main with their own alts
@@ -366,6 +507,7 @@ function Roster:AddAlt(altName, mainName)
     if Priority and Priority.SyncMissingPlayers then
         Priority:SyncMissingPlayers()
     end
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
 function Roster:RemovePlayer(name)
@@ -373,6 +515,10 @@ function Roster:RemovePlayer(name)
     if not name then return end
 
     local profile = DesolateLootcouncil.db.profile
+    if not profile then return end
+    if not profile.MainRoster then profile.MainRoster = {} end
+    if not profile.playerRoster then profile.playerRoster = { alts = {}, decay = {} } end
+    if not profile.playerRoster.alts then profile.playerRoster.alts = {} end
 
     -- Normalize lookup
     local normalizedName = Ambiguate(name, "none")
@@ -389,7 +535,9 @@ function Roster:RemovePlayer(name)
                 end
             end
         end
+        self:UpdateScoreMap()
         DesolateLootcouncil:DLC_Log("Removed Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
+        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
         return
     end
 
@@ -398,6 +546,7 @@ function Roster:RemovePlayer(name)
         profile.playerRoster.alts[normalizedName] = nil
         self:UpdateScoreMap()
         DesolateLootcouncil:DLC_Log("Removed Alt: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
+        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
 
@@ -439,7 +588,10 @@ function Roster:ZONE_CHANGED_NEW_AREA()
     local name, instanceType = GetInstanceInfo()
     local config = DesolateLootcouncil.db.profile.DecayConfig
 
-    if instanceType == "raid" then
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+
+    if instanceType == "raid" and (IsInRaid() or simActive) then
         if not config.sessionActive then
             self:Printf("Entered Raid Instance (%s). Starting Session...", name)
             self:StartRaidSession()
@@ -461,14 +613,108 @@ function Roster:ZONE_CHANGED_NEW_AREA()
     end
 end
 
-function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, groupSize, success)
-    if success == 1 then
-        local _, instanceType = GetInstanceInfo()
-        if instanceType == "raid" then
-            self:SnapshotRoster()
-            self:Printf("Encounter '%s' Defeated. Attendance updated.", encounterName)
+function Roster:ENCOUNTER_START(event, encounterID, encounterName, difficultyID, groupSize)
+    local config = DesolateLootcouncil.db.profile.DecayConfig
+    if not config.sessionActive then return end
+
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    if not IsInRaid() and not simActive then return end
+
+    config.bossLogs = config.bossLogs or {}
+
+    local bossEntry = nil
+    for _, b in ipairs(config.bossLogs) do
+        if b.encounterID == encounterID then
+            bossEntry = b
+            break
         end
     end
+
+    if not bossEntry then
+        bossEntry = {
+            encounterID = encounterID,
+            name = encounterName,
+            pulls = 0,
+            killed = false,
+        }
+        table.insert(config.bossLogs, bossEntry)
+    end
+
+    bossEntry.pulls = bossEntry.pulls + 1
+    config.lastActivity = time()
+end
+
+function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, groupSize, success)
+    local config = DesolateLootcouncil.db.profile.DecayConfig
+    if not config.sessionActive then return end
+
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    if not IsInRaid() and not simActive then return end
+
+    config.bossLogs = config.bossLogs or {}
+
+    local bossEntry = nil
+    for _, b in ipairs(config.bossLogs) do
+        if b.encounterID == encounterID then
+            bossEntry = b
+            break
+        end
+    end
+
+    if not bossEntry then
+        bossEntry = {
+            encounterID = encounterID,
+            name = encounterName,
+            pulls = 1,
+            killed = false,
+        }
+        table.insert(config.bossLogs, bossEntry)
+    end
+
+    if success == 1 then
+        bossEntry.killed = true
+        bossEntry.killedTime = time()
+
+        -- Capture group roster for the kill
+        local killRoster = {}
+        if IsInGroup() then
+            local members = GetNumGroupMembers()
+            if members > 0 then
+                for i = 1, members do
+                    local name = GetRaidRosterInfo(i)
+                    if name then
+                        local mainName = self:GetMain(name) or name
+                        local class = self:GetUnitClass(name) or "WARRIOR"
+                        table.insert(killRoster, { name = name, main = mainName, class = class })
+                    end
+                end
+            end
+        end
+
+        if Sim then
+            local sims = Sim:GetRoster()
+            for _, name in ipairs(sims) do
+                local mainName = self:GetMain(name) or name
+                local class = self:GetUnitClass(name) or "WARRIOR"
+                table.insert(killRoster, { name = name, main = mainName, class = class })
+            end
+        end
+
+        table.sort(killRoster, function(a, b)
+            return a.name < b.name
+        end)
+
+        bossEntry.roster = killRoster
+
+        self:SnapshotRoster(true)
+        self:Printf("Encounter '%s' Defeated. Attendance updated.", encounterName)
+
+        DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
+    end
+
+    config.lastActivity = time()
 end
 
 function Roster:PLAYER_LOGIN()
@@ -493,7 +739,7 @@ end
 local gruResetTimer = nil
 
 function Roster:CheckForNewRaidMembers()
-    if not IsInGroup() or not DesolateLootcouncil:AmILootMaster() then return end
+    if not IsInRaid() or not DesolateLootcouncil:AmILootMaster() then return end
     
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config or not config.sessionActive then return end
@@ -526,23 +772,24 @@ function Roster:DLC_VERSION_UPDATE()
     self:CheckForNewRaidMembers()
 end
 
+local function ResetAutopassSession()
+    if IsInRaid() then return end
+    if DesolateLootcouncil.sessionAutopassActive or DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive then
+        DesolateLootcouncil.sessionAutopassActive  = false
+        DesolateLootcouncil.sessionAutopassAnswered = false
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
+        DesolateLootcouncil:DLC_Log("Raid group disbanded. Autopass session reset.", true)
+    end
+end
+
 function Roster:GROUP_ROSTER_UPDATE()
     if gruResetTimer then gruResetTimer:Cancel() end
     gruResetTimer = C_Timer.NewTimer(0.5, function()
         gruResetTimer = nil
         if not IsInRaid() then
             -- Double check after 5 seconds to ensure this isn't a brief loading screen or portal blip
-            C_Timer.After(5.0, function()
-                if not IsInRaid() then
-                    if DesolateLootcouncil.sessionAutopassActive or DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive then
-                        DesolateLootcouncil.sessionAutopassActive  = false
-                        DesolateLootcouncil.sessionAutopassAnswered = false
-                        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
-                        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
-                        DesolateLootcouncil:DLC_Log("Raid group disbanded. Autopass session reset.", true)
-                    end
-                end
-            end)
+            C_Timer.After(5.0, ResetAutopassSession)
         else
             self:CheckForNewRaidMembers()
             -- Sync Autopass to newly joined members or after a group update (if LM)

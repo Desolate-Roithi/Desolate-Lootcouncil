@@ -22,6 +22,7 @@ function Comm:OnEnable()
     self.playerVersions = {}
     self.playerEnchantingSkill = {}
     self.lastVersionCheck = 0
+    self.rosterSyncTimer = nil
 
     DesolateLootcouncil:DLC_Log("Systems/Comm Loaded")
 end
@@ -59,6 +60,15 @@ function CommHandlers:VERSION_REQ(data, sender)
     if data and data.version then
         self:UpdatePlayerInfo(sender, data.version, data.enchantingSkill or 0)
     end
+
+    -- Autopass Sync Handshake: If the local player is the Loot Master, respond to the player's
+    -- version ping by whispering our authoritative Autopass active state directly to them.
+    -- This instantly syncs late-joiners, zone transitioners, and reloaded raiders
+    -- without waiting for the 30-second heartbeat.
+    if DesolateLootcouncil:AmILootMaster() then
+        local active = DesolateLootcouncil.sessionAutopassActive or false
+        self:SendComm("SYNC_AUTOPASS", { isActive = active, isHeartbeat = true }, sender)
+    end
 end
 CommHandlers.VERSION_CHECK = CommHandlers.VERSION_REQ
 
@@ -93,31 +103,106 @@ function CommHandlers:LOOT_SESSION_END(data, sender)
     if Session and Session.EndSession then Session:EndSession() end
 end
 
-function CommHandlers:IM_SYNC(data, sender)
-    -- Sync Item Manager lists (items only, not players)
-    if data and type(data) == "table" then
-        local db = DesolateLootcouncil.db.profile
-        if db.PriorityLists then
-            local count = 0
-            for listName, items in pairs(data) do
-                for _, localList in ipairs(db.PriorityLists) do
-                    if localList.name == listName then
-                        localList.items = items
-                        count = count + 1
-                        break
-                    end
-                end
-            end
-            DesolateLootcouncil:DLC_Log(string.format("Item Manager Synced: Updated %d item lists.", count))
+local function IsItemManagerDesynced(incomingData)
+    local db = DesolateLootcouncil.db.profile
+    if not db.PriorityLists then return true end
 
-            -- Refresh UI if open
-            local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
-            if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
-                ItemMgr:RefreshWindow()
+    -- Count number of lists
+    local incomingListsCount = 0
+    for _ in pairs(incomingData) do incomingListsCount = incomingListsCount + 1 end
+    if #db.PriorityLists ~= incomingListsCount then return true end
+
+    local localLists = {}
+    for _, localList in ipairs(db.PriorityLists) do
+        localLists[localList.name] = localList
+    end
+
+    for listName, items in pairs(incomingData) do
+        local localList = localLists[listName]
+        if not localList then return true end
+
+        local localCount = 0
+        for _ in pairs(localList.items or {}) do localCount = localCount + 1 end
+        local incomingCount = 0
+        for _ in pairs(items or {}) do incomingCount = incomingCount + 1 end
+
+        if localCount ~= incomingCount then return true end
+
+        for id, val in pairs(items or {}) do
+            if not localList.items or localList.items[id] ~= val then
+                return true
             end
         end
     end
+    return false
 end
+
+local function OverwriteItemManagerLists(data, logMessage)
+    local db = DesolateLootcouncil.db.profile
+    if db.PriorityLists then
+        for listName, items in pairs(data) do
+            for _, localList in ipairs(db.PriorityLists) do
+                if localList.name == listName then
+                    localList.items = DesolateLootcouncil.Table.DeepCopy(items)
+                    break
+                end
+            end
+        end
+
+        if logMessage then
+            DesolateLootcouncil:Print(logMessage)
+        end
+
+        -- Refresh UI if open
+        local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
+        if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
+            ItemMgr:RefreshWindow()
+        end
+    end
+end
+
+function CommHandlers:IM_SYNC(payload, sender)
+    if not payload or type(payload) ~= "table" then return end
+
+    -- Extract data and manual flag. Backwards compatibility for old clients.
+    local data = payload.lists or payload
+    local isManual = (payload.isManual == true) or (payload.lists == nil)
+
+    if type(data) ~= "table" then return end
+
+    local inRaid = IsInRaid()
+    local currentLM = DesolateLootcouncil:DetermineLootMaster()
+    local isSenderLM = DesolateLootcouncil:SmartCompare(sender, currentLM)
+    local amILM = DesolateLootcouncil:AmILootMaster()
+
+    local shouldOverwrite = false
+    local logMessage = nil
+
+    if isManual then
+        -- Manual Sync: Accepted by everyone unconditionally if desynced
+        if not DesolateLootcouncil:SmartCompare(sender, "player") then
+            if IsItemManagerDesynced(data) then
+                shouldOverwrite = true
+                logMessage = "|cff00ffff[Item Manager]|r Synced: Manual database update received from '" .. DesolateLootcouncil:GetDisplayName(sender) .. "'."
+            end
+        end
+    else
+        -- Automatic Sync: Enforce LM's configuration on raiders, only active in Raids
+        if inRaid and isSenderLM and not amILM then
+            if IsItemManagerDesynced(data) then
+                shouldOverwrite = true
+                logMessage = "|cff00ffff[Item Manager]|r Auto-updated your item database to match Loot Master '" .. DesolateLootcouncil:GetDisplayName(sender) .. "' (detected desync)."
+            end
+        end
+    end
+
+    if shouldOverwrite then
+        OverwriteItemManagerLists(data, logMessage)
+    elseif inRaid and isSenderLM and not amILM then
+        DesolateLootcouncil:DLC_Log("Item Manager is already in sync with Loot Master.")
+    end
+end
+
 
 function CommHandlers:SYNC_AUTOPASS(data, sender)
     -- Only accept autopass state from the current Loot Master (prevent spoofing).
@@ -254,6 +339,18 @@ function Comm:GetVersionCheckRemaining()
     return remaining > 0 and remaining or 0
 end
 
+--- Seeds the local player into playerVersions if not already present.
+--- Call this once when a UI window that needs version data first opens.
+function Comm:SeedSelf()
+    local myName = UnitName("player")
+    if not myName or myName == "Unknown Entity" then return end
+    if self.playerVersions[myName] then return end -- already seeded
+    local myVersion = DesolateLootcouncil.version or "0.0.0"
+    local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
+    self:UpdatePlayerInfo(myName, myVersion, mySkill)
+    DesolateLootcouncil:DLC_Log("[Conn] Self-seeded " .. myName .. " as version " .. myVersion)
+end
+
 function Comm:GetActiveUserCount()
     local count = 0
     for _ in pairs(self.playerVersions) do
@@ -302,7 +399,7 @@ function Comm:ShareDataWithAssists(dataType)
             local playersCopy = {}
             for i, p in ipairs(listObj.players or {}) do playersCopy[i] = p end
             local itemsCopy = {}
-            for i, item in ipairs(listObj.items or {}) do itemsCopy[i] = item end
+            for id, val in pairs(listObj.items or {}) do itemsCopy[id] = val end
             table.insert(lists, { name = listObj.name, players = playersCopy, items = itemsCopy })
         end
         payload = lists

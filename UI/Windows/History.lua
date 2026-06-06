@@ -3,210 +3,151 @@ if AT.abortLoad then return end
 
 ---@class UI_History : AceModule
 local UI_History = DesolateLootcouncil:NewModule("UI_History", "AceEvent-3.0")
-local AceGUI = LibStub("AceGUI-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
-function UI_History:ShowHistoryWindow()
-    if not self.historyFrame then
-        ---@type AceGUIFrame
-        local frame = AceGUI:Create("Frame") --[[@as AceGUIFrame]]
-        frame:SetTitle(L["Session History"])
-        frame:SetLayout("Flow")
-        frame:SetWidth(500)
-        frame:SetHeight(400)
-        frame:SetCallback("OnClose", function(widget) widget:Hide() end)
+local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeight, NativeGUI)
+    local row = NativeGUI:AcquireRow(self.rowPool, count, self.scrollContent, false)
+    row:SetHeight(rowHeight)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT",  self.scrollContent, "TOPLEFT",  0,   -topOffset)
+    row:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -12, -topOffset)
 
-        self.historyFrame = frame
+    -- Re-award Button (anchors right first)
+    if not row.btnReaward then
+        local btn = NativeGUI:CreateButton(row, L["Re-award"], 80, 24, "Bid")
+        row.btnReaward = btn
+    end
+    row.btnReaward:ClearAllPoints()
+    row.btnReaward:SetPoint("RIGHT", -8, 0)
+    row.btnReaward:Show()
+    row.btnReaward:SetScript("OnClick", function()
+        DesolateLootcouncil.API:ReawardItem(itemIndex)
+    end)
 
-        -- Position Persistence
-        DesolateLootcouncil:MakeMovableWithSave(frame, "History")
+    -- Item icon
+    if not row.iconBtn then
+        row.iconBtn = NativeGUI:CreateIcon(row, 24, 8)
+    end
+    row.iconBtn.texture:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+    row.iconBtn:Show()
+
+    local function ShowTip()
+        if item.link then
+            GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
+            GameTooltip:SetHyperlink(item.link)
+            GameTooltip:Show()
+        end
+    end
+    row.iconBtn:SetScript("OnClick",  ShowTip)
+    row.iconBtn:SetScript("OnEnter",  ShowTip)
+    row.iconBtn:SetScript("OnLeave",  function() GameTooltip:Hide() end)
+
+    -- Vote-type label (hidden — now inlined in itemLabel text below)
+    if not row.typeLabel then
+        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        lbl:SetWidth(50)
+        lbl:SetJustifyH("RIGHT")
+        row.typeLabel = lbl
+    end
+    row.typeLabel:Hide()
+
+    -- Item link + winner label (fills space between icon and Re-award)
+    if not row.itemLabel then
+        row.itemLabel = NativeGUI:CreateLinkLabel(row)
+        row.itemLabel.text:SetWordWrap(false)
+    end
+    row.itemLabel:ClearAllPoints()
+    row.itemLabel:SetPoint("LEFT",  row.iconBtn,   "RIGHT", 8,  0)
+    row.itemLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -8, 0)
+
+    local class      = item.winnerClass or DesolateLootcouncil:GetModule("Roster"):GetUnitClass(item.winner)
+    local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
+    local colWinner  = NativeGUI:FormatClassColor(class, winnerDisp)
+    local vtColor    = "ff888888"
+    if item.voteType then
+        local vc = NativeGUI.VOTE_COLORS[item.voteType]
+        if vc then
+            vtColor = vc.hex:sub(3)
+        end
+    end
+    local vt         = item.voteType and (" |c" .. vtColor .. "(" .. item.voteType .. ")|r") or ""
+    row.itemLabel.text:SetText((item.link or "???") .. " - " .. colWinner .. vt)
+    row.itemLabel:Show()
+    row.itemLabel:SetScript("OnClick",  ShowTip)
+    row.itemLabel:SetScript("OnEnter",  ShowTip)
+    row.itemLabel:SetScript("OnLeave",  function() GameTooltip:Hide() end)
+end
+
+--- Opens a lightweight loot history window scoped to the CURRENT raid session.
+--- Allows the Loot Master to quickly re-award items from this session.
+function UI_History:ShowSessionLootHistory()
+    if not DesolateLootcouncil:AmIRaidAssistOrLM() then
+        if self.sessionFrame then self.sessionFrame:Hide() end
+        return
     end
 
-    self.historyFrame:Show()
-    self.historyFrame:ReleaseChildren()
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if not self.sessionFrame then
+        local frame = NativeGUI:CreateWindow("DLCSessionHistoryFrame", L["Session Loot History"], "SessionHistory")
+        self.sessionFrame = frame
+        self.rowPool = {}
+    end
+
+    self.sessionFrame:Show()
+
+    -- Hide all pooled rows
+    NativeGUI:ResetRowPool(self.rowPool)
+
+    if not self.scrollFrame then
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.sessionFrame, -50, -16)
+        self.scrollFrame  = scrollFrame
+        self.scrollContent = scrollContent
+    end
+    self.scrollFrame:Show()
+    self.scrollContent:Show()
 
     local awarded = DesolateLootcouncil.API:GetAwardedList()
 
-    -- 1. Date Processing
-    local dates = {}
-    local dateMap = {}
-    for _, item in ipairs(awarded) do
-        local d = date("%Y-%m-%d", item.timestamp or time())
-        if not dateMap[d] then
-            dateMap[d] = true
-            table.insert(dates, d)
-        end
-    end
-    -- Sort Newest -> Oldest
-    table.sort(dates, function(a, b) return a > b end)
+    local hasItems  = false
+    local topOffset = 0
+    local rowHeight = 32
+    local count     = 0
 
-    -- Default Selection
-    if not self.selectedHistoryDate and #dates > 0 then
-        self.selectedHistoryDate = dates[1]
-    end
-    -- Safety Check: If selected date no longer exists (deleted), reset
-    if self.selectedHistoryDate and not dateMap[self.selectedHistoryDate] then
-        if #dates > 0 then
-            self.selectedHistoryDate = dates[1]
-        else
-            self.selectedHistoryDate = nil
-        end
-    end
+    -- Show newest first (iterate in reverse)
+    for i = #awarded, 1, -1 do
+        local item = awarded[i]
+        hasItems = true
+        count = count + 1
 
-    -- 2. UI Controls (Top Bar)
-    ---@type AceGUISimpleGroup
-    local controlGroup = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-    controlGroup:SetLayout("Flow")
-    controlGroup:SetFullWidth(true)
-    self.historyFrame:AddChild(controlGroup)
+        RenderHistoryRow(self, count, item, i, topOffset, rowHeight, NativeGUI)
 
-    -- Dropdown
-    ---@type AceGUIDropdown
-    local dateDropdown = AceGUI:Create("Dropdown") --[[@as AceGUIDropdown]]
-    dateDropdown:SetLabel(L["Select Date"])
-    dateDropdown:SetRelativeWidth(0.5)
-
-    local dropdownList = {}
-    for _, d in ipairs(dates) do
-        dropdownList[d] = d
-    end
-    dateDropdown:SetList(dropdownList)
-
-    if self.selectedHistoryDate then
-        dateDropdown:SetValue(self.selectedHistoryDate)
-    end
-
-    dateDropdown:SetCallback("OnValueChanged", function(widget, event, key)
-        self.selectedHistoryDate = key
-        self:ShowHistoryWindow()
-    end)
-    controlGroup:AddChild(dateDropdown)
-
-    -- Delete Button
-    ---@type AceGUIButton
-    local btnDelete = AceGUI:Create("Button") --[[@as AceGUIButton]]
-    btnDelete:SetText(L["Delete Date"])
-    btnDelete:SetRelativeWidth(0.3)
-    btnDelete:SetCallback("OnClick", function()
-        if not self.selectedHistoryDate then return end
-
-        -- Filter Loop (Backwards safe removal)
-        local countRemoved = 0
-        for i = #awarded, 1, -1 do
-            local item = awarded[i]
-            local d = date("%Y-%m-%d", item.timestamp or time())
-            if d == self.selectedHistoryDate then
-                table.remove(awarded, i)
-                countRemoved = countRemoved + 1
-            end
-        end
-
-        DesolateLootcouncil:DLC_Log(string.format(L["Removed %d entries for %s"], countRemoved, self.selectedHistoryDate))
-        self.selectedHistoryDate = nil -- Reset selection to force refresh logic
-        self:ShowHistoryWindow()
-    end)
-    controlGroup:AddChild(btnDelete)
-
-    -- 3. Scroll List
-    ---@type AceGUIScrollFrame
-    local scroll = AceGUI:Create("ScrollFrame") --[[@as AceGUIScrollFrame]]
-    scroll:SetLayout("List")
-    scroll:SetFullWidth(true)
-    scroll:SetFullHeight(true)
-    self.historyFrame:AddChild(scroll)
-
-    local hasItems = false
-    if self.selectedHistoryDate then
-        for i = #awarded, 1, -1 do
-            local item = awarded[i]
-            local d = date("%Y-%m-%d", item.timestamp or time())
-
-            if d == self.selectedHistoryDate then
-                hasItems = true
-                ---@type AceGUISimpleGroup
-                local row = AceGUI:Create("SimpleGroup") --[[@as AceGUISimpleGroup]]
-                row:SetLayout("Flow")
-                row:SetFullWidth(true)
-
-                -- Icon (Interactive NEW)
-                ---@type AceGUIIcon
-                local icon = AceGUI:Create("Icon")
-                icon:SetImage(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-                icon:SetImageSize(24, 24)
-                icon:SetRelativeWidth(0.05)
-                icon:SetCallback("OnClick", function()
-                    if item.link then
-                        GameTooltip:SetOwner((icon --[[@as any]]).frame, "ANCHOR_CURSOR")
-                        GameTooltip:SetHyperlink(item.link)
-                        GameTooltip:Show()
-                    end
-                end)
-                icon:SetCallback("OnEnter", function()
-                    if item.link then
-                        GameTooltip:SetOwner((icon --[[@as any]]).frame, "ANCHOR_CURSOR")
-                        GameTooltip:SetHyperlink(item.link)
-                        GameTooltip:Show()
-                    end
-                end)
-                icon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-
-                -- Link -> Winner
-                ---@type AceGUIInteractiveLabel
-                local text = AceGUI:Create("InteractiveLabel") --[[@as AceGUIInteractiveLabel]]
-                local class = item.winnerClass
-                local classColor = class and RAID_CLASS_COLORS[class] and RAID_CLASS_COLORS[class].colorStr or "ffffffff"
-
-                text:SetText((item.link or "???") .. " -> |c" .. classColor .. DesolateLootcouncil:GetDisplayName(item.winner or "Unknown") .. "|r")
-                text:SetRelativeWidth(0.45) -- Reduced from 0.50 to accommodate icon (0.05)
-                text:SetCallback("OnEnter", function(widget)
-                    if item.link then
-                        GameTooltip:SetOwner(widget.frame, "ANCHOR_CURSOR")
-                        GameTooltip:SetHyperlink(item.link)
-                        GameTooltip:Show()
-                    end
-                end)
-                text:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-
-                -- Type
-                ---@type AceGUILabel
-                local info = AceGUI:Create("Label") --[[@as AceGUILabel]]
-                info:SetText("(" .. (item.voteType or "?") .. ")")
-                info:SetRelativeWidth(0.20)
-                info:SetColor(0.7, 0.7, 0.7)
-
-                -- Re-award Button
-                ---@type AceGUIButton
-                local btnReaward = AceGUI:Create("Button")
-                btnReaward:SetText(L["Re-award"])
-                btnReaward:SetRelativeWidth(0.20)
-                btnReaward:SetCallback("OnClick", function()
-                    DesolateLootcouncil.API:ReawardItem(i)
-                end)
-
-                row:AddChild(icon)
-                row:AddChild(text)
-                row:AddChild(info)
-                row:AddChild(btnReaward)
-                scroll:AddChild(row)
-            end
-        end
+        topOffset = topOffset + rowHeight + 6
     end
 
     if not hasItems then
-        local lbl = AceGUI:Create("Label") --[[@as AceGUILabel]]
-        lbl:SetText(L["No entries for this date."])
-        lbl:SetFullWidth(true)
-        scroll:AddChild(lbl)
+        if not self.emptyLabel then
+            self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            self.emptyLabel:SetPoint("TOPLEFT", 10, -10)
+        end
+        self.emptyLabel:SetText(L["No loot awarded in this session."])
+        self.emptyLabel:Show()
+        self.scrollContent:SetHeight(40)
+    else
+        if self.emptyLabel then self.emptyLabel:Hide() end
+        self.scrollContent:SetHeight(topOffset + 10)
     end
 end
+
+--- Kept for backward-compat. Redirects to ShowSessionLootHistory.
+UI_History.ShowHistoryWindow = UI_History.ShowSessionLootHistory
 
 function UI_History:OnEnable()
     self:RegisterMessage("DLC_HISTORY_UPDATED", "OnHistoryUpdated")
 end
 
 function UI_History:OnHistoryUpdated()
-    if self.historyFrame and self.historyFrame.frame and self.historyFrame.frame:IsShown() then
-        self:ShowHistoryWindow()
+    if self.sessionFrame and self.sessionFrame:IsShown() then
+        self:ShowSessionLootHistory()
     end
 end
-

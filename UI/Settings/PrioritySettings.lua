@@ -1,8 +1,8 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
----@class PrioritySettings : AceModule
-local PrioritySettings = DesolateLootcouncil:NewModule("PrioritySettings")
+---@class UI_PrioritySettings : AceModule
+local PrioritySettings = DesolateLootcouncil:NewModule("UI_PrioritySettings")
 
 function PrioritySettings:OnInitialize()
     self.tempListName = ""
@@ -11,6 +11,8 @@ function PrioritySettings:OnInitialize()
 end
 
 function PrioritySettings:GetCreateGroupOptions()
+    local API = DesolateLootcouncil.API
+
     return {
         type = "group",
         name = "Create New List",
@@ -23,7 +25,7 @@ function PrioritySettings:GetCreateGroupOptions()
                 order = 1,
                 width = "double",
                 get = function() return self.tempListName end,
-                set = function(info, val) self.tempListName = val end,
+                set = function(_, val) self.tempListName = val end,
             },
             createBtn = {
                 type = "execute",
@@ -31,7 +33,7 @@ function PrioritySettings:GetCreateGroupOptions()
                 order = 2,
                 func = function()
                     if self.tempListName and self.tempListName ~= "" then
-                        DesolateLootcouncil:GetModule("Priority"):AddPriorityList(self.tempListName)
+                        API:AddPriorityList(self.tempListName)
                         self.tempListName = ""
                     end
                 end,
@@ -41,6 +43,8 @@ function PrioritySettings:GetCreateGroupOptions()
 end
 
 function PrioritySettings:GetManageListsGroupOptions()
+    local API = DesolateLootcouncil.API
+
     return {
         type = "group",
         name = "Manage Existing Lists",
@@ -53,13 +57,13 @@ function PrioritySettings:GetManageListsGroupOptions()
                 order = 1,
                 width = "normal",
                 values = function()
-                    local names = DesolateLootcouncil:GetModule("Priority"):GetPriorityListNames()
+                    local names = API:GetPriorityListNames()
                     local options = {}
                     for i, v in ipairs(names) do options[i] = v end
                     return options
                 end,
                 get = function() return self.tempSelectedListIndex end,
-                set = function(info, val) self.tempSelectedListIndex = val end,
+                set = function(_, val) self.tempSelectedListIndex = val end,
             },
             renameInput = {
                 type = "input",
@@ -67,7 +71,7 @@ function PrioritySettings:GetManageListsGroupOptions()
                 order = 2,
                 width = "normal",
                 get = function() return self.tempRenameVal end,
-                set = function(info, val) self.tempRenameVal = val end,
+                set = function(_, val) self.tempRenameVal = val end,
             },
             renameBtn = {
                 type = "execute",
@@ -76,8 +80,7 @@ function PrioritySettings:GetManageListsGroupOptions()
                 width = "normal",
                 func = function()
                     if self.tempSelectedListIndex and self.tempRenameVal ~= "" then
-                        DesolateLootcouncil:GetModule("Priority"):RenamePriorityList(
-                            self.tempSelectedListIndex, self.tempRenameVal)
+                        API:RenamePriorityList(self.tempSelectedListIndex, self.tempRenameVal)
                         self.tempRenameVal = ""
                         self.tempSelectedListIndex = nil
                     end
@@ -92,7 +95,7 @@ function PrioritySettings:GetManageListsGroupOptions()
                 confirmText = "Are you sure you want to delete this list?",
                 func = function()
                     if self.tempSelectedListIndex then
-                        DesolateLootcouncil:GetModule("Priority"):RemovePriorityList(self.tempSelectedListIndex)
+                        API:RemovePriorityList(self.tempSelectedListIndex)
                         self.tempSelectedListIndex = nil
                         self.tempRenameVal = ""
                     end
@@ -103,6 +106,8 @@ function PrioritySettings:GetManageListsGroupOptions()
 end
 
 function PrioritySettings:GetSeasonGroupOptions()
+    local API = DesolateLootcouncil.API
+
     return {
         type = "group",
         name = "Season Management",
@@ -114,9 +119,9 @@ function PrioritySettings:GetSeasonGroupOptions()
                 name = "Shuffle / Start Season",
                 order = 1,
                 confirm = true,
-                confirmText = "This will randomize ALL priority lists and clear history. Continute?",
+                confirmText = "This will randomize ALL priority lists and clear history. Continue?",
                 func = function()
-                    DesolateLootcouncil:GetModule("Priority"):ShuffleLists()
+                    API:ShuffleLists()
                 end,
             },
             syncBtn = {
@@ -124,7 +129,7 @@ function PrioritySettings:GetSeasonGroupOptions()
                 name = "Sync Missing Players",
                 order = 2,
                 func = function()
-                    DesolateLootcouncil:GetModule("Priority"):SyncMissingPlayers()
+                    API:SyncMissingPlayers()
                 end,
             },
             historyBtn = {
@@ -159,7 +164,7 @@ function PrioritySettings:GetOptions()
     return {
         name = "Priority Lists",
         type = "group",
-        childGroups = "tab", -- Enable Tabs
+        childGroups = "tab",
         order = 3,
         args = {
             configTab = {
@@ -209,10 +214,10 @@ function PrioritySettings:GetOverrideFunc(listName, names)
 end
 
 function PrioritySettings:GetPriorityListViewOptions()
+    local API = DesolateLootcouncil.API
     local args = {}
-    local priorityModule = DesolateLootcouncil:GetModule("Priority")
-    local names = priorityModule:GetPriorityListNames()
-    local db = DesolateLootcouncil.db.profile
+    local names = API:GetPriorityListNames()
+    local dbLists = API:GetPriorityLists()
 
     if not self.showContentMap then self.showContentMap = {} end
 
@@ -240,16 +245,14 @@ function PrioritySettings:GetPriorityListViewOptions()
 
         if self.showContentMap[listName] then
             local listObj = nil
-            if db.PriorityLists then
-                for _, l in ipairs(db.PriorityLists) do
-                    if l.name == listName then listObj = l; break end
-                end
+            for _, l in ipairs(dbLists) do
+                if l.name == listName then listObj = l; break end
             end
 
             if listObj and listObj.players then
                 local contentStr = ""
                 for rank, player in ipairs(listObj.players) do
-                    contentStr = contentStr .. string.format("|cffeda55fRank #%d:|r %s\n", rank, player)
+                    contentStr = contentStr .. string.format("|cffeda55fRank #%d:|r %s\n", rank, API:GetDisplayName(player))
                 end
 
                 args["grp_" .. i].args.contentDisplay = {

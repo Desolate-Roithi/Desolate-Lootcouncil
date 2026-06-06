@@ -1,48 +1,69 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
----@diagnostic disable: undefined-field
 ---@class UI_PriorityLogHistory : AceModule
 local UI_PriorityLogHistory = DesolateLootcouncil:NewModule("UI_PriorityLogHistory")
-local AceGUI = LibStub("AceGUI-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_PriorityLogHistory:ShowLogWindow()
-    if not self.logFrame then
-        local frame = AceGUI:Create("Frame") --[[@as any]]
-        frame:SetTitle(L["Priority Log History"])
-        frame:SetLayout("Fill")
-        frame:SetWidth(600)
-        frame:SetHeight(400)
-        frame:SetCallback("OnClose", function(widget) widget:Hide() end)
-        self.logFrame = frame
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
-        -- [NEW] Position Persistence
-        DesolateLootcouncil:MakeMovableWithSave(frame, "PriorityHistory")
+    if not self.logFrame then
+        local frame = NativeGUI:CreateWindow("DLCPriorityHistoryFrame", L["Priority Log History"], "PriorityHistory")
+        self.logFrame = frame
+        self.labelPool = {}
     end
 
     self.logFrame:Show()
-    self.logFrame:ReleaseChildren()
 
-    local scroll = AceGUI:Create("ScrollFrame")
-    scroll:SetLayout("Flow")
-    self.logFrame:AddChild(scroll)
+    for _, lbl in ipairs(self.labelPool) do
+        lbl:Hide()
+        lbl:ClearAllPoints()
+    end
+
+    if not self.scrollFrame then
+        local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.logFrame, -50, -16)
+        self.scrollFrame = scrollFrame
+        self.scrollContent = scrollContent
+    end
+
+    self.scrollFrame:Show()
+    self.scrollContent:Show()
 
     local db = DesolateLootcouncil.db.profile
     local history = db.History or {}
 
+    local topOffset = 10
+    local count = 0
+
     -- Show Newest First
     for i = #history, 1, -1 do
-        local label = AceGUI:Create("Label")
-        label:SetText(history[i])
-        label:SetFullWidth(true)
-        scroll:AddChild(label)
+        count = count + 1
+        if not self.labelPool[count] then
+            local lbl = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            lbl:SetJustifyH("LEFT")
+            self.labelPool[count] = lbl
+        end
+        local lbl = self.labelPool[count]
+        lbl:ClearAllPoints()
+        lbl:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 10, -topOffset)
+        lbl:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -16, -topOffset)
+        lbl:SetText(history[i])
+        lbl:Show()
+
+        topOffset = topOffset + lbl:GetStringHeight() + 8
     end
 
     if #history == 0 then
-        local label = AceGUI:Create("Label")
-        label:SetText(L["No history logs found."])
-        label:SetFullWidth(true)
-        scroll:AddChild(label)
+        if not self.emptyLabel then
+            self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            self.emptyLabel:SetPoint("TOPLEFT", 10, -10)
+        end
+        self.emptyLabel:SetText(L["No history logs found."])
+        self.emptyLabel:Show()
+        self.scrollContent:SetHeight(40)
+    else
+        if self.emptyLabel then self.emptyLabel:Hide() end
+        self.scrollContent:SetHeight(topOffset + 10)
     end
 end

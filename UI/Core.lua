@@ -26,6 +26,7 @@ if AT.abortLoad then return end
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_UI]]
 ---@type UI
 local UI = DesolateLootcouncil:NewModule("UI", "AceConsole-3.0", "AceEvent-3.0", "AceTimer-3.0")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 ---@diagnostic disable-next-line: inject-field
 function UI:OnEnable()
@@ -40,6 +41,38 @@ function UI:OnEnable()
             self.updateTimer = nil
         end, 2) -- 2 second debounce
     end)
+
+    -- Register Blizzard Settings Panel Category
+    local blizzOptionsFrame = CreateFrame("Frame", "DesolateLootcouncilBlizOptions", UIParent)
+    blizzOptionsFrame.name = "Desolate Loot Council"
+
+    local title = blizzOptionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("Desolate Loot Council")
+
+    local desc = blizzOptionsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    desc:SetText(L["Open the configuration window to manage settings, priority lists, and rosters."])
+
+    local btn = CreateFrame("Button", nil, blizzOptionsFrame, "UIPanelButtonTemplate")
+    btn:SetSize(180, 26)
+    btn:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -16)
+    btn:SetText(L["Open Settings Window"])
+    btn:SetScript("OnClick", function()
+        if SettingsPanel and SettingsPanel:IsShown() then
+            SettingsPanel:Hide()
+        elseif InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then
+            InterfaceOptionsFrame:Hide()
+        end
+        DesolateLootcouncil:OpenConfig()
+    end)
+
+    if Settings and Settings.RegisterCanvasLayoutCategory then
+        local category = Settings.RegisterCanvasLayoutCategory(blizzOptionsFrame, "Desolate Loot Council")
+        Settings.RegisterAddOnCategory(category)
+    else
+        InterfaceOptions_AddCategory(blizzOptionsFrame)
+    end
 end
 
 -- ============================================================================
@@ -71,7 +104,7 @@ function UI:CloseMasterLootWindow()
 end
 
 function UI:ShowAwardWindow(itemData)
-    local M = DesolateLootcouncil:GetModule("UI_Monitor")
+    local M = DesolateLootcouncil:GetModule("UI_Award")
     if M then M:ShowAwardWindow(itemData) end
 end
 
@@ -105,13 +138,20 @@ function UI:ShowVersionWindow(isTest)
     if M then M:ShowVersionWindow(isTest) end
 end
 
+function UI:ShowSettingsWindow()
+    local M = DesolateLootcouncil:GetModule("UI_Settings")
+    if M then M:ShowSettingsWindow() end
+end
+
 function UI:ResetVoting()
     local V = DesolateLootcouncil:GetModule("UI_Voting")
     if V then V:ResetVoting() end
 
     local M = DesolateLootcouncil:GetModule("UI_Monitor")
     if M and M.monitorFrame then M.monitorFrame:Hide() end
-    if M and M.awardFrame then M.awardFrame:Hide() end
+
+    local A = DesolateLootcouncil:GetModule("UI_Award")
+    if A and A.awardFrame then A.awardFrame:Hide() end
 
     self:Print("Voting data cleared.")
 end

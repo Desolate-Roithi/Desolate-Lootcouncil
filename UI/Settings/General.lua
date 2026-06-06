@@ -1,10 +1,12 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
----@class GeneralSettings : AceModule
-local GeneralSettings = DesolateLootcouncil:NewModule("GeneralSettings")
+---@class UI_GeneralSettings : AceModule
+local GeneralSettings = DesolateLootcouncil:NewModule("UI_GeneralSettings")
 
 function GeneralSettings:GetGeneralOptions()
+    local API = DesolateLootcouncil.API
+
     return {
         name = "General",
         type = "group",
@@ -21,10 +23,9 @@ function GeneralSettings:GetGeneralOptions()
                 desc = "Name of the Loot Master (PlayerName)",
                 order = 1,
                 width = "normal",
-                get = function(info) return DesolateLootcouncil.db.profile.configuredLM end,
-                set = function(info, val)
-                    DesolateLootcouncil.db.profile.configuredLM = val
-                    DesolateLootcouncil:UpdateLootMasterStatus()
+                get = function() return API:GetConfiguredLM() end,
+                set = function(_, val)
+                    API:SetConfiguredLM(val)
                 end,
             },
             minLootQuality = {
@@ -41,8 +42,8 @@ function GeneralSettings:GetGeneralOptions()
                     [4] = "Epic (Purple)",
                     [5] = "Legendary (Orange)"
                 },
-                get = function(info) return DesolateLootcouncil.db.profile.minLootQuality end,
-                set = function(info, val) DesolateLootcouncil.db.profile.minLootQuality = val end,
+                get = function() return API:GetMinLootQuality() end,
+                set = function(_, val) API:SetMinLootQuality(val) end,
             },
             enableAutoLoot = {
                 type = "toggle",
@@ -50,8 +51,8 @@ function GeneralSettings:GetGeneralOptions()
                 desc = "Automatically roll on items above threshold (LM) or pass (Raiders).",
                 order = 3,
                 width = "full",
-                get = function(info) return DesolateLootcouncil.db.profile.enableAutoLoot end,
-                set = function(info, val) DesolateLootcouncil.db.profile.enableAutoLoot = val end,
+                get = function() return API:GetEnableAutoLoot() end,
+                set = function(_, val) API:SetEnableAutoLoot(val) end,
             },
             debugMode = {
                 type = "toggle",
@@ -59,8 +60,30 @@ function GeneralSettings:GetGeneralOptions()
                 desc = "Show debug messages in chat.",
                 order = 4,
                 width = "full",
-                get = function(info) return DesolateLootcouncil.db.profile.debugMode end,
-                set = function(info, val) DesolateLootcouncil.db.profile.debugMode = val end,
+                get = function() return API:GetDebugMode() end,
+                set = function(_, val) API:SetDebugMode(val) end,
+            },
+            themeHeader = {
+                type = "header",
+                name = "UI Theme",
+                order = 7,
+            },
+            activeTheme = {
+                type = "select",
+                name = "Active Theme",
+                desc = "Select the appearance of the user interface.",
+                order = 8,
+                width = "normal",
+                values = {
+                    ["Midnight"] = "Midnight (Void)",
+                    ["Classic"] = "Classic Slate",
+                    ["Minimalist"] = "Pure Dark (Minimal)",
+                    ["Fel"] = "Emerald Fel",
+                },
+                get = function() return API:GetActiveTheme() end,
+                set = function(_, val)
+                    API:SetActiveTheme(val)
+                end,
             },
             resetLayout = {
                 type = "execute",
@@ -69,15 +92,9 @@ function GeneralSettings:GetGeneralOptions()
                 order = 5,
                 width = "normal",
                 func = function()
-                    if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ResetPositions then
-                        DesolateLootcouncil.Persistence:ResetPositions()
-                        DesolateLootcouncil:Print("All window positions have been reset.")
-                    else
-                        DesolateLootcouncil:Print("Persistence module not loaded.")
-                    end
+                    API:ResetWindowLayout()
                 end,
             },
-            -- Bug 4: History link in settings so all players can open it
             openHistory = {
                 type = "execute",
                 name = "Loot History",
@@ -85,21 +102,21 @@ function GeneralSettings:GetGeneralOptions()
                 order = 6,
                 width = "normal",
                 func = function()
-                    local UI = DesolateLootcouncil:GetModule("UI_History")
-                    if UI then UI:ShowHistoryWindow() end
+                    local UI_History = DesolateLootcouncil:GetModule("UI_History", true)
+                    if UI_History then UI_History:ShowHistoryWindow() end
                 end,
             },
             shareHeader = {
                 type = "header",
                 name = "Loot Master: Share Data",
                 order = 10,
-                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+                hidden = function() return not API:IsLootMaster() end,
             },
             shareDesc = {
                 type = "description",
                 name = "Privately whisper Priority Lists and Roster to all Raid Assists. Regular members cannot read this data.",
                 order = 11,
-                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+                hidden = function() return not API:IsLootMaster() end,
             },
             shareWithAssistsBtn = {
                 type = "execute",
@@ -107,24 +124,19 @@ function GeneralSettings:GetGeneralOptions()
                 desc = "Sends both Priority Lists and Roster to all current raid assists via private whisper.",
                 order = 12,
                 width = "full",
-                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+                hidden = function() return not API:IsLootMaster() end,
                 confirm = true,
                 confirmText = "This will overwrite the Priority Lists and Roster on all assists' clients. Continue?",
                 func = function()
-                    local Comm = DesolateLootcouncil:GetModule("Comm")
-                    if not Comm then
-                        DesolateLootcouncil:Print("Comm module not available.")
-                        return
-                    end
-                    Comm:ShareDataWithAssists("PRIORITY")
-                    Comm:ShareDataWithAssists("ROSTER")
+                    API:ShareDataWithAssists("PRIORITY")
+                    API:ShareDataWithAssists("ROSTER")
                 end,
             },
             autopassHeader = {
                 type = "header",
                 name = "Loot Master: Autopass Settings",
                 order = 20,
-                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+                hidden = function() return not API:IsLootMaster() end,
             },
             repromptAutopass = {
                 type = "execute",
@@ -132,9 +144,9 @@ function GeneralSettings:GetGeneralOptions()
                 desc = "Opens the 'Enable Autopass' popup again to change the global setting for this session.",
                 order = 21,
                 width = "full",
-                hidden = function() return not DesolateLootcouncil:AmILootMaster() end,
+                hidden = function() return not API:IsLootMaster() end,
                 func = function()
-                    StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+                    API:RepromptAutopass()
                 end,
             },
         }
