@@ -222,6 +222,15 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         frame:HookScript("OnHide", function()
             self.userClosedMonitor = true
         end)
+        frame.OnCollapse = function()
+            if self.scrollFrame then self.scrollFrame:Hide() end
+            if self.navGroup then self.navGroup:Hide() end
+            if self.deFrame then self.deFrame:Hide() end
+        end
+        frame.OnExpand = function()
+            self:ShowMonitorWindow(true)
+            self:UpdateDisenchanters()
+        end
         self.monitorFrame = frame
         self.rowPool = {}
 
@@ -283,6 +292,9 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
     if not isRefresh then
         self.userClosedMonitor = false
         self.monitorFrame:Show()
+        if self.monitorFrame.isCollapsed then
+            NativeGUI:ExpandWindow(self.monitorFrame, "Monitor")
+        end
     elseif self.userClosedMonitor then
         return
     elseif not self.monitorFrame:IsShown() then
@@ -304,8 +316,13 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         self.scrollFrame = scrollFrame
         self.scrollContent = scrollContent
     end
-    self.scrollFrame:Show()
-    self.scrollContent:Show()
+
+    if self.monitorFrame.isCollapsed then
+        self.scrollFrame:Hide()
+    else
+        self.scrollFrame:Show()
+        self.scrollContent:Show()
+    end
 
     if items then
         for i, item in ipairs(items) do
@@ -356,16 +373,13 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
             local Version = DesolateLootcouncil:GetModule("UI_Version", true)
             if Version then Version:ShowVersionWindow() end
         end)
-
-        if isLM then
-            self.btnStop = NativeGUI:CreateButton(nav, L["Stop Session"], 105, 24, "Stop")
-            self.btnStop:SetPoint("RIGHT", 0, 0)
-            self.btnStop:SetScript("OnClick", function()
-                DesolateLootcouncil.API:StopSession()
-            end)
-        end
     end
-    self.navGroup:Show()
+
+    if self.monitorFrame.isCollapsed then
+        self.navGroup:Hide()
+    else
+        self.navGroup:Show()
+    end
 
     -- Disenchanter Sidebar Attachment
     if not self.deFrame then

@@ -258,7 +258,7 @@ function Priority:SyncMissingPlayers()
                 table.remove(currentList, i)
                 removedCount = removedCount + 1
                 self:LogPriorityChange(string.format("Removed %s from %s list (Not a Main).", 
-                    DesolateLootcouncil:GetDisplayName(pName), listObj.name))
+                    Ambiguate(pName, "none"), listObj.name))
             end
         end
     end

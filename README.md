@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.0.0  
-**Last Updated:** 2026-06-06  
+**Latest Version:** v1.0.1  
+**Last Updated:** 2026-06-08  
 **Compatibility:** WoW 12.0.5 (Midnight)  
 
 ## Features
@@ -45,6 +45,26 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v1.0.1
+Maintenance and bugfix release focused on account-wide profile persistence, Loot Master character swapping, copyable log history, and visual refinements:
+* **Account-wide Profile & LM Swaps**:
+    - Enabled seamless Loot Master character swaps (e.g. Druid -> Mage -> Priest) during active raid sessions without canceling the session.
+    - Implemented a profile switching check on login: automatically prompts the Loot Master to continue or stop the active session.
+    - Active raid session data and profiles are correctly preserved in the global DB.
+* **Item Manager Profile Integration**:
+    - Moved Item Manager priority lists directly into the AceDB profile layout to survive profile changes, copies, and resets.
+    - Normalized imported base64 profile data to prevent duplicate item entries.
+    - Fixed list sync loop spam (every 30s) by converting list item IDs from string representations to numeric values inside the comparison check.
+* **Priority Log History Selection**:
+    - Replaced the non-interactive font string label pool with a selectable, copyable multi-line editbox in the Priority Log History window.
+    - Bypassed main name resolution during roster removals to log the exact alt character name (e.g., `Roithitest`) in sync logs.
+* **Themed & Collapsible Disenchanters Dock**:
+    - Colored the "Disenchanters" section header in the Award window to match the active theme's colors (`theme.textHeader`).
+    - Added a collapsible/expandable arrow indicator next to the label (points right when collapsed, down when expanded) that responds to double-clicks.
+* **Localization & Stability**:
+    - Added missing localization strings for `"Resume Session"` and `"Resuming active raid session."` in both English and German locales.
+    - Resolved linter warnings and issues, resulting in a fully passing test suite (32/32 tests) and a clean static analysis (0 warnings/errors).
 
 ### v1.0.0
 Official stable release of Desolate Lootcouncil, introducing a complete Native UI visual overhaul, a customizable theme engine, and significant stability enhancements:

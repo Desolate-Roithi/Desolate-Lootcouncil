@@ -30,6 +30,22 @@ StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
     hideOnEscape = true,
 }
 
+StaticPopupDialogs["DLC_ACTIVE_SESSION_PROMPT"] = {
+    text = "%s",
+    button1 = L["Resume Session"],
+    button2 = L["End Session"],
+    OnAccept = function()
+        DesolateLootcouncil:Print(L["Resuming active raid session."])
+    end,
+    OnCancel = function()
+        local Roster = DesolateLootcouncil:GetModule("Roster")
+        if Roster then Roster:StopRaidSession(true) end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = false,
+}
+
 ---@class (partial) DLC_Ref_Roster
 ---@field db table
 ---@field GetModule fun(self: any, name: string): any
@@ -156,6 +172,14 @@ function Roster:StartRaidSession()
     config.bossLogs = {}
     config.lastActivity = time()
 
+    local globalDb = DesolateLootcouncil.db.global
+    if globalDb then
+        globalDb.activeRaidProfile = DesolateLootcouncil.db:GetCurrentProfile()
+        globalDb.activeRaidSessionID = config.currentSessionID
+        globalDb.activeRaidLastActivity = config.lastActivity
+        globalDb.activeRaidLM = UnitName("player")
+    end
+
     -- Wipe previous overarching session's awarded items database to start completely fresh
     local session = DesolateLootcouncil.db.profile.session
     if session then
@@ -264,6 +288,14 @@ function Roster:StopRaidSession(saveHistory)
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.bossLogs = {}
+
+    local globalDb = DesolateLootcouncil.db.global
+    if globalDb then
+        globalDb.activeRaidProfile = ""
+        globalDb.activeRaidSessionID = 0
+        globalDb.activeRaidLastActivity = 0
+        globalDb.activeRaidLM = ""
+    end
 
     DesolateLootcouncil.sessionAutopassActive = false
     DesolateLootcouncil.sessionAutopassAnswered = false
@@ -643,6 +675,9 @@ function Roster:ENCOUNTER_START(event, encounterID, encounterName, difficultyID,
 
     bossEntry.pulls = bossEntry.pulls + 1
     config.lastActivity = time()
+    if DesolateLootcouncil.db.global then
+        DesolateLootcouncil.db.global.activeRaidLastActivity = config.lastActivity
+    end
 end
 
 function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, groupSize, success)
@@ -715,24 +750,44 @@ function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, g
     end
 
     config.lastActivity = time()
+    if DesolateLootcouncil.db.global then
+        DesolateLootcouncil.db.global.activeRaidLastActivity = config.lastActivity
+    end
 end
 
 function Roster:PLAYER_LOGIN()
     local config = DesolateLootcouncil.db.profile.DecayConfig
-    if config.sessionActive then
-        local delta = time() - (config.lastActivity or 0)
-        if delta > 3600 then -- 1 hour stale
-            DesolateLootcouncil:DLC_Log(string.format(
-                "[DLC] Stale session detected (inactive for %.1f hours). Use '/dlc session stop' to end it.",
-                delta / 3600), true)
+    local globalDb = DesolateLootcouncil.db.global
+    local isLM = false
+    local myName = UnitName("player")
+
+    if globalDb then
+        local function Normalize(name)
+            if not name then return "" end
+            return string.lower(string.match(name, "^([^-]+)") or name)
+        end
+        local normPlayer = Normalize(myName)
+
+        local activeLM = globalDb.activeRaidLM
+        if activeLM and activeLM ~= "" and (Normalize(activeLM) == normPlayer or Normalize(activeLM) == "player") then
+            isLM = true
+        else
+            local profiles = DesolateLootcouncil.db.sv and DesolateLootcouncil.db.sv.profiles
+            local targetProfile = globalDb.activeRaidProfile
+            local configuredLM = profiles and targetProfile and profiles[targetProfile] and profiles[targetProfile].configuredLM
+            if configuredLM and configuredLM ~= "" and (Normalize(configuredLM) == normPlayer or Normalize(configuredLM) == "player") then
+                isLM = true
+            end
         end
     end
-    
-    if not IsInRaid() then
-        DesolateLootcouncil.sessionAutopassActive = false
-        DesolateLootcouncil.sessionAutopassAnswered = false
-        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
-        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
+
+    if config.sessionActive and isLM then
+        local delta = time() - (config.lastActivity or 0)
+        local warningMsg = L["An active raid session was found.\nWould you like to resume this session or end it?"]
+        if delta > 43200 then -- 12 hours
+            warningMsg = string.format(L["An active raid session was found (inactive for %.1f hours).\nWould you like to resume this session or end it?"], delta / 3600)
+        end
+        StaticPopup_Show("DLC_ACTIVE_SESSION_PROMPT", warningMsg)
     end
 end
 
@@ -774,11 +829,14 @@ end
 
 local function ResetAutopassSession()
     if IsInRaid() then return end
-    if DesolateLootcouncil.sessionAutopassActive or DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive then
+    local config = DesolateLootcouncil.db.profile.DecayConfig
+    if config.sessionActive then return end
+    
+    if DesolateLootcouncil.sessionAutopassActive or config.sessionAutopassActive then
         DesolateLootcouncil.sessionAutopassActive  = false
         DesolateLootcouncil.sessionAutopassAnswered = false
-        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
-        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
+        config.sessionAutopassActive = false
+        config.sessionAutopassAnswered = false
         DesolateLootcouncil:DLC_Log("Raid group disbanded. Autopass session reset.", true)
     end
 end

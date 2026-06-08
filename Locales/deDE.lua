@@ -209,6 +209,8 @@ L["A previous Loot Session is still active. Do you want to close it?"] =
 L["Yes (Close Session)"] = "Ja (Sitzung schließen)"
 L["No (Keep Active)"] = "Nein (Aktiv lassen)"
 L["Are you sure you want to perform this action?"] = "Bist du sicher, dass du diese Aktion ausführen möchtest?"
+L["Resume Session"] = "Lootsession fortsetzen"
+L["Resuming active raid session."] = "Aktive Raid-Lootsession wird fortgesetzt."
 
 
 L["Award Log"] = "Vergabe-Log"

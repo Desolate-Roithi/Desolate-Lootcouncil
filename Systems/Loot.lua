@@ -513,6 +513,14 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if Voting and Voting.RemoveVotingItem then
         Voting:RemoveVotingItem(itemGUID)
     end
+
+    local db = DesolateLootcouncil.db
+    if db and db.profile and db.profile.DecayConfig then
+        db.profile.DecayConfig.lastActivity = time()
+        if db.global then
+            db.global.activeRaidLastActivity = time()
+        end
+    end
 end
 
 --- Copies the original votes back onto the new item GUID so the Monitor
@@ -601,6 +609,14 @@ function Loot:ReawardItem(index)
     if Monitor then Monitor:ShowMonitorWindow() end
 
     DesolateLootcouncil:Print(L["Item reverted to bidding session."])
+
+    local db = DesolateLootcouncil.db
+    if db and db.profile and db.profile.DecayConfig then
+        db.profile.DecayConfig.lastActivity = time()
+        if db.global then
+            db.global.activeRaidLastActivity = time()
+        end
+    end
 end
 
 function Loot:AddTestItems()

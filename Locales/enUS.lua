@@ -207,6 +207,8 @@ L["A previous Loot Session is still active. Do you want to close it?"] = true
 L["Yes (Close Session)"] = true
 L["No (Keep Active)"] = true
 L["Are you sure you want to perform this action?"] = true
+L["Resume Session"] = true
+L["Resuming active raid session."] = true
 
 -- New Keys
 L["All window positions have been reset."] = true

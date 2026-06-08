@@ -346,6 +346,7 @@ local function RenderVoteList(self, voteList, isLM, itemData, NativeGUI)
 end
 
 local function RenderDisenchantersDock(self, disenchanters, isLM, itemData, N, H, NativeGUI)
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
     if H > 0 then
         if not self.deContainer then
             local deContainer = CreateFrame("Frame", nil, self.awardFrame)
@@ -353,9 +354,26 @@ local function RenderDisenchantersDock(self, disenchanters, isLM, itemData, N, H
             deContainer:SetPoint("BOTTOMRIGHT", self.awardFrame, "BOTTOMRIGHT", -36, 12)
             self.deContainer = deContainer
 
-            local deHeader = deContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            deHeader:SetPoint("TOPLEFT", 0, 0)
+            local deHeaderButton = CreateFrame("Button", nil, deContainer)
+            deHeaderButton:SetSize(180, 20)
+            deHeaderButton:SetPoint("TOPLEFT", 0, 0)
+            deHeaderButton:SetScript("OnDoubleClick", function()
+                self.deCollapsed = not self.deCollapsed
+                self:ShowAwardWindow(self.activeItemData)
+            end)
+            self.deHeaderButton = deHeaderButton
+
+            local arrow = deHeaderButton:CreateTexture(nil, "OVERLAY")
+            arrow:SetSize(12, 12)
+            arrow:SetPoint("LEFT", 0, 0)
+            arrow:SetAtlas("minimal-scrollbar-arrow-bottom")
+            arrow:SetVertexColor(theme.textHeader[1], theme.textHeader[2], theme.textHeader[3], 0.6)
+            self.deCollapseArrow = arrow
+
+            local deHeader = deHeaderButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            deHeader:SetPoint("LEFT", arrow, "RIGHT", 4, 0)
             deHeader:SetText(L["Disenchanters"])
+            deHeader:SetTextColor(unpack(theme.textHeader))
             self.deHeaderLabel = deHeader
 
             local scrollFrame = CreateFrame("ScrollFrame", "DLCAwardDeScroll", deContainer, "UIPanelScrollFrameTemplate")
@@ -377,32 +395,53 @@ local function RenderDisenchantersDock(self, disenchanters, isLM, itemData, N, H
         end
         self.deContainer:SetHeight(H)
         self.deContainer:Show()
-        self.deScrollFrame:Show()
-        self.deScrollContent:Show()
 
-        local scrollBar = _G["DLCAwardDeScrollScrollBar"]
-        if scrollBar then
-            if N <= 3 then
-                scrollBar:Hide()
-                self.deScrollFrame:ClearAllPoints()
-                self.deScrollFrame:SetPoint("TOPLEFT", self.deContainer, "TOPLEFT", 0, -20)
-                self.deScrollFrame:SetPoint("BOTTOMRIGHT", self.deContainer, "BOTTOMRIGHT", 0, 0)
-            else
-                scrollBar:Show()
-                self.deScrollFrame:ClearAllPoints()
-                self.deScrollFrame:SetPoint("TOPLEFT", self.deContainer, "TOPLEFT", 0, -20)
-                self.deScrollFrame:SetPoint("BOTTOMRIGHT", self.deContainer, "BOTTOMRIGHT", -20, 0)
+        -- Always ensure the text and arrow colors match the active theme
+        if self.deHeaderLabel then
+            self.deHeaderLabel:SetTextColor(unpack(theme.textHeader))
+        end
+        if self.deCollapseArrow then
+            self.deCollapseArrow:Show()
+            self.deCollapseArrow:SetVertexColor(theme.textHeader[1], theme.textHeader[2], theme.textHeader[3], 0.6)
+        end
+
+        if self.deCollapsed then
+            if self.deCollapseArrow then
+                self.deCollapseArrow:SetRotation(math.pi / 2)
             end
-        end
+            if self.deScrollFrame then self.deScrollFrame:Hide() end
+            for _, row in ipairs(self.deRowPool) do row:Hide() end
+        else
+            if self.deCollapseArrow then
+                self.deCollapseArrow:SetRotation(0)
+            end
+            self.deScrollFrame:Show()
+            self.deScrollContent:Show()
 
-        for _, row in ipairs(self.deRowPool) do row:Hide() end
+            local scrollBar = _G["DLCAwardDeScrollScrollBar"]
+            if scrollBar then
+                if N <= 3 then
+                    scrollBar:Hide()
+                    self.deScrollFrame:ClearAllPoints()
+                    self.deScrollFrame:SetPoint("TOPLEFT", self.deContainer, "TOPLEFT", 0, -20)
+                    self.deScrollFrame:SetPoint("BOTTOMRIGHT", self.deContainer, "BOTTOMRIGHT", 0, 0)
+                else
+                    scrollBar:Show()
+                    self.deScrollFrame:ClearAllPoints()
+                    self.deScrollFrame:SetPoint("TOPLEFT", self.deContainer, "TOPLEFT", 0, -20)
+                    self.deScrollFrame:SetPoint("BOTTOMRIGHT", self.deContainer, "BOTTOMRIGHT", -20, 0)
+                end
+            end
 
-        local deScrollHeight = 0
-        for idx, de in ipairs(disenchanters) do
-            self:CreateDisenchanterRow(idx, self.deScrollContent, de, isLM, itemData, N)
-            deScrollHeight = deScrollHeight + 38
+            for _, row in ipairs(self.deRowPool) do row:Hide() end
+
+            local deScrollHeight = 0
+            for idx, de in ipairs(disenchanters) do
+                self:CreateDisenchanterRow(idx, self.deScrollContent, de, isLM, itemData, N)
+                deScrollHeight = deScrollHeight + 38
+            end
+            self.deScrollContent:SetHeight(deScrollHeight)
         end
-        self.deScrollContent:SetHeight(deScrollHeight)
     else
         if self.deContainer then
             self.deContainer:Hide()
@@ -414,6 +453,10 @@ function UI_Award:ShowAwardWindow(itemData)
     if not itemData then
         if self.awardFrame then self.awardFrame:Hide() end
         return
+    end
+
+    if not self.awardFrame or not self.awardFrame:IsShown() or (self.activeItemData and self.activeItemData.link ~= itemData.link) then
+        self.deCollapsed = true
     end
 
     self.activeItemData = itemData
@@ -449,12 +492,17 @@ function UI_Award:ShowAwardWindow(itemData)
     local N = #disenchanters
     local H = 0
     if N > 0 then
-        local numDisplay = math.min(N, 3)
-        local contentHeight = numDisplay * 32 + (numDisplay - 1) * 6
-        H = 18 + 8 + contentHeight
+        if self.deCollapsed == nil then
+            self.deCollapsed = true
+        end
+        if self.deCollapsed then
+            H = 20
+        else
+            local numDisplay = math.min(N, 3)
+            local contentHeight = numDisplay * 32 + (numDisplay - 1) * 6
+            H = 18 + 8 + contentHeight
+        end
     end
-
-
 
     -- Dynamically push votes list upwards if the bottom disenchant dock is visible
     self.awardScroll:ClearAllPoints()

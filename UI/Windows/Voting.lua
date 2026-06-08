@@ -173,7 +173,7 @@ function UI_Voting:StartMilestoneChecker()
 
         -- Emit one combined message for this tick, respecting the 30s dedup window
         if #pendingItems > 0 and (now - self.lastReminderSentAt) >= 30 then
-            local frameShown = self.votingFrame and self.votingFrame:IsShown()
+            local frameShown = self.votingFrame and self.votingFrame:IsShown() and not self.votingFrame.isCollapsed
             if not frameShown then
                 local timeLabel
                 if lowestThreshold >= 60 then
@@ -195,6 +195,18 @@ function UI_Voting:StartMilestoneChecker()
                 self.lastReminderSentAt = now
             end
         end
+
+        -- Auto show and expand if lowestThreshold is 30s or less
+        if lowestThreshold and lowestThreshold <= 30 then
+            local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+            if not self.votingFrame then self:CreateVotingFrame() end
+            if not self.votingFrame:IsShown() then
+                self:ShowVotingWindow()
+            end
+            if self.votingFrame.isCollapsed then
+                NativeGUI:ExpandWindow(self.votingFrame, "Voting")
+            end
+        end
     end)
 end
 
@@ -211,6 +223,13 @@ end
 function UI_Voting:CreateVotingFrame()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local frame = NativeGUI:CreateWindow("DLCVotingFrame", L["Loot Vote"], "Voting")
+
+    frame.OnCollapse = function()
+        if self.scrollFrame then self.scrollFrame:Hide() end
+    end
+    frame.OnExpand = function()
+        self:ShowVotingWindow(nil, true)
+    end
 
     frame:HookScript("OnHide", function()
         if self.votingTicker then self.votingTicker:Cancel() end
@@ -358,6 +377,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     if not self.votingFrame then self:CreateVotingFrame() end
 
     local API = DesolateLootcouncil.API
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     self.myVotes = API:GetLocalVotes()
     self.myNotes = self.myNotes or {}
@@ -370,6 +390,9 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         self.announcedMilestones = {}
         self.lastReminderSentAt  = 0
         self:StartMilestoneChecker()
+        if self.votingFrame.isCollapsed then
+            NativeGUI:ExpandWindow(self.votingFrame, "Voting")
+        end
     end
     local awardedGUIDs = API:GetAwardedGUIDs()
 
@@ -391,16 +414,19 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         row:ClearAllPoints()
     end
 
-    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     if not self.scrollFrame then
         local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(self.votingFrame, -50, -16)
         self.scrollFrame = scrollFrame
         self.scrollContent = scrollContent
     end
 
-    self.scrollFrame:Show()
-    self.scrollContent:Show()
-    NativeGUI:StyleScrollBar(self.scrollFrame)
+    if self.votingFrame.isCollapsed then
+        self.scrollFrame:Hide()
+    else
+        self.scrollFrame:Show()
+        self.scrollContent:Show()
+        NativeGUI:StyleScrollBar(self.scrollFrame)
+    end
 
     SetupVotingTicker(self, API)
 

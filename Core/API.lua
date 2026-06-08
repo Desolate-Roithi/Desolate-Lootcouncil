@@ -858,6 +858,15 @@ function DLC_API:ImportProfileData(importStringRaw, importName)
         p.playerRoster = data.Roster.playerRoster
     end
     if data.PriorityListsContent then
+        for _, list in ipairs(data.PriorityListsContent) do
+            if list.items then
+                local normalizedItems = {}
+                for id, val in pairs(list.items) do
+                    normalizedItems[tonumber(id) or id] = val
+                end
+                list.items = normalizedItems
+            end
+        end
         p.PriorityLists = data.PriorityListsContent
     elseif data.PriorityListsStructure then
         local newLists = {}

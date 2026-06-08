@@ -188,6 +188,16 @@ function UI_Loot:ShowLootWindow(lootTable)
         refreshBtn:SetScript("OnClick", OnRefreshConnectionsClicked)
 
         frame:HookScript("OnHide", OnLootFrameHide)
+
+        frame.OnCollapse = function()
+            if self.clearBtn then self.clearBtn:Hide() end
+            if self.refreshBtn then self.refreshBtn:Hide() end
+            if self.startBtn then self.startBtn:Hide() end
+            if self.scrollFrame then self.scrollFrame:Hide() end
+        end
+        frame.OnExpand = function()
+            self:ShowLootWindow(self.activeLootTable)
+        end
     end
 
     self.activeLootTable = lootTable
@@ -208,8 +218,18 @@ function UI_Loot:ShowLootWindow(lootTable)
         self.scrollContent = scrollContent
     end
 
-    self.scrollFrame:Show()
-    self.scrollContent:Show()
+    if self.lootFrame.isCollapsed then
+        if self.clearBtn then self.clearBtn:Hide() end
+        if self.refreshBtn then self.refreshBtn:Hide() end
+        if self.startBtn then self.startBtn:Hide() end
+        if self.scrollFrame then self.scrollFrame:Hide() end
+    else
+        if self.clearBtn then self.clearBtn:Show() end
+        if self.refreshBtn then self.refreshBtn:Show() end
+        if self.startBtn then self.startBtn:Show() end
+        if self.scrollFrame then self.scrollFrame:Show() end
+        self.scrollContent:Show()
+    end
 
     local catList = {}
     local listIndexMap = {}

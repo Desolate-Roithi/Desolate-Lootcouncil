@@ -33,28 +33,15 @@ function UI_PriorityLogHistory:ShowLogWindow()
     local db = DesolateLootcouncil.db.profile
     local history = db.History or {}
 
-    local topOffset = 10
-    local count = 0
-
-    -- Show Newest First
-    for i = #history, 1, -1 do
-        count = count + 1
-        if not self.labelPool[count] then
-            local lbl = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            lbl:SetJustifyH("LEFT")
-            self.labelPool[count] = lbl
+    -- Hide legacy label pool if any
+    if self.labelPool then
+        for _, lbl in ipairs(self.labelPool) do
+            lbl:Hide()
         end
-        local lbl = self.labelPool[count]
-        lbl:ClearAllPoints()
-        lbl:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 10, -topOffset)
-        lbl:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -16, -topOffset)
-        lbl:SetText(history[i])
-        lbl:Show()
-
-        topOffset = topOffset + lbl:GetStringHeight() + 8
     end
 
     if #history == 0 then
+        if self.editBox then self.editBox:Hide() end
         if not self.emptyLabel then
             self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             self.emptyLabel:SetPoint("TOPLEFT", 10, -10)
@@ -64,6 +51,45 @@ function UI_PriorityLogHistory:ShowLogWindow()
         self.scrollContent:SetHeight(40)
     else
         if self.emptyLabel then self.emptyLabel:Hide() end
-        self.scrollContent:SetHeight(topOffset + 10)
+
+        if not self.editBox then
+            local eb = CreateFrame("EditBox", nil, self.scrollContent)
+            eb:SetMultiLine(true)
+            eb:SetMaxLetters(0)
+            eb:SetAutoFocus(false)
+            eb:SetFontObject("GameFontHighlightSmall")
+            eb:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
+            
+            local isResetting = false
+            eb:SetScript("OnTextChanged", function(selfEdit)
+                if isResetting then return end
+                if selfEdit.fullText and selfEdit:GetText() ~= selfEdit.fullText then
+                    isResetting = true
+                    selfEdit:SetText(selfEdit.fullText)
+                    isResetting = false
+                end
+            end)
+            eb:SetEnabled(true)
+            self.editBox = eb
+        end
+
+        self.editBox:ClearAllPoints()
+        self.editBox:SetPoint("TOPLEFT", self.scrollContent, "TOPLEFT", 10, -10)
+        self.editBox:SetPoint("TOPRIGHT", self.scrollContent, "TOPRIGHT", -10, -10)
+        self.editBox:SetWidth(self.scrollFrame:GetWidth() - 20)
+
+        local lines = {}
+        for i = #history, 1, -1 do
+            table.insert(lines, history[i])
+        end
+        local fullText = table.concat(lines, "\n")
+
+        self.editBox.fullText = fullText
+        self.editBox:SetText(fullText)
+        self.editBox:Show()
+
+        local height = self.editBox:GetHeight()
+        if height < 40 then height = 40 end
+        self.scrollContent:SetHeight(height + 20)
     end
 end

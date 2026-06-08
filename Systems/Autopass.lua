@@ -60,7 +60,7 @@ function Autopass:DetermineRollAction(rollID, dbCat)
 end
 
 local function ShouldLogAutopassDebug()
-    return DesolateLootcouncil:AmIRaidAssistOrLM()
+    return DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.debugMode == true
 end
 
 local function DebugLog(msg)

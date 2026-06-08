@@ -163,12 +163,15 @@ function Session:RestoreSession()
         local sessionStarted = (expiry > 300) and (expiry - 300) or expiry
         local isExpiredOver12h = now > (sessionStarted + 43200)
 
-        if state.activeLM and state.activeLM ~= "" then
+        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player") or (IsInGroup() and UnitIsGroupLeader("player"))
+        if isLM then
+            DesolateLootcouncil.activeLootMaster = UnitName("player")
+            DesolateLootcouncil.amILM = true
+            state.activeLM = UnitName("player")
+        elseif state.activeLM and state.activeLM ~= "" then
             DesolateLootcouncil.activeLootMaster = state.activeLM
             DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(state.activeLM, "player")
         end
-
-        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player")
 
         if not isLM and isExpiredOver12h then
             DesolateLootcouncil:DLC_Log("Session > 12h old. Auto-closing for non-LM.")
@@ -204,7 +207,12 @@ function Session:PerformRestore(state, now, expiry)
         self.closedItems    = state.closed or {}
         self.sessionExpiry  = expiry
 
-        if state.activeLM and state.activeLM ~= "" then
+        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player") or (IsInGroup() and UnitIsGroupLeader("player"))
+        if isLM then
+            DesolateLootcouncil.activeLootMaster = UnitName("player")
+            DesolateLootcouncil.amILM = true
+            state.activeLM = UnitName("player")
+        elseif state.activeLM and state.activeLM ~= "" then
             DesolateLootcouncil.activeLootMaster = state.activeLM
             DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(state.activeLM, "player")
         end
@@ -346,7 +354,6 @@ function Session:StartSession(lootTable)
 
     -- 1. Filter junk, stamp expiry, persist to bidding storage.
     local cleanList, itemCount, duration, endTime = self:FilterBiddingLoot(lootTable)
-    self.clientLootList = cleanList
 
     if itemCount == 0 then
         Loot:ClearLootBacklog()
@@ -359,6 +366,23 @@ function Session:StartSession(lootTable)
     Loot:ClearLootBacklog()
     self:SendMessage("DLC_LOOT_WINDOW_UPDATE", nil)
 
+    if self.clientLootList and #self.clientLootList > 0 then
+        for _, newItem in ipairs(cleanList) do
+            local isDuplicate = false
+            for _, existingItem in ipairs(self.clientLootList) do
+                if existingItem.sourceGUID == newItem.sourceGUID then
+                    isDuplicate = true
+                    break
+                end
+            end
+            if not isDuplicate then
+                table.insert(self.clientLootList, newItem)
+            end
+        end
+    else
+        self.clientLootList = cleanList
+    end
+
     self:BroadcastSessionStart(cleanList, itemCount, duration, endTime)
 
     -- Auto-Sync Item Manager lists automatically when starting a session
@@ -368,7 +392,7 @@ function Session:StartSession(lootTable)
     end
 
     -- 4. Open LM windows.
-    self:OpenActiveSessionUIs(cleanList)
+    self:OpenActiveSessionUIs(self.clientLootList)
 end
 
 function Session:SendStopSession()

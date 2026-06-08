@@ -44,6 +44,12 @@ _G.DesolateLootcouncil = DesolateLootcouncil
 DesolateLootcouncil.version = C_AddOns and C_AddOns.GetAddOnMetadata("Desolate_Lootcouncil", "Version") or "1.0.0"
 
 local defaults = {
+    global = {
+        activeRaidProfile = "",
+        activeRaidSessionID = 0,
+        activeRaidLastActivity = 0,
+        activeRaidLM = "",
+    },
     profile = {
         configuredLM      = "",
         PriorityLists     = {
@@ -86,6 +92,43 @@ local defaults = {
 function DesolateLootcouncil:OnInitialize()
     -- 1. Initialize DB
     self.db = LibStub("AceDB-3.0"):New("DesolateLootDB", defaults, true)
+
+    -- Auto-switch to active raid profile if active session is set globally and we are the LM
+    if self.db.global and self.db.global.activeRaidProfile and self.db.global.activeRaidProfile ~= "" then
+        local isLM = false
+        local myName = UnitName("player")
+        
+        local function Normalize(name)
+            if not name then return "" end
+            return string.lower(string.match(name, "^([^-]+)") or name)
+        end
+        local normPlayer = Normalize(myName)
+
+        local activeLM = self.db.global.activeRaidLM
+        if activeLM and activeLM ~= "" and (Normalize(activeLM) == normPlayer or Normalize(activeLM) == "player") then
+            isLM = true
+        else
+            local profiles = self.db.sv and self.db.sv.profiles
+            local targetProfile = self.db.global.activeRaidProfile
+            local configuredLM = profiles and targetProfile and profiles[targetProfile] and profiles[targetProfile].configuredLM
+            if configuredLM and configuredLM ~= "" and (Normalize(configuredLM) == normPlayer or Normalize(configuredLM) == "player") then
+                isLM = true
+            end
+        end
+
+        if isLM then
+            local activeProf = self.db.global.activeRaidProfile
+            if self.db:GetCurrentProfile() ~= activeProf then
+                self.db:SetProfile(activeProf)
+                self:DLC_Log(string.format("Auto-switched to active raid profile: '%s'", activeProf))
+            end
+        end
+    end
+
+    -- Register profile change callbacks
+    self.db.RegisterCallback(self, "OnProfileChanged", "OnProfileChanged")
+    self.db.RegisterCallback(self, "OnProfileCopied", "OnProfileChanged")
+    self.db.RegisterCallback(self, "OnProfileReset", "OnProfileChanged")
 
     -- 1a. Stamp the DB sentinel so it's never 0 (equal to its default).
     --     AceDB's removeDefaults() strips keys that equal their default value.
@@ -134,6 +177,31 @@ function DesolateLootcouncil:OnInitialize()
     -- 8. Welcome Message
     if not self.db.profile.positions then self.db.profile.positions = {} end
     self:DLC_Log("Desolate Lootcouncil " .. self.version .. " Loaded.")
+end
+
+function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
+    self.sessionAutopassActive  = self.db.profile.DecayConfig.sessionAutopassActive or false
+    self.sessionAutopassAnswered = self.db.profile.DecayConfig.sessionAutopassAnswered or false
+
+    local Roster = self:GetModule("Roster", true)
+    if Roster and Roster.UpdateScoreMap then
+        Roster:UpdateScoreMap()
+    end
+
+    local session = self.db.profile.session
+    if session then
+        self:_RepairItemCache(session)
+    end
+    self:_RefreshOpenWindows(session)
+
+    local Session = self:GetModule("Session", true)
+    if Session and Session.RestoreSession then
+        Session:RestoreSession()
+    end
+
+    self:UpdateLootMasterStatus()
+
+    self:DLC_Log(string.format("Profile changed: Roster and Session states rehydrated."))
 end
 
 function DesolateLootcouncil:OnEnable()
@@ -339,6 +407,19 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
         self.lastLeader = leader
     end
 
+    -- Switch profile if a raid session is active globally and we are the leader/LM of the group
+    if IsInGroup() and self.db.global and self.db.global.activeRaidProfile and self.db.global.activeRaidProfile ~= "" then
+        local amILeader = self:SmartCompare(self:GetGroupLeader(), "player")
+        if amILeader then
+            local activeProf = self.db.global.activeRaidProfile
+            if self.db:GetCurrentProfile() ~= activeProf then
+                self:DLC_Log(string.format("Auto-switching profile to active raid profile: '%s' (LM Relog)", activeProf))
+                self.db:SetProfile(activeProf)
+                return
+            end
+        end
+    end
+
     local targetLM = self:DetermineLootMaster()
     local wasLM = self.amILM
     self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
@@ -348,6 +429,14 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
         self.sessionAutopassAnswered = false
         if IsInRaid() and self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
             StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+        end
+    end
+
+    -- If we are the active LM and the session is active, update the global activeRaidLM to our name
+    if self.amILM and self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
+        if self.db.global and self.db.global.activeRaidLM ~= UnitName("player") then
+            self.db.global.activeRaidLM = UnitName("player")
+            self:DLC_Log(string.format("Updated active raid LM to: %s", UnitName("player")))
         end
     end
 

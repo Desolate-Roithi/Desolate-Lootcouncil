@@ -85,6 +85,10 @@ local function CollapseWindow(frame, windowName)
     if windowName then
         DesolateLootcouncil:SaveFramePosition(frame, windowName)
     end
+
+    if frame.OnCollapse then
+        pcall(frame.OnCollapse, frame)
+    end
 end
 
 --- Restore a previously collapsed window to its original size.
@@ -112,6 +116,10 @@ local function ExpandWindow(frame, windowName)
 
     if windowName then
         DesolateLootcouncil:SaveFramePosition(frame, windowName)
+    end
+
+    if frame.OnExpand then
+        pcall(frame.OnExpand, frame)
     end
 end
 
@@ -691,7 +699,6 @@ end
 local activeEditBox = nil
 local lastActiveEditBox = nil
 local lastActiveTime = 0
-local linkInsertedThisFrame = false
 
 local function HandleEditBoxInsertLink(text)
     local target = activeEditBox
@@ -709,35 +716,9 @@ local function HandleEditBoxInsertLink(text)
         if needsFocus then
             target:SetFocus()
         end
-        linkInsertedThisFrame = true
-        RunNextFrame(function()
-            linkInsertedThisFrame = false
-        end)
         return true
     end
     return false
-end
-
--- luacheck: globals ChatEdit_InsertLink
-local orig_ChatEdit_InsertLink = ChatEdit_InsertLink
-ChatEdit_InsertLink = function(text)
-    if HandleEditBoxInsertLink(text) then
-        return true
-    end
-    if orig_ChatEdit_InsertLink then
-        return orig_ChatEdit_InsertLink(text)
-    end
-    return false
-end
-
-if ChatFrameUtil and ChatFrameUtil.InsertLink then
-    local orig_ChatFrameUtil_InsertLink = ChatFrameUtil.InsertLink
-    ChatFrameUtil.InsertLink = function(text)
-        if HandleEditBoxInsertLink(text) then
-            return true
-        end
-        return orig_ChatFrameUtil_InsertLink(text)
-    end
 end
 
 -- Hook HandleModifiedItemClick to ensure Shift-Clicks always insert links into custom inputs.
@@ -745,10 +726,6 @@ end
 if HandleModifiedItemClick then
     hooksecurefunc("HandleModifiedItemClick", function(link)
         if IsModifiedClick("CHATLINK") then
-            if linkInsertedThisFrame then
-                linkInsertedThisFrame = false
-                return
-            end
             HandleEditBoxInsertLink(link)
         end
     end)
@@ -1127,4 +1104,8 @@ end
 
 function UI_NativeGUI:ExpandWindow(frame, windowName)
     ExpandWindow(frame, windowName)
+end
+
+function UI_NativeGUI:CollapseWindow(frame, windowName)
+    CollapseWindow(frame, windowName)
 end

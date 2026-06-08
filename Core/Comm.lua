@@ -128,8 +128,14 @@ local function IsItemManagerDesynced(incomingData)
 
         if localCount ~= incomingCount then return true end
 
+        local normalizedLocal = {}
+        for localId, localVal in pairs(localList.items or {}) do
+            normalizedLocal[tonumber(localId) or localId] = localVal
+        end
+
         for id, val in pairs(items or {}) do
-            if not localList.items or localList.items[id] ~= val then
+            local numId = tonumber(id) or id
+            if normalizedLocal[numId] ~= val then
                 return true
             end
         end
@@ -143,7 +149,10 @@ local function OverwriteItemManagerLists(data, logMessage)
         for listName, items in pairs(data) do
             for _, localList in ipairs(db.PriorityLists) do
                 if localList.name == listName then
-                    localList.items = DesolateLootcouncil.Table.DeepCopy(items)
+                    localList.items = {}
+                    for id, val in pairs(items or {}) do
+                        localList.items[tonumber(id) or id] = val
+                    end
                     break
                 end
             end
@@ -197,6 +206,9 @@ function CommHandlers:IM_SYNC(payload, sender)
     end
 
     if shouldOverwrite then
+        if not isManual and not DesolateLootcouncil.db.profile.debugMode then
+            logMessage = nil
+        end
         OverwriteItemManagerLists(data, logMessage)
     elseif inRaid and isSenderLM and not amILM then
         DesolateLootcouncil:DLC_Log("Item Manager is already in sync with Loot Master.")
