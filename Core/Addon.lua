@@ -71,6 +71,7 @@ local defaults = {
         },
         minLootQuality    = 3,    -- Default to Rare
         enableAutoLoot    = true, -- Auto-pass on loot rolls (ON by default)
+        enableAutoTrade   = true, -- Auto-stage items in trade window (ON by default)
         -- Consolidated Logic (LM=Acquire, Raider=Pass)
         DecayConfig       = {
             enabled = true,

@@ -54,6 +54,15 @@ function GeneralSettings:GetGeneralOptions()
                 get = function() return API:GetEnableAutoLoot() end,
                 set = function(_, val) API:SetEnableAutoLoot(val) end,
             },
+            enableAutoTrade = {
+                type = "toggle",
+                name = "Enable Automated Trade Staging",
+                desc = "Automatically stage awarded items in the trade window when trading the winner.",
+                order = 3.5,
+                width = "full",
+                get = function() return API:GetEnableAutoTrade() end,
+                set = function(_, val) API:SetEnableAutoTrade(val) end,
+            },
             debugMode = {
                 type = "toggle",
                 name = "Enable Debug Mode",

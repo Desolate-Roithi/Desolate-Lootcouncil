@@ -241,8 +241,4 @@ L["Roll for main spec usage."] = true
 L["Roll for offspec usage."] = true
 L["Roll for transmogrification collection."] = true
 L["Pass on this item."] = true
-
-
-
-
-
+L["Trade window full. Remaining items will be staged in the next trade."] = true

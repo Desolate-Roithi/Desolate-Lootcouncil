@@ -555,6 +555,18 @@ function DLC_API:SetEnableAutoLoot(val)
     DesolateLootcouncil.db.profile.enableAutoLoot = val
 end
 
+--- Returns whether automated trade staging is enabled.
+---@return boolean
+function DLC_API:GetEnableAutoTrade()
+    return DesolateLootcouncil.db.profile.enableAutoTrade
+end
+
+--- Sets whether automated trade staging is enabled.
+---@param val boolean
+function DLC_API:SetEnableAutoTrade(val)
+    DesolateLootcouncil.db.profile.enableAutoTrade = val
+end
+
 --- Returns whether debug mode is enabled.
 ---@return boolean
 function DLC_API:GetDebugMode()

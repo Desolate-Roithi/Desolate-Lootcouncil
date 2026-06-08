@@ -18,6 +18,8 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 function Trade:OnEnable()
     self:RegisterEvent("TRADE_SHOW", "OnTradeShow")
     self:RegisterEvent("UI_INFO_MESSAGE", "OnUIInfo")
+    self:RegisterEvent("TRADE_UPDATE", "OnTradeUpdate")
+    self:RegisterEvent("TRADE_PLAYER_ITEM_CHANGED", "OnTradeUpdate")
 
     -- StaticPopup_Show is a Lua function, NOT a game event — RegisterEvent does not work here.
     -- hooksecurefunc is the only correct mechanism. Taint risk is negligible:
@@ -57,6 +59,7 @@ function Trade:OnTradeShow()
     if not tradeTargetName then return end
 
     if not DesolateLootcouncil:AmILootMaster() then return end
+    if DesolateLootcouncil.db.profile.enableAutoTrade == false then return end
 
     local session = DesolateLootcouncil.db.profile.session
     if not session or not session.awarded then return end
@@ -101,39 +104,91 @@ function Trade:IsItemWarbound(bag, slot)
     return false
 end
 
---- Scans bags 0-4 and returns the first unlocked, stageable slot for itemID.
---- For BoP items (fresh raid loot) isBound is expected and allowed through.
+--- Returns true if a bound BoP item is actually tradeable (has active trade time remaining).
+---@param bag number
+---@param slot number
+---@return boolean
+function Trade:IsItemTradeableBoP(bag, slot)
+    local tooltipData = C_TooltipInfo.GetBagItem(bag, slot)
+    if not tooltipData or not tooltipData.lines then return false end
+
+    local rawPattern = BIND_TRADE_TIME_REMAINING
+    if not rawPattern then return false end
+    -- Escape magic characters and convert %s to a wildcard match
+    local pattern = rawPattern:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%%s", ".*")
+
+    for _, line in ipairs(tooltipData.lines) do
+        if line.leftText and string.find(line.leftText, pattern) then
+            return true
+        end
+    end
+    return false
+end
+
+--- Extracts and normalizes item strings by zeroing out transient fields (uniqueID, linkLevel)
+--- so that items with identical stats/tertiaries match.
+---@param link string|nil
+---@return string|nil
+function Trade:NormalizeItemLink(link)
+    if not link then return nil end
+    local itemString = string.match(link, "item:([%-?%d:]+)")
+    if not itemString then return nil end
+
+    local parts = { strsplit(":", itemString) }
+    if parts[8] then parts[8] = "0" end -- uniqueID
+    if parts[9] then parts[9] = "0" end -- linkLevel
+
+    return table.concat(parts, ":")
+end
+
+--- Scans bags 0-4 and returns the first unlocked, stageable slot for itemID that matches stats.
+--- For BoP items (fresh raid loot) isBound is expected and allowed through if tradeable.
 --- Warbound (account-bound) copies are always skipped.
+---@param award        table
 ---@param targetItemID number
 ---@param isBoP        boolean
+---@param usedSlots    table<string, boolean>
 ---@return number|nil bag, number|nil slot
-function Trade:GetStageableSlot(targetItemID, isBoP)
+function Trade:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
+    local normalizedAwardLink = self:NormalizeItemLink(award.link)
+
     for bag = 0, 4 do
         local numSlots = C_Container.GetContainerNumSlots(bag)
         for slot = 1, numSlots do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID == targetItemID and not info.isLocked then
-                -- 12.0.1 Fix: BoP raid loot is isBound=true but is still tradeable.
-                -- Only block bound items for BoE to prevent staging equipped gear.
-                local boundOk  = (not info.isBound or isBoP)
-                local warbound = self:IsItemWarbound(bag, slot)
-                if boundOk and not warbound then
-                    return bag, slot
-                end
+            local slotKey = string.format("%d-%d", bag, slot)
+            if not usedSlots[slotKey] then
+                local info = C_Container.GetContainerItemInfo(bag, slot)
+                if info and info.itemID == targetItemID and not info.isLocked then
+                    -- 12.0.1 Fix: BoP raid loot is isBound=true but is still tradeable.
+                    -- Only block bound items for BoE to prevent staging equipped gear.
+                    local boundOk = (not info.isBound or isBoP)
 
-                DesolateLootcouncil:DLC_Log(string.format(
-                    "DEBUG: Skipped slot [%d,%d] — isWarbound=%s isBound=%s isBoP=%s",
-                    bag, slot,
-                    tostring(warbound),
-                    tostring(info.isBound),
-                    tostring(isBoP)), true)
+                    -- Check tooltip for tradeable BoP time remaining text if bound and BoP
+                    if boundOk and isBoP and info.isBound then
+                        boundOk = self:IsItemTradeableBoP(bag, slot)
+                    end
+
+                    local warbound = self:IsItemWarbound(bag, slot)
+                    if boundOk and not warbound then
+                        local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
+                        if itemLink then
+                            local normalizedItemLink = self:NormalizeItemLink(itemLink)
+                            if normalizedItemLink == normalizedAwardLink then
+                                return bag, slot
+                            end
+                        else
+                            -- Fallback if item link is not cached or in mock environment
+                            return bag, slot
+                        end
+                    end
+                end
             end
         end
     end
     return nil, nil
 end
 
-function Trade:FindAndStageItem(targetItemID, award, targetName)
+function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
     if not targetItemID then
         DesolateLootcouncil:DLC_Log(string.format(L["Could not find %s in bags for %s."], award.link or "?",
             DesolateLootcouncil:GetDisplayName(targetName)))
@@ -144,12 +199,15 @@ function Trade:FindAndStageItem(targetItemID, award, targetName)
     local _, _, _, _, _, _, _, _, _, _, _, _, _, bindType = C_Item.GetItemInfo(targetItemID)
     local isBoP = (bindType == 1)
 
-    local bag, slot = self:GetStageableSlot(targetItemID, isBoP)
-    if not bag then
+    local bag, slot = self:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
+    if not bag or not slot then
         return false
     end
 
     C_Container.UseContainerItem(bag, slot)
+    local slotKey = string.format("%d-%d", bag, slot)
+    usedSlots[slotKey] = true
+
     table.insert(self.currentTrade, {
         link   = award.link,
         winner = award.winner,
@@ -160,24 +218,55 @@ function Trade:FindAndStageItem(targetItemID, award, targetName)
     return true
 end
 
--- Bug 2: Stage ALL pending items for a player in one trade window open
+-- Stage ALL pending items for a player in one trade window open
 function Trade:StageAllItems(pendingItems, targetName)
     self.currentTrade = {}
+    local usedSlots = {}
 
     -- Register cleanup events unconditionally so currentTrade is always cleared,
     -- even if all items fail to stage (e.g. not in bags, uncached, wrong bind type).
     self:RegisterEvent("CHAT_MSG_SYSTEM")
     self:RegisterEvent("TRADE_CLOSED")
 
+    local stagedCount = 0
     for _, award in ipairs(pendingItems) do
-        local targetItemID = award.itemID
-        local staged = self:FindAndStageItem(targetItemID, award, targetName)
+        if stagedCount >= 6 then
+            DesolateLootcouncil:DLC_Log(L["Trade window full. Remaining items will be staged in the next trade."], true)
+            break
+        end
 
-        if not staged then
+        local targetItemID = award.itemID
+        local staged = self:FindAndStageItem(targetItemID, award, targetName, usedSlots)
+
+        if staged then
+            stagedCount = stagedCount + 1
+        else
             DesolateLootcouncil:DLC_Log(string.format(L["Could not find %s in bags for %s."], award.link,
                 DesolateLootcouncil:GetDisplayName(targetName)))
         end
     end
+end
+
+function Trade:ScanTradeSlots()
+    if not TradeFrame or not TradeFrame:IsShown() then return end
+
+    self.itemsInTrade = {}
+    for slot = 1, 6 do
+        local numItems = select(3, GetTradePlayerItemInfo(slot))
+        local itemID = select(8, GetTradePlayerItemInfo(slot))
+        local link = GetTradePlayerItemLink(slot)
+        if itemID and link then
+            table.insert(self.itemsInTrade, {
+                itemID = itemID,
+                link = link,
+                quantity = numItems or 1,
+            })
+        end
+    end
+end
+
+function Trade:OnTradeUpdate()
+    self:ScanTradeSlots()
 end
 
 function Trade:CHAT_MSG_SYSTEM(_event, message)
@@ -187,7 +276,8 @@ function Trade:CHAT_MSG_SYSTEM(_event, message)
 end
 
 function Trade:HandleTradeSuccess()
-    if not self.currentTrade then
+    local tradedItems = self.itemsInTrade or self.currentTrade
+    if not tradedItems then
         self:ClearPending()
         return
     end
@@ -200,26 +290,32 @@ function Trade:HandleTradeSuccess()
 
     local changed = false
 
-    for _, pending in ipairs(self.currentTrade) do
-        local winnerScore = DesolateLootcouncil:GetScoreName(pending.winner)
+    for _, pending in ipairs(tradedItems) do
+        local normalizedPendingLink = self:NormalizeItemLink(pending.link)
+        local winnerScore = DesolateLootcouncil:GetScoreName(pending.winner or UnitName("NPC"))
+
         for _, award in ipairs(session.awarded) do
-            if award.link == pending.link and DesolateLootcouncil:GetScoreName(award.winner) == winnerScore and not award.traded then
-                award.traded = true
-                changed = true
-                DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."], 
-                    pending.link, DesolateLootcouncil:GetDisplayName(pending.winner)))
-                break
+            if not award.traded and DesolateLootcouncil:GetScoreName(award.winner) == winnerScore then
+                local normalizedAwardLink = self:NormalizeItemLink(award.link)
+                if normalizedAwardLink == normalizedPendingLink then
+                    award.traded = true
+                    changed = true
+                    DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
+                        award.link, DesolateLootcouncil:GetDisplayName(award.winner)))
+                    break
+                end
             end
         end
     end
 
     if changed then
-        -- Bug 2 fix: refresh the actual trade list window
+        -- refresh the actual trade list window
         ---@type UI_TradeList
         local UI = DesolateLootcouncil:GetModule("UI_TradeList") --[[@as UI_TradeList]]
         if UI and UI.ShowTradeListWindow and DesolateLootcouncil:AmILootMaster() then
             UI:ShowTradeListWindow()
         end
+        self:SendMessage("DLC_HISTORY_UPDATED")
     end
 
     self:ClearPending()
@@ -238,6 +334,7 @@ end
 
 function Trade:ClearPending()
     self.currentTrade = nil
+    self.itemsInTrade = nil
     self:UnregisterEvent("CHAT_MSG_SYSTEM")
     self:UnregisterEvent("TRADE_CLOSED")
 end
