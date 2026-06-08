@@ -242,3 +242,30 @@ L["Roll for offspec usage."] = true
 L["Roll for transmogrification collection."] = true
 L["Pass on this item."] = true
 L["Trade window full. Remaining items will be staged in the next trade."] = true
+
+-- Handover & Decay popups
+L["No Loot Master has been detected in the group for 60+ seconds. Do you want to claim the Loot Master role?"] = true
+L["Yes (Claim LM)"] = true
+L["%s is handing you the Loot Master role. Accept?"] = true
+L["Accept"] = true
+L["Decline"] = true
+L["The last raid session (%s, %s) has pending decay. Apply decay now before starting a new session?"] = true
+L["Apply Decay"] = true
+L["Skip"] = true
+L["Review First"] = true
+L["Claim LM Role"] = true
+L["No Loot Master is detected in the raid. Claim the role to enable session management."] = true
+L["Hand Over LM Role"] = true
+L["Start the handover process to the selected officer."] = true
+L["Choose an officer in the raid to hand over the Loot Master role to."] = true
+L["Select Officer for Handover"] = true
+
+-- EJ Loot Import
+L["DLC"] = true
+L["Add to IM"] = true
+L["DLC Loot Import"] = true
+L["%d items staged across %d lists"] = true
+L["— Skip —"] = true
+L["No loot found for this boss."] = true
+L["Add all loot from this boss/raid to the import staging area."] = true
+L["Officer only."] = true

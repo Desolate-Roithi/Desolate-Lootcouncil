@@ -9,7 +9,7 @@ local Trade = DesolateLootcouncil:NewModule("Trade", "AceEvent-3.0", "AceConsole
 ---@field GetModule fun(self: any, name: string): any
 ---@field DLC_Log fun(self: any, msg: string, force?: boolean)
 ---@field AmILootMaster fun(self: any): boolean
----@field AmIRaidAssistOrLM fun(self: any): boolean
+---@field AmIOfficerOrLM fun(self: any): boolean
 
 ---@type DLC_Ref_Trade
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Trade]]
@@ -302,6 +302,13 @@ function Trade:HandleTradeSuccess()
                     changed = true
                     DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
                         award.link, DesolateLootcouncil:GetDisplayName(award.winner)))
+                    
+                    self.pendingTradeConfirms = self.pendingTradeConfirms or {}
+                    table.insert(self.pendingTradeConfirms, {
+                        itemID    = award.itemID,
+                        winner    = award.winner,
+                        timestamp = award.timestamp
+                    })
                     break
                 end
             end
@@ -317,14 +324,20 @@ function Trade:HandleTradeSuccess()
         end
         self:SendMessage("DLC_HISTORY_UPDATED")
     end
-
-    self:ClearPending()
 end
 
 function Trade:TRADE_CLOSED(...)
     if self.tradeTimer then
         self.tradeTimer:Cancel()
         self.tradeTimer = nil
+    end
+
+    if self.pendingTradeConfirms and #self.pendingTradeConfirms > 0 then
+        local Sync = DesolateLootcouncil:GetModule("Sync")
+        if Sync and Sync.ShareDataWithOfficers then
+            Sync:ShareDataWithOfficers("TRADE_CONFIRMED", self.pendingTradeConfirms)
+        end
+        wipe(self.pendingTradeConfirms)
     end
 
     C_Timer.After(0.5, function()

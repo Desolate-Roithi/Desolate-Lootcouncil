@@ -197,6 +197,7 @@ local exportOptsOpt = {
         ["Roster"] = "Roster (Mains/Alts/Decay)",
         ["PriorityLists"] = "Priority Lists (Names/Order)",
         ["PriorityContent"] = "Priority List Content (Players/Items)",
+        ["IM"] = "Item Manager (Managed Items)",
         ["History"] = "Loot History & Attendance",
         ["Config"] = "General Config & Loot Rules",
     },

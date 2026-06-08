@@ -302,6 +302,27 @@ function DLC_API:AddManagedItem(rawLink, listIndex)
     if l and l.AddItemToList then l:AddItemToList(rawLink, listIndex) end
 end
 
+function DLC_API:AddManagedItemBatch(items)
+    if not items or type(items) ~= "table" then return end
+    local listsTouched = {}
+    local db = DesolateLootcouncil.db.profile
+    
+    for _, entry in ipairs(items) do
+        local itemID = entry.itemID
+        local listIndex = entry.listIndex
+        if itemID and listIndex then
+            self:AddManagedItem(tostring(itemID), listIndex)
+            if db.PriorityLists and db.PriorityLists[listIndex] then
+                listsTouched[db.PriorityLists[listIndex].name] = true
+            end
+        end
+    end
+    
+    for listName in pairs(listsTouched) do
+        self:MarkIMDirty(listName)
+    end
+end
+
 function DLC_API:_GetItemManagerSyncData(isManual)
     if not isManual and IsInRaid() and GetNumGroupMembers() < 10 then
         return nil
@@ -420,6 +441,33 @@ end
 function DLC_API:StopRaidSession(saveHistory)
     local r = Roster()
     if r and r.StopRaidSession then r:StopRaidSession(saveHistory) end
+end
+
+function DLC_API:HasPendingDecay()
+    local r = Roster()
+    return r and r.HasPendingDecay and r:HasPendingDecay() or false
+end
+
+function DLC_API:ApplyDecayForLastSession(skip)
+    local r = Roster()
+    if r and r.ApplyDecayForLastSession then r:ApplyDecayForLastSession(skip) end
+end
+
+function DLC_API:IsLMAbsent()
+    local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+    return CommMod and CommMod.IsLMAbsent and CommMod:IsLMAbsent() or false
+end
+
+function DLC_API:ClaimLMRole()
+    local s = Session()
+    if s and s.ClaimLMRole then s:ClaimLMRole() end
+end
+
+function DLC_API:SendLMHandoverOffer(targetOfficer)
+    local Sync = DesolateLootcouncil:GetModule("Sync", true)
+    if Sync and Sync.SendLMHandoverOffer then
+        Sync:SendLMHandoverOffer(targetOfficer)
+    end
 end
 
 --- Returns the AttendanceHistory table.
@@ -606,16 +654,49 @@ function DLC_API:RepromptAutopass()
     StaticPopup_Show("DLC_ENABLE_AUTOPASS")
 end
 
---- Whispers the selected data type ("PRIORITY" or "ROSTER") to raid assists.
+--- Whispers the selected data type ("PRIORITY" or "ROSTER") to raid officers.
 ---@param dataType string
-function DLC_API:ShareDataWithAssists(dataType)
+---@param payload table?
+function DLC_API:ShareDataWithOfficers(dataType, payload)
     local CommMod = DesolateLootcouncil:GetModule("Comm", true)
-    if CommMod and CommMod.ShareDataWithAssists then
-        CommMod:ShareDataWithAssists(dataType)
+    if CommMod and CommMod.ShareDataWithOfficers then
+        CommMod:ShareDataWithOfficers(dataType, payload)
     end
 end
 
 -- Roster Options Helpers
+--- Sets a player's officer status in the roster.
+---@param name string
+---@param flag boolean
+function DLC_API:SetOfficer(name, flag)
+    local r = DesolateLootcouncil:GetModule("Roster", true)
+    if r and r.SetOfficer then r:SetOfficer(name, flag) end
+end
+
+--- Returns true if the player has officer or LM access.
+---@return boolean
+function DLC_API:IsOfficerOrLM()
+    return DesolateLootcouncil:AmIOfficerOrLM()
+end
+
+--- Marks an Item Manager list as dirty by updating its timestamp.
+---@param listName string
+function DLC_API:MarkIMDirty(listName)
+    if not listName or listName == "" then return end
+    local db = DesolateLootcouncil.db.profile
+    if not db.imTimestamps then db.imTimestamps = {} end
+    db.imTimestamps[listName] = GetServerTime()
+end
+
+--- Marks a Priority list as dirty by updating its timestamp.
+---@param listName string
+function DLC_API:MarkPriorityDirty(listName)
+    if not listName or listName == "" then return end
+    local db = DesolateLootcouncil.db.profile
+    if not db.priorityTimestamps then db.priorityTimestamps = {} end
+    db.priorityTimestamps[listName] = GetServerTime()
+end
+
 --- Adds a main character to the roster.
 ---@param name string
 function DLC_API:AddMain(name)
@@ -650,7 +731,12 @@ function DLC_API:GetRosterText()
     table.sort(sortedMains)
 
     for _, main in ipairs(sortedMains) do
-        text = text .. main
+        local mainText = main
+        local data = db.MainRoster[main]
+        if data and data.isOfficer then
+            mainText = mainText .. " (Officer)"
+        end
+        text = text .. mainText
         local alts = {}
         if db.playerRoster and db.playerRoster.alts then
             for alt, parent in pairs(db.playerRoster.alts) do
@@ -676,8 +762,12 @@ function DLC_API:GetMainRosterList()
     local list = {}
     local db = DesolateLootcouncil.db.profile
     if db.MainRoster then
-        for name, _ in pairs(db.MainRoster) do
-            list[name] = name
+        for name, data in pairs(db.MainRoster) do
+            if data and data.isOfficer then
+                list[name] = name .. " (Officer)"
+            else
+                list[name] = name
+            end
         end
     end
     return list
@@ -816,7 +906,7 @@ function DLC_API:ExportProfileData(selection)
     if selection["PriorityLists"] then
         data.PriorityListsStructure = {}
         if p.PriorityLists then
-            for _, list in ipairs(p.PriorityLists) do
+            for idx, list in ipairs(p.PriorityLists) do
                 table.insert(data.PriorityListsStructure, { name = list.name })
             end
         end
@@ -824,11 +914,22 @@ function DLC_API:ExportProfileData(selection)
     if selection["PriorityContent"] then
         data.PriorityListsContent = p.PriorityLists
     end
+    if selection["IM"] then
+        data.ItemManagerContent = {}
+        if p.PriorityLists then
+            for idx, list in ipairs(p.PriorityLists) do
+                table.insert(data.ItemManagerContent, {
+                    name = list.name,
+                    items = list.items
+                })
+            end
+        end
+    end
     if selection["History"] then
         data.History = {
             session = p.session,
             AttendanceHistory = p.AttendanceHistory,
-            PriorityLog = DesolateLootcouncil.PriorityLog
+            PriorityLog = p.PriorityLog
         }
     end
 
@@ -870,7 +971,7 @@ function DLC_API:ImportProfileData(importStringRaw, importName)
         p.playerRoster = data.Roster.playerRoster
     end
     if data.PriorityListsContent then
-        for _, list in ipairs(data.PriorityListsContent) do
+        for idx, list in ipairs(data.PriorityListsContent) do
             if list.items then
                 local normalizedItems = {}
                 for id, val in pairs(list.items) do
@@ -882,14 +983,43 @@ function DLC_API:ImportProfileData(importStringRaw, importName)
         p.PriorityLists = data.PriorityListsContent
     elseif data.PriorityListsStructure then
         local newLists = {}
-        for _, l in ipairs(data.PriorityListsStructure) do
+        for idx, l in ipairs(data.PriorityListsStructure) do
             table.insert(newLists, { name = l.name, players = {}, items = {} })
         end
         p.PriorityLists = newLists
     end
+    if data.ItemManagerContent then
+        p.PriorityLists = p.PriorityLists or {}
+        for idx, incoming in ipairs(data.ItemManagerContent) do
+            local listObj = nil
+            for key, localList in ipairs(p.PriorityLists) do
+                if localList.name == incoming.name then
+                    listObj = localList
+                    break
+                end
+            end
+            if not listObj then
+                listObj = { name = incoming.name, players = {}, items = {} }
+                table.insert(p.PriorityLists, listObj)
+            end
+
+            if incoming.items then
+                local normalizedItems = {}
+                for id, val in pairs(incoming.items) do
+                    normalizedItems[tonumber(id) or id] = val
+                end
+                listObj.items = normalizedItems
+            else
+                listObj.items = {}
+            end
+
+            self:MarkIMDirty(listObj.name)
+        end
+    end
     if data.History then
         if data.History.session then p.session = data.History.session end
         if data.History.AttendanceHistory then p.AttendanceHistory = data.History.AttendanceHistory end
+        if data.History.PriorityLog then p.PriorityLog = data.History.PriorityLog end
     end
 
     return true, ""

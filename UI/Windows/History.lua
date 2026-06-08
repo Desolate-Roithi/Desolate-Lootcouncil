@@ -81,7 +81,7 @@ end
 --- Opens a lightweight loot history window scoped to the CURRENT raid session.
 --- Allows the Loot Master to quickly re-award items from this session.
 function UI_History:ShowSessionLootHistory()
-    if not DesolateLootcouncil:AmIRaidAssistOrLM() then
+    if not DesolateLootcouncil:AmIOfficerOrLM() then
         if self.sessionFrame then self.sessionFrame:Hide() end
         return
     end

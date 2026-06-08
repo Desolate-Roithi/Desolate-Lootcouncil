@@ -3,6 +3,37 @@ if AT.abortLoad then return end
 
 ---@class UI_GeneralSettings : AceModule
 local GeneralSettings = DesolateLootcouncil:NewModule("UI_GeneralSettings")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+
+local selectedHandoverTarget = nil
+
+local function GetOfficerNamesInRaid()
+    local list = {}
+    local db = DesolateLootcouncil.db.profile
+    local MainRoster = db.MainRoster or {}
+    for name, data in pairs(MainRoster) do
+        if data.isOfficer and DesolateLootcouncil:IsUnitInRaid(name) and not DesolateLootcouncil:SmartCompare(name, "player") then
+            list[name] = DesolateLootcouncil:GetDisplayName(name)
+        end
+    end
+    return list
+end
+
+local function CanHandover()
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if not Session.clientLootList or #Session.clientLootList == 0 then
+        return true
+    end
+    local db = DesolateLootcouncil.db.profile
+    local bidding = db.session and db.session.bidding or {}
+    for _, item in ipairs(bidding) do
+        local guid = item.sourceGUID or item.link
+        if not Session.closedItems or not Session.closedItems[guid] then
+            return false
+        end
+    end
+    return true
+end
 
 function GeneralSettings:GetGeneralOptions()
     local API = DesolateLootcouncil.API
@@ -26,6 +57,56 @@ function GeneralSettings:GetGeneralOptions()
                 get = function() return API:GetConfiguredLM() end,
                 set = function(_, val)
                     API:SetConfiguredLM(val)
+                end,
+            },
+            claimLMRole = {
+                type = "execute",
+                name = L["Claim LM Role"],
+                desc = L["No Loot Master is detected in the raid. Claim the role to enable session management."],
+                order = 1.2,
+                width = "normal",
+                hidden = function()
+                    return not API:IsOfficerOrLM() or API:IsLootMaster() or not API:IsLMAbsent()
+                end,
+                confirm = true,
+                confirmText = "No Loot Master has been detected in the group for 60+ seconds. Do you want to claim the Loot Master role?",
+                func = function()
+                    API:ClaimLMRole()
+                end,
+            },
+            handoverHeader = {
+                type = "header",
+                name = L["Hand Over LM Role"],
+                order = 1.4,
+                hidden = function() return not API:IsLootMaster() end,
+            },
+            handoverTarget = {
+                type = "select",
+                name = L["Select Officer for Handover"],
+                desc = L["Choose an officer in the raid to hand over the Loot Master role to."],
+                order = 1.5,
+                width = "normal",
+                values = GetOfficerNamesInRaid,
+                get = function() return selectedHandoverTarget end,
+                set = function(_, val) selectedHandoverTarget = val end,
+                hidden = function() return not API:IsLootMaster() end,
+            },
+            handoverBtn = {
+                type = "execute",
+                name = L["Hand Over LM Role"],
+                desc = L["Start the handover process to the selected officer."],
+                order = 1.6,
+                width = "normal",
+                disabled = function() return not selectedHandoverTarget or not CanHandover() end,
+                hidden = function() return not API:IsLootMaster() end,
+                func = function()
+                    if not selectedHandoverTarget then return end
+                    if not CanHandover() then
+                        DesolateLootcouncil:Print("Cannot hand over during an active vote. Award or remove all items first.")
+                        return
+                    end
+                    API:SendLMHandoverOffer(selectedHandoverTarget)
+                    selectedHandoverTarget = nil
                 end,
             },
             minLootQuality = {
@@ -123,22 +204,22 @@ function GeneralSettings:GetGeneralOptions()
             },
             shareDesc = {
                 type = "description",
-                name = "Privately whisper Priority Lists and Roster to all Raid Assists. Regular members cannot read this data.",
+                name = "Privately whisper Priority Lists and Roster to all raid Officers. Regular members cannot read this data.",
                 order = 11,
                 hidden = function() return not API:IsLootMaster() end,
             },
-            shareWithAssistsBtn = {
+            shareWithOfficersBtn = {
                 type = "execute",
-                name = "Share Priority & Roster with Assists",
-                desc = "Sends both Priority Lists and Roster to all current raid assists via private whisper.",
+                name = "Share Priority & Roster with Officers",
+                desc = "Sends both Priority Lists and Roster to all current raid officers via private whisper.",
                 order = 12,
                 width = "full",
                 hidden = function() return not API:IsLootMaster() end,
                 confirm = true,
-                confirmText = "This will overwrite the Priority Lists and Roster on all assists' clients. Continue?",
+                confirmText = "This will overwrite the Priority Lists and Roster on all officers' clients. Continue?",
                 func = function()
-                    API:ShareDataWithAssists("PRIORITY")
-                    API:ShareDataWithAssists("ROSTER")
+                    API:ShareDataWithOfficers("PRIORITY")
+                    API:ShareDataWithOfficers("ROSTER")
                 end,
             },
             autopassHeader = {

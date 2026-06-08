@@ -14,7 +14,7 @@ local Session = DesolateLootcouncil:NewModule("Session", "AceEvent-3.0", "AceCom
 ---@field DLC_Log fun(self: any, msg: string, force?: boolean)
 ---@field GetModule fun(self: any, name: string): any
 ---@field GetEnchantingSkillLevel fun(self: any): number
----@field AmIRaidAssistOrLM fun(self: any): boolean
+---@field AmIOfficerOrLM fun(self: any): boolean
 ---@field activeLootMaster string
 ---@field amILM boolean
 ---@field sessionAutopassActive boolean?
@@ -61,6 +61,63 @@ function Session:OnEnable()
         whileDead = true,
         hideOnEscape = true,
     }
+
+    StaticPopupDialogs["DLC_CLAIM_LM"] = {
+        text = L["No Loot Master has been detected in the group for 60+ seconds. Do you want to claim the Loot Master role?"],
+        button1 = L["Yes (Claim LM)"],
+        button2 = L["Cancel"],
+        OnAccept = function()
+            Session:ClaimLMRole()
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+
+    StaticPopupDialogs["DLC_CONFIRM_LM_HANDOVER"] = {
+        text = L["%s is handing you the Loot Master role. Accept?"],
+        button1 = L["Accept"],
+        button2 = L["Decline"],
+        OnAccept = function()
+            Session:AcceptHandover()
+        end,
+        OnCancel = function()
+            Session:DeclineHandover()
+        end,
+        timeout = 30,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+
+    StaticPopupDialogs["DLC_PENDING_DECAY"] = {
+        text = L["The last raid session (%s, %s) has pending decay. Apply decay now before starting a new session?"],
+        button1 = L["Apply Decay"],
+        button2 = L["Skip"],
+        button3 = L["Review First"],
+        OnAccept = function()
+            local RosterSys = DesolateLootcouncil:GetModule("Roster")
+            if RosterSys and RosterSys.ApplyDecayForLastSession then
+                RosterSys:ApplyDecayForLastSession()
+            end
+        end,
+        OnCancel = function(_, _, reason)
+            if reason == "clicked" then
+                local RosterSys = DesolateLootcouncil:GetModule("Roster")
+                if RosterSys and RosterSys.ApplyDecayForLastSession then
+                    RosterSys:ApplyDecayForLastSession(true)
+                end
+            end
+        end,
+        OnAlt = function()
+            local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
+            if Attendance and Attendance.ShowAttendanceWindow then
+                Attendance:ShowAttendanceWindow()
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = false,
+    }
 end
 
 function Session:OnTimerTick()
@@ -72,10 +129,17 @@ function Session:OnTimerTick()
         self.lastAutopassHeartbeat = self.lastAutopassHeartbeat or 0
         if now - self.lastAutopassHeartbeat > 30 then
             self.lastAutopassHeartbeat = now
-            local Comm = DesolateLootcouncil:GetModule("Comm")
-            if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
-                Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive, true)
+            local Sync = DesolateLootcouncil:GetModule("Sync")
+            if Sync and DesolateLootcouncil.sessionAutopassActive ~= nil then
+                Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive, true)
             end
+        end
+
+        -- Periodic DLC Heartbeat (every 30s)
+        self.lastDLCHeartbeat = self.lastDLCHeartbeat or 0
+        if now - self.lastDLCHeartbeat > 30 then
+            self.lastDLCHeartbeat = now
+            self:SendDLCHeartbeat()
         end
 
         if self.clientLootList and #self.clientLootList > 0 then
@@ -85,6 +149,19 @@ function Session:OnTimerTick()
                 self:SendSessionHeartbeat()
             end
         end
+    end
+end
+
+function Session:SendDLCHeartbeat()
+    if not IsInGroup() then return end
+    local db = DesolateLootcouncil.db.profile
+    local payload = {
+        imTimestamps = db.imTimestamps or {},
+        priorityTimestamps = db.priorityTimestamps or {},
+    }
+    local Comm = DesolateLootcouncil:GetModule("Comm")
+    if Comm then
+        Comm:SendComm("DLC_HEARTBEAT", payload)
     end
 end
 
@@ -220,7 +297,7 @@ function Session:PerformRestore(state, now, expiry)
         DesolateLootcouncil:DLC_Log("Restored active session (" ..
             #self.clientLootList .. " items, LM: " .. DesolateLootcouncil:GetDisplayName(state.activeLM or "?") .. ").")
 
-        self:SendMessage("DLC_SESSION_RESTORED", self.clientLootList, DesolateLootcouncil:AmIRaidAssistOrLM())
+        self:SendMessage("DLC_SESSION_RESTORED", self.clientLootList, DesolateLootcouncil:AmIOfficerOrLM())
     else
         -- Scenario B: Expired
         DesolateLootcouncil:DLC_Log("Session expired while offline.")
@@ -320,9 +397,9 @@ function Session:BroadcastSessionStart(cleanList, itemCount, duration, endTime)
 
     -- Re-broadcast Autopass state so raiders activate it immediately on session start.
     -- IM_SYNC broadcast removed. Priority lists sync strictly on manual button press.
-    local Comm = DesolateLootcouncil:GetModule("Comm")
-    if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
-        Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+    local Sync = DesolateLootcouncil:GetModule("Sync")
+    if Sync and DesolateLootcouncil.sessionAutopassActive ~= nil then
+        Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
     end
 end
 
@@ -330,11 +407,19 @@ end
 --- visible (handles overlapping sessions gracefully).
 ---@param cleanList table
 function Session:OpenActiveSessionUIs(cleanList)
-    self:SendMessage("DLC_SESSION_STARTED", cleanList, DesolateLootcouncil:AmIRaidAssistOrLM())
+    self:SendMessage("DLC_SESSION_STARTED", cleanList, DesolateLootcouncil:AmIOfficerOrLM())
 end
 
 function Session:StartSession(lootTable)
     if not DesolateLootcouncil:AmILootMaster() then return end
+
+    local RosterSys = DesolateLootcouncil:GetModule("Roster")
+    if RosterSys and RosterSys.HasPendingDecay and RosterSys:HasPendingDecay() then
+        local db = DesolateLootcouncil.db.profile
+        local entry = db.AttendanceHistory[1]
+        StaticPopup_Show("DLC_PENDING_DECAY", entry.date or "N/A", entry.zone or "Unknown")
+        return
+    end
 
     -- Wipe previous session's awarded items database to start completely fresh ONLY if not in an active raid session
     local session = DesolateLootcouncil.db.profile.session
@@ -461,10 +546,14 @@ function Session:SendRemoveItem(guid)
     end
 end
 
--- Bug 4: Broadcast an awarded history entry to all players
+-- Bug 4: Broadcast an awarded history entry to all players (split public/officer)
 function Session:SendHistoryUpdate(entry)
-    -- Avoid serializing fullItemData (too large/circular refs); only send display fields
-    local safeEntry = {
+    local publicEntry = {
+        link      = entry.link,
+        winner    = entry.winner,
+        timestamp = entry.timestamp,
+    }
+    local officerEntry = {
         link        = entry.link,
         texture     = entry.texture,
         itemID      = entry.itemID,
@@ -473,11 +562,20 @@ function Session:SendHistoryUpdate(entry)
         voteType    = entry.voteType,
         timestamp   = entry.timestamp,
     }
-    local payload = { command = "HISTORY_UPDATE", data = safeEntry }
-    local serialized = self:Serialize(payload)
-    local channel = DesolateLootcouncil:GetBroadcastChannel()
-    if channel then
-        self:SendCommMessage("DLC_Loot", serialized, channel)
+
+    -- Populate publicAwardLog locally for the LM
+    local db = DesolateLootcouncil.db.profile
+    db.session = db.session or {}
+    db.session.publicAwardLog = db.session.publicAwardLog or {}
+    table.insert(db.session.publicAwardLog, publicEntry)
+
+    local Comm = DesolateLootcouncil:GetModule("Comm")
+    if Comm then
+        Comm:SendComm("HISTORY_UPDATE_PUBLIC", publicEntry)
+    end
+    local Sync = DesolateLootcouncil:GetModule("Sync")
+    if Sync and Sync.ShareDataWithOfficers then
+        Sync:ShareDataWithOfficers("HISTORY_UPDATE_OFFICER", officerEntry)
     end
 end
 
@@ -648,7 +746,7 @@ function Session:HandleStartSession(payload, sender)
         end
 
         -- Merge active votes from heartbeat — ensures late-joiner Assistants stay synced
-        if payload.votes and DesolateLootcouncil:AmIRaidAssistOrLM() then
+        if payload.votes and DesolateLootcouncil:AmIOfficerOrLM() then
             self.sessionVotes = self.sessionVotes or {}
             for guid, players in pairs(payload.votes) do
                 self.sessionVotes[guid] = self.sessionVotes[guid] or {}
@@ -657,7 +755,7 @@ function Session:HandleStartSession(payload, sender)
                 end
             end
         end
-        if DesolateLootcouncil:AmIRaidAssistOrLM() then
+        if DesolateLootcouncil:AmIOfficerOrLM() then
             ---@type UI_Monitor
             local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
             if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
@@ -674,7 +772,7 @@ function Session:HandleStartSession(payload, sender)
     local hydratedCount = self:_HydrateSessionItems(newItems, expiry)
     DesolateLootcouncil:DLC_Log("Added " .. hydratedCount .. " items to the session.")
 
-    self:SendMessage("DLC_SESSION_STARTED", self.clientLootList, DesolateLootcouncil:AmIRaidAssistOrLM())
+    self:SendMessage("DLC_SESSION_STARTED", self.clientLootList, DesolateLootcouncil:AmIOfficerOrLM())
 
     -- Apply closed state from heartbeat for late-joiners
     if payload.closedItems then
@@ -716,7 +814,7 @@ end
 function Session:HandleHistoryUpdate(payload)
     -- Gate: Only LM or Assists store history. LM already stored it locally during award,
     -- so this handler only inserts it for Assistants who are not LM. Normal Raiders do not store history.
-    if not DesolateLootcouncil:AmIRaidAssistOrLM() then return end
+    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
 
     local data = payload.data
     if data and data.link then
@@ -743,7 +841,7 @@ end
 
 function Session:HandleVote(payload, sender)
     -- Both LM and Assists track the incoming votes directly from the broadcast
-    if DesolateLootcouncil:AmIRaidAssistOrLM() then
+    if DesolateLootcouncil:AmIOfficerOrLM() then
         local data = payload.data
         if not data or not data.guid then return end
 
@@ -817,7 +915,7 @@ function Session:HandleSyncVotes(payload)
         end
 
         -- Update UI if open
-        if DesolateLootcouncil:AmIRaidAssistOrLM() then
+        if DesolateLootcouncil:AmIOfficerOrLM() then
             ---@type UI_Monitor
             local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
             if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
@@ -868,6 +966,14 @@ end
 
 function Session:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_Loot" then return end
+
+    local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+    if CommMod then
+        local currentLM = DesolateLootcouncil:DetermineLootMaster()
+        if currentLM and currentLM ~= "" and DesolateLootcouncil:SmartCompare(sender, currentLM) then
+            CommMod.lastLMMsgTime = GetServerTime()
+        end
+    end
 
     local success, payload = self:Deserialize(message)
     if not success or type(payload) ~= "table" then return end
@@ -954,4 +1060,165 @@ function Session:ClearVotes()
     self.closedItems = {}
     wipe(DesolateLootcouncil.db.profile.session.activeState)
     DesolateLootcouncil:DLC_Log("Session data cleared.")
+end
+
+function Session:ClaimLMRole()
+    if not IsInGroup() then return end
+    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    if DesolateLootcouncil:AmILootMaster() then return end
+
+    DesolateLootcouncil.db.profile.configuredLM = UnitName("player")
+    DesolateLootcouncil.activeLootMaster = UnitName("player")
+    DesolateLootcouncil.amILM = true
+    DesolateLootcouncil.amIOfficer = true
+
+    DesolateLootcouncil:Print("You have claimed the Loot Master role.")
+
+    self:SendSyncLM(UnitName("player"))
+
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+
+    local RosterSys = DesolateLootcouncil:GetModule("Roster")
+    if RosterSys and RosterSys.HasPendingDecay and RosterSys:HasPendingDecay() then
+        local db = DesolateLootcouncil.db.profile
+        local entry = db.AttendanceHistory[1]
+        StaticPopup_Show("DLC_PENDING_DECAY", entry.date or "N/A", entry.zone or "Unknown")
+    end
+end
+
+function Session:AcceptHandover(silent)
+    local state = DesolateLootcouncil.pendingHandoverState
+    local sender = DesolateLootcouncil.pendingHandoverSender
+    if not state or not sender then return end
+
+    local db = DesolateLootcouncil.db.profile
+    db.session = db.session or {}
+    db.session.awarded = state.awarded or {}
+    db.session.loot = state.loot or {}
+    db.PriorityLists = state.PriorityLists or {}
+    db.MainRoster = state.MainRoster or {}
+
+    local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
+    local isSenderRL = DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:GetGroupLeader())
+
+    local myName = UnitName("player")
+    if amILeader or isSenderRL then
+        db.configuredLM = ""
+    else
+        db.configuredLM = myName
+    end
+    DesolateLootcouncil.activeLootMaster = myName
+    DesolateLootcouncil.amILM = true
+    DesolateLootcouncil.amIOfficer = true
+
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+
+    local CommMod = DesolateLootcouncil:GetModule("Comm")
+    if CommMod then
+        CommMod:SendComm("LM_HANDOVER_ACCEPTED", { newLM = myName }, sender)
+    end
+
+    self:SendSyncLM(myName)
+
+    if silent then
+        DesolateLootcouncil:Print("Raid leadership received. Loot Master session restored.")
+    else
+        DesolateLootcouncil:Print(string.format("Accepted Loot Master handover from %s.", sender))
+    end
+
+    DesolateLootcouncil.pendingHandoverState = nil
+    DesolateLootcouncil.pendingHandoverSender = nil
+
+    local RosterSys = DesolateLootcouncil:GetModule("Roster")
+    if RosterSys and RosterSys.HasPendingDecay and RosterSys:HasPendingDecay() then
+        local entry = db.AttendanceHistory[1]
+        StaticPopup_Show("DLC_PENDING_DECAY", entry.date or "N/A", entry.zone or "Unknown")
+    end
+end
+
+function Session:DeclineHandover()
+    local sender = DesolateLootcouncil.pendingHandoverSender
+    if sender then
+        local CommMod = DesolateLootcouncil:GetModule("Comm")
+        if CommMod then
+            CommMod:SendComm("LM_HANDOVER_DECLINED", { reason = "declined" }, sender)
+        end
+    end
+    DesolateLootcouncil.pendingHandoverState = nil
+    DesolateLootcouncil.pendingHandoverSender = nil
+end
+
+local function SafePromoteToLeader(name)
+    if not name then return end
+    local cleanName = Ambiguate(name, "none")
+    PromoteToLeader(cleanName)
+end
+
+function Session:HandleHandoverAccepted(sender)
+    if not DesolateLootcouncil.pendingHandoverTarget or not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil.pendingHandoverTarget) then
+        return
+    end
+
+    local newLM = sender
+    local db = DesolateLootcouncil.db.profile
+    db.configuredLM = newLM
+    DesolateLootcouncil.activeLootMaster = newLM
+    DesolateLootcouncil.amILM = false
+    DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+
+    DesolateLootcouncil:Print(string.format("Handover accepted by %s. You are no longer the Loot Master.", newLM))
+
+    local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
+    if amILeader then
+        SafePromoteToLeader(newLM)
+    else
+        local rl = DesolateLootcouncil:GetGroupLeader()
+        if rl and not DesolateLootcouncil:SmartCompare(rl, "player") then
+            local CommMod = DesolateLootcouncil:GetModule("Comm")
+            if CommMod then
+                CommMod:SendComm("LM_UPDATE_CONFIGURED", { configuredLM = newLM }, rl)
+            end
+        end
+    end
+
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.CloseMasterLootWindow then
+        Monitor:CloseMasterLootWindow()
+    end
+
+    DesolateLootcouncil.pendingHandoverTarget = nil
+    local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+    if CommMod and CommMod.handoverTimeoutTimer then
+        CommMod:CancelTimer(CommMod.handoverTimeoutTimer)
+        CommMod.handoverTimeoutTimer = nil
+    end
+
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+end
+
+function Session:HandleHandoverDeclined(sender)
+    if not DesolateLootcouncil.pendingHandoverTarget or not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil.pendingHandoverTarget) then
+        return
+    end
+
+    DesolateLootcouncil:Print(string.format("Handover declined by %s.", sender))
+    DesolateLootcouncil.pendingHandoverTarget = nil
+    local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+    if CommMod and CommMod.handoverTimeoutTimer then
+        CommMod:CancelTimer(CommMod.handoverTimeoutTimer)
+        CommMod.handoverTimeoutTimer = nil
+    end
+end
+
+function Session:HandleUpdateConfigured(payload, sender)
+    local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
+    if not amILeader then return end
+
+    local newLM = payload.configuredLM
+    if newLM and newLM ~= "" then
+        DesolateLootcouncil.db.profile.configuredLM = newLM
+        DesolateLootcouncil.activeLootMaster = newLM
+        DesolateLootcouncil:UpdateLootMasterStatus()
+        DesolateLootcouncil:Print(string.format("Configured Loot Master updated to %s by request from previous LM.", newLM))
+    end
 end

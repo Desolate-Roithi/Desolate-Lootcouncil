@@ -201,6 +201,7 @@ function Priority:ShuffleLists()
         DesolateLootcouncil.Math.ShuffleTable(newList)
         -- Write directly to SavedVariables for immediate persistence
         listObj.players = newList
+        DesolateLootcouncil.API:MarkPriorityDirty(listObj.name)
     end
 
     DesolateLootcouncil:DLC_Log("All " ..
@@ -218,6 +219,7 @@ function Priority:SyncMissingPlayers()
 
     for _, listObj in ipairs(db.PriorityLists) do
         local currentList = listObj.players
+        local listChanged = false
 
         -- 1. Add Missing (O(N+M) using Scored Sets)
         local currentScoredSet = {}
@@ -239,7 +241,8 @@ function Priority:SyncMissingPlayers()
         for _, player in ipairs(missing) do
             table.insert(currentList, player.name)
             addedCount = addedCount + 1
-            self:LogPriorityChange(string.format("Synced %s to bottom of %s list.", 
+            listChanged = true
+            self:LogPriorityChange(string.format("Synced %s to bottom of %s list.",
                 DesolateLootcouncil:GetDisplayName(player.name), listObj.name))
         end
 
@@ -257,9 +260,14 @@ function Priority:SyncMissingPlayers()
             if not isMain then
                 table.remove(currentList, i)
                 removedCount = removedCount + 1
-                self:LogPriorityChange(string.format("Removed %s from %s list (Not a Main).", 
+                listChanged = true
+                self:LogPriorityChange(string.format("Removed %s from %s list (Not a Main).",
                     Ambiguate(pName, "none"), listObj.name))
             end
+        end
+
+        if listChanged then
+            DesolateLootcouncil.API:MarkPriorityDirty(listObj.name)
         end
     end
 
@@ -307,11 +315,12 @@ function Priority:MovePlayerToBottom(listName, playerName)
     if foundIndex then
         table.remove(players, foundIndex)
         table.insert(players, targetName)
+        DesolateLootcouncil.API:MarkPriorityDirty(listName)
 
-        local msg = string.format("Priority Update: %s moved to bottom of %s (Item Awarded).", 
+        local msg = string.format("Priority Update: %s moved to bottom of %s (Item Awarded).",
             DesolateLootcouncil:GetDisplayName(targetName), listName)
-        DesolateLootcouncil:DLC_Log(msg, true)
-        self:LogPriorityChange(string.format("Awarded item to %s (%s). Priority Reset.", 
+        DesolateLootcouncil:DLC_Log(msg)
+        self:LogPriorityChange(string.format("Awarded item to %s (%s). Priority Reset.",
             DesolateLootcouncil:GetDisplayName(targetName), listName))
 
         -- Structured Logging
@@ -362,8 +371,8 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
     end
 
     if not currentIdx then
-        DesolateLootcouncil:DLC_Log(string.format("Warning: Could not find %s (Main: %s) in %s.", 
-            DesolateLootcouncil:GetDisplayName(playerName), 
+        DesolateLootcouncil:DLC_Log(string.format("Warning: Could not find %s (Main: %s) in %s.",
+            DesolateLootcouncil:GetDisplayName(playerName),
             DesolateLootcouncil:GetDisplayName(targetMain),
             listName))
     end
@@ -371,7 +380,7 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
     if currentIdx then
         -- 1. Conditional Logic: Skip if already at correct position
         if currentIdx == index then
-            DesolateLootcouncil:DLC_Log(string.format("%s is already at the correct position (%d).", 
+            DesolateLootcouncil:DLC_Log(string.format("%s is already at the correct position (%d).",
                 DesolateLootcouncil:GetDisplayName(playerName), index), true)
             return
         end
@@ -387,6 +396,7 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
         if savedIndex > #players + 1 then savedIndex = #players + 1 end
 
         table.insert(players, savedIndex, targetMain)
+        DesolateLootcouncil.API:MarkPriorityDirty(listName)
 
         -- 4. Generate & Output Log Message (Sanitized)
         local sIndex = tonumber(savedIndex) or -1
@@ -466,7 +476,7 @@ function Priority:ReceivePrioritySync(syncedLists)
     end
 
     DesolateLootcouncil:DLC_Log(string.format(
-        "Priority Sync received from LM. Updated %d list(s).", updated), true)
+        "Priority Sync received from LM. Updated %d list(s).", updated))
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
@@ -517,4 +527,3 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
     -- Write the sorted result back into the DB object in-place
     listObj.players = newList
 end
-

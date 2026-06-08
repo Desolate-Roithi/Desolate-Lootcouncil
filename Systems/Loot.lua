@@ -101,6 +101,7 @@ function Loot:SetItemCategory(itemID, targetListIndex)
         if list.items and list.items[itemID] then
             if i ~= targetListIndex then
                 list.items[itemID] = nil
+                DesolateLootcouncil.API:MarkIMDirty(list.name)
             else
                 -- Already here
                 return
@@ -112,6 +113,7 @@ function Loot:SetItemCategory(itemID, targetListIndex)
     local targetList = db.PriorityLists[targetListIndex]
     if not targetList.items then targetList.items = {} end
     targetList.items[itemID] = true
+    DesolateLootcouncil.API:MarkIMDirty(targetList.name)
 
     DesolateLootcouncil:DLC_Log(string.format(L["Added Item %d to '%s'"], itemID, targetList.name))
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
@@ -127,6 +129,7 @@ function Loot:UnassignItem(itemID)
             for storedID, _ in pairs(list.items) do
                 if tonumber(storedID) == searchID then
                     list.items[storedID] = nil
+                    DesolateLootcouncil.API:MarkIMDirty(list.name)
                 end
             end
         end

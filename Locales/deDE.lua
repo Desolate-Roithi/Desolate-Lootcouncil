@@ -241,8 +241,10 @@ L["Removed Priority List: %s"] = "Prioritätsliste entfernt: %s"
 L["Renamed list to: %s"] = "Liste umbenannt in: %s"
 L["Only the Loot Master or Raid Assists can view the Loot History."] =
 "Nur der Plündermeister oder Schlachtzugsassistenten können den Plünderungsverlauf einsehen."
-L["Only the Loot Master can add items to the session."] = "Nur der Plündermeister kann Gegenstände zur Sitzung hinzufügen."
-L["Open the configuration window to manage settings, priority lists, and rosters."] = "Öffne das Konfigurationsfenster, um Einstellungen, Prioritätslisten und Roster zu verwalten."
+L["Only the Loot Master can add items to the session."] =
+"Nur der Plündermeister kann Gegenstände zur Sitzung hinzufügen."
+L["Open the configuration window to manage settings, priority lists, and rosters."] =
+"Öffne das Konfigurationsfenster, um Einstellungen, Prioritätslisten und Roster zu verwalten."
 L["Open Settings Window"] = "Konfigurationsfenster öffnen"
 
 L["Bosses & Pulls"] = "Bosse & Versuche"
@@ -251,12 +253,47 @@ L["No boss logs recorded for this session."] = "Keine Boss-Logs für diese Sitzu
 L["Ready to Craft"] = "Bereit zum Herstellen"
 L["Unskilled"] = "Fehlender Skill"
 L["Ready"] = "Bereit"
-L["Roll to receive this recipe because you have the profession and required skill to craft it."] = "Würfeln, um dieses Rezept zu erhalten, da du den Beruf und die benötigte Fertigkeit besitzt, um es herzustellen."
-L["Roll for this recipe even though you do not meet the skill or profession requirements yet."] = "Für dieses Rezept würfeln, obwohl du die Fertigkeits- oder Berufsanforderungen noch nicht erfüllst."
+L["Roll to receive this recipe because you have the profession and required skill to craft it."] =
+"Würfeln, um dieses Rezept zu erhalten, da du den Beruf und die benötigte Fertigkeit besitzt, um es herzustellen."
+L["Roll for this recipe even though you do not meet the skill or profession requirements yet."] =
+"Für dieses Rezept würfeln, obwohl du die Fertigkeits- oder Berufsanforderungen noch nicht erfüllst."
 L["Pass on this recipe."] = "Auf dieses Rezept passen."
 L["Bid priority points on this item."] = "Prioritätspunkte auf diesen Gegenstand bieten."
 L["Roll for main spec usage."] = "Für Hauptspezialisierung würfeln."
 L["Roll for offspec usage."] = "Für Nebenspezialisierung würfeln."
 L["Roll for transmogrification collection."] = "Für Transmogrifikationssammlung würfeln."
 L["Pass on this item."] = "Auf diesen Gegenstand passen."
-L["Trade window full. Remaining items will be staged in the next trade."] = "Handelsfenster voll. Verbleibende Gegenstände werden beim nächsten Handel bereitgestellt."
+L["Trade window full. Remaining items will be staged in the next trade."] =
+"Handelsfenster voll. Verbleibende Gegenstände werden beim nächsten Handel bereitgestellt."
+
+-- Handover & Decay popups
+L["No Loot Master has been detected in the group for 60+ seconds. Do you want to claim the Loot Master role?"] =
+"Kein Plündermeister im Schlachtzug seit 60+ Sekunden erkannt. Möchtest du die Plündermeister-Rolle beanspruchen?"
+L["Yes (Claim LM)"] = "Ja (PM beanspruchen)"
+L["%s is handing you the Loot Master role. Accept?"] = "%s übergibt dir die Plündermeister-Rolle. Akzeptieren?"
+L["Accept"] = "Akzeptieren"
+L["Decline"] = "Ablehnen"
+L["The last raid session (%s, %s) has pending decay. Apply decay now before starting a new session?"] =
+"Die letzte Schlachtzugssitzung (%s, %s) hat ausstehenden Verfall. Verfall jetzt anwenden, bevor eine neue Sitzung gestartet wird?"
+L["Apply Decay"] = "Verfall anwenden"
+L["Skip"] = "Überspringen"
+L["Review First"] = "Zuerst prüfen"
+L["Claim LM Role"] = "PM-Rolle beanspruchen"
+L["No Loot Master is detected in the raid. Claim the role to enable session management."] =
+"Kein Plündermeister im Schlachtzug erkannt. Beanspruche die Rolle, um das Sitzungsmanagement zu aktivieren."
+L["Hand Over LM Role"] = "PM-Rolle übergeben"
+L["Start the handover process to the selected officer."] = "Starte den Übergabeprozess an den ausgewählten Offizier."
+L["Choose an officer in the raid to hand over the Loot Master role to."] =
+"Wähle einen Offizier im Schlachtzug aus, an den die Plündermeister-Rolle übergeben werden soll."
+L["Select Officer for Handover"] = "Offizier für die Übergabe auswählen"
+
+-- EJ Loot Import
+L["DLC"] = "DLC"
+L["Add to IM"] = "Zum IM hinzufügen"
+L["DLC Loot Import"] = "DLC Loot Import"
+L["%d items staged across %d lists"] = "%d Gegenstände in %d Listen vorbereitet"
+L["— Skip —"] = "— Überspringen —"
+L["No loot found for this boss."] = "Keine Beute für diesen Boss gefunden."
+L["Add all loot from this boss/raid to the import staging area."] =
+"Alle Beute von diesem Boss/Raid zum Import-Bereich hinzufügen."
+L["Officer only."] = "Nur Offiziere."

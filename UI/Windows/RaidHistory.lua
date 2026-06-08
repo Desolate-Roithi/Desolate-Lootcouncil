@@ -251,7 +251,7 @@ end
 -- Section Renderers
 -- ============================================================
 
-local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme, lootCount)
+local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme, lootCount, isOfficer)
     -- Alternating stripe
     if lootCount % 2 == 0 then
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 0 })
@@ -272,38 +272,56 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
     end)
     row.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Re-award
-    row.btnReaward:ClearAllPoints()
-    row.btnReaward:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    row.btnReaward:SetScript("OnClick", function()
-        DesolateLootcouncil.API:ReawardItem(awardIdx)
-        C_Timer.After(0.1, function()
-            historyModule:ShowRaidHistoryWindow(historyModule.selectedIndex)
-        end)
-    end)
-
-    -- Time
-    row.timeLbl:ClearAllPoints()
-    row.timeLbl:SetPoint("RIGHT", row.btnReaward, "LEFT", -6, 0)
-    row.timeLbl:SetText(NativeGUI:FormatTime(item.timestamp))
-
-    -- Vote type
-    local vt    = item.voteType or "?"
-    local vtCol = { 0.6, 0.6, 0.6 }
-    local vc = NativeGUI.VOTE_COLORS[vt]
-    if vc then vtCol = { vc.r, vc.g, vc.b } end
-    row.vtLbl:ClearAllPoints()
-    row.vtLbl:SetPoint("RIGHT", row.timeLbl, "LEFT", -4, 0)
-    row.vtLbl:SetText(vt)
-    row.vtLbl:SetTextColor(unpack(vtCol))
-
     -- Info (item + winner)
     local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
     local colWinner  = NativeGUI:FormatClassColor(item.winnerClass, winnerDisp)
-    row.infoLbl:ClearAllPoints()
-    row.infoLbl:SetPoint("LEFT",  row.iconBtn, "RIGHT", 6, 0)
-    row.infoLbl:SetPoint("RIGHT", row.vtLbl,   "LEFT", -6, 0)
-    row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+
+    if isOfficer then
+        row.btnReaward:Show()
+        -- Re-award
+        row.btnReaward:ClearAllPoints()
+        row.btnReaward:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        row.btnReaward:SetScript("OnClick", function()
+            DesolateLootcouncil.API:ReawardItem(awardIdx)
+            C_Timer.After(0.1, function()
+                historyModule:ShowRaidHistoryWindow(historyModule.selectedIndex)
+            end)
+        end)
+
+        -- Time
+        row.timeLbl:ClearAllPoints()
+        row.timeLbl:SetPoint("RIGHT", row.btnReaward, "LEFT", -6, 0)
+        row.timeLbl:SetText(NativeGUI:FormatTime(item.timestamp))
+
+        -- Vote type
+        local vt    = item.voteType or "?"
+        local vtCol = { 0.6, 0.6, 0.6 }
+        local vc = NativeGUI.VOTE_COLORS[vt]
+        if vc then vtCol = { vc.r, vc.g, vc.b } end
+        row.vtLbl:Show()
+        row.vtLbl:ClearAllPoints()
+        row.vtLbl:SetPoint("RIGHT", row.timeLbl, "LEFT", -4, 0)
+        row.vtLbl:SetText(vt)
+        row.vtLbl:SetTextColor(unpack(vtCol))
+
+        row.infoLbl:ClearAllPoints()
+        row.infoLbl:SetPoint("LEFT",  row.iconBtn, "RIGHT", 6, 0)
+        row.infoLbl:SetPoint("RIGHT", row.vtLbl,   "LEFT", -6, 0)
+        row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+    else
+        row.btnReaward:Hide()
+        row.vtLbl:Hide()
+
+        -- Time
+        row.timeLbl:ClearAllPoints()
+        row.timeLbl:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        row.timeLbl:SetText(NativeGUI:FormatTime(item.timestamp))
+
+        row.infoLbl:ClearAllPoints()
+        row.infoLbl:SetPoint("LEFT",  row.iconBtn, "RIGHT", 6, 0)
+        row.infoLbl:SetPoint("RIGHT", row.timeLbl, "LEFT", -6, 0)
+        row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+    end
 end
 
 local function SetupBossTooltip(row, b, NativeGUI)
@@ -427,14 +445,30 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
     local API = DesolateLootcouncil.API
     local awarded
     local checkTimestamp = false
-    if isCurrent then
-        awarded = API:GetAwardedList()
-    else
-        if sessionEntry.awarded then
-            awarded = sessionEntry.awarded
-        else
+    local isOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+    if isOfficer then
+        if isCurrent then
             awarded = API:GetAwardedList()
-            checkTimestamp = true
+        else
+            if sessionEntry.awarded then
+                awarded = sessionEntry.awarded
+            else
+                awarded = API:GetAwardedList()
+                checkTimestamp = true
+            end
+        end
+    else
+        if isCurrent then
+            local db = DesolateLootcouncil.db.profile
+            awarded = db.session and db.session.publicAwardLog or {}
+        else
+            if sessionEntry.publicAwardLog then
+                awarded = sessionEntry.publicAwardLog
+            else
+                local db = DesolateLootcouncil.db.profile
+                awarded = db.session and db.session.publicAwardLog or {}
+                checkTimestamp = true
+            end
         end
     end
     local lootCount         = 0
@@ -455,7 +489,7 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
             row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  0,   -layoutState.yOffset)
             row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
 
-            SetupLootRow(row, item, awardIdx, self, NativeGUI, theme, lootCount)
+            SetupLootRow(row, item, awardIdx, self, NativeGUI, theme, lootCount, isOfficer)
 
             layoutState.yOffset = layoutState.yOffset + 32
         end
@@ -794,7 +828,9 @@ function UI_RaidHistory:Refresh()
     -- ================================================================
     -- SECTION 3 — PRIORITY POSITION CHANGES
     -- ================================================================
-    self:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader)
+    if DesolateLootcouncil:AmIOfficerOrLM() then
+        self:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader)
+    end
 
     -- ================================================================
     -- SECTION 4 — DECAY APPLIED

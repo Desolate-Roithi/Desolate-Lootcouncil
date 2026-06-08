@@ -68,6 +68,38 @@ function CommHandlers:VERSION_REQ(data, sender)
     if DesolateLootcouncil:AmILootMaster() then
         local active = DesolateLootcouncil.sessionAutopassActive or false
         self:SendComm("SYNC_AUTOPASS", { isActive = active, isHeartbeat = true }, sender)
+        
+        -- History Bulk Sync for late-joining / reloading officers
+        local db = DesolateLootcouncil.db.profile
+        local rosterEntry = db.MainRoster and db.MainRoster[sender]
+        if rosterEntry and rosterEntry.isOfficer then
+            local SessionMod = DesolateLootcouncil:GetModule("Session")
+            SessionMod.officerSyncedThisSession = SessionMod.officerSyncedThisSession or {}
+            if not SessionMod.officerSyncedThisSession[sender] then
+                SessionMod.officerSyncedThisSession[sender] = true
+                self:ScheduleTimer(function()
+                    local awardedList = db.session and db.session.awarded or {}
+                    local bulk = {}
+                    local startIdx = math.max(1, #awardedList - 49)
+                    for i = startIdx, #awardedList do
+                        local entry = awardedList[i]
+                        table.insert(bulk, {
+                            link        = entry.link,
+                            texture     = entry.texture,
+                            itemID      = entry.itemID,
+                            winner      = entry.winner,
+                            winnerClass = entry.winnerClass,
+                            voteType    = entry.voteType,
+                            timestamp   = entry.timestamp,
+                            traded      = entry.traded
+                        })
+                    end
+                    if #bulk > 0 then
+                        self:SendComm("HISTORY_BULK_SYNC", bulk, sender)
+                    end
+                end, 2)
+            end
+        end
     end
 end
 CommHandlers.VERSION_CHECK = CommHandlers.VERSION_REQ
@@ -103,187 +135,14 @@ function CommHandlers:LOOT_SESSION_END(data, sender)
     if Session and Session.EndSession then Session:EndSession() end
 end
 
-local function IsItemManagerDesynced(incomingData)
-    local db = DesolateLootcouncil.db.profile
-    if not db.PriorityLists then return true end
-
-    -- Count number of lists
-    local incomingListsCount = 0
-    for _ in pairs(incomingData) do incomingListsCount = incomingListsCount + 1 end
-    if #db.PriorityLists ~= incomingListsCount then return true end
-
-    local localLists = {}
-    for _, localList in ipairs(db.PriorityLists) do
-        localLists[localList.name] = localList
-    end
-
-    for listName, items in pairs(incomingData) do
-        local localList = localLists[listName]
-        if not localList then return true end
-
-        local localCount = 0
-        for _ in pairs(localList.items or {}) do localCount = localCount + 1 end
-        local incomingCount = 0
-        for _ in pairs(items or {}) do incomingCount = incomingCount + 1 end
-
-        if localCount ~= incomingCount then return true end
-
-        local normalizedLocal = {}
-        for localId, localVal in pairs(localList.items or {}) do
-            normalizedLocal[tonumber(localId) or localId] = localVal
-        end
-
-        for id, val in pairs(items or {}) do
-            local numId = tonumber(id) or id
-            if normalizedLocal[numId] ~= val then
-                return true
-            end
-        end
-    end
-    return false
-end
-
-local function OverwriteItemManagerLists(data, logMessage)
-    local db = DesolateLootcouncil.db.profile
-    if db.PriorityLists then
-        for listName, items in pairs(data) do
-            for _, localList in ipairs(db.PriorityLists) do
-                if localList.name == listName then
-                    localList.items = {}
-                    for id, val in pairs(items or {}) do
-                        localList.items[tonumber(id) or id] = val
-                    end
-                    break
-                end
-            end
-        end
-
-        if logMessage then
-            DesolateLootcouncil:Print(logMessage)
-        end
-
-        -- Refresh UI if open
-        local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
-        if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
-            ItemMgr:RefreshWindow()
-        end
-    end
-end
-
-function CommHandlers:IM_SYNC(payload, sender)
-    if not payload or type(payload) ~= "table" then return end
-
-    -- Extract data and manual flag. Backwards compatibility for old clients.
-    local data = payload.lists or payload
-    local isManual = (payload.isManual == true) or (payload.lists == nil)
-
-    if type(data) ~= "table" then return end
-
-    local inRaid = IsInRaid()
-    local currentLM = DesolateLootcouncil:DetermineLootMaster()
-    local isSenderLM = DesolateLootcouncil:SmartCompare(sender, currentLM)
-    local amILM = DesolateLootcouncil:AmILootMaster()
-
-    local shouldOverwrite = false
-    local logMessage = nil
-
-    if isManual then
-        -- Manual Sync: Accepted by everyone unconditionally if desynced
-        if not DesolateLootcouncil:SmartCompare(sender, "player") then
-            if IsItemManagerDesynced(data) then
-                shouldOverwrite = true
-                logMessage = "|cff00ffff[Item Manager]|r Synced: Manual database update received from '" .. DesolateLootcouncil:GetDisplayName(sender) .. "'."
-            end
-        end
-    else
-        -- Automatic Sync: Enforce LM's configuration on raiders, only active in Raids
-        if inRaid and isSenderLM and not amILM then
-            if IsItemManagerDesynced(data) then
-                shouldOverwrite = true
-                logMessage = "|cff00ffff[Item Manager]|r Auto-updated your item database to match Loot Master '" .. DesolateLootcouncil:GetDisplayName(sender) .. "' (detected desync)."
-            end
-        end
-    end
-
-    if shouldOverwrite then
-        if not isManual and not DesolateLootcouncil.db.profile.debugMode then
-            logMessage = nil
-        end
-        OverwriteItemManagerLists(data, logMessage)
-    elseif inRaid and isSenderLM and not amILM then
-        DesolateLootcouncil:DLC_Log("Item Manager is already in sync with Loot Master.")
-    end
-end
-
-
-function CommHandlers:SYNC_AUTOPASS(data, sender)
-    -- Only accept autopass state from the current Loot Master (prevent spoofing).
-    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
-        local isActive
-        local isHeartbeat = false
-        if type(data) == "table" then
-            isActive = data.isActive
-            isHeartbeat = data.isHeartbeat
-        else
-            isActive = data
-        end
-
-        local changed = (DesolateLootcouncil.sessionAutopassActive ~= isActive)
-        DesolateLootcouncil.sessionAutopassActive = isActive
-
-        if not isHeartbeat or changed then
-            local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
-            if changed or not isHeartbeat then
-                DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
-            end
-
-            local Autopass = DesolateLootcouncil:GetModule("Autopass")
-            if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
-                Autopass:ScanAndAutopassActiveLootRolls()
-            end
-        end
-    else
-        DesolateLootcouncil:DLC_Log(string.format("SYNC_AUTOPASS from non-LM '%s' ignored.", tostring(sender)))
-    end
-end
-
-function CommHandlers:SYNC_PRIORITY(data, sender)
-    -- Only accept from the current Loot Master (prevent spoofing)
-    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
-        local Priority = DesolateLootcouncil:GetModule("Priority")
-        if Priority and Priority.ReceivePrioritySync then
-            Priority:ReceivePrioritySync(data)
-        end
-    else
-        DesolateLootcouncil:DLC_Log(string.format("SYNC_PRIORITY from non-LM '%s' ignored.", tostring(sender)))
-    end
-end
-
-function CommHandlers:SYNC_ROSTER(data, sender)
-    -- Only accept from the current Loot Master (prevent spoofing)
-    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
-        local RosterSys = DesolateLootcouncil:GetModule("Roster")
-        if RosterSys and RosterSys.ReceiveRosterSync then
-            RosterSys:ReceiveRosterSync(data)
-        end
-    else
-        DesolateLootcouncil:DLC_Log(string.format("SYNC_ROSTER from non-LM '%s' ignored.", tostring(sender)))
-    end
-end
-
-function CommHandlers:LURA_TEST_START(data, sender)
-    local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
-    if Lura and Lura.ActivateGlobalTestMode then Lura:ActivateGlobalTestMode() end
-end
-
-function CommHandlers:LURA_TEST_END(data, sender)
-    local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
-    if Lura and Lura.DeactivateGlobalTestMode then Lura:DeactivateGlobalTestMode() end
-end
-
 function Comm:OnCommReceived(prefix, message, _distribution, sender)
     if prefix ~= "DLC_COMM" then return end
     if DesolateLootcouncil:SmartCompare(sender, "player") then return end -- Ignore self
+
+    local currentLM = DesolateLootcouncil:DetermineLootMaster()
+    if currentLM and currentLM ~= "" and DesolateLootcouncil:SmartCompare(sender, currentLM) then
+        self.lastLMMsgTime = GetServerTime()
+    end
 
     local success, command, data = self:Deserialize(message)
     if not success then return end
@@ -298,7 +157,23 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
     local handler = CommHandlers[command]
     if handler then
         handler(self, data, sender)
+    else
+        local Sync = DesolateLootcouncil:GetModule("Sync", true)
+        if Sync and Sync.HandleMessage then
+            Sync:HandleMessage(command, data, sender)
+        end
     end
+end
+
+function Comm:IsLMAbsent()
+    if not IsInGroup() then return false end
+    if DesolateLootcouncil:AmILootMaster() then return false end
+    local now = GetServerTime()
+    if not self.lastLMMsgTime then
+        self.groupJoinedTime = self.groupJoinedTime or now
+        return (now - self.groupJoinedTime > 60)
+    end
+    return (now - self.lastLMMsgTime > 60)
 end
 
 
@@ -371,93 +246,16 @@ function Comm:GetActiveUserCount()
     return count
 end
 
-function Comm:SendSyncAutopass(isActive, isHeartbeat)
-    DesolateLootcouncil.sessionAutopassActive = isActive
-    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = isActive
-    
-    local payload = isActive
-    if isHeartbeat then
-        payload = { isActive = isActive, isHeartbeat = true }
-    end
-    self:SendComm("SYNC_AUTOPASS", payload)
-    
-    if not isHeartbeat then
-        local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
-        DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
 
-        local Autopass = DesolateLootcouncil:GetModule("Autopass")
-        if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
-            Autopass:ScanAndAutopassActiveLootRolls()
-        end
-    end
-end
 
---- Shares the given data type with all raid assistants and the raid leader
---- via private whisper. Only call this as the Loot Master.
----@param dataType string  "PRIORITY" or "ROSTER"
-function Comm:ShareDataWithAssists(dataType)
-    if not DesolateLootcouncil:AmILootMaster() then
-        DesolateLootcouncil:DLC_Log("ShareDataWithAssists: You are not the Loot Master.")
-        return
-    end
 
-    local command, payload
-    if dataType == "PRIORITY" then
-        command = "SYNC_PRIORITY"
-        local db = DesolateLootcouncil.db.profile
-        -- Build a compact copy: only name + players + items (no circular refs)
-        local lists = {}
-        for _, listObj in ipairs(db.PriorityLists or {}) do
-            local playersCopy = {}
-            for i, p in ipairs(listObj.players or {}) do playersCopy[i] = p end
-            local itemsCopy = {}
-            for id, val in pairs(listObj.items or {}) do itemsCopy[id] = val end
-            table.insert(lists, { name = listObj.name, players = playersCopy, items = itemsCopy })
-        end
-        payload = lists
-    elseif dataType == "ROSTER" then
-        command = "SYNC_ROSTER"
-        local db = DesolateLootcouncil.db.profile
-        local mainsCopy = {}
-        for name, data in pairs(db.MainRoster or {}) do
-            mainsCopy[name] = { addedAt = data.addedAt or 0 }
-        end
-        local altsCopy = {}
-        for alt, main in pairs((db.playerRoster or {}).alts or {}) do
-            altsCopy[alt] = main
-        end
-        payload = { mains = mainsCopy, alts = altsCopy }
-    else
-        DesolateLootcouncil:DLC_Log("ShareDataWithAssists: Unknown dataType '" .. tostring(dataType) .. "'.")
-        return
-    end
-
-    -- Collect targets: only assists (rank 1) and leaders (rank 2)
-    local targets = {}
-    if IsInRaid() then
-        for i = 1, GetNumGroupMembers() do
-            local name, rank = GetRaidRosterInfo(i)
-            if name and rank >= 1 and not DesolateLootcouncil:SmartCompare(name, "player") then
-                table.insert(targets, name)
-            end
-        end
-    end
-
-    if #targets == 0 then
-        DesolateLootcouncil:DLC_Log("ShareDataWithAssists: No assists or leaders found to share with.", true)
-        return
-    end
-
-    for _, target in ipairs(targets) do
-        local serialized = self:Serialize(command, payload)
-        self:SendCommMessage("DLC_COMM", serialized, "WHISPER", target)
-    end
-
-    DesolateLootcouncil:DLC_Log(string.format(
-        "Shared %s data with %d assist(s).", dataType, #targets), true)
-end
 
 function Comm:PruneRosterData()
+    if not IsInGroup() then
+        self.lastLMMsgTime = nil
+        self.groupJoinedTime = nil
+    end
+
     local toRemove = {}
     for name in pairs(self.playerVersions) do
         if not DesolateLootcouncil:IsUnitInRaid(name) and not DesolateLootcouncil:SmartCompare(name, "player") then
@@ -500,3 +298,5 @@ function Comm:PruneRosterData()
         end
     end
 end
+
+

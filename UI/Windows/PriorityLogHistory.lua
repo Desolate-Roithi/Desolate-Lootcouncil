@@ -6,6 +6,10 @@ local UI_PriorityLogHistory = DesolateLootcouncil:NewModule("UI_PriorityLogHisto
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_PriorityLogHistory:ShowLogWindow()
+    if not DesolateLootcouncil:AmIOfficerOrLM() then
+        if self.logFrame then self.logFrame:Hide() end
+        return
+    end
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.logFrame then

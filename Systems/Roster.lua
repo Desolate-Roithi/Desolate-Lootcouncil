@@ -16,14 +16,14 @@ StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
     OnAccept = function()
         DesolateLootcouncil.sessionAutopassAnswered = true
         DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
-        local Comm = DesolateLootcouncil:GetModule("Comm")
-        if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(true) end
+        local Sync = DesolateLootcouncil:GetModule("Sync")
+        if Sync and Sync.SendSyncAutopass then Sync:SendSyncAutopass(true) end
     end,
     OnCancel = function()
         DesolateLootcouncil.sessionAutopassAnswered = true
         DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
-        local Comm = DesolateLootcouncil:GetModule("Comm")
-        if Comm and Comm.SendSyncAutopass then Comm:SendSyncAutopass(false) end
+        local Sync = DesolateLootcouncil:GetModule("Sync")
+        if Sync and Sync.SendSyncAutopass then Sync:SendSyncAutopass(false) end
     end,
     timeout = 0,
     whileDead = true,
@@ -216,11 +216,16 @@ function Roster:StopRaidSession(saveHistory)
             attendees       = {},
             attendeeDetails = {},
             bossLogs        = {},
-            awarded         = {}
+            awarded         = {},
+            decayApplied    = self.decayAppliedForSession or (not config.enabled and -1 or nil)
         }
+        self.decayAppliedForSession = nil
         local session = db.session
         if session and session.awarded then
             entry.awarded = DesolateLootcouncil.Table.DeepCopy(session.awarded)
+        end
+        if session and session.publicAwardLog then
+            entry.publicAwardLog = DesolateLootcouncil.Table.DeepCopy(session.publicAwardLog)
         end
         -- Deep copy attendees
         for name, _ in pairs(config.currentAttendees) do
@@ -476,7 +481,7 @@ function Roster:AddMain(name)
         end
     end
 
-    devDB.MainRoster[normalizedName] = { addedAt = time() } -- Store main with timestamp
+    devDB.MainRoster[normalizedName] = { addedAt = time(), isOfficer = false } -- Store main with timestamp
     devDB.playerRoster.alts[normalizedName] = nil           -- Ensure not an alt
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Added Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
@@ -486,6 +491,37 @@ function Roster:AddMain(name)
         Priority:SyncMissingPlayers()
     end
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+end
+
+function Roster:SetOfficer(name, flag)
+    if not DesolateLootcouncil.db then return end
+    if not name or name == "" then return end
+    
+    local devDB = DesolateLootcouncil.db.profile
+    if not devDB or not devDB.MainRoster then return end
+    
+    local normalizedName = Ambiguate(name, "none")
+    for existingName, data in pairs(devDB.MainRoster) do
+        if DesolateLootcouncil:SmartCompare(existingName, normalizedName) then
+            data.isOfficer = flag == true
+            
+            -- Refresh local player officer cache if it is us
+            if DesolateLootcouncil:SmartCompare(existingName, "player") then
+                DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+            end
+            
+            -- Fire event
+            self:SendMessage("DLC_OFFICER_FLAG_CHANGED", existingName, flag)
+            
+            local Sync = DesolateLootcouncil:GetModule("Sync", true)
+            if Sync and Sync.SendOfficerFlagSync and IsInGroup() and DesolateLootcouncil:AmILootMaster() then
+                Sync:SendOfficerFlagSync(existingName, flag)
+            end
+            
+            LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            return
+        end
+    end
 end
 
 function Roster:AddAlt(altName, mainName)
@@ -851,12 +887,10 @@ function Roster:GROUP_ROSTER_UPDATE()
         else
             self:CheckForNewRaidMembers()
             -- Sync Autopass to newly joined members or after a group update (if LM)
-            if DesolateLootcouncil:AmILootMaster() then
-                local Comm = DesolateLootcouncil:GetModule("Comm")
-                if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
-                    Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+                local Sync = DesolateLootcouncil:GetModule("Sync")
+                if Sync and DesolateLootcouncil.sessionAutopassActive ~= nil then
+                    Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
                 end
-            end
         end
     end)
 end
@@ -890,4 +924,47 @@ function Roster:ReceiveRosterSync(syncedRoster)
         "Roster Sync received from LM. %d mains applied.", mainCount), true)
 
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+end
+
+function Roster:HasPendingDecay()
+    local db = DesolateLootcouncil.db.profile
+    if db.AttendanceHistory and db.AttendanceHistory[1] then
+        local entry = db.AttendanceHistory[1]
+        if entry.decayApplied == nil then
+            return true
+        end
+    end
+    return false
+end
+
+function Roster:ApplyDecayForLastSession(skip)
+    local db = DesolateLootcouncil.db.profile
+    if not db.AttendanceHistory or not db.AttendanceHistory[1] then return end
+    local entry = db.AttendanceHistory[1]
+    if skip then
+        entry.decayApplied = -1
+        DesolateLootcouncil:Print("Decay for last session skipped.")
+        return
+    end
+
+    local absent = {}
+    local roster = db.MainRoster or {}
+    for name in pairs(roster) do
+        if not entry.attendees[name] then
+            absent[name] = true
+        end
+    end
+
+    local dbLists = db.PriorityLists or {}
+    local penalty = db.DecayConfig and db.DecayConfig.defaultPenalty or 1
+    if penalty > 0 then
+        for _, listObj in ipairs(dbLists) do
+            DesolateLootcouncil.API:CalculateListDecay(listObj, penalty, absent)
+        end
+        DesolateLootcouncil:Print(string.format("Applied +%d Position Decay to all lists for absent players.", penalty))
+    else
+        DesolateLootcouncil:Print("Decay penalty is 0. No priorities changed.")
+    end
+
+    entry.decayApplied = GetServerTime()
 end

@@ -60,6 +60,8 @@ local defaults = {
         },
         MainRoster        = {},
         playerRoster      = { alts = {}, decay = {} },
+        imTimestamps      = {},
+        priorityTimestamps = {},
         verboseMode       = false,
         debugMode         = false,
         session           = {
@@ -214,6 +216,9 @@ function DesolateLootcouncil:OnEnable()
     -- schedule a short delay to let GROUP_ROSTER_UPDATE settle first.
     self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
         C_Timer.After(2, function() self:UpdateLootMasterStatus() end)
+    end)
+    self:RegisterMessage("DLC_OFFICER_FLAG_CHANGED", function()
+        self.amIOfficer = self:AmIOfficerOrLM()
     end)
 end
 
@@ -404,6 +409,19 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     
     local leader = self:GetGroupLeader()
     if leader and not self:SmartCompare(leader, self.lastLeader) then
+        local wasLeader = self.lastLeader and self:SmartCompare(self.lastLeader, "player")
+        local isNowLeader = self:SmartCompare(leader, "player")
+        if wasLeader and not isNowLeader then
+            local db = self.db.profile
+            local hasActiveSession = db.session and ((db.session.loot and #db.session.loot > 0) or (db.session.awarded and #db.session.awarded > 0))
+            if self.amILM and hasActiveSession then
+                local SyncMod = self:GetModule("Sync", true)
+                if SyncMod then
+                    self:DLC_Log(string.format("Leadership passed to %s. Initiating automatic Loot Master handover.", leader))
+                    SyncMod:SendLMHandoverOffer(leader)
+                end
+            end
+        end
         self.activeLootMaster = nil
         self.lastLeader = leader
     end
@@ -424,6 +442,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     local targetLM = self:DetermineLootMaster()
     local wasLM = self.amILM
     self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
+    self.amIOfficer = self:AmIOfficerOrLM()
     
     -- If we just BECAME the LM, reset the prompt flag so we can decide for ourselves
     if self.amILM and not wasLM then
@@ -461,20 +480,34 @@ function DesolateLootcouncil:AmILootMaster()
     return self.amILM
 end
 
--- Bug 3: Raid Assists can view Monitor but not award
-function DesolateLootcouncil:AmIRaidAssistOrLM()
+function DesolateLootcouncil:AmIOfficerOrLM()
+    -- Tier 1: Solo mode — player is always LM when not in any group.
     if self.amILM then return true end
-    if IsInRaid() then
-        -- Check own rank: 0=member, 1=assist, 2=leader
-        for i = 1, GetNumGroupMembers() do
-            local name, rank = GetRaidRosterInfo(i)
-            if name and rank >= 1 then
-                if self:SmartCompare(name, "player") then return true end
+
+    -- Tier 2: In a group — LM identity must be resolved and the LM must be present.
+    -- If no LM is synced yet (e.g. joining raid before version check handshake),
+    -- fall back to false rather than granting access based on stale data.
+    if IsInGroup() and (not self.activeLootMaster or self.activeLootMaster == "") then
+        return false  -- LM not yet identified; deny access until handshake completes
+    end
+
+    -- Tier 3: Roster flag lookup — check if our MainRoster entry has isOfficer = true.
+    local myScore = self:GetScoreName("player")
+    local db = self.db.profile
+    if db.MainRoster then
+        for name, data in pairs(db.MainRoster) do
+            if self:GetScoreName(name) == myScore then
+                return data.isOfficer == true
             end
         end
     end
-    -- [FIND_1] Ensure raiders (rank 0) never return true if they reach here
+
     return false
+end
+
+-- Backward compatibility stub calling AmIOfficerOrLM()
+function DesolateLootcouncil:AmIRaidAssistOrLM()
+    return self:AmIOfficerOrLM()
 end
 
 -- --- Version Logic ---

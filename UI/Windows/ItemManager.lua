@@ -180,8 +180,8 @@ function UI_ItemManager:RefreshWindow()
         self.btnAdd = btn
     end
 
-    -- 4. Sync Raid Button (LM/Assist Only)
-    if DesolateLootcouncil:AmIRaidAssistOrLM() then
+    -- 4. Sync Raid Button (LM/Officer Only)
+    if DesolateLootcouncil:AmIOfficerOrLM() then
         if not self.btnSync then
             local btn = NativeGUI:CreateButton(self.frame, L["Sync Raid"], 90, 24, "Bid")
             btn:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -16, -58)

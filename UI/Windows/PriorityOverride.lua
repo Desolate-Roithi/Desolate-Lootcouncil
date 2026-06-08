@@ -11,6 +11,10 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
+    if not DesolateLootcouncil:AmIOfficerOrLM() then
+        if self.priorityOverrideFrame then self.priorityOverrideFrame:Hide() end
+        return
+    end
     if self.priorityOverrideFrame then
         self.priorityOverrideFrame:Hide()
     end

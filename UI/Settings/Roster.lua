@@ -19,6 +19,9 @@ end
 
 local SetTempIsAlt = function(info, val)
     RosterSettings.tempIsAlt = val
+    if val then
+        RosterSettings.tempIsOfficer = false
+    end
 end
 
 local TargetMainHidden = function()
@@ -50,9 +53,14 @@ local SavePlayer = function()
         RosterSettings.tempName = ""
         RosterSettings.tempMain = nil
         RosterSettings.tempIsAlt = false
+        RosterSettings.tempIsOfficer = false
     else
         DesolateLootcouncil.API:AddMain(name)
+        if RosterSettings.tempIsOfficer then
+            DesolateLootcouncil.API:SetOfficer(name, true)
+        end
         RosterSettings.tempName = ""
+        RosterSettings.tempIsOfficer = false
     end
 end
 
@@ -120,6 +128,62 @@ local saveBtnOpt = {
     func = SavePlayer,
 }
 
+local isOfficerOpt = {
+    type = "toggle",
+    name = "Is Officer?",
+    desc = "Check if this player is an officer.",
+    order = 3.5,
+    hidden = function() return RosterSettings.tempIsAlt end,
+    get = function() return RosterSettings.tempIsOfficer end,
+    set = function(info, val) RosterSettings.tempIsOfficer = val end,
+}
+
+local GetOfficerValues = function()
+    return DesolateLootcouncil.API:GetMainRosterList()
+end
+
+local GetTempOfficerSelect = function()
+    return RosterSettings.tempOfficerSelect
+end
+
+local SetTempOfficerSelect = function(info, val)
+    RosterSettings.tempOfficerSelect = val
+end
+
+local GetOfficerToggle = function()
+    if not RosterSettings.tempOfficerSelect then return false end
+    local db = DesolateLootcouncil.db.profile
+    local main = RosterSettings.tempOfficerSelect
+    if db.MainRoster and db.MainRoster[main] then
+        return db.MainRoster[main].isOfficer == true
+    end
+    return false
+end
+
+local SetOfficerToggle = function(info, checked)
+    if RosterSettings.tempOfficerSelect then
+        DesolateLootcouncil.API:SetOfficer(RosterSettings.tempOfficerSelect, checked)
+    end
+end
+
+local officerSelectOpt = {
+    type = "select",
+    name = "Select Player to Update",
+    order = 1,
+    width = "double",
+    values = GetOfficerValues,
+    get = GetTempOfficerSelect,
+    set = SetTempOfficerSelect,
+}
+
+local officerToggleOpt = {
+    type = "toggle",
+    name = "Is Officer?",
+    order = 2,
+    get = GetOfficerToggle,
+    set = SetOfficerToggle,
+}
+
 local removeSelectOpt = {
     type = "select",
     name = "Select Player to Remove",
@@ -146,8 +210,10 @@ local rosterListOpt = {
 function RosterSettings:OnInitialize()
     self.tempName = ""
     self.tempIsAlt = false
+    self.tempIsOfficer = false
     self.tempMain = nil
     self.tempRemove = nil
+    self.tempOfficerSelect = nil
 end
 
 function RosterSettings:GetManageGroupOptions()
@@ -161,8 +227,23 @@ function RosterSettings:GetManageGroupOptions()
     local args = opts.args
     args.addPlayer = addPlayerOpt
     args.isAlt = isAltOpt
+    args.isOfficer = isOfficerOpt
     args.targetMain = targetMainOpt
     args.saveBtn = saveBtnOpt
+    return opts
+end
+
+function RosterSettings:GetOfficerGroupOptions()
+    local opts = {
+        type = "group",
+        name = "Manage Officers",
+        order = 1.5,
+        inline = true,
+        args = {}
+    }
+    local args = opts.args
+    args.officerSelect = officerSelectOpt
+    args.officerToggle = officerToggleOpt
     return opts
 end
 
@@ -200,6 +281,7 @@ function RosterSettings:GetOptions()
         order = 2,
         args = {
             manageGroup = self:GetManageGroupOptions(),
+            officerGroup = self:GetOfficerGroupOptions(),
             removeGroup = self:GetRemoveGroupOptions(),
             displayGroup = self:GetDisplayGroupOptions()
         }

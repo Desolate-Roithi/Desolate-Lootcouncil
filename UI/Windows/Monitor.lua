@@ -210,7 +210,7 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
 end
 
 function UI_Monitor:ShowMonitorWindow(isRefresh)
-    if not DesolateLootcouncil:AmIRaidAssistOrLM() then
+    if not DesolateLootcouncil:AmIOfficerOrLM() then
         if self.monitorFrame then self.monitorFrame:Hide() end
         return
     end
@@ -373,12 +373,28 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
             local Version = DesolateLootcouncil:GetModule("UI_Version", true)
             if Version then Version:ShowVersionWindow() end
         end)
+
+        self.btnStop = NativeGUI:CreateButton(nav, L["Stop Session"], 95, 24, "Stop")
+        self.btnStop:SetPoint("RIGHT", 0, 0)
+        self.btnStop:SetScript("OnClick", function()
+            local Session = DesolateLootcouncil:GetModule("Session", true)
+            if Session and Session.SendStopSession then
+                Session:SendStopSession()
+            end
+        end)
     end
 
     if self.monitorFrame.isCollapsed then
         self.navGroup:Hide()
     else
         self.navGroup:Show()
+        if self.btnStop then
+            if isLM then
+                self.btnStop:Show()
+            else
+                self.btnStop:Hide()
+            end
+        end
     end
 
     -- Disenchanter Sidebar Attachment

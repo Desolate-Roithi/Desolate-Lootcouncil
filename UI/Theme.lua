@@ -5,18 +5,6 @@ if AT.abortLoad then return end
 local UI_Theme = DesolateLootcouncil:NewModule("UI_Theme")
 
 function UI_Theme:OnInitialize()
-    local AceGUI = LibStub("AceGUI-3.0", true)
-    if AceGUI and not AceGUI._desolateThemed then
-        local originalCreate = AceGUI.Create
-        AceGUI.Create = function(self, widgetType, ...)
-            local widget = originalCreate(self, widgetType, ...)
-            if widget then
-                UI_Theme:ApplyTheme(widget)
-            end
-            return widget
-        end
-        AceGUI._desolateThemed = true
-    end
 end
 
 local themes = {}

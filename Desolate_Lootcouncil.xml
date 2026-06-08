@@ -18,6 +18,7 @@
 
     <!-- 3. Core Modules -->
     <Script file="Core\Comm.lua"/>
+    <Script file="Core\Sync.lua"/>
     <Script file="Core\SlashCommands.lua"/>
 
     <!-- 4. Settings -->
@@ -63,6 +64,7 @@
     <Script file="UI\Windows\PriorityOverride.lua"/>
     <Script file="UI\Windows\TradeList.lua"/>
     <Script file="UI\Windows\ItemManager.lua"/>
+    <Script file="UI\Windows\EJLootImport.lua"/>
     <Script file="UI\Windows\Version.lua"/>
     <Script file="UI\Windows\Voting.lua"/>
     <Script file="UI\Windows\Settings.lua"/>
