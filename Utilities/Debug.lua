@@ -35,9 +35,15 @@ function Debug:OnEnable()
 end
 
 function Debug:ShowStatus()
-    local userCount = 1
+    local userCount = 0
     if DesolateLootcouncil.activeAddonUsers then
-        for _ in pairs(DesolateLootcouncil.activeAddonUsers) do userCount = userCount + 1 end
+        for _ in pairs(DesolateLootcouncil.activeAddonUsers) do
+            userCount = userCount + 1
+        end
+        local myName = UnitName("player")
+        if myName and not DesolateLootcouncil.activeAddonUsers[myName] then
+            userCount = userCount + 1
+        end
     end
 
     local activeLM = DesolateLootcouncil:DetermineLootMaster()
@@ -46,6 +52,7 @@ function Debug:ShowStatus()
     DesolateLootcouncil:DLC_Log("Configured LM: " .. (DesolateLootcouncil.db.profile.configuredLM or "None"), true)
     DesolateLootcouncil:DLC_Log("Active LM: " .. tostring(activeLM), true)
     DesolateLootcouncil:DLC_Log("Am I LM?: " .. tostring(DesolateLootcouncil:AmILootMaster()), true)
+    DesolateLootcouncil:DLC_Log("Am I Officer?: " .. tostring(DesolateLootcouncil:AmIOfficerOrLM()), true)
     DesolateLootcouncil:DLC_Log("Autopass Active: " .. tostring(DesolateLootcouncil.sessionAutopassActive), true)
     DesolateLootcouncil:DLC_Log("Addon Users Found: " .. userCount, true)
     DesolateLootcouncil:DLC_Log("Current Zone: " .. (GetRealZoneText() or "Unknown"), true)

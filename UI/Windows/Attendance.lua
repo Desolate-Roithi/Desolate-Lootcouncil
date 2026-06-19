@@ -328,7 +328,7 @@ function UI_Attendance:GetSettingsGroupOptions(config)
             desc = L["If enabled, absent players will suffer priority decay."],
             order = 2,
             get = function() return config.enabled end,
-            set = function(_, val) config.enabled = val end,
+            set = function(_, val) DesolateLootcouncil.API:SetDecayEnabled(val) end,
         },
         defaultPenalty = {
             type = "select",
@@ -337,7 +337,7 @@ function UI_Attendance:GetSettingsGroupOptions(config)
             order = 3,
             values = { [0] = "0", [1] = "1", [2] = "2", [3] = "3" },
             get = function() return config.defaultPenalty end,
-            set = function(_, val) config.defaultPenalty = val end,
+            set = function(_, val) DesolateLootcouncil.API:SetDecayPenalty(val) end,
         }
     }
 end

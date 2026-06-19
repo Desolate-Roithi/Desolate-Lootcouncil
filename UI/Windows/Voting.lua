@@ -118,8 +118,6 @@ function UI_Voting:_ProcessMilestoneItem(item, now)
     -- Background Autopass evaluation (when window is closed/hidden)
     local isPending = (API:GetOutboundVote(guid) ~= nil)
     if remaining <= -3 and not hasVoted and not isPending then
-        self.myVotes = self.myVotes or {}
-        self.myVotes[guid] = 5
         API:SendVote(guid, 5, "")
         hasVoted = 5
     end
@@ -353,9 +351,8 @@ function UI_Voting:_LayoutVotingRow(index, data, guid, now, awardedGUIDs)
 
     if shouldAutoPass and not currentVote and not isPending and not isClosed then
         -- Automatically send an Auto Pass vote to the Loot Master
-        self.myVotes[guid] = 5
         DesolateLootcouncil.API:SendVote(guid, 5, "")
-        currentVote = 5
+        currentVote = self.myVotes[guid] or { type = 5, note = "", roll = 100 }
     end
 
     if not isClosed and not isExpired and expiry > 0 and remaining > 0 then
@@ -507,9 +504,7 @@ function UI_Voting:StyleVotedChangeState(row, theme, guid, currentVote)
     row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
     row.statusBtn:SetBackdropBorderColor(unpack(btnTheme))
     row.statusBtn:SetScript("OnClick", function()
-        self.myVotes[guid] = nil
         DesolateLootcouncil.API:CancelVote(guid)
-        self:ShowVotingWindow(nil, true)
     end)
     row.statusBtn:Show()
 
@@ -524,10 +519,8 @@ function UI_Voting:StyleActiveVoteState(row, theme, guid, data)
     row.timerLbl:Show()
 
     local function CastVote(val)
-        self.myVotes[guid] = val
         local note = self.myNotes[guid] or ""
         DesolateLootcouncil.API:SendVote(guid, val, note)
-        self:ShowVotingWindow(nil, true)
     end
 
     local itemID = data and (data.link or data.itemID)

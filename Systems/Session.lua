@@ -74,17 +74,78 @@ function Session:OnEnable()
         hideOnEscape = true,
     }
 
-    StaticPopupDialogs["DLC_CONFIRM_LM_HANDOVER"] = {
-        text = L["%s is handing you the Loot Master role. Accept?"],
-        button1 = L["Accept"],
-        button2 = L["Decline"],
+    StaticPopupDialogs["DLC_HANDOVER_RL_ACTIVE"] = {
+        text = L["%s is handing you the Loot Master role. Do you want to continue the running raid session, or start a new one?"],
+        button1 = L["Continue Session"],
+        button2 = L["Start New Session"],
         OnAccept = function()
-            Session:AcceptHandover()
+            Session:AcceptHandover(false, true)
         end,
-        OnCancel = function()
+        OnCancel = function(_, _, reason)
+            if reason == "clicked" then
+                Session:AcceptHandover(false, false)
+            else
+                Session:DeclineHandover()
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = false,
+    }
+
+    StaticPopupDialogs["DLC_HANDOVER_OFFICER_ACTIVE"] = {
+        text = L["%s is handing you the Loot Master role. Do you want to continue the running raid session, start a new one, or decline the handover?"],
+        button1 = L["Continue Session"],
+        button2 = L["Start New Session"],
+        button3 = L["Decline Handover"],
+        OnAccept = function()
+            Session:AcceptHandover(false, true)
+        end,
+        OnCancel = function(_, _, reason)
+            if reason == "clicked" then
+                Session:AcceptHandover(false, false)
+            else
+                Session:DeclineHandover()
+            end
+        end,
+        OnAlt = function()
             Session:DeclineHandover()
         end,
-        timeout = 30,
+        timeout = 60,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+
+    StaticPopupDialogs["DLC_HANDOVER_OFFICER_INACTIVE"] = {
+        text = L["%s is offering you the Loot Master role. Accept or decline?"],
+        button1 = L["Accept LM"],
+        button2 = L["Decline Handover"],
+        OnAccept = function()
+            Session:AcceptHandover(false, false)
+        end,
+        OnCancel = function(_, _, reason)
+            Session:DeclineHandover()
+        end,
+        timeout = 60,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+
+    StaticPopupDialogs["DLC_CONFIRM_FORCE_HANDOVER"] = {
+        text = L["The active Loot Master is %s. Handover of active sessions should ideally be initiated by the active LM. Force handover anyway?"],
+        button1 = L["Yes (Force)"],
+        button2 = L["No"],
+        OnAccept = function()
+            local target = DesolateLootcouncil.pendingForceTarget
+            if target then
+                DesolateLootcouncil.API:SendLMHandoverOffer(target)
+            end
+            DesolateLootcouncil.pendingForceTarget = nil
+        end,
+        OnCancel = function()
+            DesolateLootcouncil.pendingForceTarget = nil
+        end,
+        timeout = 0,
         whileDead = true,
         hideOnEscape = true,
     }
@@ -155,9 +216,31 @@ end
 function Session:SendDLCHeartbeat()
     if not IsInGroup() then return end
     local db = DesolateLootcouncil.db.profile
+    local officers = {}
+    local officerMains = {}
+    if db.MainRoster then
+        for name, data in pairs(db.MainRoster) do
+            if data.isOfficer then
+                table.insert(officers, name)
+                officerMains[DesolateLootcouncil:GetScoreName(name)] = true
+            end
+        end
+    end
+    if db.playerRoster and db.playerRoster.alts then
+        for alt, main in pairs(db.playerRoster.alts) do
+            local mainScore = DesolateLootcouncil:GetScoreName(main)
+            if officerMains[mainScore] then
+                table.insert(officers, alt)
+            end
+        end
+    end
     local payload = {
         imTimestamps = db.imTimestamps or {},
         priorityTimestamps = db.priorityTimestamps or {},
+        officers = officers,
+        configTimestamp = db.configTimestamp or 0,
+        historyTimestamp = db.historyTimestamp or 0,
+        rosterTimestamp = db.rosterTimestamp or 0,
     }
     local Comm = DesolateLootcouncil:GetModule("Comm")
     if Comm then
@@ -1012,10 +1095,17 @@ end
 function Session:SendVote(itemGUID, voteType, note)
     self.myLocalVotes = self.myLocalVotes or {}
 
+    local roll
+    if type(self.myLocalVotes[itemGUID]) == "table" and self.myLocalVotes[itemGUID].roll then
+        roll = self.myLocalVotes[itemGUID].roll
+    else
+        roll = math.random(1, 100)
+    end
+
     if voteType == 0 then
         self.myLocalVotes[itemGUID] = nil
     else
-        self.myLocalVotes[itemGUID] = { type = voteType, note = note or "" }
+        self.myLocalVotes[itemGUID] = { type = voteType, note = note or "", roll = roll }
     end
     self:SaveSessionState()
 
@@ -1024,7 +1114,6 @@ function Session:SendVote(itemGUID, voteType, note)
     if Voting then Voting:ShowVotingWindow(nil, true) end
 
     -- Broadcast to RAID channel (Approach B)
-    local roll = math.random(1, 100)
     local payload = {
         command = "VOTE",
         data = { guid = itemGUID, vote = voteType, roll = roll, note = note or "" }
@@ -1086,17 +1175,51 @@ function Session:ClaimLMRole()
     end
 end
 
-function Session:AcceptHandover(silent)
+function Session:AcceptHandover(silent, continueSession)
     local state = DesolateLootcouncil.pendingHandoverState
     local sender = DesolateLootcouncil.pendingHandoverSender
     if not state or not sender then return end
 
+    if continueSession == nil then
+        return
+    end
+
     local db = DesolateLootcouncil.db.profile
+
+    -- Guard: If there is no open loot session in the incoming handover state, and we want to continue, abort.
+    if continueSession and (not state.loot or #state.loot == 0) then
+        DesolateLootcouncil:DLC_Log("AcceptHandover: Handover payload contains no active session.")
+        DesolateLootcouncil.pendingHandoverState = nil
+        DesolateLootcouncil.pendingHandoverSender = nil
+        Session.pendingHandoverChoice = nil
+        return
+    end
+
     db.session = db.session or {}
-    db.session.awarded = state.awarded or {}
-    db.session.loot = state.loot or {}
-    db.PriorityLists = state.PriorityLists or {}
-    db.MainRoster = state.MainRoster or {}
+    db.DecayConfig.sessionActive = state.sessionActive == true
+    if continueSession then
+        db.session.awarded = state.awarded or {}
+        db.session.loot = state.loot or {}
+        self.clientLootList = state.loot
+        self.sessionVotes = state.votes or {}
+        self.closedItems = state.closed or {}
+        self.sessionExpiry = state.expiry or 0
+        self:SaveSessionState()
+
+        -- Restore Autopass state if continuing
+        DesolateLootcouncil.sessionAutopassActive = state.sessionAutopassActive == true
+        DesolateLootcouncil.sessionAutopassAnswered = state.sessionAutopassAnswered == true
+        db.DecayConfig.sessionAutopassActive = state.sessionAutopassActive == true
+        db.DecayConfig.sessionAutopassAnswered = state.sessionAutopassAnswered == true
+    else
+        self:SendStopSession()
+        
+        -- Reset Autopass state if starting new session
+        DesolateLootcouncil.sessionAutopassActive = false
+        DesolateLootcouncil.sessionAutopassAnswered = false
+        db.DecayConfig.sessionAutopassActive = false
+        db.DecayConfig.sessionAutopassAnswered = false
+    end
 
     local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
     local isSenderRL = DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:GetGroupLeader())
@@ -1115,24 +1238,95 @@ function Session:AcceptHandover(silent)
 
     local CommMod = DesolateLootcouncil:GetModule("Comm")
     if CommMod then
-        CommMod:SendComm("LM_HANDOVER_ACCEPTED", { newLM = myName }, sender)
+        CommMod:SendComm("LM_HANDOVER_ACCEPTED", { newLM = myName, continueSession = continueSession }, sender)
+    end
+
+    -- Direct RL Sync Backup: Send configuration update to RL if we are officer accepting
+    if not amILeader and not isSenderRL then
+        local rl = DesolateLootcouncil:GetGroupLeader()
+        if rl and CommMod then
+            CommMod:SendComm("LM_UPDATE_CONFIGURED", { configuredLM = myName }, rl)
+        end
     end
 
     self:SendSyncLM(myName)
 
     if silent then
-        DesolateLootcouncil:Print("Raid leadership received. Loot Master session restored.")
+        if continueSession then
+            DesolateLootcouncil:Print(L["Raid leadership received. Loot Master session restored."])
+        else
+            DesolateLootcouncil:Print(L["Raid leadership received. Started new Loot Master session."])
+        end
     else
-        DesolateLootcouncil:Print(string.format("Accepted Loot Master handover from %s.", sender))
+        if continueSession then
+            DesolateLootcouncil:Print(string.format(L["Accepted Loot Master handover from %s (restored session)."], DesolateLootcouncil:GetDisplayName(sender)))
+        else
+            DesolateLootcouncil:Print(string.format(L["Accepted Loot Master handover from %s (started new session)."], DesolateLootcouncil:GetDisplayName(sender)))
+        end
+    end
+
+    -- Pull updates immediately after accepting handover if incoming timestamps are newer
+    if CommMod then
+        -- Check Roster
+        local localRosterTs = db.rosterTimestamp or 0
+        local incomingRosterTs = state.rosterTimestamp or 0
+        if incomingRosterTs > localRosterTs then
+            CommMod:SendComm("ROSTER_PULL_REQUEST", {}, sender)
+        end
+        -- Check Priority Lists
+        if state.priorityTimestamps then
+            db.priorityTimestamps = db.priorityTimestamps or {}
+            for listName, incomingTs in pairs(state.priorityTimestamps) do
+                local localTs = db.priorityTimestamps[listName] or 0
+                if incomingTs > localTs then
+                    CommMod:SendComm("PRIORITY_PULL_REQUEST", { listName = listName }, sender)
+                end
+            end
+        end
+        -- Check IM lists
+        if state.imTimestamps then
+            db.imTimestamps = db.imTimestamps or {}
+            for listName, incomingTs in pairs(state.imTimestamps) do
+                local localTs = db.imTimestamps[listName] or 0
+                if incomingTs > localTs then
+                    CommMod:SendComm("IM_PULL_REQUEST", { listName = listName }, sender)
+                end
+            end
+        end
+        -- Check Config
+        local localConfigTs = db.configTimestamp or 0
+        local incomingConfigTs = state.configTimestamp or 0
+        if incomingConfigTs > localConfigTs then
+            CommMod:SendComm("CONFIG_PULL_REQUEST", {}, sender)
+        end
+        -- Check History
+        local localHistoryTs = db.historyTimestamp or 0
+        local incomingHistoryTs = state.historyTimestamp or 0
+        if incomingHistoryTs > localHistoryTs then
+            CommMod:SendComm("HISTORY_PULL_REQUEST", {}, sender)
+        end
     end
 
     DesolateLootcouncil.pendingHandoverState = nil
     DesolateLootcouncil.pendingHandoverSender = nil
+    Session.pendingHandoverChoice = nil
+
+    -- Re-evaluate status to reflect roles and layout changes
+    DesolateLootcouncil:UpdateLootMasterStatus()
+
+    -- Reprompt for Autopass if starting new session
+    if not continueSession and db.DecayConfig.sessionActive then
+        StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+    end
 
     local RosterSys = DesolateLootcouncil:GetModule("Roster")
     if RosterSys and RosterSys.HasPendingDecay and RosterSys:HasPendingDecay() then
         local entry = db.AttendanceHistory[1]
         StaticPopup_Show("DLC_PENDING_DECAY", entry.date or "N/A", entry.zone or "Unknown")
+    end
+
+    if continueSession then
+        self:SendMessage("DLC_SESSION_RESTORED", self.clientLootList, DesolateLootcouncil:AmIOfficerOrLM())
     end
 end
 
@@ -1143,9 +1337,12 @@ function Session:DeclineHandover()
         if CommMod then
             CommMod:SendComm("LM_HANDOVER_DECLINED", { reason = "declined" }, sender)
         end
+        DesolateLootcouncil:Print(string.format(L["Declined Loot Master handover from %s."], DesolateLootcouncil:GetDisplayName(sender)))
     end
     DesolateLootcouncil.pendingHandoverState = nil
     DesolateLootcouncil.pendingHandoverSender = nil
+    Session.pendingHandoverChoice = nil
+    DesolateLootcouncil:UpdateLootMasterStatus()
 end
 
 local function SafePromoteToLeader(name)
@@ -1192,6 +1389,11 @@ function Session:HandleHandoverAccepted(sender)
         CommMod:CancelTimer(CommMod.handoverTimeoutTimer)
         CommMod.handoverTimeoutTimer = nil
     end
+    local SyncMod = DesolateLootcouncil:GetModule("Sync", true)
+    if SyncMod and SyncMod.handoverTimeoutTimer then
+        SyncMod:CancelTimer(SyncMod.handoverTimeoutTimer)
+        SyncMod.handoverTimeoutTimer = nil
+    end
 
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
@@ -1208,11 +1410,23 @@ function Session:HandleHandoverDeclined(sender)
         CommMod:CancelTimer(CommMod.handoverTimeoutTimer)
         CommMod.handoverTimeoutTimer = nil
     end
+    local SyncMod = DesolateLootcouncil:GetModule("Sync", true)
+    if SyncMod and SyncMod.handoverTimeoutTimer then
+        SyncMod:CancelTimer(SyncMod.handoverTimeoutTimer)
+        SyncMod.handoverTimeoutTimer = nil
+    end
 end
 
 function Session:HandleUpdateConfigured(payload, sender)
     local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
     if not amILeader then return end
+
+    -- SECURE SENDER CHECK: Only accept LM configuration updates from the current active LM!
+    local currentLM = DesolateLootcouncil.activeLootMaster
+    if not DesolateLootcouncil:SmartCompare(sender, currentLM) then
+        DesolateLootcouncil:DLC_Log(string.format("Ignored LM_UPDATE_CONFIGURED from unauthorized sender: %s", tostring(sender)))
+        return
+    end
 
     local newLM = payload.configuredLM
     if newLM and newLM ~= "" then

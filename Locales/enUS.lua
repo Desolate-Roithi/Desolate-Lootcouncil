@@ -259,6 +259,9 @@ L["Hand Over LM Role"] = true
 L["Start the handover process to the selected officer."] = true
 L["Choose an officer in the raid to hand over the Loot Master role to."] = true
 L["Select Officer for Handover"] = true
+L["Loot Master handover received. Do you want to continue the running loot session, or clear it and start a new one?"] = true
+L["Continue Session"] = true
+L["Start New Session"] = true
 
 -- EJ Loot Import
 L["DLC"] = true
@@ -267,5 +270,26 @@ L["DLC Loot Import"] = true
 L["%d items staged across %d lists"] = true
 L["— Skip —"] = true
 L["No loot found for this boss."] = true
-L["Add all loot from this boss/raid to the import staging area."] = true
 L["Officer only."] = true
+
+-- Reworked Handover & Offline Scenarios
+L["%s is handing you the Loot Master role. Do you want to continue the running raid session, or start a new one?"] = true
+L["%s is handing you the Loot Master role. Do you want to continue the running raid session, start a new one, or decline the handover?"] = true
+L["%s is offering you the Loot Master role. Accept or decline?"] = true
+L["The active Loot Master is %s. Handover of active sessions should ideally be initiated by the active LM. Force handover anyway?"] = true
+L["Declined Loot Master handover from %s."] = true
+L["Loot Master %s has left the group. Leadership falls back to %s."] = true
+L["Raid Leader %s has left the group. %s is now the group leader and Loot Master."] = true
+L["Yes (Force)"] = true
+L["Decline Handover"] = true
+L["Accept LM"] = true
+
+-- Pre-commit Code Review Additions
+L["Cannot hand over: %s is no longer in the group or online."] = true
+L["Cannot hand over during an active vote. Award or remove all items first."] = true
+L["Import to Current Profile"] = true
+L["Import data directly into the active profile."] = true
+L["Are you sure you want to import directly into your CURRENT active profile? This cannot be undone."] = true
+L["Raid leadership received. Started new Loot Master session."] = true
+L["Accepted Loot Master handover from %s (restored session)."] = true
+L["Accepted Loot Master handover from %s (started new session)."] = true

@@ -22,6 +22,8 @@ local Loot = DesolateLootcouncil:NewModule("Loot", "AceEvent-3.0", "AceTimer-3.0
 ---@type DLC_Ref_Loot
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Loot]]
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+local canaccessvalue = canaccessvalue
+
 
 
 function Loot:OnInitialize()
@@ -234,9 +236,11 @@ end
 
 function Loot:OnLootMessage(event, msg)
     if not DesolateLootcouncil:AmILootMaster() then return end
+    if not canaccessvalue(msg) then return end
 
     -- Catch "You receive loot: [Item Link]" or local equivalents using Global strings
     local link = string.match(msg, "|c%x+|Hitem:.-|h%[.-%]|h|r")
+
     if not link then return end
 
     -- Extract pure patterns without link/name for robust locale matching

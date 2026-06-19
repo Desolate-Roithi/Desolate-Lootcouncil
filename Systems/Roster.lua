@@ -284,6 +284,8 @@ function Roster:StopRaidSession(saveHistory)
             count = count + 1
         end
         self:Printf("Session ENDED. Saved attendance for %d players.", count)
+        db.historyTimestamp = GetServerTime()
+        db.rosterTimestamp = GetServerTime()
     else
         self:Printf("Session ABORTED. No history saved.")
     end
@@ -483,6 +485,7 @@ function Roster:AddMain(name)
 
     devDB.MainRoster[normalizedName] = { addedAt = time(), isOfficer = false } -- Store main with timestamp
     devDB.playerRoster.alts[normalizedName] = nil           -- Ensure not an alt
+    devDB.rosterTimestamp = GetServerTime()
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Added Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
     
@@ -498,12 +501,14 @@ function Roster:SetOfficer(name, flag)
     if not name or name == "" then return end
     
     local devDB = DesolateLootcouncil.db.profile
-    if not devDB or not devDB.MainRoster then return end
+    if not devDB then return end
+    if not devDB.MainRoster then devDB.MainRoster = {} end
     
     local normalizedName = Ambiguate(name, "none")
     for existingName, data in pairs(devDB.MainRoster) do
         if DesolateLootcouncil:SmartCompare(existingName, normalizedName) then
             data.isOfficer = flag == true
+            devDB.rosterTimestamp = GetServerTime()
             
             -- Refresh local player officer cache if it is us
             if DesolateLootcouncil:SmartCompare(existingName, "player") then
@@ -521,6 +526,26 @@ function Roster:SetOfficer(name, flag)
             LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
             return
         end
+    end
+    
+    if flag == true then
+        devDB.MainRoster[normalizedName] = { addedAt = GetServerTime(), isOfficer = true }
+        devDB.rosterTimestamp = GetServerTime()
+        
+        -- Refresh local player officer cache if it is us
+        if DesolateLootcouncil:SmartCompare(normalizedName, "player") then
+            DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+        end
+        
+        -- Fire event
+        self:SendMessage("DLC_OFFICER_FLAG_CHANGED", normalizedName, flag)
+        
+        local Sync = DesolateLootcouncil:GetModule("Sync", true)
+        if Sync and Sync.SendOfficerFlagSync and IsInGroup() and DesolateLootcouncil:AmILootMaster() then
+            Sync:SendOfficerFlagSync(normalizedName, flag)
+        end
+        
+        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
 
@@ -567,6 +592,7 @@ function Roster:AddAlt(altName, mainName)
         end
     end
 
+    profile.rosterTimestamp = GetServerTime()
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Linked Alt " .. DesolateLootcouncil:GetDisplayName(normalizedAlt) .. 
         " to " .. DesolateLootcouncil:GetDisplayName(normalizedMain))
@@ -594,6 +620,7 @@ function Roster:RemovePlayer(name)
     -- Try delete as Main
     if profile.MainRoster and profile.MainRoster[normalizedName] then
         profile.MainRoster[normalizedName] = nil
+        profile.rosterTimestamp = GetServerTime()
         -- Unlink alts
         if profile.playerRoster and profile.playerRoster.alts then
             for alt, main in pairs(profile.playerRoster.alts) do
@@ -612,6 +639,7 @@ function Roster:RemovePlayer(name)
     -- Try delete as Alt
     if profile.playerRoster.alts[normalizedName] then
         profile.playerRoster.alts[normalizedName] = nil
+        profile.rosterTimestamp = GetServerTime()
         self:UpdateScoreMap()
         DesolateLootcouncil:DLC_Log("Removed Alt: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
@@ -902,10 +930,18 @@ function Roster:ReceiveRosterSync(syncedRoster)
     if not syncedRoster or type(syncedRoster) ~= "table" then return end
     local db = DesolateLootcouncil.db.profile
 
+    local localTs = db.rosterTimestamp or 0
+    local incomingTs = syncedRoster.timestamp or 0
+    local hasRoster = db.MainRoster and next(db.MainRoster) ~= nil
+    if hasRoster and incomingTs <= localTs then
+        DesolateLootcouncil:DLC_Log(string.format("Ignored ROSTER sync: local roster is newer or same age (local: %s, incoming: %s).", tostring(localTs), tostring(incomingTs)))
+        return
+    end
+
     -- Overwrite MainRoster
     db.MainRoster = {}
     for name, data in pairs(syncedRoster.mains or {}) do
-        db.MainRoster[name] = { addedAt = data.addedAt or 0 }
+        db.MainRoster[name] = { addedAt = data.addedAt or 0, isOfficer = data.isOfficer == true }
     end
 
     -- Overwrite alt links
@@ -914,6 +950,8 @@ function Roster:ReceiveRosterSync(syncedRoster)
     for alt, main in pairs(syncedRoster.alts or {}) do
         db.playerRoster.alts[alt] = main
     end
+
+    db.rosterTimestamp = incomingTs
 
     -- Rebuild cache
     self:UpdateScoreMap()

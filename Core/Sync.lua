@@ -6,6 +6,7 @@ local Sync = DesolateLootcouncil:NewModule("Sync", "AceTimer-3.0")
 
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DesolateLootcouncil]]
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local SyncHandlers = {}
 
@@ -82,7 +83,7 @@ function Sync:ShareDataWithOfficers(dataType, payload)
         for alt, main in pairs((db.playerRoster or {}).alts or {}) do
             altsCopy[alt] = main
         end
-        finalPayload = { mains = mainsCopy, alts = altsCopy }
+        finalPayload = { mains = mainsCopy, alts = altsCopy, timestamp = db.rosterTimestamp or 0 }
     elseif dataType == "TRADE_CONFIRMED" then
         command = "TRADE_CONFIRMED"
         finalPayload = payload
@@ -128,13 +129,23 @@ function Sync:ShareDataWithOfficers(dataType, payload)
 end
 
 function Sync:SendLMHandoverOffer(targetOfficer)
+    if not DesolateLootcouncil:IsUnitInRaid(targetOfficer) or not DesolateLootcouncil:IsUnitOnline(targetOfficer) then
+        DesolateLootcouncil:Print(string.format("Cannot hand over: %s is no longer in the group or online.", targetOfficer))
+        return
+    end
     local db = DesolateLootcouncil.db.profile
     local state = {
         awarded = db.session and db.session.awarded or {},
         loot = db.session and db.session.loot or {},
-        PriorityLists = db.PriorityLists or {},
-        MainRoster = db.MainRoster or {},
-        configuredLM = targetOfficer
+        rosterTimestamp = db.rosterTimestamp or 0,
+        priorityTimestamps = db.priorityTimestamps or {},
+        imTimestamps = db.imTimestamps or {},
+        configTimestamp = db.configTimestamp or 0,
+        historyTimestamp = db.historyTimestamp or 0,
+        configuredLM = targetOfficer,
+        sessionActive = db.DecayConfig and db.DecayConfig.sessionActive or false,
+        sessionAutopassActive = DesolateLootcouncil.sessionAutopassActive or false,
+        sessionAutopassAnswered = DesolateLootcouncil.sessionAutopassAnswered or false
     }
     
     local Comm = DesolateLootcouncil:GetModule("Comm", true)
@@ -145,13 +156,21 @@ function Sync:SendLMHandoverOffer(targetOfficer)
     DesolateLootcouncil.pendingHandoverTarget = targetOfficer
     if self.handoverTimeoutTimer then
         self:CancelTimer(self.handoverTimeoutTimer)
+        self.handoverTimeoutTimer = nil
     end
-    self.handoverTimeoutTimer = self:ScheduleTimer(function()
-        if DesolateLootcouncil.pendingHandoverTarget == targetOfficer then
-            DesolateLootcouncil.pendingHandoverTarget = nil
-            DesolateLootcouncil:Print(string.format("Handover to %s timed out.", targetOfficer))
-        end
-    end, 30)
+
+    -- Timeout logic: RL handover does not time out (stays active indefinitely).
+    -- Officer handovers time out after 60 seconds.
+    local currentRL = DesolateLootcouncil:GetGroupLeader()
+    if not DesolateLootcouncil:SmartCompare(targetOfficer, currentRL) then
+        self.handoverTimeoutTimer = self:ScheduleTimer(function()
+            if DesolateLootcouncil.pendingHandoverTarget == targetOfficer then
+                DesolateLootcouncil.pendingHandoverTarget = nil
+                DesolateLootcouncil:Print(string.format(L["Handover to %s timed out."], DesolateLootcouncil:GetDisplayName(targetOfficer)))
+            end
+            self.handoverTimeoutTimer = nil
+        end, 60)
+    end
 end
 
 -- ============================================================================
@@ -367,6 +386,32 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     local db = DesolateLootcouncil.db.profile
     local Comm = DesolateLootcouncil:GetModule("Comm", true)
 
+    if data.officers then
+        local RosterSys = DesolateLootcouncil:GetModule("Roster", true)
+        if RosterSys then
+            local incomingOfficers = {}
+            for _, officerName in ipairs(data.officers) do
+                local normName = Ambiguate(officerName, "none")
+                incomingOfficers[normName] = true
+            end
+
+            -- Update existing roster entries
+            for name, rData in pairs(db.MainRoster or {}) do
+                local normName = Ambiguate(name, "none")
+                local isOfficerIncoming = incomingOfficers[normName] or false
+                if rData.isOfficer ~= isOfficerIncoming then
+                    RosterSys:SetOfficer(name, isOfficerIncoming)
+                end
+                incomingOfficers[normName] = nil
+            end
+
+            -- Add new officers not currently in the local roster
+            for officerName in pairs(incomingOfficers) do
+                RosterSys:SetOfficer(officerName, true)
+            end
+        end
+    end
+
     if data.imTimestamps and Comm then
         db.imTimestamps = db.imTimestamps or {}
         for listName, incomingTs in pairs(data.imTimestamps) do
@@ -385,6 +430,144 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
                 Comm:SendComm("PRIORITY_PULL_REQUEST", { listName = listName }, sender)
             end
         end
+    end
+
+    if data.configTimestamp and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
+        local localConfigTs = db.configTimestamp or 0
+        if data.configTimestamp > localConfigTs then
+            Comm:SendComm("CONFIG_PULL_REQUEST", {}, sender)
+        end
+    end
+
+    if data.historyTimestamp and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
+        local localHistoryTs = db.historyTimestamp or 0
+        if data.historyTimestamp > localHistoryTs then
+            Comm:SendComm("HISTORY_PULL_REQUEST", {}, sender)
+        end
+    end
+
+    if data.rosterTimestamp and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
+        local localRosterTs = db.rosterTimestamp or 0
+        if data.rosterTimestamp > localRosterTs then
+            Comm:SendComm("ROSTER_PULL_REQUEST", {}, sender)
+        end
+    end
+end
+
+function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
+    if not IsInGroup() then return end
+    if not DesolateLootcouncil:AmILootMaster() then return end
+
+    local db = DesolateLootcouncil.db.profile
+    local payload = {
+        configuredLM = db.configuredLM,
+        minLootQuality = db.minLootQuality,
+        enableAutoLoot = db.enableAutoLoot,
+        enableAutoTrade = db.enableAutoTrade,
+        verboseMode = db.verboseMode,
+        debugMode = db.debugMode,
+        activeTheme = db.activeTheme,
+        DecayConfig = {
+            enabled = db.DecayConfig and db.DecayConfig.enabled,
+            defaultPenalty = db.DecayConfig and db.DecayConfig.defaultPenalty
+        },
+        configTimestamp = db.configTimestamp or 0
+    }
+
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm then
+        Comm:SendComm("SYNC_CONFIG", payload, sender)
+    end
+end
+
+function SyncHandlers:SYNC_CONFIG(data, sender)
+    if not IsInGroup() then return end
+    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
+    if not data or type(data) ~= "table" then return end
+
+    local db = DesolateLootcouncil.db.profile
+    local incomingTs = data.configTimestamp or 0
+    local localTs = db.configTimestamp or 0
+    
+    if incomingTs > localTs then
+        db.configuredLM = data.configuredLM
+        db.minLootQuality = data.minLootQuality
+        db.enableAutoLoot = data.enableAutoLoot
+        db.enableAutoTrade = data.enableAutoTrade
+        db.verboseMode = data.verboseMode
+        db.debugMode = data.debugMode
+        db.activeTheme = data.activeTheme
+        
+        if data.DecayConfig then
+            db.DecayConfig = db.DecayConfig or {}
+            db.DecayConfig.enabled = data.DecayConfig.enabled
+            db.DecayConfig.defaultPenalty = data.DecayConfig.defaultPenalty
+        end
+        
+        db.configTimestamp = incomingTs
+        
+        LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+        DesolateLootcouncil:DLC_Log(string.format("Synced configuration database with Loot Master %s.", DesolateLootcouncil:GetDisplayName(sender)))
+    end
+end
+
+function SyncHandlers:HISTORY_PULL_REQUEST(data, sender)
+    if not IsInGroup() then return end
+    if not DesolateLootcouncil:AmILootMaster() then return end
+
+    local db = DesolateLootcouncil.db.profile
+    local payload = {
+        AttendanceHistory = db.AttendanceHistory or {},
+        historyTimestamp = db.historyTimestamp or 0
+    }
+
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm then
+        Comm:SendComm("SYNC_HISTORY", payload, sender)
+    end
+end
+
+function SyncHandlers:SYNC_HISTORY(data, sender)
+    if not IsInGroup() then return end
+    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
+    if not data or type(data) ~= "table" then return end
+
+    local db = DesolateLootcouncil.db.profile
+    local incomingTs = data.historyTimestamp or 0
+    local localTs = db.historyTimestamp or 0
+
+    if incomingTs > localTs then
+        db.AttendanceHistory = data.AttendanceHistory or {}
+        db.historyTimestamp = incomingTs
+        
+        local Session = DesolateLootcouncil:GetModule("Session")
+        if Session then
+            Session:SendMessage("DLC_HISTORY_UPDATED")
+        end
+        DesolateLootcouncil:DLC_Log(string.format("Synced attendance history database with Loot Master %s.", DesolateLootcouncil:GetDisplayName(sender)))
+    end
+end
+
+function SyncHandlers:ROSTER_PULL_REQUEST(data, sender)
+    if not IsInGroup() then return end
+    if not DesolateLootcouncil:AmILootMaster() then return end
+
+    local db = DesolateLootcouncil.db.profile
+    local mainsCopy = {}
+    for name, rData in pairs(db.MainRoster or {}) do
+        mainsCopy[name] = { addedAt = rData.addedAt or 0, isOfficer = rData.isOfficer == true }
+    end
+    local altsCopy = {}
+    for alt, main in pairs((db.playerRoster or {}).alts or {}) do
+        altsCopy[alt] = main
+    end
+    local finalPayload = { mains = mainsCopy, alts = altsCopy, timestamp = db.rosterTimestamp or 0 }
+
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm then
+        Comm:SendComm("SYNC_ROSTER", finalPayload, sender)
     end
 end
 
@@ -588,13 +771,27 @@ function SyncHandlers:LM_HANDOVER_OFFER(state, sender)
     DesolateLootcouncil.pendingHandoverSender = sender
 
     local amILeader = DesolateLootcouncil:SmartCompare(currentRL, "player")
-    if amILeader then
-        local Session = DesolateLootcouncil:GetModule("Session")
-        if Session and Session.AcceptHandover then
-            Session:AcceptHandover(true)
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session then
+        if amILeader then
+            -- Raid Leader promotion flow:
+            -- If raid session is already ongoing, show RL active popup (two options).
+            -- Else, accept silently without any popup.
+            if state.sessionActive then
+                Session.pendingHandoverChoice = true
+                StaticPopup_Show("DLC_HANDOVER_RL_ACTIVE", DesolateLootcouncil:GetDisplayName(sender))
+            else
+                Session:AcceptHandover(true, false)
+            end
+        else
+            -- Officer flow:
+            Session.pendingHandoverChoice = true
+            if state.sessionActive then
+                StaticPopup_Show("DLC_HANDOVER_OFFICER_ACTIVE", DesolateLootcouncil:GetDisplayName(sender))
+            else
+                StaticPopup_Show("DLC_HANDOVER_OFFICER_INACTIVE", DesolateLootcouncil:GetDisplayName(sender))
+            end
         end
-    else
-        StaticPopup_Show("DLC_CONFIRM_LM_HANDOVER", DesolateLootcouncil:GetDisplayName(sender))
     end
 end
 

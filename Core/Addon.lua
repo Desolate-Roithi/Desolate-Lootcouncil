@@ -62,6 +62,8 @@ local defaults = {
         playerRoster      = { alts = {}, decay = {} },
         imTimestamps      = {},
         priorityTimestamps = {},
+        configTimestamp   = 0,
+        historyTimestamp  = 0,
         verboseMode       = false,
         debugMode         = false,
         session           = {
@@ -407,13 +409,16 @@ end
 function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
     
+    local oldLM = self.activeLootMaster
+    local oldLeader = self.lastLeader
+    
     local leader = self:GetGroupLeader()
     if leader and not self:SmartCompare(leader, self.lastLeader) then
         local wasLeader = self.lastLeader and self:SmartCompare(self.lastLeader, "player")
         local isNowLeader = self:SmartCompare(leader, "player")
         if wasLeader and not isNowLeader then
-            local db = self.db.profile
-            local hasActiveSession = db.session and ((db.session.loot and #db.session.loot > 0) or (db.session.awarded and #db.session.awarded > 0))
+            local Session = self:GetModule("Session", true)
+            local hasActiveSession = Session and Session.clientLootList and #Session.clientLootList > 0
             if self.amILM and hasActiveSession then
                 local SyncMod = self:GetModule("Sync", true)
                 if SyncMod then
@@ -441,13 +446,32 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
 
     local targetLM = self:DetermineLootMaster()
     local wasLM = self.amILM
+    
+    local lmLeft = false
+    if oldLM and oldLM ~= "" and IsInGroup() then
+        if not self:IsUnitInRaid(oldLM) and not self:SmartCompare(oldLM, "player") then
+            self.activeLootMaster = targetLM
+            lmLeft = true
+        end
+    end
+    
     self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
     self.amIOfficer = self:AmIOfficerOrLM()
+    
+    if lmLeft and self.amIOfficer then
+        if oldLeader and self:SmartCompare(oldLM, oldLeader) then
+            self:Print(string.format(L["Raid Leader %s has left the group. %s is now the group leader and Loot Master."], self:GetDisplayName(oldLM), self:GetDisplayName(targetLM)))
+        else
+            self:Print(string.format(L["Loot Master %s has left the group. Leadership falls back to %s."], self:GetDisplayName(oldLM), self:GetDisplayName(targetLM)))
+        end
+    end
     
     -- If we just BECAME the LM, reset the prompt flag so we can decide for ourselves
     if self.amILM and not wasLM then
         self.sessionAutopassAnswered = false
-        if IsInRaid() and self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
+        local Session = self:GetModule("Session", true)
+        local pendingChoice = Session and Session.pendingHandoverChoice
+        if not pendingChoice and IsInRaid() and self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
             StaticPopup_Show("DLC_ENABLE_AUTOPASS")
         end
     end
@@ -492,8 +516,19 @@ function DesolateLootcouncil:AmIOfficerOrLM()
     end
 
     -- Tier 3: Roster flag lookup — check if our MainRoster entry has isOfficer = true.
-    local myScore = self:GetScoreName("player")
+    local myName = UnitName("player")
+    local myMain = myName
     local db = self.db.profile
+    if db.playerRoster and db.playerRoster.alts then
+        local myScoreName = self:GetScoreName(myName)
+        for alt, main in pairs(db.playerRoster.alts) do
+            if self:GetScoreName(alt) == myScoreName then
+                myMain = main
+                break
+            end
+        end
+    end
+    local myScore = self:GetScoreName(myMain)
     if db.MainRoster then
         for name, data in pairs(db.MainRoster) do
             if self:GetScoreName(name) == myScore then
@@ -564,9 +599,38 @@ function DesolateLootcouncil:IsUnitInRaid(unitName)
     if IsInRaid() then
         return UnitInRaid(unitName) ~= nil
     elseif IsInGroup() then
-        return UnitInParty(unitName) ~= nil or UnitIsUnit(unitName, "player")
+        return UnitIsUnit(unitName, "player") or UnitInParty(unitName) ~= nil
     end
     return UnitIsUnit(unitName, "player")
+end
+
+function DesolateLootcouncil:IsUnitOnline(unitName)
+    if not unitName or unitName == "" then return false end
+
+    local Sim = self:GetModule("Simulation", true)
+    if Sim and Sim.IsSimulated and Sim:IsSimulated(unitName) then return true end
+
+    if self:SmartCompare(unitName, "player") then
+        return true
+    end
+
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, rank, subgroup, level, class, fileName, zone, online = GetRaidRosterInfo(i) -- luacheck: ignore rank subgroup level class fileName zone
+            if name and self:SmartCompare(name, unitName) then
+                return online == true or online == 1
+            end
+        end
+    elseif IsInGroup() then
+        for i = 1, GetNumSubgroupMembers() do
+            local unit = "party" .. i
+            local name = UnitName(unit)
+            if name and self:SmartCompare(name, unitName) then
+                return UnitIsConnected(unit) == true or UnitIsConnected(unit) == 1
+            end
+        end
+    end
+    return false
 end
 
 --- Returns a consistent Name-Realm string for a unit.

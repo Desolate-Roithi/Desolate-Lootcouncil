@@ -482,6 +482,7 @@ function DLC_API:DeleteAttendanceHistoryEntry(index)
     local db = DesolateLootcouncil.db.profile
     if db.AttendanceHistory and db.AttendanceHistory[index] then
         table.remove(db.AttendanceHistory, index)
+        db.historyTimestamp = GetServerTime()
     end
 end
 
@@ -576,6 +577,7 @@ end
 ---@param val string
 function DLC_API:SetConfiguredLM(val)
     DesolateLootcouncil.db.profile.configuredLM = val
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
     DesolateLootcouncil:UpdateLootMasterStatus()
 end
 
@@ -589,6 +591,7 @@ end
 ---@param val number
 function DLC_API:SetMinLootQuality(val)
     DesolateLootcouncil.db.profile.minLootQuality = val
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
 end
 
 --- Returns whether automated rolling/passing is enabled.
@@ -601,6 +604,7 @@ end
 ---@param val boolean
 function DLC_API:SetEnableAutoLoot(val)
     DesolateLootcouncil.db.profile.enableAutoLoot = val
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
 end
 
 --- Returns whether automated trade staging is enabled.
@@ -613,6 +617,7 @@ end
 ---@param val boolean
 function DLC_API:SetEnableAutoTrade(val)
     DesolateLootcouncil.db.profile.enableAutoTrade = val
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
 end
 
 --- Returns whether debug mode is enabled.
@@ -625,6 +630,7 @@ end
 ---@param val boolean
 function DLC_API:SetDebugMode(val)
     DesolateLootcouncil.db.profile.debugMode = val
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
 end
 
 --- Returns the active UI theme name.
@@ -658,9 +664,9 @@ end
 ---@param dataType string
 ---@param payload table?
 function DLC_API:ShareDataWithOfficers(dataType, payload)
-    local CommMod = DesolateLootcouncil:GetModule("Comm", true)
-    if CommMod and CommMod.ShareDataWithOfficers then
-        CommMod:ShareDataWithOfficers(dataType, payload)
+    local SyncMod = DesolateLootcouncil:GetModule("Sync", true)
+    if SyncMod and SyncMod.ShareDataWithOfficers then
+        SyncMod:ShareDataWithOfficers(dataType, payload)
     end
 end
 
@@ -838,6 +844,7 @@ end
 ---@param val boolean
 function DLC_API:SetDecayEnabled(val)
     DesolateLootcouncil.db.profile.DecayConfig.enabled = val
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
 end
 
 --- Returns the default decay penalty amount.
@@ -850,6 +857,7 @@ end
 ---@param val number
 function DLC_API:SetDecayPenalty(val)
     DesolateLootcouncil.db.profile.DecayConfig.defaultPenalty = val
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
 end
 
 -- Profile Options Helpers
@@ -942,12 +950,14 @@ end
 ---@param importStringRaw string
 ---@param importName string
 ---@return boolean success, string errorMsg
-function DLC_API:ImportProfileData(importStringRaw, importName)
+function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
     if not importStringRaw or importStringRaw == "" then
         return false, "Import Error: String is empty."
     end
-    if not importName or importName == "" then
-        return false, "Import Error: Please specify a name for the new profile."
+    if not importToCurrent then
+        if not importName or importName == "" then
+            return false, "Import Error: Please specify a name for the new profile."
+        end
     end
 
     local decoded = importStringRaw
@@ -960,7 +970,9 @@ function DLC_API:ImportProfileData(importStringRaw, importName)
         return false, "Import Error: Invalid string format / Decode failed."
     end
 
-    DesolateLootcouncil.db:SetProfile(importName)
+    if not importToCurrent then
+        DesolateLootcouncil.db:SetProfile(importName)
+    end
 
     local p = DesolateLootcouncil.db.profile
     if data.config then

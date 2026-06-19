@@ -53,6 +53,12 @@ function Trade:OnUIInfo(_event, _msgID, msg)
 end
 
 function Trade:OnTradeShow()
+    if self.clearTimer then
+        self.clearTimer:Cancel()
+        self.clearTimer = nil
+    end
+    self:ClearPending()
+
     -- Get the name of the person we are trading with
     -- "NPC" unit token refers to the trade target while the trade window is open
     local tradeTargetName = UnitName("NPC")
@@ -316,6 +322,14 @@ function Trade:HandleTradeSuccess()
     end
 
     if changed then
+        if self.pendingTradeConfirms and #self.pendingTradeConfirms > 0 then
+            local Sync = DesolateLootcouncil:GetModule("Sync")
+            if Sync and Sync.ShareDataWithOfficers then
+                Sync:ShareDataWithOfficers("TRADE_CONFIRMED", self.pendingTradeConfirms)
+            end
+            wipe(self.pendingTradeConfirms)
+        end
+
         -- refresh the actual trade list window
         ---@type UI_TradeList
         local UI = DesolateLootcouncil:GetModule("UI_TradeList") --[[@as UI_TradeList]]
@@ -332,15 +346,8 @@ function Trade:TRADE_CLOSED(...)
         self.tradeTimer = nil
     end
 
-    if self.pendingTradeConfirms and #self.pendingTradeConfirms > 0 then
-        local Sync = DesolateLootcouncil:GetModule("Sync")
-        if Sync and Sync.ShareDataWithOfficers then
-            Sync:ShareDataWithOfficers("TRADE_CONFIRMED", self.pendingTradeConfirms)
-        end
-        wipe(self.pendingTradeConfirms)
-    end
-
-    C_Timer.After(0.5, function()
+    self.clearTimer = C_Timer.After(5.0, function()
+        self.clearTimer = nil
         self:ClearPending()
     end)
 end

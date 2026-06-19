@@ -3,6 +3,7 @@ if AT.abortLoad then return end
 
 ---@class UI_ProfileSettings : AceModule
 local ProfileSettings = DesolateLootcouncil:NewModule("UI_ProfileSettings")
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- Helper functions
 local ValuesCurrentProfile = function()
@@ -113,6 +114,16 @@ local DoImport = function()
         DesolateLootcouncil:DLC_Log("Import succeeded!", true)
         ProfileSettings.importStringRaw = nil
         ProfileSettings.importName = nil
+    else
+        DesolateLootcouncil:DLC_Log(err, true)
+    end
+end
+
+local DoImportToCurrent = function()
+    local success, err = DesolateLootcouncil.API:ImportProfileData(ProfileSettings.importStringRaw, nil, true)
+    if success then
+        DesolateLootcouncil:DLC_Log("Import to current profile succeeded!", true)
+        ProfileSettings.importStringRaw = nil
     else
         DesolateLootcouncil:DLC_Log(err, true)
     end
@@ -257,6 +268,17 @@ local doImportOpt = {
     func = DoImport,
 }
 
+local doImportToCurrentOpt = {
+    type = "execute",
+    name = L["Import to Current Profile"],
+    desc = L["Import data directly into the active profile."],
+    width = 1.2,
+    order = 14,
+    confirm = true,
+    confirmText = L["Are you sure you want to import directly into your CURRENT active profile? This cannot be undone."],
+    func = DoImportToCurrent,
+}
+
 function ProfileSettings:OnInitialize()
     self.exportSelection = {}
     self.generatedString = ""
@@ -301,6 +323,7 @@ function ProfileSettings:GetImportExportOptions()
     args.importString = importStringOpt
     args.importProfileName = importProfileNameOpt
     args.doImport = doImportOpt
+    args.doImportToCurrent = doImportToCurrentOpt
     return opts
 end
 

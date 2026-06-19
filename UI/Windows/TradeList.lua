@@ -38,6 +38,20 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     row.btnRemove:SetScript("OnClick", function()
         item.traded = true
         DesolateLootcouncil:DLC_Log(string.format(L["Marked %s as traded."], item.link))
+        
+        local Sync = DesolateLootcouncil:GetModule("Sync", true)
+        if Sync and Sync.ShareDataWithOfficers then
+            local payload = {
+                {
+                    itemID    = item.itemID,
+                    winner    = item.winner,
+                    timestamp = item.timestamp
+                }
+            }
+            Sync:ShareDataWithOfficers("TRADE_CONFIRMED", payload)
+        end
+        
+        self:SendMessage("DLC_HISTORY_UPDATED")
         self:ShowTradeListWindow()
     end)
 

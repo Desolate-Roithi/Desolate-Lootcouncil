@@ -10,12 +10,65 @@ local selectedHandoverTarget = nil
 local function GetOfficerNamesInRaid()
     local list = {}
     local db = DesolateLootcouncil.db.profile
-    local MainRoster = db.MainRoster or {}
-    for name, data in pairs(MainRoster) do
-        if data.isOfficer and DesolateLootcouncil:IsUnitInRaid(name) and not DesolateLootcouncil:SmartCompare(name, "player") then
-            list[name] = DesolateLootcouncil:GetDisplayName(name)
+    
+    local members = {}
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, rank, subgroup, level, class, fileName, zone, online = GetRaidRosterInfo(i) -- luacheck: ignore rank subgroup level class fileName zone
+            if name and online then
+                table.insert(members, name)
+            end
+        end
+    elseif IsInGroup() then
+        table.insert(members, (UnitName("player")))
+        for i = 1, GetNumSubgroupMembers() do
+            local name = UnitName("party" .. i)
+            if name and UnitIsConnected("party" .. i) then
+                table.insert(members, name)
+            end
+        end
+    else
+        table.insert(members, (UnitName("player")))
+    end
+
+    for index, groupMemberName in ipairs(members) do
+        if not DesolateLootcouncil:SmartCompare(groupMemberName, "player") then
+            local mainName = groupMemberName
+            if db.playerRoster and db.playerRoster.alts then
+                local memberScoreName = DesolateLootcouncil:GetScoreName(groupMemberName)
+                for alt, main in pairs(db.playerRoster.alts) do
+                    if DesolateLootcouncil:GetScoreName(alt) == memberScoreName then
+                        mainName = main
+                        break
+                    end
+                end
+            end
+            
+            local mainScore = DesolateLootcouncil:GetScoreName(mainName)
+            local memberScore = DesolateLootcouncil:GetScoreName(groupMemberName)
+            local isOfficer = false
+            if db.MainRoster then
+                for rosterName, rosterData in pairs(db.MainRoster) do
+                    local rScore = DesolateLootcouncil:GetScoreName(rosterName)
+                    if rScore == mainScore or rScore == memberScore then
+                        if rosterData.isOfficer then
+                            isOfficer = true
+                        end
+                        if isOfficer then break end
+                    end
+                end
+            end
+            
+            if isOfficer then
+                local displayName = DesolateLootcouncil:GetDisplayName(mainName)
+                if not DesolateLootcouncil:SmartCompare(groupMemberName, mainName) then
+                    displayName = string.format("%s (%s)", displayName, Ambiguate(groupMemberName, "none"))
+                end
+                list[groupMemberName] = displayName
+            end
         end
     end
+    
     return list
 end
 
@@ -102,7 +155,12 @@ function GeneralSettings:GetGeneralOptions()
                 func = function()
                     if not selectedHandoverTarget then return end
                     if not CanHandover() then
-                        DesolateLootcouncil:Print("Cannot hand over during an active vote. Award or remove all items first.")
+                        DesolateLootcouncil:Print(L["Cannot hand over during an active vote. Award or remove all items first."])
+                        return
+                    end
+                    if not DesolateLootcouncil:IsUnitInRaid(selectedHandoverTarget) or not DesolateLootcouncil:IsUnitOnline(selectedHandoverTarget) then
+                        DesolateLootcouncil:Print(string.format(L["Cannot hand over: %s is no longer in the group or online."], selectedHandoverTarget))
+                        selectedHandoverTarget = nil
                         return
                     end
                     API:SendLMHandoverOffer(selectedHandoverTarget)

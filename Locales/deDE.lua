@@ -286,6 +286,9 @@ L["Start the handover process to the selected officer."] = "Starte den Übergabe
 L["Choose an officer in the raid to hand over the Loot Master role to."] =
 "Wähle einen Offizier im Schlachtzug aus, an den die Plündermeister-Rolle übergeben werden soll."
 L["Select Officer for Handover"] = "Offizier für die Übergabe auswählen"
+L["Loot Master handover received. Do you want to continue the running loot session, or clear it and start a new one?"] = "Loot Master Übergabe empfangen. Möchtest du die laufende Plündermeister-Sitzung fortsetzen oder löschen und eine neue starten?"
+L["Continue Session"] = "Sitzung fortsetzen"
+L["Start New Session"] = "Neue Sitzung starten"
 
 -- EJ Loot Import
 L["DLC"] = "DLC"
@@ -294,6 +297,26 @@ L["DLC Loot Import"] = "DLC Loot Import"
 L["%d items staged across %d lists"] = "%d Gegenstände in %d Listen vorbereitet"
 L["— Skip —"] = "— Überspringen —"
 L["No loot found for this boss."] = "Keine Beute für diesen Boss gefunden."
-L["Add all loot from this boss/raid to the import staging area."] =
-"Alle Beute von diesem Boss/Raid zum Import-Bereich hinzufügen."
 L["Officer only."] = "Nur Offiziere."
+
+-- Reworked Handover & Offline Scenarios
+L["%s is handing you the Loot Master role. Do you want to continue the running raid session, or start a new one?"] = "%s übergibt dir die Plündermeister-Rolle. Möchtest du die laufende Schlachtzugs-Sitzung fortsetzen oder eine neue starten?"
+L["%s is handing you the Loot Master role. Do you want to continue the running raid session, start a new one, or decline the handover?"] = "%s übergibt dir die Plündermeister-Rolle. Möchtest du die laufende Schlachtzugs-Sitzung fortsetzen, eine neue starten oder die Übergabe ablehnen?"
+L["%s is offering you the Loot Master role. Accept or decline?"] = "%s bietet dir die Plündermeister-Rolle an. Akzeptieren oder ablehnen?"
+L["The active Loot Master is %s. Handover of active sessions should ideally be initiated by the active LM. Force handover anyway?"] = "Der aktive Plündermeister ist %s. Die Übergabe einer aktiven Sitzung sollte idealerweise vom aktiven Plündermeister initiiert werden. Übergabe trotzdem erzwingen?"
+L["Declined Loot Master handover from %s."] = "Plündermeister-Übergabe von %s abgelehnt."
+L["Loot Master %s has left the group. Leadership falls back to %s."] = "Plündermeister %s hat die Gruppe verlassen. Die Leitung fällt zurück an %s."
+L["Raid Leader %s has left the group. %s is now the group leader and Loot Master."] = "Schlachtzugsleiter %s hat die Gruppe verlassen. %s ist jetzt der Schlachtzugsleiter und Plündermeister."
+L["Yes (Force)"] = "Ja (Erzwingen)"
+L["Decline Handover"] = "Übergabe ablehnen"
+L["Accept LM"] = "PM akzeptieren"
+
+-- Pre-commit Code Review Additions
+L["Cannot hand over: %s is no longer in the group or online."] = "Übergabe nicht möglich: %s ist nicht mehr in der Gruppe oder online."
+L["Cannot hand over during an active vote. Award or remove all items first."] = "Übergabe während einer aktiven Abstimmung nicht möglich. Vergib oder entferne zuerst alle Gegenstände."
+L["Import to Current Profile"] = "In aktuelles Profil importieren"
+L["Import data directly into the active profile."] = "Daten direkt in das aktive Profil importieren."
+L["Are you sure you want to import directly into your CURRENT active profile? This cannot be undone."] = "Bist du sicher, dass du die Daten direkt in dein AKTUELLES aktives Profil importieren möchtest? Dies kann nicht rückgängig gemacht werden."
+L["Raid leadership received. Started new Loot Master session."] = "Schlachtzugsleitung erhalten. Neue Plündermeister-Sitzung gestartet."
+L["Accepted Loot Master handover from %s (restored session)."] = "Plündermeister-Übergabe von %s akzeptiert (Sitzung wiederhergestellt)."
+L["Accepted Loot Master handover from %s (started new session)."] = "Plündermeister-Übergabe von %s akzeptiert (neue Sitzung gestartet)."
