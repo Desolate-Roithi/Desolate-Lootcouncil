@@ -194,8 +194,21 @@ function UI_Voting:StartMilestoneChecker()
             end
         end
 
-        -- Auto show and expand if lowestThreshold is 30s or less
-        if lowestThreshold and lowestThreshold <= 30 then
+        -- Auto show and expand if any unvoted item has 30s or less remaining
+        local API = DesolateLootcouncil.API
+        local hasCriticalItem = false
+        for idx, item in ipairs(items) do
+            local guid = item.sourceGUID or item.link
+            local remaining = item.expiry and (item.expiry - now) or 0
+            local isClosed = API:IsItemClosed(guid)
+            local hasVoted = self.myVotes and self.myVotes[guid]
+            if not hasVoted and not isClosed and remaining > 0 and remaining <= 30 then
+                hasCriticalItem = true
+                break
+            end
+        end
+
+        if hasCriticalItem then
             local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
             if not self.votingFrame then self:CreateVotingFrame() end
             if not self.votingFrame:IsShown() then
@@ -224,6 +237,24 @@ function UI_Voting:CreateVotingFrame()
 
     frame.OnCollapse = function()
         if self.scrollFrame then self.scrollFrame:Hide() end
+        if self.votingTicker then self.votingTicker:Cancel() end
+        self:CancelAllTimers()
+
+        local items = self.cachedVotingItems
+        if not items or #items == 0 then return end
+
+        local now = GetServerTime()
+        local API = DesolateLootcouncil.API
+        for idx, item in ipairs(items) do
+            local guid      = item.sourceGUID or item.link
+            local remaining = (item.expiry or 0) - now
+            local isClosed  = API:IsItemClosed(guid)
+            local isExpired = (item.expiry and item.expiry > 0) and (remaining <= 0)
+            if not self.myVotes[guid] and not isClosed and not isExpired then
+                DesolateLootcouncil:Print(L["You have outstanding loot votes! Type /dlc vote to reopen."])
+                break
+            end
+        end
     end
     frame.OnExpand = function()
         self:ShowVotingWindow(nil, true)
