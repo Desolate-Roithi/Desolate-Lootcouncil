@@ -419,7 +419,7 @@ function Loot:_BroadcastAward(itemData, winnerName, voteType)
     end
 
     local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
-    if not isSelf then
+    if not isSelf and DesolateLootcouncil:IsUnitOnline(winnerName) then
         C_ChatInfo.SendChatMessage(string.format(L["You have been awarded %s! Trade me."], itemData.link), "WHISPER", nil,
             winnerName)
     end

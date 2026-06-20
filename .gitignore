@@ -1,6 +1,7 @@
 # --- Editor & System Junk ---
 .vscode/
 .agent/
+Documentation/
 .DS_Store
 Thumbs.db
 

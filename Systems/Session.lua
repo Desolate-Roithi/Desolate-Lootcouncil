@@ -636,15 +636,6 @@ function Session:SendHistoryUpdate(entry)
         winner    = entry.winner,
         timestamp = entry.timestamp,
     }
-    local officerEntry = {
-        link        = entry.link,
-        texture     = entry.texture,
-        itemID      = entry.itemID,
-        winner      = entry.winner,
-        winnerClass = entry.winnerClass,
-        voteType    = entry.voteType,
-        timestamp   = entry.timestamp,
-    }
 
     -- Populate publicAwardLog locally for the LM
     local db = DesolateLootcouncil.db.profile
@@ -656,10 +647,7 @@ function Session:SendHistoryUpdate(entry)
     if Comm then
         Comm:SendComm("HISTORY_UPDATE_PUBLIC", publicEntry)
     end
-    local Sync = DesolateLootcouncil:GetModule("Sync")
-    if Sync and Sync.ShareDataWithOfficers then
-        Sync:ShareDataWithOfficers("HISTORY_UPDATE_OFFICER", officerEntry)
-    end
+    db.historyTimestamp = GetServerTime()
 end
 
 function Session:RemoveSessionItem(guid)

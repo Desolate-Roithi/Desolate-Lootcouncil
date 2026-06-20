@@ -314,13 +314,6 @@ function Trade:HandleTradeSuccess()
                     changed = true
                     DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
                         award.link, DesolateLootcouncil:GetDisplayName(award.winner)))
-                    
-                    self.pendingTradeConfirms = self.pendingTradeConfirms or {}
-                    table.insert(self.pendingTradeConfirms, {
-                        itemID    = award.itemID,
-                        winner    = award.winner,
-                        timestamp = award.timestamp
-                    })
                     break
                 end
             end
@@ -328,13 +321,8 @@ function Trade:HandleTradeSuccess()
     end
 
     if changed then
-        if self.pendingTradeConfirms and #self.pendingTradeConfirms > 0 then
-            local Sync = DesolateLootcouncil:GetModule("Sync")
-            if Sync and Sync.ShareDataWithOfficers then
-                Sync:ShareDataWithOfficers("TRADE_CONFIRMED", self.pendingTradeConfirms)
-            end
-            wipe(self.pendingTradeConfirms)
-        end
+        local db = DesolateLootcouncil.db.profile
+        db.historyTimestamp = GetServerTime()
 
         -- refresh the actual trade list window
         ---@type UI_TradeList

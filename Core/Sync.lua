@@ -84,14 +84,8 @@ function Sync:ShareDataWithOfficers(dataType, payload)
             altsCopy[alt] = main
         end
         finalPayload = { mains = mainsCopy, alts = altsCopy, timestamp = db.rosterTimestamp or 0 }
-    elseif dataType == "TRADE_CONFIRMED" then
-        command = "TRADE_CONFIRMED"
-        finalPayload = payload
     elseif dataType == "HISTORY_BULK_SYNC" then
         command = "HISTORY_BULK_SYNC"
-        finalPayload = payload
-    elseif dataType == "HISTORY_UPDATE_OFFICER" then
-        command = "HISTORY_UPDATE_OFFICER"
         finalPayload = payload
     elseif dataType == "LM_HANDOVER_OFFER" then
         command = "LM_HANDOVER_OFFER"
@@ -105,7 +99,7 @@ function Sync:ShareDataWithOfficers(dataType, payload)
     local db = DesolateLootcouncil.db.profile
     for name, data in pairs(db.MainRoster or {}) do
         if data.isOfficer and not DesolateLootcouncil:SmartCompare(name, "player") then
-            if DesolateLootcouncil:IsUnitInRaid(name) then
+            if DesolateLootcouncil:IsUnitInRaid(name) and DesolateLootcouncil:IsUnitOnline(name) then
                 table.insert(targets, name)
             end
         end
@@ -519,6 +513,7 @@ function SyncHandlers:HISTORY_PULL_REQUEST(data, sender)
     local db = DesolateLootcouncil.db.profile
     local payload = {
         AttendanceHistory = db.AttendanceHistory or {},
+        awarded = db.session and db.session.awarded or {},
         historyTimestamp = db.historyTimestamp or 0
     }
 
@@ -540,6 +535,8 @@ function SyncHandlers:SYNC_HISTORY(data, sender)
 
     if incomingTs > localTs then
         db.AttendanceHistory = data.AttendanceHistory or {}
+        db.session = db.session or {}
+        db.session.awarded = data.awarded or {}
         db.historyTimestamp = incomingTs
         
         local Session = DesolateLootcouncil:GetModule("Session")
@@ -644,64 +641,6 @@ function SyncHandlers:HISTORY_UPDATE_PUBLIC(data, sender)
     local Session = DesolateLootcouncil:GetModule("Session")
     if Session then
         Session:SendMessage("DLC_HISTORY_UPDATED", data)
-    end
-end
-
-function SyncHandlers:HISTORY_UPDATE_OFFICER(data, sender)
-    if not IsInGroup() then return end
-    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
-    if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
-    if not data or not data.link then return end
-
-    if not DesolateLootcouncil:AmILootMaster() then
-        local db = DesolateLootcouncil.db.profile
-        db.session = db.session or {}
-        db.session.awarded = db.session.awarded or {}
-
-        table.insert(db.session.awarded, {
-            link        = data.link,
-            texture     = data.texture,
-            itemID      = data.itemID,
-            winner      = data.winner,
-            winnerClass = data.winnerClass,
-            voteType    = data.voteType,
-            timestamp   = data.timestamp,
-            traded      = false
-        })
-
-        local Session = DesolateLootcouncil:GetModule("Session")
-        if Session then
-            Session:SendMessage("DLC_HISTORY_UPDATED", data)
-        end
-    end
-end
-
-function SyncHandlers:TRADE_CONFIRMED(data, sender)
-    if not IsInGroup() then return end
-    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
-    if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
-    if not data or type(data) ~= "table" then return end
-
-    local db = DesolateLootcouncil.db.profile
-    if not db.session or not db.session.awarded then return end
-
-    local changed = false
-    for idx, confirm in ipairs(data) do
-        local winnerScore = DesolateLootcouncil:GetScoreName(confirm.winner)
-        for key, award in ipairs(db.session.awarded) do
-            if not award.traded and award.itemID == confirm.itemID and award.timestamp == confirm.timestamp and DesolateLootcouncil:GetScoreName(award.winner) == winnerScore then
-                award.traded = true
-                changed = true
-                break
-            end
-        end
-    end
-
-    if changed then
-        local Session = DesolateLootcouncil:GetModule("Session")
-        if Session then
-            Session:SendMessage("DLC_HISTORY_UPDATED")
-        end
     end
 end
 
