@@ -779,27 +779,27 @@ function Session:_ApplyLMLateJoinerIdentity(payload, sender)
     end
 end
 
+local function IsItemAlreadyInList(list, item)
+    for _, existing in ipairs(list) do
+        if (existing.sourceGUID or existing.link) == (item.sourceGUID or item.link) then
+            return true
+        end
+    end
+    return false
+end
+
 --- Filters duplicates and populates local loot lists.
 ---@param newItems table
 ---@param expiry number
 ---@return number hydratedCount
 function Session:_HydrateSessionItems(newItems, expiry)
     local hydratedCount = 0
-    if newItems then
-        for _, item in ipairs(newItems) do
-            item.expiry = expiry
-            -- Avoid duplicates when reconnecting mid-session
-            local alreadyHave = false
-            for _, existing in ipairs(self.clientLootList) do
-                if (existing.sourceGUID or existing.link) == (item.sourceGUID or item.link) then
-                    alreadyHave = true
-                    break
-                end
-            end
-            if not alreadyHave then
-                table.insert(self.clientLootList, item)
-                hydratedCount = hydratedCount + 1
-            end
+    if not newItems then return hydratedCount end
+    for _, item in ipairs(newItems) do
+        item.expiry = expiry
+        if not IsItemAlreadyInList(self.clientLootList, item) then
+            table.insert(self.clientLootList, item)
+            hydratedCount = hydratedCount + 1
         end
     end
     return hydratedCount

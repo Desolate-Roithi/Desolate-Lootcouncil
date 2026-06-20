@@ -147,6 +147,36 @@ function Trade:NormalizeItemLink(link)
     return table.concat(parts, ":")
 end
 
+local function IsSlotStageable(self, bag, slot, targetItemID, isBoP, normalizedAwardLink)
+    local info = C_Container.GetContainerItemInfo(bag, slot)
+    if not info or info.itemID ~= targetItemID or info.isLocked then
+        return false
+    end
+
+    -- 12.0.1 Fix: BoP raid loot is isBound=true but is still tradeable.
+    -- Only block bound items for BoE to prevent staging equipped gear.
+    local boundOk = (not info.isBound or isBoP)
+    if boundOk and isBoP and info.isBound then
+        boundOk = self:IsItemTradeableBoP(bag, slot)
+    end
+    if not boundOk then
+        return false
+    end
+
+    if self:IsItemWarbound(bag, slot) then
+        return false
+    end
+
+    local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
+    if itemLink then
+        local normalizedItemLink = self:NormalizeItemLink(itemLink)
+        return normalizedItemLink == normalizedAwardLink
+    else
+        -- Fallback if item link is not cached or in mock environment
+        return true
+    end
+end
+
 --- Scans bags 0-4 and returns the first unlocked, stageable slot for itemID that matches stats.
 --- For BoP items (fresh raid loot) isBound is expected and allowed through if tradeable.
 --- Warbound (account-bound) copies are always skipped.
@@ -162,32 +192,8 @@ function Trade:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
         local numSlots = C_Container.GetContainerNumSlots(bag)
         for slot = 1, numSlots do
             local slotKey = string.format("%d-%d", bag, slot)
-            if not usedSlots[slotKey] then
-                local info = C_Container.GetContainerItemInfo(bag, slot)
-                if info and info.itemID == targetItemID and not info.isLocked then
-                    -- 12.0.1 Fix: BoP raid loot is isBound=true but is still tradeable.
-                    -- Only block bound items for BoE to prevent staging equipped gear.
-                    local boundOk = (not info.isBound or isBoP)
-
-                    -- Check tooltip for tradeable BoP time remaining text if bound and BoP
-                    if boundOk and isBoP and info.isBound then
-                        boundOk = self:IsItemTradeableBoP(bag, slot)
-                    end
-
-                    local warbound = self:IsItemWarbound(bag, slot)
-                    if boundOk and not warbound then
-                        local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
-                        if itemLink then
-                            local normalizedItemLink = self:NormalizeItemLink(itemLink)
-                            if normalizedItemLink == normalizedAwardLink then
-                                return bag, slot
-                            end
-                        else
-                            -- Fallback if item link is not cached or in mock environment
-                            return bag, slot
-                        end
-                    end
-                end
+            if not usedSlots[slotKey] and IsSlotStageable(self, bag, slot, targetItemID, isBoP, normalizedAwardLink) then
+                return bag, slot
             end
         end
     end

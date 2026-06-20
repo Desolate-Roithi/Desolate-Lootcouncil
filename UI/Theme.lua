@@ -228,12 +228,19 @@ function UI_Theme:ApplyTheme(widgetOrFrame, windowType)
     end
 
     -- 3. Apply theme backdrop and border
-    f:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        tile = true, tileSize = 16, edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 }
-    })
+    local NativeGUI_ref = DesolateLootcouncil:GetModule("UI_NativeGUI", true)
+    if NativeGUI_ref then
+        NativeGUI_ref:ApplyTiledBackdrop(f)
+    else
+        f:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            tile = true,
+            tileSize = 16,
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 }
+        })
+    end
     f:SetBackdropColor(unpack(theme.bg))
     f:SetBackdropBorderColor(unpack(theme.border))
 
@@ -275,25 +282,29 @@ function UI_Theme:StyleRow(rowWidget, isActive)
         Mixin(f, BackdropTemplateMixin)
     end
 
-    f:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        tile = true, tileSize = 16, edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 }
-    })
-
-    -- Row background: slightly lighter dark-obsidian than the main frame
-    local bgR = theme.bg[1] + 0.03
-    local bgG = theme.bg[2] + 0.03
-    local bgB = theme.bg[3] + 0.03
-    f:SetBackdropColor(bgR, bgG, bgB, 0.95)
-
-    if isActive then
-        -- Glowing neon accent border
-        f:SetBackdropBorderColor(unpack(theme.border))
+    local NativeGUI_ref = DesolateLootcouncil:GetModule("UI_NativeGUI", true)
+    if NativeGUI_ref then
+        NativeGUI_ref:ApplyTiledBackdrop(f)
+        NativeGUI_ref:StyleRowBackdrop(f, theme, isActive)
     else
-        -- Muted/dark border
-        f:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
+        f:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            tile = true,
+            tileSize = 16,
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 }
+        })
+        -- Row background: slightly lighter dark-obsidian than the main frame
+        local bgR = theme.bg[1] + 0.03
+        local bgG = theme.bg[2] + 0.03
+        local bgB = theme.bg[3] + 0.03
+        f:SetBackdropColor(bgR, bgG, bgB, 0.95)
+        if isActive then
+            f:SetBackdropBorderColor(unpack(theme.border))
+        else
+            f:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
+        end
     end
 end
 
@@ -370,7 +381,8 @@ function UI_Theme:ApplyThemeToAllOpenWindows()
         if SettingsUI.sidebar then
             local theme = self:GetActiveTheme()
             SettingsUI.sidebar:SetBackdropColor(theme.bg[1] * 0.6, theme.bg[2] * 0.6, theme.bg[3] * 0.6, 0.5)
-            SettingsUI.sidebar:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4, 0.5)
+            SettingsUI.sidebar:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4,
+                0.5)
         end
         SettingsUI:RenderTabs()
     end

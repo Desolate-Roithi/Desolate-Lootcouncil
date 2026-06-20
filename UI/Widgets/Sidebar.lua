@@ -24,12 +24,8 @@ function UI_Sidebar:AttachTo(parentFrame)
 
     -- Apply active theme backdrop matching CreateWindow/ApplyTheme style
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
-    f:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        tile = true, tileSize = 16, edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 }
-    })
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    NativeGUI:ApplyTiledBackdrop(f)
     f:SetBackdropColor(theme.bg[1] * 0.9, theme.bg[2] * 0.9, theme.bg[3] * 0.9, 0.95)
     f:SetBackdropBorderColor(unpack(theme.border))
 

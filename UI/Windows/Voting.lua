@@ -2,10 +2,10 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_Voting : AceModule
-local UI_Voting = DesolateLootcouncil:NewModule("UI_Voting", "AceEvent-3.0")
+local UI_Voting  = DesolateLootcouncil:NewModule("UI_Voting", "AceEvent-3.0")
 
 -- File-scope constants: defined once, shared across all calls to ShowVotingWindow.
-local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+local L          = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local VOTE_TEXT  = { [1] = L["Bid"], [2] = L["Roll"], [3] = L["Offspec"], [4] = L["T-Mog"], [5] = L["Pass"] }
 local VOTE_COLOR = setmetatable({}, {
     __index = function(_, key)
@@ -124,7 +124,7 @@ function UI_Voting:_ProcessMilestoneItem(item, now)
 
     for _, threshold in ipairs(VOTE_REMINDER_THRESHOLDS) do
         if remaining > 0 and remaining <= threshold
-                and not self.announcedMilestones[guid][threshold] then
+            and not self.announcedMilestones[guid][threshold] then
             -- Always mark as announced so we never re-fire this threshold
             self.announcedMilestones[guid][threshold] = true
 
@@ -145,9 +145,9 @@ function UI_Voting:StartMilestoneChecker()
 
     -- Per-item threshold announcement tracking and global dedup timestamp
     self.announcedMilestones = self.announcedMilestones or {}
-    self.lastReminderSentAt  = self.lastReminderSentAt  or 0
+    self.lastReminderSentAt  = self.lastReminderSentAt or 0
 
-    self.milestoneTicker = C_Timer.NewTicker(5, function()
+    self.milestoneTicker     = C_Timer.NewTicker(5, function()
         local items = self.cachedVotingItems
         if not items or #items == 0 then
             if self.milestoneTicker then
@@ -157,8 +157,8 @@ function UI_Voting:StartMilestoneChecker()
             return
         end
 
-        local now            = GetServerTime()
-        local pendingItems   = {}   -- unvoted items crossing a threshold this tick
+        local now             = GetServerTime()
+        local pendingItems    = {}  -- unvoted items crossing a threshold this tick
         local lowestThreshold = nil -- most urgent threshold crossed
 
         for _, item in ipairs(items) do
@@ -310,7 +310,8 @@ local function SetupVotingTicker(self, API)
             if info.fontString then
                 local remaining = (info.expiry or 0) - now
                 local isClosed  = API:IsItemClosed(guid)
-                local txt = (isClosed or remaining <= 0) and ("|cffff0000" .. L["Closed"] .. "|r") or FormatTime(remaining)
+                local txt       = (isClosed or remaining <= 0) and ("|cffff0000" .. L["Closed"] .. "|r") or
+                FormatTime(remaining)
                 info.fontString:SetText(txt)
             end
         end
@@ -340,14 +341,14 @@ end
 function UI_Voting:_LayoutVotingRow(index, data, guid, now, awardedGUIDs)
     if awardedGUIDs[guid] then return false end
 
-    local API = DesolateLootcouncil.API
-    local currentVote = self.myVotes[guid]
-    local isClosed    = API:IsItemClosed(guid)
-    local expiry      = data.expiry or 0
-    local remaining   = expiry - now
-    local isExpired   = (expiry > 0) and (remaining <= 0)
+    local API            = DesolateLootcouncil.API
+    local currentVote    = self.myVotes[guid]
+    local isClosed       = API:IsItemClosed(guid)
+    local expiry         = data.expiry or 0
+    local remaining      = expiry - now
+    local isExpired      = (expiry > 0) and (remaining <= 0)
     local shouldAutoPass = (expiry > 0) and (remaining <= -3)
-    local isPending   = (API:GetOutboundVote(guid) ~= nil)
+    local isPending      = (API:GetOutboundVote(guid) ~= nil)
 
     if shouldAutoPass and not currentVote and not isPending and not isClosed then
         -- Automatically send an Auto Pass vote to the Loot Master
@@ -381,8 +382,8 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     self.noteExpanded = self.noteExpanded or {}
 
     if lootTable then
-        self.cachedVotingItems = lootTable
-        self.myVotes = self.myVotes or {}
+        self.cachedVotingItems   = lootTable
+        self.myVotes             = self.myVotes or {}
         -- New session: reset milestone state so all thresholds fire fresh
         self.announcedMilestones = {}
         self.lastReminderSentAt  = 0
@@ -453,8 +454,10 @@ function UI_Voting:StyleClosedExpiredState(row, theme, currentVote, guid)
     local votedText = L["You voted: |cffaaaaaaAuto Pass|r"]
     if currentVote then
         local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
-        local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
-        votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"), GetVoteText(guid, voteVal), noteText)
+        local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and
+        (" (" .. currentVote.note .. ")") or ""
+        votedText = string.format(L["You voted: %s%s|r%s"], (VOTE_COLOR[voteVal] or "|cffffffff"),
+            GetVoteText(guid, voteVal), noteText)
     end
 
     row.statusBtn:SetText(L["Closed"])
@@ -473,11 +476,11 @@ end
 function UI_Voting:StylePendingState(row, theme, guid)
     row.timerLbl:Show()
 
-    local outbound   = DesolateLootcouncil.API:GetOutboundVote(guid)
+    local outbound    = DesolateLootcouncil.API:GetOutboundVote(guid)
     local pendingType = outbound and outbound.type
-    local vText  = pendingType and GetVoteText(guid, pendingType)  or "?"
-    local vColor = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
-    local noteText = self.myNotes[guid] and self.myNotes[guid] ~= "" and (" (" .. self.myNotes[guid] .. ")") or ""
+    local vText       = pendingType and GetVoteText(guid, pendingType) or "?"
+    local vColor      = pendingType and VOTE_COLOR[pendingType] or "|cffffffff"
+    local noteText    = self.myNotes[guid] and self.myNotes[guid] ~= "" and (" (" .. self.myNotes[guid] .. ")") or ""
 
     row.statusBtn:SetText(L["Syncing..."])
     row.statusBtn:SetEnabled(false)
@@ -496,7 +499,8 @@ function UI_Voting:StyleVotedChangeState(row, theme, guid, currentVote)
     row.timerLbl:Show()
 
     local voteVal = type(currentVote) == "table" and currentVote.type or currentVote
-    local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and (" (" .. currentVote.note .. ")") or ""
+    local noteText = type(currentVote) == "table" and currentVote.note and currentVote.note ~= "" and
+    (" (" .. currentVote.note .. ")") or ""
 
     row.statusBtn:SetText(L["Change"])
     row.statusBtn:SetEnabled(true)
@@ -508,7 +512,8 @@ function UI_Voting:StyleVotedChangeState(row, theme, guid, currentVote)
     end)
     row.statusBtn:Show()
 
-    row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", (VOTE_COLOR[voteVal] or "|cffffffff"), GetVoteText(guid, voteVal), noteText))
+    row.statusText:SetText(string.format(L["Voted: %s%s|r"] .. "%s", (VOTE_COLOR[voteVal] or "|cffffffff"),
+        GetVoteText(guid, voteVal), noteText))
     row.statusText:SetPoint("LEFT", row.timerLbl, "RIGHT", 8, 0)
     row.statusText:SetPoint("RIGHT", row.statusBtn, "LEFT", -10, 0)
     row.statusText:Show()
@@ -532,17 +537,17 @@ function UI_Voting:StyleActiveVoteState(row, theme, guid, data)
     if isRecipe then
         w = 100
         BUTTONS = {
-            { L["Ready to Craft"], 2, "Roll", L["Roll to receive this recipe because you have the profession and required skill to craft it."] },
-            { L["Unskilled"], 3, "Offspec", L["Roll for this recipe even though you do not meet the skill or profession requirements yet."] },
-            { L["Pass"], 5, "Pass", L["Pass on this recipe."] }
+            { L["Ready to Craft"], 2, "Roll",    L["Roll to receive this recipe because you have the profession and required skill to craft it."] },
+            { L["Unskilled"],      3, "Offspec", L["Roll for this recipe even though you do not meet the skill or profession requirements yet."] },
+            { L["Pass"],           5, "Pass",    L["Pass on this recipe."] }
         }
     else
         BUTTONS = {
-            { VOTE_TEXT[1], 1, "Bid", L["Bid priority points on this item."] },
-            { VOTE_TEXT[2], 2, "Roll", L["Roll for main spec usage."] },
+            { VOTE_TEXT[1], 1, "Bid",     L["Bid priority points on this item."] },
+            { VOTE_TEXT[2], 2, "Roll",    L["Roll for main spec usage."] },
             { VOTE_TEXT[3], 3, "Offspec", L["Roll for offspec usage."] },
-            { VOTE_TEXT[4], 4, "T-Mog", L["Roll for transmogrification collection."] },
-            { VOTE_TEXT[5], 5, "Pass", L["Pass on this item."] }
+            { VOTE_TEXT[4], 4, "T-Mog",   L["Roll for transmogrification collection."] },
+            { VOTE_TEXT[5], 5, "Pass",    L["Pass on this item."] }
         }
     end
 
@@ -704,18 +709,10 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
 
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
     -- Dynamically update backdrop color in case theme changed
-    local bgR = theme.bg[1] + 0.03
-    local bgG = theme.bg[2] + 0.03
-    local bgB = theme.bg[3] + 0.03
-    row:SetBackdropColor(bgR, bgG, bgB, 0.95)
+    NativeGUI:StyleRowBackdrop(row, theme, isActive)
 
-    if isActive then
-        row:SetBackdropBorderColor(unpack(theme.border))
-    else
-        row:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
-    end
-
-    local rowHeight = (not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid]) and 92 or 44
+    local rowHeight = (not isClosed and not isExpired and not isPending and not currentVote and self.noteExpanded[guid]) and
+    92 or 44
     row:SetHeight(rowHeight)
 
     PositionRow(self, index, row, self.scrollContent)
@@ -763,8 +760,6 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
 
     self:StyleNoteBox(row, theme, guid, isClosed, isExpired, isPending, currentVote)
 end
-
-
 
 function UI_Voting:OnEnable()
     self:RegisterMessage("DLC_SESSION_STARTED", "OnSessionStarted")

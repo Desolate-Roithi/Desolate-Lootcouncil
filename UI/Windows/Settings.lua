@@ -31,11 +31,7 @@ function UI_Settings:ShowSettingsWindow()
         sidebar:SetWidth(150)
         sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -45)
         sidebar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 12)
-        sidebar:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
+        NativeGUI:ApplySimpleBackdrop(sidebar)
         local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
         sidebar:SetBackdropColor(theme.bg[1] * 0.6, theme.bg[2] * 0.6, theme.bg[3] * 0.6, 0.5)
         sidebar:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4, 0.5)
@@ -56,6 +52,7 @@ function UI_Settings:ShowSettingsWindow()
 end
 
 function UI_Settings:RenderTabs()
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local options = DesolateLootcouncil.SettingsLoader.GetOptions()
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
 
@@ -88,11 +85,7 @@ function UI_Settings:RenderTabs()
         local btn = CreateFrame("Button", nil, self.sidebar, "BackdropTemplate")
         btn:SetSize(138, tabHeight)
         btn:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 6, -(idx - 1) * (tabHeight + 4) - 6)
-        btn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
+        NativeGUI:ApplySimpleBackdrop(btn)
 
         local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fs:SetPoint("LEFT", 10, 0)

@@ -37,11 +37,7 @@ local function CreateAttendanceColumns(self, frame, theme, isDecayEnabled)
     local leftPanel = CreateFrame("Frame", "DLCAttendanceFrameLeftPanel", frame, "BackdropTemplate")
     leftPanel:SetSize(296, 330)
     leftPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -65)
-    leftPanel:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-    })
+    NativeGUI:ApplySimpleBackdrop(leftPanel)
     leftPanel:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.4)
     leftPanel:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4, 0.4)
 
@@ -59,11 +55,7 @@ local function CreateAttendanceColumns(self, frame, theme, isDecayEnabled)
     local rightPanel = CreateFrame("Frame", "DLCAttendanceFrameRightPanel", frame, "BackdropTemplate")
     rightPanel:SetSize(296, 330)
     rightPanel:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -65)
-    rightPanel:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-    })
+    NativeGUI:ApplySimpleBackdrop(rightPanel)
     rightPanel:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.4)
     rightPanel:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4, 0.4)
 
@@ -164,6 +156,7 @@ function UI_Attendance:UpdateAttendanceLists()
     local absKids = { self.scrollContentAbsent:GetChildren() }
     for _, kid in ipairs(absKids) do kid:Hide(); kid:ClearAllPoints() end
 
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
 
     local listAttended = {}
@@ -175,11 +168,7 @@ function UI_Attendance:UpdateAttendanceLists()
         local btn = CreateFrame("Button", nil, self.scrollContentAttended, "BackdropTemplate")
         btn:SetSize(260, 24)
         btn:SetPoint("TOPLEFT", self.scrollContentAttended, "TOPLEFT", 4, -offsetAtt)
-        btn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
+        NativeGUI:ApplySimpleBackdrop(btn)
         btn:SetBackdropColor(theme.bg[1] + 0.05, theme.bg[2] + 0.05, theme.bg[3] + 0.05, 0.3)
         btn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.3)
 
@@ -216,11 +205,7 @@ function UI_Attendance:UpdateAttendanceLists()
         local btn = CreateFrame("Button", nil, self.scrollContentAbsent, "BackdropTemplate")
         btn:SetSize(260, 24)
         btn:SetPoint("TOPLEFT", self.scrollContentAbsent, "TOPLEFT", 4, -offsetAbs)
-        btn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
+        NativeGUI:ApplySimpleBackdrop(btn)
         btn:SetBackdropColor(theme.bg[1] + 0.05, theme.bg[2] + 0.05, theme.bg[3] + 0.05, 0.3)
         btn:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.3)
 

@@ -41,4 +41,14 @@ function AT.CompareSemVer(v1, v2)
     return false
 end
 
+--- Strips realm suffix and lowercases a character name for stable comparison.
+--- Equivalent to the local Normalize() helpers previously copy-pasted in
+--- Core/Addon.lua:OnInitialize and Systems/Roster.lua:PLAYER_LOGIN.
+---@param name string|nil
+---@return string normalized lowercase realmless name, or "" if nil
+function AT.NormalizeName(name)
+    if not name then return "" end
+    return string.lower(string.match(name, "^([^-]+)") or name)
+end
+
 DesolateLootcouncil.Math = Math

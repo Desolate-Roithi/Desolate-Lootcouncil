@@ -293,3 +293,11 @@ L["Are you sure you want to import directly into your CURRENT active profile? Th
 L["Raid leadership received. Started new Loot Master session."] = true
 L["Accepted Loot Master handover from %s (restored session)."] = true
 L["Accepted Loot Master handover from %s (started new session)."] = true
+
+-- Missing Keys (Post Code-Review D1 patch)
+L["An active raid session was found.\nWould you like to resume this session or end it?"] = true
+L["An active raid session was found (inactive for %.1f hours).\nWould you like to resume this session or end it?"] = true
+L["Handover to %s timed out."] = true
+L["Only the Loot Master or Officers can view the Loot History."] = true
+L["Raid leadership received. Loot Master session restored."] = true
+L["Add all loot from this boss/raid to the import staging area."] = true

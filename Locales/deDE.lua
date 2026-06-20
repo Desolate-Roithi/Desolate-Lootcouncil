@@ -320,3 +320,12 @@ L["Are you sure you want to import directly into your CURRENT active profile? Th
 L["Raid leadership received. Started new Loot Master session."] = "Schlachtzugsleitung erhalten. Neue Plündermeister-Sitzung gestartet."
 L["Accepted Loot Master handover from %s (restored session)."] = "Plündermeister-Übergabe von %s akzeptiert (Sitzung wiederhergestellt)."
 L["Accepted Loot Master handover from %s (started new session)."] = "Plündermeister-Übergabe von %s akzeptiert (neue Sitzung gestartet)."
+
+-- Missing Keys (Post Code-Review D1 patch)
+L["Raid leadership received. Loot Master session restored."] = "Schlachtzugsleitung erhalten. Plündermeister-Sitzung wiederhergestellt."
+L["Only the Loot Master or Officers can view the Loot History."] = "Nur der Plündermeister oder Offiziere können den Plünderungsverlauf einsehen."
+L["Handover to %s timed out."] = "Übergabe an %s abgelaufen."
+L["An active raid session was found (inactive for %.1f hours).\nWould you like to resume this session or end it?"] = "Eine aktive Schlachtzugssitzung wurde gefunden (inaktiv für %.1f Stunden).\nMöchtest du diese Sitzung fortsetzen oder beenden?"
+L["Add all loot from this boss/raid to the import staging area."] = "Füge die gesamte Beute von diesem Boss/Raid dem Import-Vorbereitungsbereich hinzu."
+L["An active raid session was found.\nWould you like to resume this session or end it?"] = "Eine aktive Schlachtzugssitzung wurde gefunden.\nMöchtest du diese Sitzung fortsetzen oder beenden?"
+

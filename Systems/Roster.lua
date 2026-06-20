@@ -826,20 +826,16 @@ function Roster:PLAYER_LOGIN()
     local myName = UnitName("player")
 
     if globalDb then
-        local function Normalize(name)
-            if not name then return "" end
-            return string.lower(string.match(name, "^([^-]+)") or name)
-        end
-        local normPlayer = Normalize(myName)
+        local normPlayer = AT.NormalizeName(myName)
 
         local activeLM = globalDb.activeRaidLM
-        if activeLM and activeLM ~= "" and (Normalize(activeLM) == normPlayer or Normalize(activeLM) == "player") then
+        if activeLM and activeLM ~= "" and (AT.NormalizeName(activeLM) == normPlayer or AT.NormalizeName(activeLM) == "player") then
             isLM = true
         else
             local profiles = DesolateLootcouncil.db.sv and DesolateLootcouncil.db.sv.profiles
             local targetProfile = globalDb.activeRaidProfile
             local configuredLM = profiles and targetProfile and profiles[targetProfile] and profiles[targetProfile].configuredLM
-            if configuredLM and configuredLM ~= "" and (Normalize(configuredLM) == normPlayer or Normalize(configuredLM) == "player") then
+            if configuredLM and configuredLM ~= "" and (AT.NormalizeName(configuredLM) == normPlayer or AT.NormalizeName(configuredLM) == "player") then
                 isLM = true
             end
         end
@@ -905,6 +901,13 @@ local function ResetAutopassSession()
     end
 end
 
+local function BroadcastAutopassState()
+    local Sync = DesolateLootcouncil:GetModule("Sync")
+    if Sync and DesolateLootcouncil.sessionAutopassActive ~= nil then
+        Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+    end
+end
+
 function Roster:GROUP_ROSTER_UPDATE()
     if gruResetTimer then gruResetTimer:Cancel() end
     gruResetTimer = C_Timer.NewTimer(0.5, function()
@@ -912,14 +915,11 @@ function Roster:GROUP_ROSTER_UPDATE()
         if not IsInRaid() then
             -- Double check after 5 seconds to ensure this isn't a brief loading screen or portal blip
             C_Timer.After(5.0, ResetAutopassSession)
-        else
-            self:CheckForNewRaidMembers()
-            -- Sync Autopass to newly joined members or after a group update (if LM)
-                local Sync = DesolateLootcouncil:GetModule("Sync")
-                if Sync and DesolateLootcouncil.sessionAutopassActive ~= nil then
-                    Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
-                end
+            return
         end
+        self:CheckForNewRaidMembers()
+        -- Sync Autopass to newly joined members or after a group update (if LM)
+        BroadcastAutopassState()
     end)
 end
 

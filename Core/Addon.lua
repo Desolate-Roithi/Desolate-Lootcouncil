@@ -51,33 +51,33 @@ local defaults = {
         activeRaidLM = "",
     },
     profile = {
-        configuredLM      = "",
-        PriorityLists     = {
+        configuredLM       = "",
+        PriorityLists      = {
             { name = "Tier",         players = {}, items = {} },
             { name = "Weapons",      players = {}, items = {} },
             { name = "Rest",         players = {}, items = {} },
             { name = "Collectables", players = {}, items = {} }
         },
-        MainRoster        = {},
-        playerRoster      = { alts = {}, decay = {} },
-        imTimestamps      = {},
+        MainRoster         = {},
+        playerRoster       = { alts = {}, decay = {} },
+        imTimestamps       = {},
         priorityTimestamps = {},
-        configTimestamp   = 0,
-        historyTimestamp  = 0,
-        verboseMode       = false,
-        debugMode         = false,
-        session           = {
+        configTimestamp    = 0,
+        historyTimestamp   = 0,
+        verboseMode        = false,
+        debugMode          = false,
+        session            = {
             loot = {},
             bidding = {},
             awarded = {},
             lootedMobs = {},
             isOpen = false
         },
-        minLootQuality    = 3,    -- Default to Rare
-        enableAutoLoot    = true, -- Auto-pass on loot rolls (ON by default)
-        enableAutoTrade   = true, -- Auto-stage items in trade window (ON by default)
+        minLootQuality     = 3,   -- Default to Rare
+        enableAutoLoot     = true, -- Auto-pass on loot rolls (ON by default)
+        enableAutoTrade    = true, -- Auto-stage items in trade window (ON by default)
         -- Consolidated Logic (LM=Acquire, Raider=Pass)
-        DecayConfig       = {
+        DecayConfig        = {
             enabled = true,
             defaultPenalty = 1,     -- Configurable (0-3)
             sessionActive = false,
@@ -87,10 +87,10 @@ local defaults = {
             sessionAutopassActive = false,
             sessionAutopassAnswered = false,
         },
-        AttendanceHistory = {},     -- List of past sessions { date, zone, attendees }
-        positions         = {},     -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
-        activeTheme       = "Midnight", -- Default UI Theme (Midnight Void)
-        dbCreatedAt       = 0,      -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
+        AttendanceHistory  = {},        -- List of past sessions { date, zone, attendees }
+        positions          = {},        -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
+        activeTheme        = "Midnight", -- Default UI Theme (Midnight Void)
+        dbCreatedAt        = 0,         -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
     }
 }
 
@@ -102,21 +102,18 @@ function DesolateLootcouncil:OnInitialize()
     if self.db.global and self.db.global.activeRaidProfile and self.db.global.activeRaidProfile ~= "" then
         local isLM = false
         local myName = UnitName("player")
-        
-        local function Normalize(name)
-            if not name then return "" end
-            return string.lower(string.match(name, "^([^-]+)") or name)
-        end
-        local normPlayer = Normalize(myName)
+
+        local normPlayer = addonTable.NormalizeName(myName)
 
         local activeLM = self.db.global.activeRaidLM
-        if activeLM and activeLM ~= "" and (Normalize(activeLM) == normPlayer or Normalize(activeLM) == "player") then
+        if activeLM and activeLM ~= "" and (addonTable.NormalizeName(activeLM) == normPlayer or addonTable.NormalizeName(activeLM) == "player") then
             isLM = true
         else
             local profiles = self.db.sv and self.db.sv.profiles
             local targetProfile = self.db.global.activeRaidProfile
-            local configuredLM = profiles and targetProfile and profiles[targetProfile] and profiles[targetProfile].configuredLM
-            if configuredLM and configuredLM ~= "" and (Normalize(configuredLM) == normPlayer or Normalize(configuredLM) == "player") then
+            local configuredLM = profiles and targetProfile and profiles[targetProfile] and
+            profiles[targetProfile].configuredLM
+            if configuredLM and configuredLM ~= "" and (addonTable.NormalizeName(configuredLM) == normPlayer or addonTable.NormalizeName(configuredLM) == "player") then
                 isLM = true
             end
         end
@@ -154,19 +151,19 @@ function DesolateLootcouncil:OnInitialize()
     end)
 
     -- 3. Initialize Active Users
-    self.activeAddonUsers = {}
+    self.activeAddonUsers        = {}
     -- 4. Initialize Simulated Group
-    self.simulatedGroup = { [UnitName("player")] = true }
+    self.simulatedGroup          = { [UnitName("player")] = true }
 
     -- 5. Initialize Autopass state to a known-false default.
     --    CRITICAL: DO NOT change sessionAutopassActive to `nil`. We had a bug where
     --    `nil` broke the deterministic UI logic. Instead, we use a separate flag
     --    `sessionAutopassAnswered` to track if the LM has seen the popup, preventing
     --    endless re-prompts when the LM explicitly clicks "No" (which sets it to false).
-    self.sessionAutopassActive  = self.db.profile.DecayConfig.sessionAutopassActive or false
+    self.sessionAutopassActive   = self.db.profile.DecayConfig.sessionAutopassActive or false
     self.sessionAutopassAnswered = self.db.profile.DecayConfig.sessionAutopassAnswered or false
-    self.amILM                  = false  -- explicit init; starts nil otherwise, breaks wasLM guard in UpdateLootMasterStatus
-    self.lastLeader             = nil
+    self.amILM                   = false -- explicit init; starts nil otherwise, breaks wasLM guard in UpdateLootMasterStatus
+    self.lastLeader              = nil
 
 
     -- 6. Validate/Notify
@@ -185,10 +182,10 @@ function DesolateLootcouncil:OnInitialize()
 end
 
 function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
-    self.sessionAutopassActive  = self.db.profile.DecayConfig.sessionAutopassActive or false
+    self.sessionAutopassActive   = self.db.profile.DecayConfig.sessionAutopassActive or false
     self.sessionAutopassAnswered = self.db.profile.DecayConfig.sessionAutopassAnswered or false
 
-    local Roster = self:GetModule("Roster", true)
+    local Roster                 = self:GetModule("Roster", true)
     if Roster and Roster.UpdateScoreMap then
         Roster:UpdateScoreMap()
     end
@@ -395,7 +392,7 @@ function DesolateLootcouncil:DetermineLootMaster()
     elseif IsInGroup() then
         for i = 1, GetNumSubgroupMembers() do
             local unit = "party" .. i
-            if UnitIsGroupLeader(unit) then 
+            if UnitIsGroupLeader(unit) then
                 local pName, pRealm = UnitName(unit)
                 if pRealm and pRealm ~= "" then return pName .. "-" .. pRealm:gsub("%s+", "") end
                 return pName
@@ -408,10 +405,10 @@ end
 
 function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
-    
+
     local oldLM = self.activeLootMaster
     local oldLeader = self.lastLeader
-    
+
     local leader = self:GetGroupLeader()
     if leader and not self:SmartCompare(leader, self.lastLeader) then
         local wasLeader = self.lastLeader and self:SmartCompare(self.lastLeader, "player")
@@ -422,7 +419,8 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
             if self.amILM and hasActiveSession then
                 local SyncMod = self:GetModule("Sync", true)
                 if SyncMod then
-                    self:DLC_Log(string.format("Leadership passed to %s. Initiating automatic Loot Master handover.", leader))
+                    self:DLC_Log(string.format("Leadership passed to %s. Initiating automatic Loot Master handover.",
+                        leader))
                     SyncMod:SendLMHandoverOffer(leader)
                 end
             end
@@ -446,7 +444,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
 
     local targetLM = self:DetermineLootMaster()
     local wasLM = self.amILM
-    
+
     local lmLeft = false
     if oldLM and oldLM ~= "" and IsInGroup() then
         if not self:IsUnitInRaid(oldLM) and not self:SmartCompare(oldLM, "player") then
@@ -454,18 +452,20 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
             lmLeft = true
         end
     end
-    
+
     self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
     self.amIOfficer = self:AmIOfficerOrLM()
-    
+
     if lmLeft and self.amIOfficer then
         if oldLeader and self:SmartCompare(oldLM, oldLeader) then
-            self:Print(string.format(L["Raid Leader %s has left the group. %s is now the group leader and Loot Master."], self:GetDisplayName(oldLM), self:GetDisplayName(targetLM)))
+            self:Print(string.format(L["Raid Leader %s has left the group. %s is now the group leader and Loot Master."],
+                self:GetDisplayName(oldLM), self:GetDisplayName(targetLM)))
         else
-            self:Print(string.format(L["Loot Master %s has left the group. Leadership falls back to %s."], self:GetDisplayName(oldLM), self:GetDisplayName(targetLM)))
+            self:Print(string.format(L["Loot Master %s has left the group. Leadership falls back to %s."],
+                self:GetDisplayName(oldLM), self:GetDisplayName(targetLM)))
         end
     end
-    
+
     -- If we just BECAME the LM, reset the prompt flag so we can decide for ourselves
     if self.amILM and not wasLM then
         self.sessionAutopassAnswered = false
@@ -484,7 +484,8 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
         end
     end
 
-    self:DLC_Log(string.format(L["Role Update: You are %s (LM: %s)"], self.amILM and L["Loot Master"] or L["Raider"], tostring(self:GetDisplayName(targetLM))))
+    self:DLC_Log(string.format(L["Role Update: You are %s (LM: %s)"], self.amILM and L["Loot Master"] or L["Raider"],
+        tostring(self:GetDisplayName(targetLM))))
 
     -- Always broadcast LM identity when in a group, regardless of our own role.
     -- This ensures late-joiners are corrected even before the session heartbeat fires (30s).
@@ -512,7 +513,7 @@ function DesolateLootcouncil:AmIOfficerOrLM()
     -- If no LM is synced yet (e.g. joining raid before version check handshake),
     -- fall back to false rather than granting access based on stale data.
     if IsInGroup() and (not self.activeLootMaster or self.activeLootMaster == "") then
-        return false  -- LM not yet identified; deny access until handshake completes
+        return false -- LM not yet identified; deny access until handshake completes
     end
 
     -- Tier 3: Roster flag lookup — check if our MainRoster entry has isOfficer = true.
@@ -658,7 +659,7 @@ end
 ---@return string|nil
 function DesolateLootcouncil:GetScoreName(name)
     if not name or name == "" then return nil end
-    
+
     -- Local cache for common 'player' lookup to avoid UnitName calls in loops
     if name == "player" then
         if not self._playerScore then
@@ -685,10 +686,10 @@ end
 function DesolateLootcouncil:GetUnitScore(unit)
     if not unit then return nil end
     if unit == "player" then return self:GetScoreName("player") end
-    
+
     local name, realm = UnitName(unit)
     if not name then return nil end
-    
+
     realm = (realm and realm ~= "") and realm or GetRealmName()
     return string.lower(name .. "-" .. realm):gsub("%s+", "")
 end
@@ -700,7 +701,7 @@ function DesolateLootcouncil:GetDisplayName(name)
     if not name or name == "" then return nil end
     local Roster = self:GetModule("Roster")
     local main = Roster and Roster:GetMain(name) or name
-    
+
     local profile = self.db.profile
     -- 1. Check if the Main is in the MainRoster (to get the exact casing/format)
     if profile.MainRoster then

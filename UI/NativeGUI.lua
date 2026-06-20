@@ -24,6 +24,25 @@ UI_NativeGUI.VOTE_COLORS = {
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 
 -- ============================================================================
+-- Shared Backdrop Definitions (used by both local helpers and public methods)
+-- ============================================================================
+
+local BACKDROP_SIMPLE = {
+    bgFile   = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    edgeSize = 1,
+}
+
+local BACKDROP_TILED = {
+    bgFile   = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    tile     = true,
+    tileSize = 16,
+    edgeSize = 1,
+    insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+}
+
+-- ============================================================================
 -- Local UI Creation Helpers (Extracted to keep core methods extremely short)
 -- ============================================================================
 
@@ -179,11 +198,7 @@ local function CreateCloseButton(frame, theme)
     local close = CreateFrame("Button", nil, frame, "BackdropTemplate")
     close:SetSize(20, 20)
     close:SetPoint("TOPRIGHT", -12, -12)
-    close:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-    })
+    close:SetBackdrop(BACKDROP_SIMPLE)
     close:SetBackdropColor(theme.bg[1] * 1.5, theme.bg[2] * 1.5, theme.bg[3] * 1.5, 0.8)
     close:SetBackdropBorderColor(unpack(theme.border))
 
@@ -311,11 +326,7 @@ local function StyleScrollArrowButton(btn, theme, arrowAtlas)
 end
 
 local function StyleDropdownButton(btn, theme)
-    btn:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-    })
+    btn:SetBackdrop(BACKDROP_SIMPLE)
     btn:SetBackdropColor(theme.bg[1] * 0.4, theme.bg[2] * 0.4, theme.bg[3] * 0.4, 0.9)
     btn:SetBackdropBorderColor(unpack(theme.border))
 end
@@ -474,6 +485,41 @@ function UI_NativeGUI:AcquireRow(rowPool, index, parent, isActive)
     local row = rowPool[index]
     row:Show()
     return row
+end
+
+--- Applies the flat single-pixel border backdrop (no tile) to a frame.
+--- Eliminates the repeated 4-line SetBackdrop({WHITE8X8, edgeSize=1}) pattern.
+---@param frame Frame  frame that inherits BackdropTemplate
+function UI_NativeGUI:ApplySimpleBackdrop(frame)
+    frame:SetBackdrop(BACKDROP_SIMPLE)
+end
+
+--- Applies the tiled single-pixel border backdrop with insets to a frame.
+--- Eliminates the repeated 8-line SetBackdrop({tile=true, tileSize=16, insets}) pattern.
+---@param frame Frame  frame that inherits BackdropTemplate
+function UI_NativeGUI:ApplyTiledBackdrop(frame)
+    frame:SetBackdrop(BACKDROP_TILED)
+end
+
+--- Applies the row background color (+0.03 tint) and active/inactive border to a row frame.
+--- Eliminates the 6-line duplicate block in CreateRowContainer and Voting.lua:CreateItemRow.
+---@param row    Frame    frame that already has a tiled backdrop applied
+---@param theme  table    active theme table
+---@param isActive boolean  true → full neon border, false → 30%-muted border
+function UI_NativeGUI:StyleRowBackdrop(row, theme, isActive)
+    local bgR = theme.bg[1] + 0.03
+    local bgG = theme.bg[2] + 0.03
+    local bgB = theme.bg[3] + 0.03
+    row:SetBackdropColor(bgR, bgG, bgB, 0.95)
+    if isActive then
+        row:SetBackdropBorderColor(unpack(theme.border))
+    else
+        row:SetBackdropBorderColor(
+            theme.border[1] * 0.3,
+            theme.border[2] * 0.3,
+            theme.border[3] * 0.3,
+            0.4)
+    end
 end
 
 --- Creates a standard clickable icon button.
@@ -672,26 +718,10 @@ end
 ---@return Frame rowContainer
 function UI_NativeGUI:CreateRowContainer(parent, isActive)
     local row = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    row:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        tile = true,
-        tileSize = 16,
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 }
-    })
+    self:ApplyTiledBackdrop(row)
 
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
-    local bgR = theme.bg[1] + 0.03
-    local bgG = theme.bg[2] + 0.03
-    local bgB = theme.bg[3] + 0.03
-    row:SetBackdropColor(bgR, bgG, bgB, 0.95)
-
-    if isActive then
-        row:SetBackdropBorderColor(unpack(theme.border))
-    else
-        row:SetBackdropBorderColor(theme.border[1] * 0.3, theme.border[2] * 0.3, theme.border[3] * 0.3, 0.4)
-    end
+    self:StyleRowBackdrop(row, theme, isActive)
 
     return row
 end
