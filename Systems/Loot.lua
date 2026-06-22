@@ -40,7 +40,8 @@ function Loot:OnEnable()
     self.sessionItems = session.sessionItems or {} -- Persisted duplicate check
     session.sessionItems = self.sessionItems
 
-    self:RegisterEvent("LOOT_OPENED", "OnLootOpened")
+    -- LOOT_OPENED registration removed to prevent corpse clicks from adding duplicates.
+    -- All items are added strictly via START_LOOT_ROLL and CHAT_MSG_LOOT.
     self:RegisterEvent("CHAT_MSG_LOOT", "OnLootMessage")
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
 
@@ -279,7 +280,7 @@ function Loot:OnLootMessage(event, msg)
                         for _, entry in ipairs(session.loot) do
                             if entry.itemID == itemID and not entry.msgClaimed then
                                 local guid = entry.sourceGUID or ""
-                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") or string.find(guid, "^Manual%-") or string.find(guid, "^Reaward%-") then
                                     entry.msgClaimed = true
                                     foundClaim = true
                                     DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (loot): %s (GUID: %s)", link, guid))
@@ -294,7 +295,7 @@ function Loot:OnLootMessage(event, msg)
                         for _, entry in ipairs(session.bidding) do
                             if entry.itemID == itemID and not entry.msgClaimed then
                                 local guid = entry.sourceGUID or ""
-                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") or string.find(guid, "^Manual%-") or string.find(guid, "^Reaward%-") then
                                     entry.msgClaimed = true
                                     foundClaim = true
                                     DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (bidding): %s (GUID: %s)", link, guid))
@@ -309,7 +310,7 @@ function Loot:OnLootMessage(event, msg)
                         for _, entry in ipairs(session.awarded) do
                             if entry.itemID == itemID and not entry.msgClaimed then
                                 local guid = entry.sourceGUID or ""
-                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") then
+                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") or string.find(guid, "^Manual%-") or string.find(guid, "^Reaward%-") then
                                     entry.msgClaimed = true
                                     foundClaim = true
                                     DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (awarded): %s (GUID: %s)", link, guid))

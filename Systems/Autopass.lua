@@ -134,9 +134,9 @@ function Autopass:OnStartLootRoll(event, rollID)
 
     if isLM then
         C_Timer.After(1.0, function()
-            local Comm = DesolateLootcouncil:GetModule("Comm")
-            if Comm and DesolateLootcouncil.sessionAutopassActive ~= nil then
-                Comm:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+            local Sync = DesolateLootcouncil:GetModule("Sync", true)
+            if Sync and DesolateLootcouncil.sessionAutopassActive ~= nil then
+                Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
             end
         end)
     end

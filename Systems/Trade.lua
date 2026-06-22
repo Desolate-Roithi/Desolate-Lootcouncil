@@ -63,6 +63,7 @@ function Trade:OnTradeShow()
     -- "NPC" unit token refers to the trade target while the trade window is open
     local tradeTargetName = UnitName("NPC")
     if not tradeTargetName then return end
+    self.tradeTargetName = tradeTargetName
 
     if not DesolateLootcouncil:AmILootMaster() then return end
     if DesolateLootcouncil.db.profile.enableAutoTrade == false then return end
@@ -304,7 +305,7 @@ function Trade:HandleTradeSuccess()
 
     for _, pending in ipairs(tradedItems) do
         local normalizedPendingLink = self:NormalizeItemLink(pending.link)
-        local winnerScore = DesolateLootcouncil:GetScoreName(pending.winner or UnitName("NPC"))
+        local winnerScore = DesolateLootcouncil:GetScoreName(pending.winner or self.tradeTargetName or UnitName("NPC"))
 
         for _, award in ipairs(session.awarded) do
             if not award.traded and DesolateLootcouncil:GetScoreName(award.winner) == winnerScore then
@@ -349,6 +350,7 @@ end
 function Trade:ClearPending()
     self.currentTrade = nil
     self.itemsInTrade = nil
+    self.tradeTargetName = nil
     self:UnregisterEvent("CHAT_MSG_SYSTEM")
     self:UnregisterEvent("TRADE_CLOSED")
 end

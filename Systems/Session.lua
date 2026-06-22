@@ -1188,7 +1188,8 @@ function Session:AcceptHandover(silent, continueSession)
     if continueSession then
         db.session.awarded = state.awarded or {}
         db.session.loot = state.loot or {}
-        self.clientLootList = state.loot
+        db.session.bidding = state.bidding or {}
+        self.clientLootList = state.bidding
         self.sessionVotes = state.votes or {}
         self.closedItems = state.closed or {}
         self.sessionExpiry = state.expiry or 0
@@ -1293,6 +1294,11 @@ function Session:AcceptHandover(silent, continueSession)
         if incomingHistoryTs > localHistoryTs then
             CommMod:SendComm("HISTORY_PULL_REQUEST", {}, sender)
         end
+    end
+
+    if continueSession then
+        self:OpenActiveSessionUIs(self.clientLootList)
+        self:SendSessionHeartbeat()
     end
 
     DesolateLootcouncil.pendingHandoverState = nil

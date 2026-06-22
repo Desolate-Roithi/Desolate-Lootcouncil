@@ -193,6 +193,13 @@ function Roster:StartRaidSession()
 
         StaticPopup_Show("DLC_ENABLE_AUTOPASS")
     end
+
+    -- Trigger immediate config sync to officers on session start
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session and Session.SendDLCHeartbeat then
+        Session:SendDLCHeartbeat()
+    end
 end
 
 --- Stops the current session and optionally saves history
@@ -308,6 +315,13 @@ function Roster:StopRaidSession(saveHistory)
     DesolateLootcouncil.sessionAutopassAnswered = false
     DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = false
     DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = false
+
+    -- Trigger immediate config sync to officers on session stop
+    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session and Session.SendDLCHeartbeat then
+        Session:SendDLCHeartbeat()
+    end
 end
 
 --- Helper to get a unit's class filename robustly

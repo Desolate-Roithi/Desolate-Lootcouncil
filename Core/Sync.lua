@@ -128,9 +128,14 @@ function Sync:SendLMHandoverOffer(targetOfficer)
         return
     end
     local db = DesolateLootcouncil.db.profile
+    local Session = DesolateLootcouncil:GetModule("Session")
     local state = {
         awarded = db.session and db.session.awarded or {},
         loot = db.session and db.session.loot or {},
+        bidding = db.session and db.session.bidding or {},
+        votes = Session and Session.sessionVotes or {},
+        closed = Session and Session.closedItems or {},
+        expiry = Session and Session.sessionExpiry or 0,
         rosterTimestamp = db.rosterTimestamp or 0,
         priorityTimestamps = db.priorityTimestamps or {},
         imTimestamps = db.imTimestamps or {},
@@ -237,7 +242,7 @@ local function OverwriteItemManagerLists(data, logMessage)
         end
 
         local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
-        if ItemMgr and ItemMgr.frame and (ItemMgr.frame --[[@as any]]).frame:IsShown() then
+        if ItemMgr and ItemMgr.frame and ItemMgr.frame:IsShown() then
             ItemMgr:RefreshWindow()
         end
     end
@@ -463,7 +468,9 @@ function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
         activeTheme = db.activeTheme,
         DecayConfig = {
             enabled = db.DecayConfig and db.DecayConfig.enabled,
-            defaultPenalty = db.DecayConfig and db.DecayConfig.defaultPenalty
+            defaultPenalty = db.DecayConfig and db.DecayConfig.defaultPenalty,
+            sessionActive = db.DecayConfig and db.DecayConfig.sessionActive or false,
+            currentSessionID = db.DecayConfig and db.DecayConfig.currentSessionID
         },
         configTimestamp = db.configTimestamp or 0
     }
@@ -497,6 +504,8 @@ function SyncHandlers:SYNC_CONFIG(data, sender)
             db.DecayConfig = db.DecayConfig or {}
             db.DecayConfig.enabled = data.DecayConfig.enabled
             db.DecayConfig.defaultPenalty = data.DecayConfig.defaultPenalty
+            db.DecayConfig.sessionActive = data.DecayConfig.sessionActive == true
+            db.DecayConfig.currentSessionID = data.DecayConfig.currentSessionID
         end
         
         db.configTimestamp = incomingTs
