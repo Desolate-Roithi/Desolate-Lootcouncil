@@ -49,14 +49,29 @@ function UI_Version:ShowVersionWindow(isTest)
         self.versionFrame = frame
         self.rowPool = {}
 
-        local btnRefresh = NativeGUI:CreateButton(frame, L["Refresh / Ping"], 180, 24, "Pass")
-        btnRefresh:SetPoint("BOTTOM", frame, "BOTTOM", 0, 12)
+        local btnRefresh = NativeGUI:CreateButton(frame, L["Refresh / Ping"], 160, 24, "Pass")
+        btnRefresh:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 12)
         self.btnRefresh = btnRefresh
+
+        local btnSync = NativeGUI:CreateButton(frame, L["Sync Autopass"], 160, 24, "Pass")
+        btnSync:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 12)
+        self.btnSync = btnSync
 
         -- Repeating timer to handle button state and countdown text
         self.refreshTimer = self:ScheduleRepeatingTimer(OnVersionTimerTick, 1)
 
         btnRefresh:SetScript("OnClick", function() OnVersionRefreshClicked(isTest) end)
+        btnSync:SetScript("OnClick", function()
+            if not DesolateLootcouncil.sessionAutopassAnswered then
+                DesolateLootcouncil:PromptAutopass()
+            else
+                local Sync = DesolateLootcouncil:GetModule("Sync")
+                if Sync and Sync.SendSyncAutopass then
+                    Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive or false)
+                    DesolateLootcouncil:Print(L["Autopass state synced to raid group."])
+                end
+            end
+        end)
 
         frame:HookScript("OnHide", OnVersionFrameHide)
     end
@@ -170,8 +185,20 @@ function UI_Version:UpdateVersionList(isTest)
         self.headerLabel = self.versionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         self.headerLabel:SetPoint("TOPLEFT", 16, -42)
     end
-    self.headerLabel:SetText(string.format(L["Highest Found Version: %s"], highestVerStr))
+    
+    local apStatus = L["Disabled"]
+    if DesolateLootcouncil.sessionAutopassActive then
+        apStatus = L["Enabled"]
+    elseif not DesolateLootcouncil.sessionAutopassAnswered then
+        apStatus = L["Not Prompted"]
+    end
+    self.headerLabel:SetText(string.format(L["Highest Found Version: %s  |  Autopass: %s"], highestVerStr, apStatus))
     self.headerLabel:Show()
+
+    if self.btnSync then
+        local isLM = DesolateLootcouncil:AmILootMaster()
+        self.btnSync:SetEnabled(isLM)
+    end
 
     table.sort(roster, function(a, b) return a.name < b.name end)
 
@@ -205,15 +232,22 @@ function UI_Version:UpdateVersionList(isTest)
         end
 
         local ver = entry.version
+        local apSuffix = ""
+        local Comm = DesolateLootcouncil:GetModule("Comm")
+        local apState = Comm.playerAutopassStates and Comm.playerAutopassStates[entry.name]
+        if apState ~= nil then
+            apSuffix = apState and " (AP: On)" or " (AP: Off)"
+        end
+
         if not ver then
             row.verText:SetText(L["Not Installed / Missing"])
             row.verText:SetTextColor(0.5, 0.5, 0.5)
         else
             if not AT.CompareSemVer(highestVerStr, ver) then
-                row.verText:SetText(string.format(L["%s (Current)"], ver))
+                row.verText:SetText(string.format(L["%s (Current)"], ver) .. apSuffix)
                 row.verText:SetTextColor(0, 1, 0)
             else
-                row.verText:SetText(string.format(L["%s (Outdated)"], ver))
+                row.verText:SetText(string.format(L["%s (Outdated)"], ver) .. apSuffix)
                 row.verText:SetTextColor(1, 0, 0)
             end
         end

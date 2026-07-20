@@ -1030,6 +1030,17 @@ function Session:HandleSyncLM(payload, sender)
         DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(lm, "player")
         DesolateLootcouncil:DLC_Log(string.format("Loot Master identity synced from Leader (%s): %s",
             DesolateLootcouncil:GetDisplayName(sender), DesolateLootcouncil:GetDisplayName(lm)))
+
+        -- Check if we have a pending autopass state cached for this newly resolved Loot Master
+        local Sync = DesolateLootcouncil:GetModule("Sync", true)
+        if Sync and Sync.pendingAutopass then
+            for cachedSender, pendingData in pairs(Sync.pendingAutopass) do
+                if DesolateLootcouncil:SmartCompare(cachedSender, lm) then
+                    Sync:HandleMessage("SYNC_AUTOPASS", pendingData, cachedSender)
+                    Sync.pendingAutopass[cachedSender] = nil
+                end
+            end
+        end
     else
         DesolateLootcouncil:DLC_Log(string.format("Ignored SYNC_LM from non-leader: %s", tostring(sender)))
     end
@@ -1310,7 +1321,7 @@ function Session:AcceptHandover(silent, continueSession)
 
     -- Reprompt for Autopass if starting new session
     if not continueSession and db.DecayConfig.sessionActive then
-        StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+        DesolateLootcouncil:PromptAutopass()
     end
 
     local RosterSys = DesolateLootcouncil:GetModule("Roster")

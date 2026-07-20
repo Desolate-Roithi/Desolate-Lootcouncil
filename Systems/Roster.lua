@@ -16,6 +16,7 @@ StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
     OnAccept = function()
         DesolateLootcouncil.sessionAutopassAnswered = true
         DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
+        DesolateLootcouncil.db.profile.enableAutoLoot = true
         local Sync = DesolateLootcouncil:GetModule("Sync")
         if Sync and Sync.SendSyncAutopass then Sync:SendSyncAutopass(true) end
     end,
@@ -191,7 +192,7 @@ function Roster:StartRaidSession()
     if DesolateLootcouncil:AmILootMaster() then
         -- Priority list propagation is now manual only via the Item Manager UI button.
 
-        StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+        DesolateLootcouncil:PromptAutopass()
     end
 
     -- Trigger immediate config sync to officers on session start
@@ -713,7 +714,7 @@ function Roster:ZONE_CHANGED_NEW_AREA()
             -- If the LM somehow never got the popup (e.g. session was persisted
             -- across a /reload without an autopass answer), re-show it.
             if IsInRaid() and DesolateLootcouncil:AmILootMaster() and not DesolateLootcouncil.sessionAutopassAnswered then
-                StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+                DesolateLootcouncil:PromptAutopass()
             end
         end
         -- Auto-ping the LM to sync Autopass and IM configs if joining late
@@ -916,6 +917,7 @@ local function ResetAutopassSession()
 end
 
 local function BroadcastAutopassState()
+    if not DesolateLootcouncil:AmILootMaster() then return end
     local Sync = DesolateLootcouncil:GetModule("Sync")
     if Sync and DesolateLootcouncil.sessionAutopassActive ~= nil then
         Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)

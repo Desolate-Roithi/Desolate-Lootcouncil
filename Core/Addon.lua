@@ -74,7 +74,7 @@ local defaults = {
             isOpen = false
         },
         minLootQuality     = 3,   -- Default to Rare
-        enableAutoLoot     = true, -- Auto-pass on loot rolls (ON by default)
+        enableAutoLoot     = false, -- Auto-pass on loot rolls (OFF by default)
         enableAutoTrade    = true, -- Auto-stage items in trade window (ON by default)
         -- Consolidated Logic (LM=Acquire, Raider=Pass)
         DecayConfig        = {
@@ -160,8 +160,12 @@ function DesolateLootcouncil:OnInitialize()
     --    `nil` broke the deterministic UI logic. Instead, we use a separate flag
     --    `sessionAutopassAnswered` to track if the LM has seen the popup, preventing
     --    endless re-prompts when the LM explicitly clicks "No" (which sets it to false).
-    self.sessionAutopassActive   = self.db.profile.DecayConfig.sessionAutopassActive or false
-    self.sessionAutopassAnswered = self.db.profile.DecayConfig.sessionAutopassAnswered or false
+    if self.db.profile.DecayConfig and not self.db.profile.DecayConfig.sessionActive then
+        self.db.profile.DecayConfig.sessionAutopassActive = false
+        self.db.profile.DecayConfig.sessionAutopassAnswered = false
+    end
+    self.sessionAutopassActive   = self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionAutopassActive or false
+    self.sessionAutopassAnswered = self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionAutopassAnswered or false
     self.amILM                   = false -- explicit init; starts nil otherwise, breaks wasLM guard in UpdateLootMasterStatus
     self.lastLeader              = nil
 
@@ -182,8 +186,12 @@ function DesolateLootcouncil:OnInitialize()
 end
 
 function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
-    self.sessionAutopassActive   = self.db.profile.DecayConfig.sessionAutopassActive or false
-    self.sessionAutopassAnswered = self.db.profile.DecayConfig.sessionAutopassAnswered or false
+    if self.db.profile.DecayConfig and not self.db.profile.DecayConfig.sessionActive then
+        self.db.profile.DecayConfig.sessionAutopassActive = false
+        self.db.profile.DecayConfig.sessionAutopassAnswered = false
+    end
+    self.sessionAutopassActive   = self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionAutopassActive or false
+    self.sessionAutopassAnswered = self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionAutopassAnswered or false
 
     local Roster                 = self:GetModule("Roster", true)
     if Roster and Roster.UpdateScoreMap then
@@ -219,6 +227,7 @@ function DesolateLootcouncil:OnEnable()
     self:RegisterMessage("DLC_OFFICER_FLAG_CHANGED", function()
         self.amIOfficer = self:AmIOfficerOrLM()
     end)
+
 end
 
 local REFRESH_TIMER = nil
@@ -469,10 +478,13 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     -- If we just BECAME the LM, reset the prompt flag so we can decide for ourselves
     if self.amILM and not wasLM then
         self.sessionAutopassAnswered = false
+        if self.db.profile.DecayConfig then
+            self.db.profile.DecayConfig.sessionAutopassAnswered = false
+        end
         local Session = self:GetModule("Session", true)
         local pendingChoice = Session and Session.pendingHandoverChoice
         if not pendingChoice and IsInRaid() and self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
-            StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+            self:PromptAutopass()
         end
     end
 
@@ -781,4 +793,63 @@ function DesolateLootcouncil:GetBroadcastChannel()
     if IsInRaid() then return "RAID" end
     if IsInGroup() then return "PARTY" end
     return nil
+end
+
+function DesolateLootcouncil:DoAllGroupMembersHaveAddon()
+    if not IsInGroup() then return true end
+
+    -- Check if simulation is active
+    local Sim = self:GetModule("Simulation", true)
+    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    if simActive then return true end
+
+    local prefix = IsInRaid() and "raid" or "party"
+    local count = GetNumGroupMembers()
+    local Comm = self:GetModule("Comm", true)
+    if not Comm then return false end
+
+    for i = 1, count do
+        local name = GetUnitName(prefix .. i, true)
+        if name then
+            local found = false
+            for verName in pairs(Comm.playerVersions) do
+                if self:SmartCompare(name, verName) then
+                    found = true
+                    break
+                end
+            end
+            if not found and not self:SmartCompare(name, "player") then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+function DesolateLootcouncil:IsLMAddonUser()
+    local lm = self:DetermineLootMaster()
+    if not lm or lm == "" then return false end
+    if self:SmartCompare(lm, "player") then return true end
+    if self.activeAddonUsers and self.activeAddonUsers[lm] then return true end
+    return false
+end
+
+function DesolateLootcouncil:PromptAutopass()
+    if not self:AmILootMaster() then return end
+
+    local allHaveAddon = self:DoAllGroupMembersHaveAddon()
+    if not allHaveAddon then
+        local Sync = self:GetModule("Sync", true)
+        if Sync and Sync.SendSyncAutopass then
+            Sync:SendSyncAutopass(false)
+        end
+        self.sessionAutopassAnswered = true
+        if self.db and self.db.profile and self.db.profile.DecayConfig then
+            self.db.profile.DecayConfig.sessionAutopassAnswered = true
+        end
+        self:Print(L["Autopass is disabled because not everyone in the raid has the addon."])
+        return
+    end
+
+    StaticPopup_Show("DLC_ENABLE_AUTOPASS")
 end

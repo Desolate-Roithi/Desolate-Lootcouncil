@@ -28,6 +28,10 @@ end
 function Autopass:SyncAutopassState()
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if config then
+        if not config.sessionActive then
+            config.sessionAutopassActive = false
+            config.sessionAutopassAnswered = false
+        end
         DesolateLootcouncil.sessionAutopassActive = config.sessionAutopassActive or false
     end
 end
@@ -132,6 +136,12 @@ function Autopass:OnStartLootRoll(event, rollID)
         return
     end
 
+    -- Security Check: Loot Master must have the addon. Protects PUG players from passing.
+    if not isLM and not DesolateLootcouncil:IsLMAddonUser() then
+        DebugLog(string.format("Skipped RollID %d: Loot Master is not using the addon.", rollID))
+        return
+    end
+
     if isLM then
         C_Timer.After(1.0, function()
             local Sync = DesolateLootcouncil:GetModule("Sync", true)
@@ -155,6 +165,14 @@ function Autopass:ScanAndAutopassActiveLootRolls()
 
     if not GroupLootContainer or not GroupLootContainer.rollFrames then
         DebugLog("Skipped scan: GroupLootContainer not found or has no rollFrames.")
+        return
+    end
+
+    local isLM = DesolateLootcouncil:AmILootMaster()
+
+    -- Security Check: Loot Master must have the addon. Protects PUG players from passing.
+    if not isLM and not DesolateLootcouncil:IsLMAddonUser() then
+        DebugLog("Skipped scan: Loot Master is not using the addon.")
         return
     end
 

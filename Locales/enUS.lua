@@ -301,3 +301,11 @@ L["Handover to %s timed out."] = true
 L["Only the Loot Master or Officers can view the Loot History."] = true
 L["Raid leadership received. Loot Master session restored."] = true
 L["Add all loot from this boss/raid to the import staging area."] = true
+L["Autopass is disabled because not everyone in the raid has the addon."] = true
+L["Sync Autopass"] = true
+L["Not Prompted"] = true
+L["Enabled"] = true
+L["Disabled"] = true
+L["Autopass state synced to raid group."] = true
+L["Highest Found Version: %s  |  Autopass: %s"] = true
+

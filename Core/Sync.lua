@@ -299,20 +299,29 @@ function SyncHandlers:IM_SYNC(payload, sender)
 end
 
 function SyncHandlers:SYNC_AUTOPASS(data, sender)
-    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then
-        local isActive
-        local isHeartbeat = false
-        if type(data) == "table" then
-            isActive = data.isActive
-            isHeartbeat = data.isHeartbeat
-        else
-            isActive = data
-        end
+    local isActive
+    local isHeartbeat = false
+    if type(data) == "table" then
+        isActive = data.isActive
+        isHeartbeat = data.isHeartbeat
+    else
+        isActive = data
+    end
 
+    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil.activeLootMaster or DesolateLootcouncil:DetermineLootMaster()) then
         local changed = (DesolateLootcouncil.sessionAutopassActive ~= isActive)
         DesolateLootcouncil.sessionAutopassActive = isActive
 
+        if isActive then
+            DesolateLootcouncil.db.profile.enableAutoLoot = true
+        end
+
         if not isHeartbeat or changed then
+            local Comm = DesolateLootcouncil:GetModule("Comm", true)
+            if Comm then
+                Comm:SendComm("SYNC_AUTOPASS_ACK", { isActive = isActive }, sender)
+            end
+
             local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
             if changed or not isHeartbeat then
                 DesolateLootcouncil:DLC_Log("Loot Master has " .. status .. " Autopass for this session.")
@@ -324,7 +333,9 @@ function SyncHandlers:SYNC_AUTOPASS(data, sender)
             end
         end
     else
-        DesolateLootcouncil:DLC_Log(string.format("SYNC_AUTOPASS from non-LM '%s' ignored.", tostring(sender)))
+        Sync.pendingAutopass = Sync.pendingAutopass or {}
+        Sync.pendingAutopass[sender] = { isActive = isActive, isHeartbeat = isHeartbeat }
+        DesolateLootcouncil:DLC_Log(string.format("SYNC_AUTOPASS from non-LM '%s' cached (not yet recognized as LM).", tostring(sender)))
     end
 end
 

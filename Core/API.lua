@@ -657,7 +657,7 @@ end
 
 --- Reprompts the Loot Master to choose whether to enable autopass for this session.
 function DLC_API:RepromptAutopass()
-    StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+    DesolateLootcouncil:PromptAutopass()
 end
 
 --- Whispers the selected data type ("PRIORITY" or "ROSTER") to raid officers.

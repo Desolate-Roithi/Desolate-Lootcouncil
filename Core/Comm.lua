@@ -49,6 +49,7 @@ function CommHandlers:VERSION_REQ(data, sender)
     -- Reply with my version and enchanting skill
     local responseData = {
         version = DesolateLootcouncil.version,
+        autopassActive = DesolateLootcouncil.sessionAutopassActive,
     }
     local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
     if (mySkill or 0) > 0 then
@@ -58,7 +59,7 @@ function CommHandlers:VERSION_REQ(data, sender)
 
     -- Track sender too if they sent version and skill
     if data and data.version then
-        self:UpdatePlayerInfo(sender, data.version, data.enchantingSkill or 0)
+        self:UpdatePlayerInfo(sender, data.version, data.enchantingSkill or 0, data.autopassActive)
     end
 
     -- Autopass Sync Handshake: If the local player is the Loot Master, respond to the player's
@@ -101,21 +102,47 @@ function CommHandlers:VERSION_REQ(data, sender)
             end
         end
     end
+
+    -- Handshake correction: if the local player is the Group Leader (the authority for nominating LM),
+    -- whisper the current active LM directly to the sender.
+    local isLeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
+    if isLeader then
+        local SessionMod = DesolateLootcouncil:GetModule("Session", true)
+        if SessionMod then
+            local targetLM = DesolateLootcouncil.activeLootMaster or DesolateLootcouncil:DetermineLootMaster()
+            if targetLM then
+                local lmPayload = { command = "SYNC_LM", data = { lm = targetLM } }
+                self:SendCommMessage("DLC_Loot", SessionMod:Serialize(lmPayload), "WHISPER", sender)
+            end
+        end
+    end
 end
 CommHandlers.VERSION_CHECK = CommHandlers.VERSION_REQ
 
 function CommHandlers:VERSION_RESP(data, sender)
     -- Store sender's version and enchanting skill
-    local ver, skill
+    local ver, skill, autopassActive
     if type(data) == "table" then
         ver = data.version
         skill = data.enchantingSkill
+        autopassActive = data.autopassActive
     else
         ver = data
         skill = nil
+        autopassActive = nil
     end
 
-    self:UpdatePlayerInfo(sender, ver, skill)
+    self:UpdatePlayerInfo(sender, ver, skill, autopassActive)
+end
+
+function CommHandlers:SYNC_AUTOPASS_ACK(data, sender)
+    local active
+    if type(data) == "table" then
+        active = data.isActive
+    else
+        active = data
+    end
+    self:UpdatePlayerInfo(sender, nil, nil, active)
 end
 
 function CommHandlers:LOOT_SESSION_START(data, sender)
@@ -177,10 +204,18 @@ function Comm:IsLMAbsent()
 end
 
 
-function Comm:UpdatePlayerInfo(sender, version, skill)
-    self.playerVersions[sender] = version
+function Comm:UpdatePlayerInfo(sender, version, skill, autopassActive)
+    if version ~= nil then
+        self.playerVersions[sender] = version
+    end
     if skill ~= nil then
         self.playerEnchantingSkill[sender] = skill
+    end
+    if not self.playerAutopassStates then
+        self.playerAutopassStates = {}
+    end
+    if autopassActive ~= nil then
+        self.playerAutopassStates[sender] = autopassActive
     end
 
     -- Sync to Global for Debug module
@@ -198,6 +233,10 @@ function Comm:SendVersionCheck()
     self.playerVersions[myName] = DesolateLootcouncil.version
     local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
     self.playerEnchantingSkill[myName] = mySkill
+    if not self.playerAutopassStates then
+        self.playerAutopassStates = {}
+    end
+    self.playerAutopassStates[myName] = DesolateLootcouncil.sessionAutopassActive
 
     -- 2. Throttling for Broadcast
     local now = GetTime()
@@ -209,7 +248,8 @@ function Comm:SendVersionCheck()
     self.lastVersionCheck = now
 
     local payloadData = {
-        version = DesolateLootcouncil.version
+        version = DesolateLootcouncil.version,
+        autopassActive = DesolateLootcouncil.sessionAutopassActive,
     }
     if (mySkill or 0) > 0 then
         payloadData.enchantingSkill = mySkill

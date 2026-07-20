@@ -328,4 +328,12 @@ L["Handover to %s timed out."] = "Übergabe an %s abgelaufen."
 L["An active raid session was found (inactive for %.1f hours).\nWould you like to resume this session or end it?"] = "Eine aktive Schlachtzugssitzung wurde gefunden (inaktiv für %.1f Stunden).\nMöchtest du diese Sitzung fortsetzen oder beenden?"
 L["Add all loot from this boss/raid to the import staging area."] = "Füge die gesamte Beute von diesem Boss/Raid dem Import-Vorbereitungsbereich hinzu."
 L["An active raid session was found.\nWould you like to resume this session or end it?"] = "Eine aktive Schlachtzugssitzung wurde gefunden.\nMöchtest du diese Sitzung fortsetzen oder beenden?"
+L["Autopass is disabled because not everyone in the raid has the addon."] = "Autopass ist deaktiviert, da nicht alle Schlachtzugsmitglieder das Addon installiert haben."
+L["Sync Autopass"] = "Autopass synchronisieren"
+L["Not Prompted"] = "Nicht gefragt"
+L["Enabled"] = "Aktiviert"
+L["Disabled"] = "Deaktiviert"
+L["Autopass state synced to raid group."] = "Autopass-Status mit dem Schlachtzug synchronisiert."
+L["Highest Found Version: %s  |  Autopass: %s"] = "Höchste gefundene Version: %s  |  Autopass: %s"
+
 
