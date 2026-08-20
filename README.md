@@ -2,9 +2,14 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.0.1  
-**Last Updated:** 2026-06-08  
-**Compatibility:** WoW 12.0.5 (Midnight)  
+**Latest Version:** v1.1.2  
+**Last Updated:** 2026-08-20  
+**Compatibility:** WoW 12.1.0 (Midnight)  
+
+## Release v1.1.2 (2026-08-20)
+
+* **WoW 12.1.0 Compatibility**: Updated TOC interface tag to `120100` and added `pcall` / `issecretvalue()` protections for `UnitClass` and `UnitIsGroupLeader` secret returns.
+* **Component Cleanup**: Cleanly unlinked and disabled the temporary Lu'Ra memory tracker widget.
 
 ## Features
 
