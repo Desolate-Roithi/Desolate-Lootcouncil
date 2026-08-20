@@ -43,6 +43,15 @@ DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "A
 _G.DesolateLootcouncil = DesolateLootcouncil
 DesolateLootcouncil.version = C_AddOns and C_AddOns.GetAddOnMetadata("Desolate_Lootcouncil", "Version") or "1.0.0"
 
+local function SafeIsGroupLeader(unit)
+    unit = unit or "player"
+    local ok, isLeader = pcall(UnitIsGroupLeader, unit)
+    if ok and isLeader ~= nil and not (type(issecretvalue) == "function" and issecretvalue(isLeader)) then
+        return not not isLeader
+    end
+    return false
+end
+
 local defaults = {
     global = {
         activeRaidProfile = "",
@@ -333,12 +342,12 @@ function DesolateLootcouncil:GetGroupLeader()
             if name and rank == 2 then return name end
         end
     else
-        if UnitIsGroupLeader("player") then
+        if SafeIsGroupLeader("player") then
             return UnitName("player")
         end
         for i = 1, GetNumSubgroupMembers() do
             local unit = "party" .. i
-            if UnitIsGroupLeader(unit) then
+            if SafeIsGroupLeader(unit) then
                 local pName, pRealm = UnitName(unit)
                 if pRealm and pRealm ~= "" then return pName .. "-" .. pRealm:gsub("%s+", "") end
                 return pName
@@ -378,7 +387,7 @@ function DesolateLootcouncil:DetermineLootMaster()
             end
         end
     elseif IsInGroup() then
-        isLeader = UnitIsGroupLeader("player")
+        isLeader = SafeIsGroupLeader("player")
     end
 
     if isLeader then
@@ -401,7 +410,7 @@ function DesolateLootcouncil:DetermineLootMaster()
     elseif IsInGroup() then
         for i = 1, GetNumSubgroupMembers() do
             local unit = "party" .. i
-            if UnitIsGroupLeader(unit) then
+            if SafeIsGroupLeader(unit) then
                 local pName, pRealm = UnitName(unit)
                 if pRealm and pRealm ~= "" then return pName .. "-" .. pRealm:gsub("%s+", "") end
                 return pName

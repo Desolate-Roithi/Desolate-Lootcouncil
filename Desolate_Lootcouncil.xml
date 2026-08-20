@@ -51,8 +51,6 @@
     <Script file="UI\NativeGUI.lua"/>
     <Script file="UI\Core.lua"/>
     <Script file="UI\Widgets\Sidebar.lua"/>
-    <!-- [LURA] Remove line below to unload the Lura widget (see UI\Widgets\Lura\LuraWidget.lua removal guide) -->
-    <Script file="UI\Widgets\Lura\LuraWidget.lua"/>
     <Script file="UI\Layouts.lua"/>
     <Script file="UI\Windows\Attendance.lua"/>
     <Script file="UI\Windows\PriorityLogHistory.lua"/>

@@ -23,6 +23,15 @@ local Session = DesolateLootcouncil:NewModule("Session", "AceEvent-3.0", "AceCom
 ---@type DLC_Ref_Session
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Session]]
 
+local function SafeIsGroupLeader(unit)
+    unit = unit or "player"
+    local ok, isLeader = pcall(UnitIsGroupLeader, unit)
+    if ok and isLeader ~= nil and not (type(issecretvalue) == "function" and issecretvalue(isLeader)) then
+        return not not isLeader
+    end
+    return false
+end
+
 ---@class DistributionPayload
 ---@field command string
 ---@field data table
@@ -323,7 +332,7 @@ function Session:RestoreSession()
         local sessionStarted = (expiry > 300) and (expiry - 300) or expiry
         local isExpiredOver12h = now > (sessionStarted + 43200)
 
-        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player") or (IsInGroup() and UnitIsGroupLeader("player"))
+        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player") or (IsInGroup() and SafeIsGroupLeader("player"))
         if isLM then
             DesolateLootcouncil.activeLootMaster = UnitName("player")
             DesolateLootcouncil.amILM = true
@@ -367,7 +376,7 @@ function Session:PerformRestore(state, now, expiry)
         self.closedItems    = state.closed or {}
         self.sessionExpiry  = expiry
 
-        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player") or (IsInGroup() and UnitIsGroupLeader("player"))
+        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player") or (IsInGroup() and SafeIsGroupLeader("player"))
         if isLM then
             DesolateLootcouncil.activeLootMaster = UnitName("player")
             DesolateLootcouncil.amILM = true
@@ -714,7 +723,7 @@ local function IsAuthorizedSessionSender(sender)
             end
         end
     elseif IsInGroup() then
-        amILeader = UnitIsGroupLeader("player")
+        amILeader = SafeIsGroupLeader("player")
     else
         amILeader = true
     end
@@ -1019,7 +1028,7 @@ function Session:HandleSyncLM(payload, sender)
         end
     elseif IsInGroup() then
         -- In a party, check if the sender is the leader
-        isAuthorized = UnitIsGroupLeader(sender)
+        isAuthorized = SafeIsGroupLeader(sender)
     else
         -- Solo: accept self-syncs
         isAuthorized = DesolateLootcouncil:SmartCompare(sender, "player")

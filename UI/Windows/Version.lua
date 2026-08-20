@@ -5,6 +5,15 @@ if AT.abortLoad then return end
 local UI_Version = DesolateLootcouncil:NewModule("UI_Version", "AceEvent-3.0", "AceTimer-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
+local function SafeGetUnitClass(unit)
+    unit = unit or "player"
+    local ok, _, classFilename = pcall(UnitClass, unit)
+    if ok and classFilename and not (type(issecretvalue) == "function" and issecretvalue(classFilename)) then
+        return classFilename
+    end
+    return "WARRIOR"
+end
+
 
 
 -- Helper functions to keep nesting flat
@@ -123,7 +132,7 @@ function UI_Version:UpdateVersionList(isTest)
         end
     end
 
-    AddEntry(UnitName("player"), select(2, UnitClass("player")), DesolateLootcouncil.API:GetVersion())
+    AddEntry(UnitName("player"), SafeGetUnitClass("player"), DesolateLootcouncil.API:GetVersion())
 
     if IsInRaid() then
         for i = 1, 40 do
@@ -139,7 +148,7 @@ function UI_Version:UpdateVersionList(isTest)
                 local unit = "party" .. i
                 if UnitExists(unit) then
                     local name = UnitName(unit)
-                    local filename = select(2, UnitClass(unit))
+                    local filename = SafeGetUnitClass(unit)
                     AddEntry(name, filename, nil)
                 end
             end

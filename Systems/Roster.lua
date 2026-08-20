@@ -3,6 +3,15 @@ if AT.abortLoad then return end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
+local function SafeGetUnitClass(unit)
+    unit = unit or "player"
+    local ok, _, classFilename = pcall(UnitClass, unit)
+    if ok and classFilename and not (type(issecretvalue) == "function" and issecretvalue(classFilename)) then
+        return classFilename
+    end
+    return nil
+end
+
 ---@class Roster : AceModule, AceEvent-3.0, AceConsole-3.0
 local Roster = DesolateLootcouncil:NewModule("Roster", "AceEvent-3.0", "AceConsole-3.0")
 
@@ -330,7 +339,7 @@ end
 ---@return string classFilename
 function Roster:GetUnitClass(unitName)
     if DesolateLootcouncil:SmartCompare(unitName, "player") then
-        local _, classFilename = UnitClass("player")
+        local classFilename = SafeGetUnitClass("player")
         return classFilename
     end
     if IsInRaid() and GetRaidRosterInfo then
@@ -344,7 +353,7 @@ function Roster:GetUnitClass(unitName)
         for i = 1, GetNumSubgroupMembers() do
             local name = GetUnitName("party" .. i, true)
             if name and DesolateLootcouncil:SmartCompare(name, unitName) then
-                local _, fileName = UnitClass("party" .. i)
+                local fileName = SafeGetUnitClass("party" .. i)
                 return fileName
             end
         end

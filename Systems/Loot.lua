@@ -24,6 +24,15 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local canaccessvalue = canaccessvalue
 
+local function SafeIsGroupLeader(unit)
+    unit = unit or "player"
+    local ok, isLeader = pcall(UnitIsGroupLeader, unit)
+    if ok and isLeader ~= nil and not (type(issecretvalue) == "function" and issecretvalue(isLeader)) then
+        return not not isLeader
+    end
+    return false
+end
+
 
 
 function Loot:OnInitialize()
@@ -410,7 +419,7 @@ function Loot:_BroadcastAward(itemData, winnerName, voteType)
     local msg = string.format(L["Winner of %s is %s! (%s)"], itemData.link, winnerDisplay, voteType)
 
     if IsInRaid() then
-        if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then
+        if SafeIsGroupLeader("player") or UnitIsGroupAssistant("player") then
             C_ChatInfo.SendChatMessage(msg, "RAID_WARNING")
         else
             C_ChatInfo.SendChatMessage(msg, "RAID")
