@@ -123,7 +123,7 @@ end
 
 function Autopass:OnStartLootRoll(event, rollID)
     local db = DesolateLootcouncil.db.profile
-    if not db.enableAutoLoot then
+    if not db.enableAutoLoot and not DesolateLootcouncil.sessionAutopassActive then
         DebugLog(string.format("Skipped RollID %d: enableAutoLoot setting is disabled.", rollID))
         return
     end

@@ -625,7 +625,7 @@ function Loot:ReawardItem(index)
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
     if Monitor then Monitor:ShowMonitorWindow() end
 
-    DesolateLootcouncil:Print(L["Item reverted to bidding session."])
+    DesolateLootcouncil:Print(L["Item reverted to monitor window."])
 
     local db = DesolateLootcouncil.db
     if db and db.profile and db.profile.DecayConfig then

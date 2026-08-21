@@ -15,12 +15,18 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 -- UI can display an accurate countdown without duplicating this magic number.
 local VERSION_CHECK_COOLDOWN = 10
 
+function Comm:OnInitialize()
+    self.playerVersions = {}
+    self.playerEnchantingSkill = {}
+    self.lastVersionCheck = 0
+end
+
 function Comm:OnEnable()
     -- Register the communication prefix
     self:RegisterComm("DLC_COMM", "OnCommReceived")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "PruneRosterData")
-    self.playerVersions = {}
-    self.playerEnchantingSkill = {}
+    self.playerVersions = self.playerVersions or {}
+    self.playerEnchantingSkill = self.playerEnchantingSkill or {}
     self.lastVersionCheck = 0
     self.rosterSyncTimer = nil
 
@@ -205,14 +211,15 @@ end
 
 
 function Comm:UpdatePlayerInfo(sender, version, skill, autopassActive)
+    self.playerVersions = self.playerVersions or {}
+    self.playerEnchantingSkill = self.playerEnchantingSkill or {}
+    self.playerAutopassStates = self.playerAutopassStates or {}
+
     if version ~= nil then
         self.playerVersions[sender] = version
     end
     if skill ~= nil then
         self.playerEnchantingSkill[sender] = skill
-    end
-    if not self.playerAutopassStates then
-        self.playerAutopassStates = {}
     end
     if autopassActive ~= nil then
         self.playerAutopassStates[sender] = autopassActive
@@ -228,14 +235,15 @@ function Comm:UpdatePlayerInfo(sender, version, skill, autopassActive)
 end
 
 function Comm:SendVersionCheck()
+    self.playerVersions = self.playerVersions or {}
+    self.playerEnchantingSkill = self.playerEnchantingSkill or {}
+    self.playerAutopassStates = self.playerAutopassStates or {}
+
     -- 1. Explicitly update self (Always refresh local state even if throttled)
     local myName = UnitName("player")
     self.playerVersions[myName] = DesolateLootcouncil.version
     local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
     self.playerEnchantingSkill[myName] = mySkill
-    if not self.playerAutopassStates then
-        self.playerAutopassStates = {}
-    end
     self.playerAutopassStates[myName] = DesolateLootcouncil.sessionAutopassActive
 
     -- 2. Throttling for Broadcast
@@ -269,6 +277,10 @@ end
 --- Seeds the local player into playerVersions if not already present.
 --- Call this once when a UI window that needs version data first opens.
 function Comm:SeedSelf()
+    self.playerVersions = self.playerVersions or {}
+    self.playerEnchantingSkill = self.playerEnchantingSkill or {}
+    self.playerAutopassStates = self.playerAutopassStates or {}
+
     local myName = UnitName("player")
     if not myName or myName == "Unknown Entity" then return end
     if self.playerVersions[myName] then return end -- already seeded

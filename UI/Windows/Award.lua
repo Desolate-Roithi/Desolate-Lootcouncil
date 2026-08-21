@@ -261,7 +261,8 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
     scroll:SetHeight(topOffset + rowHeight + 10)
 end
 
-local function RenderAwardHeader(self, itemData)
+local function RenderAwardHeader(self, itemData, isLM)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
     local _, properLink, quality = C_Item.GetItemInfo(itemData.link)
     if not quality then
@@ -291,9 +292,14 @@ local function RenderAwardHeader(self, itemData)
         icon:SetPoint("CENTER", border, "CENTER")
         container.icon = icon
 
+        -- Revote button
+        local btnRevote = NativeGUI:CreateButton(container, L["Revote"], 70, 24, "Pass")
+        btnRevote:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+        container.btnRevote = btnRevote
+
         local text = container:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         text:SetPoint("LEFT", border, "RIGHT", 10, 0)
-        text:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+        text:SetPoint("RIGHT", btnRevote, "LEFT", -10, 0)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         container.text = text
@@ -302,6 +308,23 @@ local function RenderAwardHeader(self, itemData)
     local iconTexture = C_Item.GetItemIconByID(itemData.itemID) or 134400
     self.awardHeaderContainer.icon:SetTexture(iconTexture)
     self.awardHeaderContainer.text:SetText((properLink or itemData.link) .. "|cffaaaaaa" .. catText .. "|r")
+
+    if isLM then
+        self.awardHeaderContainer.btnRevote:Show()
+        self.awardHeaderContainer.btnRevote:SetScript("OnClick", function()
+            local guid = itemData.sourceGUID or itemData.link
+            DesolateLootcouncil.API:RevoteItem(guid)
+            self.awardFrame:Hide()
+        end)
+        self.awardHeaderContainer.text:ClearAllPoints()
+        self.awardHeaderContainer.text:SetPoint("LEFT", self.awardHeaderContainer.iconBorder, "RIGHT", 10, 0)
+        self.awardHeaderContainer.text:SetPoint("RIGHT", self.awardHeaderContainer.btnRevote, "LEFT", -10, 0)
+    else
+        self.awardHeaderContainer.btnRevote:Hide()
+        self.awardHeaderContainer.text:ClearAllPoints()
+        self.awardHeaderContainer.text:SetPoint("LEFT", self.awardHeaderContainer.iconBorder, "RIGHT", 10, 0)
+        self.awardHeaderContainer.text:SetPoint("RIGHT", self.awardHeaderContainer, "RIGHT", 0, 0)
+    end
 
     -- Quality color border
     local r, g, b
@@ -476,12 +499,15 @@ function UI_Award:ShowAwardWindow(itemData)
 
     self.awardFrame:Show()
 
+    self.awardRowPool = self.awardRowPool or {}
+    self.deRowPool = self.deRowPool or {}
+
     -- Reset pools
     for _, r in ipairs(self.awardRowPool) do r:Hide() end
     for _, r in ipairs(self.deRowPool) do r:Hide() end
 
     -- Render Custom Header
-    RenderAwardHeader(self, itemData)
+    RenderAwardHeader(self, itemData, isLM)
 
     local API  = DesolateLootcouncil.API
     local guid = itemData.sourceGUID or itemData.link

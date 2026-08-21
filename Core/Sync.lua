@@ -265,7 +265,7 @@ function SyncHandlers:IM_SYNC(payload, sender)
     local logMessage = nil
 
     if isManual then
-        if not DesolateLootcouncil:SmartCompare(sender, "player") then
+        if not DesolateLootcouncil:SmartCompare(sender, "player") and not amILM then
             if IsItemManagerDesynced(data) then
                 shouldOverwrite = true
                 logMessage = "|cff00ffff[Item Manager]|r Synced: Manual database update received from '" .. DesolateLootcouncil:GetDisplayName(sender) .. "'."
@@ -397,28 +397,21 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     local Comm = DesolateLootcouncil:GetModule("Comm", true)
 
     if data.officers then
-        local RosterSys = DesolateLootcouncil:GetModule("Roster", true)
-        if RosterSys then
-            local incomingOfficers = {}
-            for _, officerName in ipairs(data.officers) do
-                local normName = Ambiguate(officerName, "none")
-                incomingOfficers[normName] = true
+        DesolateLootcouncil.officerScores = {}
+        for _, officerName in ipairs(data.officers) do
+            local score = DesolateLootcouncil:GetScoreName(officerName)
+            if score then
+                DesolateLootcouncil.officerScores[score] = true
             end
+        end
 
-            -- Update existing roster entries
-            for name, rData in pairs(db.MainRoster or {}) do
-                local normName = Ambiguate(name, "none")
-                local isOfficerIncoming = incomingOfficers[normName] or false
-                if rData.isOfficer ~= isOfficerIncoming then
-                    RosterSys:SetOfficer(name, isOfficerIncoming)
-                end
-                incomingOfficers[normName] = nil
-            end
+        DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+    end
 
-            -- Add new officers not currently in the local roster
-            for officerName in pairs(incomingOfficers) do
-                RosterSys:SetOfficer(officerName, true)
-            end
+    if data.rosterTimestamp and Comm and not DesolateLootcouncil:AmILootMaster() then
+        local localRosterTs = db.rosterTimestamp or 0
+        if data.rosterTimestamp > localRosterTs then
+            Comm:SendComm("ROSTER_PULL_REQUEST", {}, sender)
         end
     end
 

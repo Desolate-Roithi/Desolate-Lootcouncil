@@ -42,6 +42,10 @@ function UI:OnEnable()
         end, 2) -- 2 second debounce
     end)
 
+    self:RegisterMessage("DLC_SESSION_STOPPED", function()
+        self:CloseAllWindows()
+    end)
+
     -- Register Blizzard Settings Panel Category
     local blizzOptionsFrame = CreateFrame("Frame", "DesolateLootcouncilBlizOptions", UIParent)
     blizzOptionsFrame.name = "Desolate Loot Council"
@@ -159,4 +163,46 @@ end
 function UI:RemoveVotingItem(guid)
     local V = DesolateLootcouncil:GetModule("UI_Voting")
     if V then V:RemoveVotingItem(guid) end
+end
+
+function UI:CloseAllWindows()
+    local windowModules = {
+        "UI_Monitor",
+        "UI_Voting",
+        "UI_Loot",
+        "UI_Award",
+        "UI_Attendance",
+        "UI_TradeList",
+        "UI_History",
+        "UI_Version",
+        "UI_PriorityOverride",
+        "UI_ItemManager",
+        "UI_Settings",
+        "UI_EJLootImport",
+        "UI_PriorityLogHistory",
+        "UI_RaidHistory"
+    }
+
+    for _, modName in ipairs(windowModules) do
+        local mod = DesolateLootcouncil:GetModule(modName, true)
+        if mod then
+            if mod.Close then
+                pcall(function() mod:Close() end)
+            end
+            if mod.Hide then
+                pcall(function() mod:Hide() end)
+            end
+            local frameProps = {
+                "frame", "mainFrame", "window", "monitorFrame", "votingFrame",
+                "lootFrame", "awardFrame", "attendanceFrame", "historyFrame", "sessionFrame",
+                "tradeListFrame", "versionFrame", "overrideFrame", "priorityOverrideFrame",
+                "itemManagerFrame", "settingsFrame", "logFrame", "deFrame"
+            }
+            for _, prop in ipairs(frameProps) do
+                if mod[prop] and type(mod[prop]) == "table" and mod[prop].Hide then
+                    pcall(function() mod[prop]:Hide() end)
+                end
+            end
+        end
+    end
 end

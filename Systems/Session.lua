@@ -229,7 +229,7 @@ function Session:SendDLCHeartbeat()
     local officerMains = {}
     if db.MainRoster then
         for name, data in pairs(db.MainRoster) do
-            if data.isOfficer then
+            if type(data) == "table" and data.isOfficer then
                 table.insert(officers, name)
                 officerMains[DesolateLootcouncil:GetScoreName(name)] = true
             end
@@ -891,6 +891,77 @@ function Session:HandleCloseItem(payload)
     end
 end
 
+function Session:HandleReopenItem(payload)
+    local guid = payload.data and payload.data.guid
+    local newExpiry = payload.data and payload.data.expiry
+    if guid then
+        if self.closedItems then
+            self.closedItems[guid] = nil
+        end
+
+        if self.sessionVotes then
+            self.sessionVotes[guid] = nil
+        end
+
+        if self.myLocalVotes then
+            self.myLocalVotes[guid] = nil
+        end
+
+        if self.outboundVotes then
+            self.outboundVotes[guid] = nil
+        end
+
+        if self.clientLootList then
+            for _, item in ipairs(self.clientLootList) do
+                if (item.sourceGUID or item.link) == guid then
+                    if newExpiry then item.expiry = newExpiry end
+                    break
+                end
+            end
+        end
+
+        local session = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session
+        if session then
+            if session.bidding then
+                for _, item in ipairs(session.bidding) do
+                    if (item.sourceGUID or item.link) == guid then
+                        if newExpiry then item.expiry = newExpiry end
+                        break
+                    end
+                end
+            end
+            if session.activeState then
+                session.activeState[guid] = nil
+                if session.activeState.myVotes then
+                    session.activeState.myVotes[guid] = nil
+                end
+            end
+        end
+
+        local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
+        if Voting then
+            if Voting.myVotes then Voting.myVotes[guid] = nil end
+            if Voting.myNotes then Voting.myNotes[guid] = nil end
+            if Voting.noteExpanded then Voting.noteExpanded[guid] = nil end
+            if Voting.cachedVotingItems then
+                for _, item in ipairs(Voting.cachedVotingItems) do
+                    if (item.sourceGUID or item.link) == guid then
+                        if newExpiry then item.expiry = newExpiry end
+                        break
+                    end
+                end
+            end
+            if Voting.announcedMilestones then
+                Voting.announcedMilestones[guid] = nil
+            end
+        end
+
+        self.sessionPayloadCache = nil -- Invalidate heartbeat cache so new expiry/closed state is broadcast
+        DesolateLootcouncil:DLC_Log("Voting reopened for item: " .. string.sub(guid, -8))
+        self:SendMessage("DLC_ITEM_REOPENED", guid, newExpiry)
+    end
+end
+
 function Session:HandleHistoryUpdate(payload)
     -- Gate: Only LM or Assists store history. LM already stored it locally during award,
     -- so this handler only inserts it for Assistants who are not LM. Normal Raiders do not store history.
@@ -1078,6 +1149,8 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
         self:HandleRemoveItem(payload)
     elseif payload.command == "CLOSE_ITEM" then
         self:HandleCloseItem(payload)
+    elseif payload.command == "REOPEN_ITEM" then
+        self:HandleReopenItem(payload)
     elseif payload.command == "LOOT_SESSION_START" then
         self:HandleStartSession(payload, sender)
     elseif payload.command == "LOOT_SESSION_END" then
@@ -1086,6 +1159,16 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
         self:HandleHistoryUpdate(payload)
     elseif payload.command == "SYNC_LM" then
         self:HandleSyncLM(payload, sender)
+    end
+end
+
+function Session:SendReopenItem(itemGUID, expiry)
+    local payload = { command = "REOPEN_ITEM", data = { guid = itemGUID, expiry = expiry } }
+    self:HandleReopenItem(payload)
+    local serialized = self:Serialize(payload)
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
+    if channel then
+        self:SendCommMessage("DLC_Loot", serialized, channel)
     end
 end
 

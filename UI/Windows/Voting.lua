@@ -798,6 +798,7 @@ function UI_Voting:OnEnable()
     self:RegisterMessage("DLC_SESSION_RESTORED", "OnSessionRestored")
     self:RegisterMessage("DLC_ITEM_CLOSED", "OnItemClosed")
     self:RegisterMessage("DLC_ITEM_REMOVED", "OnItemRemoved")
+    self:RegisterMessage("DLC_ITEM_REOPENED", "OnItemReopened")
 end
 
 function UI_Voting:OnSessionStarted(eventName, cleanList, isLM)
@@ -818,6 +819,45 @@ end
 
 function UI_Voting:OnItemRemoved(eventName, guid)
     self:RemoveVotingItem(guid)
+end
+
+function UI_Voting:OnItemReopened(eventName, guid, newExpiry)
+    local API = DesolateLootcouncil.API
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if not self.votingFrame then self:CreateVotingFrame() end
+
+    self.myVotes = API:GetLocalVotes()
+    if self.myVotes then self.myVotes[guid] = nil end
+    if self.myNotes then self.myNotes[guid] = nil end
+    if self.noteExpanded then self.noteExpanded[guid] = nil end
+
+    if self.announcedMilestones then
+        self.announcedMilestones[guid] = nil
+    end
+
+    if not self.cachedVotingItems or #self.cachedVotingItems == 0 then
+        local SessionInfo = DesolateLootcouncil:GetModule("Session")
+        if SessionInfo and SessionInfo.clientLootList and #SessionInfo.clientLootList > 0 then
+            self.cachedVotingItems = SessionInfo.clientLootList
+        end
+    end
+
+    if self.cachedVotingItems then
+        for _, item in ipairs(self.cachedVotingItems) do
+            if (item.sourceGUID or item.link) == guid then
+                if newExpiry then item.expiry = newExpiry end
+                break
+            end
+        end
+    end
+
+    if self.votingFrame.isCollapsed then
+        NativeGUI:ExpandWindow(self.votingFrame, "Voting")
+    end
+
+    self:StartMilestoneChecker()
+    self:ShowVotingWindow(self.cachedVotingItems, false)
 end
 
 if _G.DLC_TEST_MODE then

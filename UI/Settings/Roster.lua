@@ -154,7 +154,7 @@ local GetOfficerToggle = function()
     if not RosterSettings.tempOfficerSelect then return false end
     local db = DesolateLootcouncil.db.profile
     local main = RosterSettings.tempOfficerSelect
-    if db.MainRoster and db.MainRoster[main] then
+    if db.MainRoster and type(db.MainRoster[main]) == "table" then
         return db.MainRoster[main].isOfficer == true
     end
     return false

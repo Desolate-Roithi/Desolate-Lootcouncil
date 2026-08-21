@@ -51,7 +51,7 @@ local function GetOfficerNamesInRaid()
                 for rosterName, rosterData in pairs(db.MainRoster) do
                     local rScore = DesolateLootcouncil:GetScoreName(rosterName)
                     if rScore == mainScore or rScore == memberScore then
-                        if rosterData.isOfficer then
+                        if type(rosterData) == "table" and rosterData.isOfficer then
                             isOfficer = true
                         end
                         if isOfficer then break end

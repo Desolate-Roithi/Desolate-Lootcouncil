@@ -278,6 +278,22 @@ function DLC_API:CloseItem(guid)
     if s and s.SendCloseItem then s:SendCloseItem(guid) end
 end
 
+--- Reopens / Revotes an item for voting (LM action).
+---@param guid string
+function DLC_API:RevoteItem(guid)
+    local s = Session()
+    if s and s.SendReopenItem then
+        local duration = (s.sessionDuration and s.sessionDuration > 0 and s.sessionDuration) or 300
+        local expiry = GetServerTime() + duration
+        s:SendReopenItem(guid, expiry)
+    end
+end
+
+function DLC_API:CloseAllWindows()
+    local UI = DesolateLootcouncil:GetModule("UI", true)
+    if UI and UI.CloseAllWindows then UI:CloseAllWindows() end
+end
+
 --- Awards the item identified by GUID to a winner with the given vote description.
 ---@param guid      string
 ---@param winner    string
@@ -981,6 +997,18 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
     if data.Roster then
         p.MainRoster = data.Roster.MainRoster
         p.playerRoster = data.Roster.playerRoster
+        p.rosterTimestamp = GetServerTime()
+
+        local Roster = DesolateLootcouncil:GetModule("Roster", true)
+        if Roster then
+            Roster:SanitizeMainsAndAlts()
+            Roster:UpdateScoreMap()
+        end
+
+        local Priority = DesolateLootcouncil:GetModule("Priority", true)
+        if Priority and Priority.SyncMissingPlayers then
+            Priority:SyncMissingPlayers()
+        end
     end
     if data.PriorityListsContent then
         for idx, list in ipairs(data.PriorityListsContent) do

@@ -2,8 +2,14 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_Attendance : AceModule
-local UI_Attendance = DesolateLootcouncil:NewModule("UI_Attendance")
+local UI_Attendance = DesolateLootcouncil:NewModule("UI_Attendance", "AceEvent-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+
+function UI_Attendance:OnEnable()
+    self:RegisterMessage("DLC_SESSION_STOPPED", function()
+        if self.attendanceFrame then self.attendanceFrame:Hide() end
+    end)
+end
 
 -- State for the Attendance Window
 local tempAttended = {}

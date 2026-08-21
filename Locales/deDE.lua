@@ -189,7 +189,7 @@ L["Winner of %s is %s! (%s)"] = "Gewinner von %s ist %s! (%s)"
 L["You have been awarded %s! Trade me."] = "Dir wurde %s zugesprochen! Handel mich an."
 L["Restored %d votes for re-awarded item."] = "%d Stimmen für neu vergebenen Gegenstand wiederhergestellt."
 L["Re-awarded item: %s"] = "Gegenstand neu vergeben: %s"
-L["Item reverted to bidding session."] = "Gegenstand in die Lootsession zurückgegeben."
+L["Item reverted to monitor window."] = "Gegenstand in das Monitor-Fenster zurückgegeben."
 L["Added test items to session."] = "Testgegenstände zur Lootsession hinzugefügt."
 L["Triggered disenchanter scan via version check."] = "Entzauberer-Scan via Versionsprüfung ausgelöst."
 
@@ -329,11 +329,14 @@ L["An active raid session was found (inactive for %.1f hours).\nWould you like t
 L["Add all loot from this boss/raid to the import staging area."] = "Füge die gesamte Beute von diesem Boss/Raid dem Import-Vorbereitungsbereich hinzu."
 L["An active raid session was found.\nWould you like to resume this session or end it?"] = "Eine aktive Schlachtzugssitzung wurde gefunden.\nMöchtest du diese Sitzung fortsetzen oder beenden?"
 L["Autopass is disabled because not everyone in the raid has the addon."] = "Autopass ist deaktiviert, da nicht alle Schlachtzugsmitglieder das Addon installiert haben."
+L["Autopass is disabled because the following members do not have the addon: %s"] = "Autopass ist deaktiviert, da folgende Mitglieder das Addon nicht installiert haben: %s"
 L["Sync Autopass"] = "Autopass synchronisieren"
 L["Not Prompted"] = "Nicht gefragt"
 L["Enabled"] = "Aktiviert"
 L["Disabled"] = "Deaktiviert"
 L["Autopass state synced to raid group."] = "Autopass-Status mit dem Schlachtzug synchronisiert."
 L["Highest Found Version: %s  |  Autopass: %s"] = "Höchste gefundene Version: %s  |  Autopass: %s"
+L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."] = "[Verfall] %s wurde von Position #%d auf #%d in Liste %s verschoben (+%d Verfall wegen Abwesenheit)."
+L["Revote"] = "Erneut abstimmen"
 
 

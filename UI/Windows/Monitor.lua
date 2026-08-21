@@ -221,6 +221,26 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         local frame = NativeGUI:CreateWindow("DLCMonitorFrame", L["Session Monitor"], "Monitor")
         frame:HookScript("OnHide", function()
             self.userClosedMonitor = true
+            if self.deFrame then self.deFrame:Hide() end
+
+            local sessionModules = {
+                "UI_TradeList",
+                "UI_History",
+                "UI_Attendance",
+                "UI_Loot",
+                "UI_Award",
+                "UI_Version",
+                "UI_PriorityOverride"
+            }
+            for _, modName in ipairs(sessionModules) do
+                local mod = DesolateLootcouncil:GetModule(modName, true)
+                if mod then
+                    local targetFrame = mod.frame or mod.tradeListFrame or mod.sessionFrame or mod.attendanceFrame or mod.lootFrame or mod.awardFrame or mod.versionFrame or mod.priorityOverrideFrame
+                    if targetFrame and targetFrame.Hide then
+                        targetFrame:Hide()
+                    end
+                end
+            end
         end)
         frame.OnCollapse = function()
             if self.scrollFrame then self.scrollFrame:Hide() end
@@ -416,6 +436,7 @@ function UI_Monitor:OnEnable()
     self:RegisterMessage("DLC_SESSION_STOPPED", "OnSessionStopped")
     self:RegisterMessage("DLC_SESSION_RESTORED", "OnSessionRestored")
     self:RegisterMessage("DLC_ITEM_REMOVED", "OnItemRemoved")
+    self:RegisterMessage("DLC_ITEM_REOPENED", "OnItemReopened")
 end
 
 function UI_Monitor:OnSessionStarted(eventName, cleanList, isLM)
@@ -426,6 +447,11 @@ end
 
 function UI_Monitor:OnSessionStopped()
     if self.monitorFrame then self.monitorFrame:Hide() end
+    if self.deFrame then self.deFrame:Hide() end
+    local UI = DesolateLootcouncil:GetModule("UI", true)
+    if UI and UI.CloseAllWindows then
+        UI:CloseAllWindows()
+    end
 end
 
 function UI_Monitor:OnSessionRestored(eventName, clientLootList, isLM)
@@ -436,6 +462,12 @@ end
 
 function UI_Monitor:OnItemRemoved(eventName, guid)
     self:ShowMonitorWindow(true)
+end
+
+function UI_Monitor:OnItemReopened(eventName, guid)
+    if DesolateLootcouncil:AmIOfficerOrLM() then
+        self:ShowMonitorWindow(true)
+    end
 end
 
 function UI_Monitor:UpdateDisenchantersButtonState()
@@ -488,5 +520,10 @@ end
 
 function UI_Monitor:CloseMasterLootWindow()
     if self.monitorFrame then self.monitorFrame:Hide() end
+    if self.deFrame then self.deFrame:Hide() end
+    local UI = DesolateLootcouncil:GetModule("UI", true)
+    if UI and UI.CloseAllWindows then
+        UI:CloseAllWindows()
+    end
 end
 

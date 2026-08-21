@@ -804,61 +804,85 @@ function DesolateLootcouncil:GetBroadcastChannel()
     return nil
 end
 
-function DesolateLootcouncil:DoAllGroupMembersHaveAddon()
-    if not IsInGroup() then return true end
+function DesolateLootcouncil:GetMissingAddonMembers()
+    if not IsInGroup() then return {} end
 
     -- Check if simulation is active
     local Sim = self:GetModule("Simulation", true)
     local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
-    if simActive then return true end
+    if simActive then return {} end
 
     local prefix = IsInRaid() and "raid" or "party"
     local count = GetNumGroupMembers()
     local Comm = self:GetModule("Comm", true)
-    if not Comm then return false end
+    local playerVersions = (Comm and Comm.playerVersions) or {}
 
+    local missing = {}
     for i = 1, count do
         local name = GetUnitName(prefix .. i, true)
         if name then
             local found = false
-            for verName in pairs(Comm.playerVersions) do
+            for verName in pairs(playerVersions) do
                 if self:SmartCompare(name, verName) then
                     found = true
                     break
                 end
             end
             if not found and not self:SmartCompare(name, "player") then
-                return false
+                table.insert(missing, self:GetDisplayName(name) or name)
             end
         end
     end
-    return true
+    return missing
+end
+
+function DesolateLootcouncil:DoAllGroupMembersHaveAddon()
+    local missing = self:GetMissingAddonMembers()
+    return #missing == 0
 end
 
 function DesolateLootcouncil:IsLMAddonUser()
     local lm = self:DetermineLootMaster()
     if not lm or lm == "" then return false end
     if self:SmartCompare(lm, "player") then return true end
-    if self.activeAddonUsers and self.activeAddonUsers[lm] then return true end
+    local activeUsers = self.activeAddonUsers or {}
+    if activeUsers[lm] then return true end
+    for user in pairs(activeUsers) do
+        if self:SmartCompare(user, lm) then
+            return true
+        end
+    end
     return false
 end
 
-function DesolateLootcouncil:PromptAutopass()
+function DesolateLootcouncil:PromptAutopass(isRetry)
     if not self:AmILootMaster() then return end
 
-    local allHaveAddon = self:DoAllGroupMembersHaveAddon()
-    if not allHaveAddon then
-        local Sync = self:GetModule("Sync", true)
-        if Sync and Sync.SendSyncAutopass then
-            Sync:SendSyncAutopass(false)
-        end
-        self.sessionAutopassAnswered = true
-        if self.db and self.db.profile and self.db.profile.DecayConfig then
-            self.db.profile.DecayConfig.sessionAutopassAnswered = true
-        end
-        self:Print(L["Autopass is disabled because not everyone in the raid has the addon."])
+    if not IsInGroup() or self:DoAllGroupMembersHaveAddon() then
+        StaticPopup_Show("DLC_ENABLE_AUTOPASS")
         return
     end
 
-    StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+    if not isRetry then
+        local Comm = self:GetModule("Comm", true)
+        if Comm and Comm.SendVersionCheck then
+            Comm:SendVersionCheck()
+        end
+        C_Timer.After(2.0, function()
+            self:PromptAutopass(true)
+        end)
+        return
+    end
+
+    local missing = self:GetMissingAddonMembers()
+    local missingStr = table.concat(missing, ", ")
+    self:Print(string.format(L["Autopass is disabled because the following members do not have the addon: %s"], missingStr))
+    local Sync = self:GetModule("Sync", true)
+    if Sync and Sync.SendSyncAutopass then
+        Sync:SendSyncAutopass(false)
+    end
+    self.sessionAutopassAnswered = true
+    if self.db and self.db.profile and self.db.profile.DecayConfig then
+        self.db.profile.DecayConfig.sessionAutopassAnswered = true
+    end
 end

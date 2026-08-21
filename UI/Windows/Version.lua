@@ -267,6 +267,12 @@ function UI_Version:UpdateVersionList(isTest)
     self.scrollContent:SetHeight(topOffset + 10)
 end
 
+function UI_Version:OnEnable()
+    self:RegisterMessage("DLC_SESSION_STOPPED", function()
+        if self.versionFrame then self.versionFrame:Hide() end
+    end)
+end
+
 if _G.DLC_TEST_MODE then
     UI_Version.ParseSemVer = AT.ParseSemVer
     UI_Version.CompareSemVer = AT.CompareSemVer

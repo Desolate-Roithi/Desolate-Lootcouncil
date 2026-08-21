@@ -9,13 +9,19 @@ local function GetUnitIDForName(playerName)
     local targetScore = DesolateLootcouncil:GetScoreName(playerName)
     if not targetScore then return nil end
 
+    local Roster = DesolateLootcouncil:GetModule("Roster", true)
+    local targetMain = Roster and Roster:GetMain(playerName) or playerName
+    local mainScore = DesolateLootcouncil:GetScoreName(targetMain)
+
     for i = 1, 40 do
         local unit = "raid" .. i
-        if DesolateLootcouncil:GetUnitScore(unit) == targetScore then return unit end
+        local unitScore = DesolateLootcouncil:GetUnitScore(unit)
+        if unitScore and (unitScore == targetScore or unitScore == mainScore) then return unit end
     end
     for i = 1, 4 do
         local unit = "party" .. i
-        if DesolateLootcouncil:GetUnitScore(unit) == targetScore then return unit end
+        local unitScore = DesolateLootcouncil:GetUnitScore(unit)
+        if unitScore and (unitScore == targetScore or unitScore == mainScore) then return unit end
     end
     return nil
 end
@@ -55,17 +61,17 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     row.btnTrade:Show()
     row.btnTrade:SetScript("OnClick", function()
         local unitID = GetUnitIDForName(item.winner)
-        if unitID and CheckInteractDistance(unitID, 2) then
+        if unitID then
             InitiateTrade(unitID)
             return
         end
         local winnerScore = DesolateLootcouncil:GetScoreName(item.winner)
-        if DesolateLootcouncil:GetUnitScore("target") == winnerScore then
-            if CheckInteractDistance("target", 2) then
-                InitiateTrade("target")
-            else
-                DesolateLootcouncil:DLC_Log(string.format(L["%s is out of trade range."], DesolateLootcouncil:GetDisplayName(item.winner)))
-            end
+        local Roster = DesolateLootcouncil:GetModule("Roster", true)
+        local winnerMain = Roster and Roster:GetMain(item.winner) or item.winner
+        local mainScore = DesolateLootcouncil:GetScoreName(winnerMain)
+        local targetScore = DesolateLootcouncil:GetUnitScore("target")
+        if targetScore and (targetScore == winnerScore or targetScore == mainScore) then
+            InitiateTrade("target")
             return
         end
         DesolateLootcouncil:DLC_Log(string.format(L["Could not auto-target %s. Please target them manually and click Trade again."],
@@ -177,6 +183,9 @@ end
 
 function UI_TradeList:OnEnable()
     self:RegisterMessage("DLC_HISTORY_UPDATED", "OnHistoryUpdated")
+    self:RegisterMessage("DLC_SESSION_STOPPED", function()
+        if self.tradeListFrame then self.tradeListFrame:Hide() end
+    end)
 end
 
 function UI_TradeList:OnHistoryUpdated()

@@ -52,6 +52,38 @@ function Trade:OnUIInfo(_event, _msgID, msg)
     end
 end
 
+local function GetTradePartnerName()
+    local name, realm = UnitName("NPC")
+    if name and realm and realm ~= "" then
+        return name .. "-" .. realm:gsub("%s+", "")
+    end
+    if name and name ~= "" then
+        return name
+    end
+    local unitName = GetUnitName("NPC", true)
+    if unitName and unitName ~= "" then
+        return unitName:gsub("%s+", "")
+    end
+    return nil
+end
+
+local function IsTradeTargetMatch(awardWinner, tradePartnerName)
+    if not awardWinner or not tradePartnerName then return false end
+    if DesolateLootcouncil:SmartCompare(awardWinner, tradePartnerName) then
+        return true
+    end
+
+    local Roster = DesolateLootcouncil:GetModule("Roster", true)
+    if Roster and Roster.GetMain then
+        local awardMain = Roster:GetMain(awardWinner) or awardWinner
+        local partnerMain = Roster:GetMain(tradePartnerName) or tradePartnerName
+        if DesolateLootcouncil:SmartCompare(awardMain, partnerMain) then
+            return true
+        end
+    end
+    return false
+end
+
 function Trade:OnTradeShow()
     if self.clearTimer then
         self.clearTimer:Cancel()
@@ -61,7 +93,7 @@ function Trade:OnTradeShow()
 
     -- Get the name of the person we are trading with
     -- "NPC" unit token refers to the trade target while the trade window is open
-    local tradeTargetName = UnitName("NPC")
+    local tradeTargetName = GetTradePartnerName()
     if not tradeTargetName then return end
     self.tradeTargetName = tradeTargetName
 
@@ -74,7 +106,7 @@ function Trade:OnTradeShow()
     -- Build list of all untraded items for this player
     local pendingItems = {}
     for _, award in ipairs(session.awarded) do
-        if DesolateLootcouncil:SmartCompare(award.winner, tradeTargetName) and not award.traded then
+        if IsTradeTargetMatch(award.winner, tradeTargetName) and not award.traded then
             table.insert(pendingItems, award)
         end
     end
@@ -264,6 +296,7 @@ function Trade:ScanTradeSlots()
     if not TradeFrame or not TradeFrame:IsShown() then return end
 
     self.itemsInTrade = {}
+    local partnerName = self.tradeTargetName or GetTradePartnerName()
     for slot = 1, 6 do
         local numItems = select(3, GetTradePlayerItemInfo(slot))
         local itemID = select(8, GetTradePlayerItemInfo(slot))
@@ -273,6 +306,7 @@ function Trade:ScanTradeSlots()
                 itemID = itemID,
                 link = link,
                 quantity = numItems or 1,
+                winner = partnerName,
             })
         end
     end
@@ -301,14 +335,15 @@ function Trade:HandleTradeSuccess()
         return
     end
 
+    local partnerName = self.tradeTargetName or GetTradePartnerName()
     local changed = false
 
     for _, pending in ipairs(tradedItems) do
         local normalizedPendingLink = self:NormalizeItemLink(pending.link)
-        local winnerScore = DesolateLootcouncil:GetScoreName(pending.winner or self.tradeTargetName or UnitName("NPC"))
+        local targetWinner = pending.winner or partnerName
 
         for _, award in ipairs(session.awarded) do
-            if not award.traded and DesolateLootcouncil:GetScoreName(award.winner) == winnerScore then
+            if not award.traded and IsTradeTargetMatch(award.winner, targetWinner) then
                 local normalizedAwardLink = self:NormalizeItemLink(award.link)
                 if normalizedAwardLink == normalizedPendingLink then
                     award.traded = true

@@ -144,6 +144,9 @@ UI_History.ShowHistoryWindow = UI_History.ShowSessionLootHistory
 
 function UI_History:OnEnable()
     self:RegisterMessage("DLC_HISTORY_UPDATED", "OnHistoryUpdated")
+    self:RegisterMessage("DLC_SESSION_STOPPED", function()
+        if self.sessionFrame then self.sessionFrame:Hide() end
+    end)
 end
 
 function UI_History:OnHistoryUpdated()

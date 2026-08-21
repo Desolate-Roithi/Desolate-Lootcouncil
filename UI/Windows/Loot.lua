@@ -315,6 +315,9 @@ end
 
 function UI_Loot:OnEnable()
     self:RegisterMessage("DLC_LOOT_WINDOW_UPDATE", "OnLootWindowUpdate")
+    self:RegisterMessage("DLC_SESSION_STOPPED", function()
+        if self.lootFrame then self.lootFrame:Hide() end
+    end)
 end
 
 function UI_Loot:OnLootWindowUpdate(eventName, lootTable)

@@ -501,6 +501,7 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
     for i = #newList, 1, -1 do
         local name = newList[i]
         if absentMap[name] then
+            local origPos = i
             local targetIdx = i + penalty
 
             table.remove(newList, i)
@@ -511,6 +512,14 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
             end
 
             table.insert(newList, targetIdx, name)
+
+            local displayName = DesolateLootcouncil:GetDisplayName(name)
+            local logMsg = string.format(
+                L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."],
+                displayName, origPos, targetIdx, listName, penalty
+            )
+            DesolateLootcouncil:DLC_Log(logMsg)
+            self:LogPriorityChange(logMsg)
         end
     end
 
