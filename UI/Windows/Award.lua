@@ -79,8 +79,7 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         classIcon:SetPoint("LEFT", 12, 0)
         row.classIcon = classIcon
     end
-    local Roster = DesolateLootcouncil:GetModule("Roster", true)
-    local class = Roster and Roster:GetUnitClass(v.name) or "WARRIOR"
+    local class = DesolateLootcouncil.API:GetUnitClass(v.name)
     if _G.CLASS_ICON_TCOORDS then
         local coords = _G.CLASS_ICON_TCOORDS[class]
         if coords then
@@ -222,8 +221,7 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
         classIcon:SetPoint("LEFT", 12, 0)
         row.classIcon = classIcon
     end
-    local Roster = DesolateLootcouncil:GetModule("Roster", true)
-    local class = Roster and Roster:GetUnitClass(de.name) or "WARRIOR"
+    local class = DesolateLootcouncil.API:GetUnitClass(de.name)
     if _G.CLASS_ICON_TCOORDS then
         local coords = _G.CLASS_ICON_TCOORDS[class]
         if coords then

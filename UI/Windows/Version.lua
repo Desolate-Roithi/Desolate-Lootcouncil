@@ -74,11 +74,8 @@ function UI_Version:ShowVersionWindow(isTest)
             if not DesolateLootcouncil.sessionAutopassAnswered then
                 DesolateLootcouncil:PromptAutopass()
             else
-                local Sync = DesolateLootcouncil:GetModule("Sync")
-                if Sync and Sync.SendSyncAutopass then
-                    Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive or false)
-                    DesolateLootcouncil:Print(L["Autopass state synced to raid group."])
-                end
+                DesolateLootcouncil.API:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive or false)
+                DesolateLootcouncil:Print(L["Autopass state synced to raid group."])
             end
         end)
 
@@ -159,7 +156,7 @@ function UI_Version:UpdateVersionList(isTest)
     if activeUsers then
         for name, _ in pairs(activeUsers) do
             if not rosterMap[name] then
-                local class = DesolateLootcouncil:GetModule("Roster"):GetUnitClass(name)
+                local class = DesolateLootcouncil.API:GetUnitClass(name)
                 AddEntry(name, class, nil)
             end
         end
@@ -242,8 +239,7 @@ function UI_Version:UpdateVersionList(isTest)
 
         local ver = entry.version
         local apSuffix = ""
-        local Comm = DesolateLootcouncil:GetModule("Comm")
-        local apState = Comm.playerAutopassStates and Comm.playerAutopassStates[entry.name]
+        local apState = DesolateLootcouncil.API:GetPlayerAutopassState(entry.name)
         if apState ~= nil then
             apSuffix = apState and " (AP: On)" or " (AP: Off)"
         end

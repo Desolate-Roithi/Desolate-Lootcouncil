@@ -9,8 +9,7 @@ local function GetUnitIDForName(playerName)
     local targetScore = DesolateLootcouncil:GetScoreName(playerName)
     if not targetScore then return nil end
 
-    local Roster = DesolateLootcouncil:GetModule("Roster", true)
-    local targetMain = Roster and Roster:GetMain(playerName) or playerName
+    local targetMain = DesolateLootcouncil.API:GetMain(playerName)
     local mainScore = DesolateLootcouncil:GetScoreName(targetMain)
 
     for i = 1, 40 do
@@ -42,12 +41,7 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     row.btnRemove:SetPoint("RIGHT", -8, 0)
     row.btnRemove:Show()
     row.btnRemove:SetScript("OnClick", function()
-        item.traded = true
-        DesolateLootcouncil:DLC_Log(string.format(L["Marked %s as traded."], item.link))
-        
-        DesolateLootcouncil.db.profile.historyTimestamp = GetServerTime()
-        
-        self:SendMessage("DLC_HISTORY_UPDATED")
+        DesolateLootcouncil.API:MarkItemTraded(item)
         self:ShowTradeListWindow()
     end)
 
@@ -66,8 +60,7 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
             return
         end
         local winnerScore = DesolateLootcouncil:GetScoreName(item.winner)
-        local Roster = DesolateLootcouncil:GetModule("Roster", true)
-        local winnerMain = Roster and Roster:GetMain(item.winner) or item.winner
+        local winnerMain = DesolateLootcouncil.API:GetMain(item.winner)
         local mainScore = DesolateLootcouncil:GetScoreName(winnerMain)
         local targetScore = DesolateLootcouncil:GetUnitScore("target")
         if targetScore and (targetScore == winnerScore or targetScore == mainScore) then
@@ -99,7 +92,7 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     row.winnerLabel:SetPoint("RIGHT", row.btnTrade, "LEFT", -10, 0)
     row.winnerLabel:Show()
 
-    local class = item.winnerClass or DesolateLootcouncil:GetModule("Roster"):GetUnitClass(item.winner)
+    local class = item.winnerClass or DesolateLootcouncil.API:GetUnitClass(item.winner)
     local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner)
     row.winnerLabel:SetText(NativeGUI:FormatClassColor(class, winnerDisp))
 

@@ -101,8 +101,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
             nameLabel:SetPoint("RIGHT", -8, 0)
             nameLabel:SetJustifyH("LEFT")
             
-            local R = DesolateLootcouncil:GetModule("Roster")
-            local class = R and R:GetUnitClass(name)
+            local class = DesolateLootcouncil.API:GetUnitClass(name)
             nameLabel:SetText(NativeGUI:FormatClassColor(class, DesolateLootcouncil:GetDisplayName(name)))
 
             -- Drag grip icon (subtle == indicator on the right)

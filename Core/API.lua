@@ -232,6 +232,79 @@ function DLC_API:GetItemManagerDB()
     return DesolateLootcouncil.db.profile
 end
 
+--- Returns the class of a unit or character name via Roster.
+---@param unitOrName string
+---@return string
+function DLC_API:GetUnitClass(unitOrName)
+    local r = Roster()
+    return (r and r.GetUnitClass and r:GetUnitClass(unitOrName)) or "WARRIOR"
+end
+
+--- Returns the main character name for an alt (or the name itself if not an alt).
+---@param name string
+---@return string
+function DLC_API:GetMain(name)
+    local r = Roster()
+    return (r and r.GetMain and r:GetMain(name)) or name
+end
+
+--- Returns full item data cached in the active session for a given GUID.
+---@param guid string
+---@return table|nil
+function DLC_API:GetItemData(guid)
+    local s = Session()
+    return s and s.GetItemData and s:GetItemData(guid)
+end
+
+--- Returns whether a character name is an active simulated player.
+---@param name string
+---@return boolean
+function DLC_API:IsSimulatedPlayer(name)
+    local sim = DesolateLootcouncil:GetModule("Simulation", true)
+    return (sim and sim.IsSimulatedPlayer and sim:IsSimulatedPlayer(name)) or false
+end
+
+--- Returns the count of active simulated players.
+---@return number
+function DLC_API:GetSimulationCount()
+    local sim = DesolateLootcouncil:GetModule("Simulation", true)
+    return (sim and sim.GetCount and sim:GetCount()) or 0
+end
+
+--- Returns the Autopass state for a given player name from Comm.
+---@param name string
+---@return boolean|nil
+function DLC_API:GetPlayerAutopassState(name)
+    local c = Comm()
+    return c and c.playerAutopassStates and c.playerAutopassStates[name]
+end
+
+--- Returns pending voters from the simulation module if active.
+---@param guid string
+---@param votedPlayers table
+---@return table|nil
+function DLC_API:GetPendingSimVoters(guid, votedPlayers)
+    local sim = DesolateLootcouncil:GetModule("Simulation", true)
+    return sim and sim.GetPendingVoters and sim:GetPendingVoters(guid, votedPlayers)
+end
+
+--- Returns true if LM handover can safely take place (all items closed or no active bidding items).
+---@return boolean
+function DLC_API:CanHandover()
+    local s = Session()
+    if not s or not s.clientLootList or #s.clientLootList == 0 then
+        return true
+    end
+    local bidding = self:GetBiddingList()
+    for _, item in ipairs(bidding) do
+        local guid = item.sourceGUID or item.link
+        if not s.closedItems or not s.closedItems[guid] then
+            return false
+        end
+    end
+    return true
+end
+
 -- ---------------------------------------------------------------------------
 -- ACTIONS — trigger backend behaviour; return nothing unless noted
 -- ---------------------------------------------------------------------------
@@ -292,6 +365,55 @@ end
 function DLC_API:CloseAllWindows()
     local UI = DesolateLootcouncil:GetModule("UI", true)
     if UI and UI.CloseAllWindows then UI:CloseAllWindows() end
+end
+
+--- Syncs data (priorities/roster) with officers via the Sync module.
+function DLC_API:SyncDataWithOfficers()
+    local syncMod = DesolateLootcouncil:GetModule("Sync", true)
+    if syncMod and syncMod.SyncDataWithOfficers then
+        syncMod:SyncDataWithOfficers()
+    end
+end
+
+--- Syncs the Autopass state to the raid group via Sync.
+---@param state boolean
+function DLC_API:SendSyncAutopass(state)
+    local syncMod = DesolateLootcouncil:GetModule("Sync", true)
+    if syncMod and syncMod.SendSyncAutopass then
+        syncMod:SendSyncAutopass(state)
+    end
+end
+
+--- Refreshes themes across all loot and voting windows.
+function DLC_API:RefreshLootAndVotingThemes()
+    local s = Session()
+    if s and s.RefreshLootAndVotingThemes then
+        s:RefreshLootAndVotingThemes()
+    end
+end
+
+--- Marks an item in session awards as traded and logs the event.
+---@param item table
+function DLC_API:MarkItemTraded(item)
+    if not item then return end
+    item.traded = true
+    DesolateLootcouncil:DLC_Log(string.format(L["Marked %s as traded."], tostring(item.link)))
+    if DesolateLootcouncil.db and DesolateLootcouncil.db.profile then
+        DesolateLootcouncil.db.profile.historyTimestamp = GetServerTime()
+    end
+    local UI = DesolateLootcouncil:GetModule("UI", true)
+    if UI and UI.SendMessage then
+        UI:SendMessage("DLC_HISTORY_UPDATED")
+    end
+end
+
+--- Records that decay was applied for the active tracking session.
+---@param timestamp number?
+function DLC_API:SetSessionDecayApplied(timestamp)
+    local r = Roster()
+    if r then
+        r.decayAppliedForSession = timestamp or GetServerTime()
+    end
 end
 
 --- Awards the item identified by GUID to a winner with the given vote description.

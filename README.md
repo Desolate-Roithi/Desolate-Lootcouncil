@@ -2,14 +2,33 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.1.2  
-**Last Updated:** 2026-08-20  
+**Latest Version:** v1.2.0  
+**Last Updated:** 2026-08-22  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
-## Release v1.1.2 (2026-08-20)
+## Release v1.2.0 (2026-08-22)
 
-* **WoW 12.1.0 Compatibility**: Updated TOC interface tag to `120100` and added `pcall` / `issecretvalue()` protections for `UnitClass` and `UnitIsGroupLeader` secret returns.
-* **Component Cleanup**: Cleanly unlinked and disabled the temporary Lu'Ra memory tracker widget.
+* **Autopass & Relog Stability**:
+  * Fixed startup/relog nil table crash in `DoAllGroupMembersHaveAddon` by initializing Comm caches on addon initialize.
+  * Prevented non-LM group invites and reloads from clobbering the Loot Master's active Autopass configurations.
+  * Replaced Blizzard `CheckInteractDistance` calls with taint-safe range verification to prevent `ADDON_ACTION_BLOCKED` combat errors.
+* **Trade System & Cross-Realm Staging**:
+  * Fixed cross-realm name normalization in trade staging to reliably match players across different connected realms.
+  * Ensured awarded items are immediately marked as traded upon trade completion and cleared from Pending Trades.
+  * Enhanced bag item filtering to correctly differentiate BoP tradeable raid drops from untradeable Warbound copies.
+* **Item Revote & Voting Window Reopening**:
+  * Added **Revote** button to the Award window header for Loot Masters to restart voting when necessary.
+  * Cleared stale local/session votes and activeState on item reopen.
+  * Handled `DLC_ITEM_REOPENED` in Voting and Monitor windows to un-collapse frames, clear previous selections, and restart full countdown timers.
+* **Session Window Lifecycle & Cascading Cleanup**:
+  * Closing the central Session Monitor window (via 'X' button, Escape, or Stop Session) now cascades to close all child session windows (Pending Trades, Award Log, Attendance, Loot Backlog, Version Check, Disenchanter sidebar).
+  * Expanded `UI:CloseAllWindows()` to support all frame property variants (`sessionFrame`, `tradeListFrame`, `deFrame`, etc.).
+* **100% UI-API Compliance**:
+  * Refactored all UI components to query and trigger actions exclusively through `DesolateLootcouncil.API` (`Core/API.lua`), fully decoupling the frontend presentation layer from backend systems.
+* **Roster Management & History**:
+  * Added `SanitizeMainsAndAlts` to prevent alts and previous season characters from polluting the Main Roster.
+  * Added point decay event logging to session history to ensure all roster point decays are tracked.
+  * Clarified re-award message to *"Item reverted to monitor window"* in English and German.
 
 ## Features
 

@@ -63,12 +63,9 @@ function UI_Monitor:GetVoteInfo(guid)
         if myScore and not votedPlayers[myScore] then table.insert(pending, API:GetDisplayName(myFullName)) end
     end
 
-    local Sim = DesolateLootcouncil:GetModule("Simulation")
-    if Sim and Sim.GetPendingVoters then
-        local simPending = Sim:GetPendingVoters(guid, votedPlayers)
-        if simPending then
-            for _, sName in ipairs(simPending) do table.insert(pending, sName) end
-        end
+    local simPending = API.GetPendingSimVoters and API:GetPendingSimVoters(guid, votedPlayers)
+    if simPending then
+        for _, sName in ipairs(simPending) do table.insert(pending, sName) end
     end
 
     if #pending > 0 then countsText = countsText .. " |cffaaaaaa(Pending: " .. #pending .. ")|r" end
@@ -370,7 +367,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         self.btnLoot:SetPoint("LEFT", 110, 0)
         self.btnLoot:SetScript("OnClick", function()
             local LootUI = DesolateLootcouncil:GetModule("UI_Loot", true)
-            if LootUI then LootUI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot) end
+            if LootUI then LootUI:ShowLootWindow(DesolateLootcouncil.API:GetLootBacklog()) end
         end)
 
         self.btnHist = NativeGUI:CreateButton(nav, L["Award Log"], 72, 24, "Pass")
@@ -397,10 +394,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         self.btnStop = NativeGUI:CreateButton(nav, L["Stop Session"], 95, 24, "Stop")
         self.btnStop:SetPoint("RIGHT", 0, 0)
         self.btnStop:SetScript("OnClick", function()
-            local Session = DesolateLootcouncil:GetModule("Session", true)
-            if Session and Session.SendStopSession then
-                Session:SendStopSession()
-            end
+            DesolateLootcouncil.API:StopSession()
         end)
     end
 

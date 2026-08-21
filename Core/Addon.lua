@@ -239,8 +239,6 @@ function DesolateLootcouncil:OnEnable()
 
 end
 
-local REFRESH_TIMER = nil
-
 function DesolateLootcouncil:_RepairItemCache(session)
     if not session then return false end
     local repaired = false
@@ -316,10 +314,10 @@ function DesolateLootcouncil:_RefreshOpenWindows(session)
 end
 
 function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
-    if REFRESH_TIMER then
-        self:CancelTimer(REFRESH_TIMER)
+    if self.refreshTimer then
+        self:CancelTimer(self.refreshTimer)
     end
-    REFRESH_TIMER = self:ScheduleTimer(function()
+    self.refreshTimer = self:ScheduleTimer(function()
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 
         local session = self.db and self.db.profile and self.db.profile.session
@@ -328,7 +326,7 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
         end
         self:_RefreshOpenWindows(session)
 
-        REFRESH_TIMER = nil
+        self.refreshTimer = nil
     end, 0.5)
 end
 

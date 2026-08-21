@@ -73,19 +73,7 @@ local function GetOfficerNamesInRaid()
 end
 
 local function CanHandover()
-    local Session = DesolateLootcouncil:GetModule("Session")
-    if not Session.clientLootList or #Session.clientLootList == 0 then
-        return true
-    end
-    local db = DesolateLootcouncil.db.profile
-    local bidding = db.session and db.session.bidding or {}
-    for _, item in ipairs(bidding) do
-        local guid = item.sourceGUID or item.link
-        if not Session.closedItems or not Session.closedItems[guid] then
-            return false
-        end
-    end
-    return true
+    return DesolateLootcouncil.API and DesolateLootcouncil.API.CanHandover and DesolateLootcouncil.API:CanHandover()
 end
 
 local function BuildLMSection(API)

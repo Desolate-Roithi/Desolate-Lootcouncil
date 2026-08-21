@@ -18,26 +18,18 @@ local VOTE_COLOR = setmetatable({}, {
 local function GetVoteText(guid, voteVal)
     if not voteVal then return "?" end
     local isRecipe = false
-    local session = DesolateLootcouncil.db.profile.session
-    local bidding = session and session.bidding
+    local API = DesolateLootcouncil.API
     local itemID
-    if bidding then
+    local itemData = API and API.GetItemData and API:GetItemData(guid)
+    if itemData then
+        itemID = itemData.link or itemData.itemID
+    end
+    if not itemID and API and API.GetBiddingList then
+        local bidding = API:GetBiddingList()
         for _, item in ipairs(bidding) do
             if (item.sourceGUID or item.link) == guid then
                 itemID = item.link or item.itemID
                 break
-            end
-        end
-    end
-    if not itemID then
-        local SessionInfo = DesolateLootcouncil:GetModule("Session")
-        local clientList = SessionInfo and SessionInfo.clientLootList
-        if clientList then
-            for _, item in ipairs(clientList) do
-                if (item.sourceGUID or item.link) == guid then
-                    itemID = item.link or item.itemID
-                    break
-                end
             end
         end
     end
@@ -837,9 +829,9 @@ function UI_Voting:OnItemReopened(eventName, guid, newExpiry)
     end
 
     if not self.cachedVotingItems or #self.cachedVotingItems == 0 then
-        local SessionInfo = DesolateLootcouncil:GetModule("Session")
-        if SessionInfo and SessionInfo.clientLootList and #SessionInfo.clientLootList > 0 then
-            self.cachedVotingItems = SessionInfo.clientLootList
+        local bidding = DesolateLootcouncil.API and DesolateLootcouncil.API.GetBiddingList and DesolateLootcouncil.API:GetBiddingList()
+        if bidding and #bidding > 0 then
+            self.cachedVotingItems = bidding
         end
     end
 

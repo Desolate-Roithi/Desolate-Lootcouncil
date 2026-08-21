@@ -281,11 +281,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
         DLC:DLC_Log(L["Decay Amount is 0. No priorities changed."])
     end
 
-    local Roster = DesolateLootcouncil:GetModule("Roster", true)
-    if Roster then
-        Roster.decayAppliedForSession = GetServerTime()
-    end
-
+    DesolateLootcouncil.API:SetSessionDecayApplied(GetServerTime())
     self:CommitAttendanceToHistory(tempAttended)
 end
 

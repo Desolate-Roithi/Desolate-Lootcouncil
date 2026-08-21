@@ -60,7 +60,7 @@ local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeig
     row.itemLabel:SetPoint("LEFT",  row.iconBtn,   "RIGHT", 8,  0)
     row.itemLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -8, 0)
 
-    local class      = item.winnerClass or DesolateLootcouncil:GetModule("Roster"):GetUnitClass(item.winner)
+    local class      = item.winnerClass or DesolateLootcouncil.API:GetUnitClass(item.winner)
     local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
     local colWinner  = NativeGUI:FormatClassColor(class, winnerDisp)
     local vtColor    = "ff888888"

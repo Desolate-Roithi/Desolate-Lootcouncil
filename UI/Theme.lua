@@ -371,8 +371,7 @@ end
 
 --- Re-applies active theme to all open addon UI windows.
 function UI_Theme:ApplyThemeToAllOpenWindows()
-    local session = DesolateLootcouncil:GetModule("Session", true)
-    local clientLootList = session and session.clientLootList
+    local clientLootList = DesolateLootcouncil.API and DesolateLootcouncil.API.GetBiddingList and DesolateLootcouncil.API:GetBiddingList()
 
     -- Settings Window
     local SettingsUI = DesolateLootcouncil:GetModule("UI_Settings", true)
@@ -391,7 +390,7 @@ function UI_Theme:ApplyThemeToAllOpenWindows()
     local LootUI = DesolateLootcouncil:GetModule("UI_Loot", true)
     if LootUI and LootUI.lootFrame and LootUI.lootFrame:IsShown() then
         self:StyleNativeWindow(LootUI.lootFrame)
-        LootUI:ShowLootWindow(DesolateLootcouncil.db.profile.session.loot)
+        LootUI:ShowLootWindow(DesolateLootcouncil.API:GetLootBacklog())
     end
 
     -- Monitor Window

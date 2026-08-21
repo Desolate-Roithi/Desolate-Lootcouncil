@@ -56,8 +56,7 @@ local function OnTimerTick()
     local totalC = GetNumGroupMembers()
     if totalC == 0 then totalC = 1 end
 
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    local simCount = Sim and Sim:GetCount() or 0
+    local simCount = DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationCount and DesolateLootcouncil.API:GetSimulationCount() or 0
     if simCount > 0 then
         totalC = totalC + simCount
     end
