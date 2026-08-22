@@ -2,33 +2,9 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.2.0  
+**Latest Version:** v1.2.1  
 **Last Updated:** 2026-08-22  
 **Compatibility:** WoW 12.1.0 (Midnight)  
-
-## Release v1.2.0 (2026-08-22)
-
-* **Autopass & Relog Stability**:
-  * Fixed startup/relog nil table crash in `DoAllGroupMembersHaveAddon` by initializing Comm caches on addon initialize.
-  * Prevented non-LM group invites and reloads from clobbering the Loot Master's active Autopass configurations.
-  * Replaced Blizzard `CheckInteractDistance` calls with taint-safe range verification to prevent `ADDON_ACTION_BLOCKED` combat errors.
-* **Trade System & Cross-Realm Staging**:
-  * Fixed cross-realm name normalization in trade staging to reliably match players across different connected realms.
-  * Ensured awarded items are immediately marked as traded upon trade completion and cleared from Pending Trades.
-  * Enhanced bag item filtering to correctly differentiate BoP tradeable raid drops from untradeable Warbound copies.
-* **Item Revote & Voting Window Reopening**:
-  * Added **Revote** button to the Award window header for Loot Masters to restart voting when necessary.
-  * Cleared stale local/session votes and activeState on item reopen.
-  * Handled `DLC_ITEM_REOPENED` in Voting and Monitor windows to un-collapse frames, clear previous selections, and restart full countdown timers.
-* **Session Window Lifecycle & Cascading Cleanup**:
-  * Closing the central Session Monitor window (via 'X' button, Escape, or Stop Session) now cascades to close all child session windows (Pending Trades, Award Log, Attendance, Loot Backlog, Version Check, Disenchanter sidebar).
-  * Expanded `UI:CloseAllWindows()` to support all frame property variants (`sessionFrame`, `tradeListFrame`, `deFrame`, etc.).
-* **100% UI-API Compliance**:
-  * Refactored all UI components to query and trigger actions exclusively through `DesolateLootcouncil.API` (`Core/API.lua`), fully decoupling the frontend presentation layer from backend systems.
-* **Roster Management & History**:
-  * Added `SanitizeMainsAndAlts` to prevent alts and previous season characters from polluting the Main Roster.
-  * Added point decay event logging to session history to ensure all roster point decays are tracked.
-  * Clarified re-award message to *"Item reverted to monitor window"* in English and German.
 
 ## Features
 
@@ -70,52 +46,41 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 
 ## Recent Changes
 
-### v1.0.1
-Maintenance and bugfix release focused on account-wide profile persistence, Loot Master character swapping, copyable log history, and visual refinements:
-* **Account-wide Profile & LM Swaps**:
-    - Enabled seamless Loot Master character swaps (e.g. Druid -> Mage -> Priest) during active raid sessions without canceling the session.
-    - Implemented a profile switching check on login: automatically prompts the Loot Master to continue or stop the active session.
-    - Active raid session data and profiles are correctly preserved in the global DB.
-* **Item Manager Profile Integration**:
-    - Moved Item Manager priority lists directly into the AceDB profile layout to survive profile changes, copies, and resets.
-    - Normalized imported base64 profile data to prevent duplicate item entries.
-    - Fixed list sync loop spam (every 30s) by converting list item IDs from string representations to numeric values inside the comparison check.
-* **Priority Log History Selection**:
-    - Replaced the non-interactive font string label pool with a selectable, copyable multi-line editbox in the Priority Log History window.
-    - Bypassed main name resolution during roster removals to log the exact alt character name (e.g., `Roithitest`) in sync logs.
-* **Themed & Collapsible Disenchanters Dock**:
-    - Colored the "Disenchanters" section header in the Award window to match the active theme's colors (`theme.textHeader`).
-    - Added a collapsible/expandable arrow indicator next to the label (points right when collapsed, down when expanded) that responds to double-clicks.
-* **Localization & Stability**:
-    - Added missing localization strings for `"Resume Session"` and `"Resuming active raid session."` in both English and German locales.
-    - Resolved linter warnings and issues, resulting in a fully passing test suite (32/32 tests) and a clean static analysis (0 warnings/errors).
+### v1.2.1 (2026-08-22)
+* **Pre-Populated Item Manager Starter Catalog**: Included 114+ raid items categorized across 6 default priority lists (**Tier**, **Weapons**, **Rest**, **Collectables**, **Trinkets and Cantrips**, **Recipes**) with full localization so new users start with organized categories right away.
+* **Automatic Season/Tier Catalog Migration**: Added expansion-aware season tier tracking (`CATALOG_TIER = "midnight-s2"`) to seamlessly refresh the item catalog across upcoming raid seasons.
+* **Single Source of Truth**: Centralized starter catalog constants in `Core/Constants.lua` to streamline future season releases.
 
-### v1.0.0
-Official stable release of Desolate Lootcouncil, introducing a complete Native UI visual overhaul, a customizable theme engine, and significant stability enhancements:
-* **Custom UI & Theme Engine**:
-    - Replaced generic `AceGUI` windows with a premium custom Native UI framework.
-    - Added pre-packaged themes including `Fel`, `Classic`, `Midnight`, and `Minimalist`.
-    - Centralized all window sizing and layouts configuration under `UI/Layouts.lua`.
-* **Recipe-Specific Voting**:
-    - Introduced specialized buttons for recipe items (Item Class 9): *"Ready to Craft"* (immediate learning) and *"Unskilled"* (profession but insufficient skill).
-* **Link Insertion & EditBox Improvements**:
-    - Enabled Shift-Clicking item links from bags/chat directly into custom EditBox inputs (e.g. in the Item Manager).
-* **Layout Reset & Self-Healing**:
-    - Added the `/dlc reset` and `/dlc resetpositions` commands to clear and reset all coordinates in real-time.
-    - Implemented layout self-healing to automatically discard narrow/corrupted window dimensions saved during collapsed states.
-* **Automation & Stability**:
-    - Automatically refreshes the Pending Trades and History windows on item award/re-award.
-    - Gated roster scanning/alt alerts to actual raid groups of 10+ players.
-    - Hardened Loot Master tracking against group leader changes.
-    - Unified semantic versioning logic and resolved localization gaps in English and German.
+### v1.2.0 (2026-08-22)
+* **Autopass & Relog Stability**:
+  * Fixed startup/relog `nil` table crash in `DoAllGroupMembersHaveAddon` by initializing communication caches on load.
+  * Prevented non-LM group invites and reloads from clobbering the Loot Master's active Autopass configurations.
+  * Replaced Blizzard `CheckInteractDistance` calls with taint-safe range verification to eliminate combat errors.
+* **Trade System & Cross-Realm Staging**:
+  * Fixed cross-realm name normalization in trade staging to reliably match players across connected realms.
+  * Ensured awarded items are immediately marked as traded upon trade completion and cleared from Pending Trades.
+  * Enhanced bag item filtering to correctly differentiate BoP tradeable raid drops from untradeable Warbound copies.
+* **Item Revote & Voting Window Reopening**:
+  * Added **Revote** button to the Award window header for Loot Masters to restart voting when necessary.
+  * Cleared stale local/session votes and activeState on item reopen.
+  * Handled `DLC_ITEM_REOPENED` in Voting and Monitor windows to un-collapse frames, clear previous selections, and restart full countdown timers.
+* **Session Window Lifecycle & Cascading Cleanup**:
+  * Closing the central Session Monitor window (via 'X' button, Escape, or Stop Session) now cascades to close all child session windows (Pending Trades, Award Log, Attendance, Loot Backlog, Version Check, Disenchanter sidebar).
+  * Expanded `UI:CloseAllWindows()` to support all frame property variants.
+* **100% UI-API Compliance**:
+  * Refactored all UI components to query and trigger actions exclusively through `DesolateLootcouncil.API` (`Core/API.lua`), fully decoupling the frontend presentation layer from backend systems.
+* **Roster Management & History**:
+  * Added `SanitizeMainsAndAlts` to prevent alts and previous season characters from polluting the Main Roster.
+  * Added point decay event logging to session history to ensure all roster point decays are tracked.
+  * Clarified re-award message to *"Item reverted to monitor window"* in English and German.
 
 ---
 
-## Beta Releases (v0.8.5-Beta - v0.9.5-Beta)
+## Previous Releases (v1.0.0 - v1.1.2)
 
-Major features and stability improvements introduced during the Beta phase:
-* **Modular Architecture**: Separated the background automatic passing systems from the front-end interface to improve latency and stability.
-* **Alt and Roster Management**: Added automatic registration of mains, alt-character linking, and intelligent raid disband alert suppression.
-* **Encounter Tools**: Integrated a custom boss sequence widget (for Lu'Ra encounter) allowing coordination of raid markers.
-* **Network & Database Safety**: Improved packet routing, hardened database check validation, and added trade safeguards to prevent accidental item equipping.
-* **Localization Foundation**: Structured UI systems to support multi-language localizations.
+Key features and improvements introduced in earlier releases:
+* **Custom Native UI & Theme Engine**: Replaced generic frames with a custom Native UI framework featuring pre-packaged themes (`Fel`, `Classic`, `Midnight`, `Minimalist`) and layout self-healing.
+* **Account-wide Profile Persistence & LM Swapping**: Enabled seamless Loot Master character swaps mid-raid without losing session data, with full profile persistence.
+* **Item Manager Profile Integration**: Added priority list management directly in AceDB profiles with base64 import/export and live syncing.
+* **Recipe-Specific Voting & Disenchanting**: Integrated specialized recipe voting buttons (*"Ready to Craft"*, *"Unskilled"*) and collapsible disenchanter docking.
+* **WoW 12.1.0 (Midnight) Compatibility**: Added `issecretvalue()` and `pcall` protections across leader and unit inspection APIs.

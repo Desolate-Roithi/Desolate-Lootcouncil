@@ -556,6 +556,22 @@ function DLC_API:GetPriorityLists()
     return DesolateLootcouncil.db.profile.PriorityLists or {}
 end
 
+--- Returns the localized display name for a priority list category.
+--- Falls back safely without throwing AceLocale missing entry errors for custom lists.
+---@param listName string
+---@return string
+function DLC_API:GetLocalizedListName(listName)
+    if not listName or listName == "" then return "" end
+    local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil", true)
+    if L then
+        local val = rawget(L, listName)
+        if val and type(val) == "string" and val ~= "" then
+            return val
+        end
+    end
+    return listName
+end
+
 --- Returns the DecayConfig settings table.
 ---@return table config
 function DLC_API:GetAttendanceConfig()

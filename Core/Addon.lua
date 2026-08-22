@@ -61,12 +61,8 @@ local defaults = {
     },
     profile = {
         configuredLM       = "",
-        PriorityLists      = {
-            { name = "Tier",         players = {}, items = {} },
-            { name = "Weapons",      players = {}, items = {} },
-            { name = "Rest",         players = {}, items = {} },
-            { name = "Collectables", players = {}, items = {} }
-        },
+        catalogTier        = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.CATALOG_TIER) or "midnight-s2",
+        PriorityLists      = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {},
         MainRoster         = {},
         playerRoster       = { alts = {}, decay = {} },
         imTimestamps       = {},

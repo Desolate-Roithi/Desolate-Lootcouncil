@@ -191,7 +191,7 @@ function UI_EJLootImport:RefreshStagingWindow()
     local listOptions = {}
     listOptions[0] = L["— Skip —"]
     for idx, list in ipairs(DesolateLootcouncil.API:GetPriorityLists()) do
-        listOptions[idx] = list.name
+        listOptions[idx] = DesolateLootcouncil.API:GetLocalizedListName(list.name)
     end
 
     local listsTouched = {}

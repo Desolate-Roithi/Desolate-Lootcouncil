@@ -1,4 +1,4 @@
-local L = LibStub("AceLocale-3.0"):NewLocale("DesolateLootcouncil", "enUS", true)
+local L = LibStub("AceLocale-3.0"):NewLocale("DesolateLootcouncil", "enUS", true, true)
 if not L then return end
 
 -- Global
@@ -311,4 +311,13 @@ L["Autopass state synced to raid group."] = true
 L["Highest Found Version: %s  |  Autopass: %s"] = true
 L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."] = true
 L["Revote"] = true
+
+-- Priority Lists & Categories
+L["Tier"] = true
+L["Weapons"] = true
+L["Rest"] = true
+L["Collectables"] = true
+L["Trinkets and Cantrips"] = true
+L["Recipes"] = true
+L["Junk/Pass"] = true
 

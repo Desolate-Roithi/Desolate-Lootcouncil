@@ -30,12 +30,20 @@ function Priority:OnEnable()
     local db = DesolateLootcouncil.db.profile
 
     -- Crucial: Use OR to preserve existing data (fixes wipe on reload)
-    db.PriorityLists = db.PriorityLists or {
-        { name = "Tier",         players = {}, items = {}, buttons = { "Main Spec", "Off Spec", "Transmog", "Pass" } },
-        { name = "Weapons",      players = {}, items = {}, buttons = { "BiS", "Major Sidegrade", "Minor Sidegrade", "Pass" } },
-        { name = "Rest",         players = {}, items = {}, buttons = { "Main Spec", "Off Spec", "Pass" } },
-        { name = "Collectables", players = {}, items = {}, buttons = { "Need", "Greed", "Pass" } }
-    }
+    db.PriorityLists = db.PriorityLists or ((DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {})
+
+    -- Season / Raid Tier Catalog Migration Check
+    local activeTier = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.CATALOG_TIER) or "midnight-s2"
+    if not db.catalogTier then
+        -- First time setting up catalog tier: preserve existing data for the current active tier
+        db.catalogTier = activeTier
+    elseif db.catalogTier ~= activeTier then
+        -- New raid tier/season detected: update default priority lists with the new tier catalog
+        local tierName = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.CATALOG_TIER_NAME) or activeTier
+        DesolateLootcouncil:DLC_Log("New raid tier detected (" .. tierName .. "). Updating Item Manager catalog...")
+        db.PriorityLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or db.PriorityLists
+        db.catalogTier = activeTier
+    end
 
     if db.PriorityLists and not db.migrated_priority_v2 then
         -- DATA MIGRATION: Convert Key-Value to Array of Objects

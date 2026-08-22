@@ -149,7 +149,7 @@ function UI_ItemManager:RefreshWindow()
     local db = DesolateLootcouncil.API:GetItemManagerDB()
     local pNames = DesolateLootcouncil.API:GetPriorityListNames()
     local listNames = {}
-    for i, name in ipairs(pNames) do listNames[i] = name end
+    for i, name in ipairs(pNames) do listNames[i] = DesolateLootcouncil.API:GetLocalizedListName(name) end
 
     -- 1. EditBox Search/Input
     if not self.itemInput then

@@ -233,10 +233,10 @@ function UI_Loot:ShowLootWindow(lootTable)
     local catList = {}
     local listIndexMap = {}
     for idx, list in ipairs(DesolateLootcouncil.API:GetPriorityLists()) do
-        catList[list.name] = list.name
+        catList[list.name] = DesolateLootcouncil.API:GetLocalizedListName(list.name)
         listIndexMap[list.name] = idx
     end
-    catList["Junk/Pass"] = "Junk/Pass"
+    catList["Junk/Pass"] = L["Junk/Pass"] or "Junk/Pass"
 
     local topOffset = 0
     local rowHeight = 44

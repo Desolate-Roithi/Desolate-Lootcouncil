@@ -339,4 +339,13 @@ L["Highest Found Version: %s  |  Autopass: %s"] = "Höchste gefundene Version: %
 L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."] = "[Verfall] %s wurde von Position #%d auf #%d in Liste %s verschoben (+%d Verfall wegen Abwesenheit)."
 L["Revote"] = "Erneut abstimmen"
 
+-- Priority Lists & Categories
+L["Tier"] = "Tier"
+L["Weapons"] = "Waffen"
+L["Rest"] = "Rest"
+L["Collectables"] = "Sammelobjekte"
+L["Trinkets and Cantrips"] = "Schmuckstücke & Cantrips"
+L["Recipes"] = "Rezepte"
+L["Junk/Pass"] = "Müll/Passen"
+
 

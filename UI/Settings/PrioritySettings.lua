@@ -224,7 +224,7 @@ function PrioritySettings:GetPriorityListViewOptions()
     for i, listName in ipairs(names) do
         args["grp_" .. i] = {
             type = "group",
-            name = listName,
+            name = API:GetLocalizedListName(listName),
             inline = true,
             order = i,
             args = {

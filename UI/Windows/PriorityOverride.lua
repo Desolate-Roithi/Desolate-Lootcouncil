@@ -28,7 +28,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
     -- Create Midnight-styled native window
     local frame = NativeGUI:CreateWindow(
         "DLCPriorityOverride",
-        string.format(L["Override: %s"], (list.name or listKey)),
+        string.format(L["Override: %s"], DesolateLootcouncil.API:GetLocalizedListName(list.name or listKey)),
         "PriorityOverride"
     )
 
