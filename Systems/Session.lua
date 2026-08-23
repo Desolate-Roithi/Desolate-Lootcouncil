@@ -524,6 +524,11 @@ function Session:StartSession(lootTable)
         Loot:ScanDisenchanters()
     end
 
+    local Priority = DesolateLootcouncil:GetModule("Priority", true)
+    if Priority and Priority.NotifyIfPlayersMissing then
+        Priority:NotifyIfPlayersMissing()
+    end
+
     if not lootTable or #lootTable == 0 then
         DesolateLootcouncil:DLC_Log("No items to distribute!")
         return
@@ -1003,6 +1008,12 @@ function Session:HandleVote(payload, sender)
             self.sessionVotes[data.guid][sender] = nil
             DesolateLootcouncil:DLC_Log("Vote retracted by " .. DesolateLootcouncil:GetDisplayName(sender))
         else
+            -- Record unassigned voter for LM review if unknown
+            local Roster = DesolateLootcouncil:GetModule("Roster", true)
+            if Roster and Roster.RecordUnassignedPlayer then
+                Roster:RecordUnassignedPlayer(sender, "Bid")
+            end
+
             -- Use authoritative roll from sender if available, or fallback to local generation
             local serverRoll = data.roll or math.random(1, 100)
             self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll, note = data.note or "" }

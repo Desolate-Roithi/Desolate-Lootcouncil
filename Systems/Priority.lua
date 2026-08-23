@@ -38,10 +38,27 @@ function Priority:OnEnable()
         -- First time setting up catalog tier: preserve existing data for the current active tier
         db.catalogTier = activeTier
     elseif db.catalogTier ~= activeTier then
-        -- New raid tier/season detected: update default priority lists with the new tier catalog
+        -- New raid tier/season detected: update default priority lists' items only, preserving players!
         local tierName = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.CATALOG_TIER_NAME) or activeTier
-        DesolateLootcouncil:DLC_Log("New raid tier detected (" .. tierName .. "). Updating Item Manager catalog...")
-        db.PriorityLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or db.PriorityLists
+        DesolateLootcouncil:DLC_Log("New raid tier detected (" .. tierName .. "). Updating Item Manager catalog items (players preserved)...")
+        local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
+        if db.PriorityLists then
+            for _, def in ipairs(defaultLists) do
+                local found = false
+                for _, existing in ipairs(db.PriorityLists) do
+                    if existing.name == def.name then
+                        found = true
+                        existing.items = DesolateLootcouncil.Table.DeepCopy(def.items or {})
+                        break
+                    end
+                end
+                if not found then
+                    table.insert(db.PriorityLists, def)
+                end
+            end
+        else
+            db.PriorityLists = defaultLists
+        end
         db.catalogTier = activeTier
     end
 
@@ -121,20 +138,23 @@ function Priority:AddPriorityList(name)
         if list.name == name then return end
     end
 
-    -- Create new list populated with SHUFFLED roster
+    -- Create new list populated with existing list's order or roster
     local newList = {}
-    if db.MainRoster then
+    if #db.PriorityLists > 0 and db.PriorityLists[1].players and #db.PriorityLists[1].players > 0 then
+        for _, p in ipairs(db.PriorityLists[1].players) do
+            table.insert(newList, p)
+        end
+    elseif db.MainRoster then
         for rName, _ in pairs(db.MainRoster) do
             table.insert(newList, rName)
         end
+        DesolateLootcouncil.Math.ShuffleTable(newList)
     end
-    DesolateLootcouncil.Math.ShuffleTable(newList)
 
     table.insert(db.PriorityLists, { name = name, players = newList, items = {} })
-    local msg = string.format(L["Added new Priority List: %s (Initialized with shuffled roster)"], name)
+    local msg = string.format(L["Added new Priority List: %s"], name)
     DesolateLootcouncil:DLC_Log(msg)
     self:LogPriorityChange(msg)
-    self:SyncMissingPlayers() -- Auto-populate (and notifies change internally)
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
@@ -217,6 +237,46 @@ function Priority:ShuffleLists()
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
+function Priority:GetMissingPlayers()
+    if not DesolateLootcouncil.db then return {} end
+    local db = DesolateLootcouncil.db.profile
+    if not db.MainRoster or not db.PriorityLists then return {} end
+
+    local missingOverall = {}
+    local missingSet = {}
+
+    for _, listObj in ipairs(db.PriorityLists) do
+        local currentScoredSet = {}
+        for _, pName in ipairs(listObj.players or {}) do
+            local score = DesolateLootcouncil:GetScoreName(pName)
+            if score then currentScoredSet[score] = true end
+        end
+
+        for name in pairs(db.MainRoster) do
+            local nameScore = DesolateLootcouncil:GetScoreName(name)
+            if nameScore and not currentScoredSet[nameScore] then
+                if not missingSet[name] then
+                    missingSet[name] = true
+                    table.insert(missingOverall, name)
+                end
+            end
+        end
+    end
+
+    table.sort(missingOverall)
+    return missingOverall
+end
+
+function Priority:NotifyIfPlayersMissing()
+    if not DesolateLootcouncil:AmILootMaster() then return end
+    local missing = self:GetMissingPlayers()
+    if #missing > 0 then
+        local namesStr = table.concat(missing, ", ")
+        local msg = string.format(L["Notice: %d player(s) in Main roster are missing from priority lists (%s). Click 'Sync Missing Players' in Priority settings to append them."], #missing, namesStr)
+        DesolateLootcouncil:DLC_Log(msg, true)
+    end
+end
+
 function Priority:SyncMissingPlayers()
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
@@ -244,7 +304,12 @@ function Priority:SyncMissingPlayers()
             end
         end
 
-        table.sort(missing, function(a, b) return a.addedAt < b.addedAt end)
+        table.sort(missing, function(a, b)
+            if a.addedAt ~= b.addedAt then
+                return a.addedAt < b.addedAt
+            end
+            return tostring(a.name) < tostring(b.name)
+        end)
 
         for _, player in ipairs(missing) do
             table.insert(currentList, player.name)

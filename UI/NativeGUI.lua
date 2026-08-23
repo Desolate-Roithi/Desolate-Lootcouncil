@@ -941,7 +941,10 @@ function UI_NativeGUI:CreateCheckBox(parent, labelText, defaultChecked, callback
     label:SetText(labelText or "")
     cb.label = label
 
+    local isEnabled = true
+
     cb:SetScript("OnClick", function()
+        if not isEnabled then return end
         isChecked = not isChecked
         if isChecked then checkedTexture:Show() else checkedTexture:Hide() end
         if callback then callback(isChecked) end
@@ -953,6 +956,21 @@ function UI_NativeGUI:CreateCheckBox(parent, labelText, defaultChecked, callback
     end
     cb.GetChecked = function()
         return isChecked
+    end
+    cb.SetEnabled = function(_, enabled)
+        isEnabled = (enabled ~= false)
+        if isEnabled then
+            cb:Enable()
+            cb:SetAlpha(1.0)
+            if cb.label then cb.label:SetTextColor(1, 1, 1, 1) end
+        else
+            cb:Disable()
+            cb:SetAlpha(0.35)
+            if cb.label then cb.label:SetTextColor(0.5, 0.5, 0.5, 1) end
+        end
+    end
+    cb.IsEnabled = function()
+        return isEnabled
     end
 
     return cb

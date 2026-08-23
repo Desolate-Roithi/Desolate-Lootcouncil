@@ -2,16 +2,17 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.2.1  
-**Last Updated:** 2026-08-22  
+**Latest Version:** v1.2.2  
+**Last Updated:** 2026-08-23  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
 
 ### For Loot Masters
 * **Automation:** Automatically detects the Loot Master and manages disenchanting assignments.
-* **Alt Linking:** Tracks alts and links them to main characters so priority rankings and penalties apply to the player's account.
+* **Alt Linking & Unassigned Queue:** Tracks alts and mains, with a dedicated review staging queue for unknown characters.
 * **Session Control:** Monitor active bids in real time and revert mistaken item awards easily.
+* **Modular Profile Export/Import:** Granular sharing of rosters, empty list structures, rankings, item catalogs, and history.
 * **Security:** Offspec and Transmog rolls are handled server-side to prevent manipulation.
 * **Cross-Realm:** Handles player name and realm formatting seamlessly.
 
@@ -34,6 +35,7 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 | `/dlc history` | Open the session loot and attendance history window. |
 | `/dlc status` | Print current connection, session, and autopass statuses to chat. |
 | `/dlc version` | Query and verify addon versions installed by raid members. |
+| `/dlc unassigned` | Review and map unknown characters detected during raid sessions. |
 | `/dlc reset` | Reset all window layout sizes and positions to defaults. |
 | `/dlc sim` | Developer tool to test simulated scenarios and players. |
 
@@ -45,6 +47,18 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v1.2.2 (2026-08-23)
+* **Unassigned Players Staging & Review Queue**:
+  * Added dedicated review window (`/dlc unassigned`) and notification badges in Version check and Roster settings for unknown characters.
+  * Easy one-click actions: **Add as Main**, **Link to Main** (with Main dropdown), **Add All as Mains**, and **Dismiss**.
+* **Modular Profile Export & Import**:
+  * Added granular export categories: Entire Profile, Roster (Mains/Alts), Priority Lists (with Player Rankings), Priority Lists (Empty Structure without Players), Item Manager Catalogs, Raid Attendance & History, and Config/Decay.
+  * Added non-destructive merging (importing priority lists preserves item catalogs and vice versa).
+  * Added native enabled/disabled states and mutual exclusivity to settings checkboxes.
+* **UI Polish & Layout Adjustments**:
+  * Fixed footer button overlapping in Version check window with dynamic width distribution.
+  * Added window position persistence for the Unassigned Players Review window.
 
 ### v1.2.1 (2026-08-22)
 * **Pre-Populated Item Manager Starter Catalog**: Included 114+ raid items categorized across 6 default priority lists (**Tier**, **Weapons**, **Rest**, **Collectables**, **Trinkets and Cantrips**, **Recipes**) with full localization so new users start with organized categories right away.

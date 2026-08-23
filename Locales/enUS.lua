@@ -321,3 +321,17 @@ L["Trinkets and Cantrips"] = true
 L["Recipes"] = true
 L["Junk/Pass"] = true
 
+-- Unassigned Players Review
+L["Unassigned"] = true
+L["Unassigned Players Review"] = true
+L["Add All as Mains"] = true
+L["Dismiss All"] = true
+L["Link Alt"] = true
+L["Add Main"] = true
+L["Please select a Main character first."] = true
+L["No unassigned players found.\nAll detected players are properly mapped."] = true
+L["Notice: %d player(s) in Main roster are missing from priority lists (%s). Click 'Sync Missing Players' in Priority settings to append them."] = true
+L["Decay of %d applied to players: %s"] = true
+L["Decay of %d positions was applied when session ended (no absent players)."] = true
+L["Sync to Lists"] = true
+

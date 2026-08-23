@@ -633,6 +633,65 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
     layoutState.yOffset = layoutState.yOffset + 6
 end
 
+local function GetSessionDecaySummary(sessionEntry, db, config)
+    local isCurrent = (sessionEntry.sessionID == "CURRENT")
+    local decayEnabled = config.enabled
+    local defaultPenalty = config.defaultPenalty or 1
+
+    if not decayEnabled or sessionEntry.decayApplied == -1 then
+        return { disabled = true }
+    end
+
+    if isCurrent then
+        return { isCurrent = true }
+    end
+
+    -- Check if explicitly stored in sessionEntry
+    local absentList = {}
+    local penalty = sessionEntry.decayPenalty or defaultPenalty
+
+    if sessionEntry.decayAbsent then
+        for p in pairs(sessionEntry.decayAbsent) do
+            table.insert(absentList, p)
+        end
+    end
+
+    -- Fallback: Extract distinct players and penalty from SessionPositionLog
+    if #absentList == 0 then
+        local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
+        local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
+        if splBucket then
+            local seen = {}
+            for _, entry in ipairs(splBucket) do
+                local pName, pPen = entry:match("%[Decay%]%s+(.-)%s+moved from position #%d+ to #%d+ in .- %(%+(%d+) decay")
+                if pName then
+                    if pPen then penalty = tonumber(pPen) or penalty end
+                    if not seen[pName] then
+                        seen[pName] = true
+                        table.insert(absentList, pName)
+                    end
+                end
+            end
+        end
+    end
+
+    -- Second Fallback: Compare sessionEntry.attendees against MainRoster if decayApplied is set
+    if #absentList == 0 and sessionEntry.decayApplied and sessionEntry.decayApplied ~= -1 and sessionEntry.attendees and db.MainRoster then
+        for mName in pairs(db.MainRoster) do
+            if not sessionEntry.attendees[mName] then
+                table.insert(absentList, mName)
+            end
+        end
+    end
+
+    table.sort(absentList)
+    return {
+        applied = (sessionEntry.decayApplied ~= nil and sessionEntry.decayApplied ~= -1) or (#absentList > 0),
+        penalty = penalty,
+        absent = absentList
+    }
+end
+
 function UI_RaidHistory:RenderDecaySection(sc, NativeGUI, sessionEntry, isCurrent, config, layoutState, AddText, AddHeader)
     local decayCollapsed = AddHeader("decay", SECTION_ICONS.decay, L["Decay Applied"])
     if decayCollapsed then
@@ -640,38 +699,27 @@ function UI_RaidHistory:RenderDecaySection(sc, NativeGUI, sessionEntry, isCurren
         return
     end
 
-    local db  = DesolateLootcouncil.db.profile
-    local decayEntries = {}
+    local db = DesolateLootcouncil.db.profile
+    local summary = GetSessionDecaySummary(sessionEntry, db, config)
 
-    -- Look for decay-tagged lines in the same session position log
-    local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
-    local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
-    if splBucket then
-        for _, entry in ipairs(splBucket) do
-            local lower = entry:lower()
-            if lower:find("decay") or lower:find("absent") then
-                table.insert(decayEntries, entry)
-            end
+    if summary.disabled then
+        AddText(L["Decay disabled."], 14, { 0.5, 0.5, 0.5 })
+    elseif isCurrent or summary.isCurrent then
+        AddText(L["No decay applied yet."], 14, { 0.5, 0.5, 0.5 })
+    elseif summary.applied and #summary.absent > 0 then
+        local formattedNames = {}
+        for _, name in ipairs(summary.absent) do
+            local class = DesolateLootcouncil.API:GetUnitClass(name)
+            local disp = DesolateLootcouncil:GetDisplayName(name)
+            table.insert(formattedNames, NativeGUI:FormatClassColor(class, disp))
         end
-    end
-
-    if #decayEntries > 0 then
-        for _, entry in ipairs(decayEntries) do
-            AddText(entry, 14, { 0.93, 0.65, 0.37 })
-        end
+        local namesStr = table.concat(formattedNames, ", ")
+        local decayStr = string.format(L["Decay of %d applied to players: %s"], summary.penalty, namesStr)
+        AddText(decayStr, 14, { 0.93, 0.65, 0.37 })
+    elseif summary.applied then
+        AddText(string.format(L["Decay of %d positions was applied when session ended (no absent players)."], summary.penalty), 14, { 0.5, 0.5, 0.5 })
     else
-        local decayEnabled = config.enabled
-        local penalty      = config.defaultPenalty or 0
-        local decayStr
-        if not decayEnabled then
-            decayStr = L["Decay disabled."]
-        elseif isCurrent then
-            decayStr = L["No decay applied yet."]
-        else
-            decayStr = string.format(
-                L["Decay of %d positions was applied when session ended."], penalty)
-        end
-        AddText(decayStr, 14, { 0.5, 0.5, 0.5 })
+        AddText(L["No decay applied yet."], 14, { 0.5, 0.5, 0.5 })
     end
 
     layoutState.yOffset = layoutState.yOffset + 6

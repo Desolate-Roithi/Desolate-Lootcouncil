@@ -126,6 +126,29 @@ function SlashCommands.Handle(input)
         local Sim = DesolateLootcouncil:GetModule("Simulation")
         if Sim then Sim:HandleSlashCommand(table.concat(args, " ", 2)) end
 
+        -- Unassigned Players Review
+    elseif cmd == "unassigned" then
+        if DesolateLootcouncil:AmIOfficerOrLM() then
+            local UI = DesolateLootcouncil:GetModule("UI_UnassignedPlayers", true)
+            if UI and UI.ShowUnassignedWindow then UI:ShowUnassignedWindow() end
+        else
+            DesolateLootcouncil:Print(L["Only the Loot Master or Officers can view the Loot History."])
+        end
+
+        -- Mock Unassigned Players (Test)
+    elseif cmd == "testunassigned" or cmd == "mockunassigned" then
+        local profile = DesolateLootcouncil.db.profile
+        if profile then
+            profile.unassignedPlayers = profile.unassignedPlayers or {}
+            profile.unassignedPlayers["Dustknight"] = { firstSeen = time(), source = "Raid", class = "WARRIOR" }
+            profile.unassignedPlayers["Frostmage"] = { firstSeen = time() + 1, source = "Bid", class = "MAGE" }
+            profile.unassignedPlayers["Holyheals"] = { firstSeen = time() + 2, source = "Version", class = "PRIEST" }
+            profile.unassignedPlayers["Shadowstep"] = { firstSeen = time() + 3, source = "Raid", class = "ROGUE" }
+            DesolateLootcouncil:Print("Injected 4 mock unassigned players (Dustknight, Frostmage, Holyheals, Shadowstep).")
+            local UI = DesolateLootcouncil:GetModule("UI_UnassignedPlayers", true)
+            if UI and UI.ShowUnassignedWindow then UI:ShowUnassignedWindow() end
+        end
+
     elseif cmd == "reset" or cmd == "resetpositions" then
         if DesolateLootcouncil.Persistence and DesolateLootcouncil.Persistence.ResetPositions then
             DesolateLootcouncil.Persistence:ResetPositions()
@@ -138,6 +161,7 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:Print("  |cff33ff99/dlc show|r - Re-open Voting Window")
         DesolateLootcouncil:Print("  |cff33ff99/dlc history|r - Open Loot History")
         DesolateLootcouncil:Print("  |cff33ff99/dlc version|r - Check versions")
+        DesolateLootcouncil:Print("  |cff33ff99/dlc unassigned|r - Review Unassigned Players")
         DesolateLootcouncil:Print("  |cff33ff99/dlc status|r - Show debug status")
         DesolateLootcouncil:Print("  |cff33ff99/dlc reset|r - Reset all window positions to default")
         DesolateLootcouncil:Print("Loot Master (LM) Only:")
@@ -146,7 +170,7 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:Print("  |cff33ff99/dlc trade|r - Open Trade List")
         DesolateLootcouncil:Print("  |cff33ff99/dlc session|r - Manage Sessions (start/stop)")
         DesolateLootcouncil:Print("  |cff33ff99/dlc test|r - Generate Test Items")
-
+        DesolateLootcouncil:Print("  |cff33ff99/dlc testunassigned|r - Inject Mock Unassigned Players")
     end
 end
 

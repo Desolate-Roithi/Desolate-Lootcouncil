@@ -75,15 +75,6 @@ local DeleteProfile = function()
     DesolateLootcouncil:DLC_Log("Deleted profile: " .. current)
 end
 
-local ExportOptsSet = function(info, key, state)
-    ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
-    ProfileSettings.exportSelection[key] = state
-end
-
-local ExportOptsGet = function(info, key)
-    return ProfileSettings.exportSelection and ProfileSettings.exportSelection[key]
-end
-
 local GenerateExportString = function()
     ProfileSettings.generatedString = DesolateLootcouncil.API:ExportProfileData(ProfileSettings.exportSelection)
 end
@@ -198,22 +189,126 @@ local descOpt = {
     order = 0,
 }
 
-local exportOptsOpt = {
-    type = "multiselect",
+local exportOptsGroupOpt = {
+    type = "group",
     name = "Data to Export",
-    desc = "Select which sections to include.",
-    width = "full",
+    inline = true,
     order = 1,
-    values = {
-        ["Roster"] = "Roster (Mains/Alts/Decay)",
-        ["PriorityLists"] = "Priority Lists (Names/Order)",
-        ["PriorityContent"] = "Priority List Content (Players/Items)",
-        ["IM"] = "Item Manager (Managed Items)",
-        ["History"] = "Loot History & Attendance",
-        ["Config"] = "General Config & Loot Rules",
-    },
-    set = ExportOptsSet,
-    get = ExportOptsGet,
+    args = {
+        all = {
+            type = "toggle",
+            name = "|cffffd700Entire Profile (Export Everything)|r",
+            desc = "Exports a complete backup of all profile modules.",
+            width = "full",
+            order = 1,
+            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
+            set = function(_, val)
+                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+                ProfileSettings.exportSelection["All"] = val
+                if val then
+                    ProfileSettings.exportSelection["Roster"] = false
+                    ProfileSettings.exportSelection["PriorityRankings"] = false
+                    ProfileSettings.exportSelection["PriorityStructure"] = false
+                    ProfileSettings.exportSelection["IM"] = false
+                    ProfileSettings.exportSelection["History"] = false
+                    ProfileSettings.exportSelection["Config"] = false
+                end
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end,
+        },
+        roster = {
+            type = "toggle",
+            name = "Roster (Mains & Alts)",
+            width = 1.3,
+            order = 2,
+            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
+            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["Roster"] end,
+            set = function(_, val)
+                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
+                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+                ProfileSettings.exportSelection["Roster"] = val
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end,
+        },
+        priorityRankings = {
+            type = "toggle",
+            name = "Priority Lists (with Player Rankings)",
+            desc = "Exports list definitions and active player order.",
+            width = 1.6,
+            order = 3,
+            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
+            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["PriorityRankings"] end,
+            set = function(_, val)
+                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
+                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+                ProfileSettings.exportSelection["PriorityRankings"] = val
+                if val then
+                    ProfileSettings.exportSelection["PriorityStructure"] = false
+                end
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end,
+        },
+        priorityStructure = {
+            type = "toggle",
+            name = "Priority Lists (Empty Structure without Players)",
+            desc = "Exports empty list definitions/templates.",
+            width = 1.6,
+            order = 4,
+            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
+            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["PriorityStructure"] end,
+            set = function(_, val)
+                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
+                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+                ProfileSettings.exportSelection["PriorityStructure"] = val
+                if val then
+                    ProfileSettings.exportSelection["PriorityRankings"] = false
+                end
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end,
+        },
+        im = {
+            type = "toggle",
+            name = "Item Manager (Managed Item Catalogs)",
+            width = 1.6,
+            order = 5,
+            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
+            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["IM"] end,
+            set = function(_, val)
+                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
+                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+                ProfileSettings.exportSelection["IM"] = val
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end,
+        },
+        history = {
+            type = "toggle",
+            name = "Raid Attendance & Award History",
+            width = 1.6,
+            order = 6,
+            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
+            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["History"] end,
+            set = function(_, val)
+                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
+                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+                ProfileSettings.exportSelection["History"] = val
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end,
+        },
+        config = {
+            type = "toggle",
+            name = "General Config & Decay Rules",
+            width = 1.6,
+            order = 7,
+            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
+            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["Config"] end,
+            set = function(_, val)
+                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
+                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+                ProfileSettings.exportSelection["Config"] = val
+                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            end,
+        },
+    }
 }
 
 local genExportOpt = {
@@ -316,7 +411,7 @@ function ProfileSettings:GetImportExportOptions()
     }
     local args = opts.args
     args.desc = descOpt
-    args.exportOpts = exportOptsOpt
+    args.exportOpts = exportOptsGroupOpt
     args.genExport = genExportOpt
     args.exportString = exportStringOpt
     args.importHeader = importHeaderOpt

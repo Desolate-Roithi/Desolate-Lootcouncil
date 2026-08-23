@@ -66,8 +66,16 @@ DesolateLootcouncil.DefaultLayouts = {
         relativePoint = "CENTER",
         x = 0,
         y = 0,
-        width = 370,
-        height = 400
+        width = 390,
+        height = 420
+    },
+    ["UnassignedPlayers"] = {
+        point = "CENTER",
+        relativePoint = "CENTER",
+        x = 0,
+        y = 0,
+        width = 540,
+        height = 420
     },
     ["Attendance"] = {
         point = "CENTER",

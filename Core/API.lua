@@ -409,10 +409,14 @@ end
 
 --- Records that decay was applied for the active tracking session.
 ---@param timestamp number?
-function DLC_API:SetSessionDecayApplied(timestamp)
+---@param penalty number?
+---@param absentMap table?
+function DLC_API:SetSessionDecayApplied(timestamp, penalty, absentMap)
     local r = Roster()
     if r then
         r.decayAppliedForSession = timestamp or GetServerTime()
+        r.decayPenaltyForSession = penalty
+        r.decayAbsentForSession = absentMap
     end
 end
 
@@ -879,6 +883,35 @@ function DLC_API:RemovePlayer(name)
     if r and r.RemovePlayer then r:RemovePlayer(name) end
 end
 
+--- Returns the list of unassigned players awaiting review.
+---@return table
+function DLC_API:GetUnassignedPlayers()
+    local r = DesolateLootcouncil:GetModule("Roster", true)
+    return (r and r.GetUnassignedPlayers and r:GetUnassignedPlayers()) or {}
+end
+
+--- Assigns an unassigned player as a Main character.
+---@param name string
+function DLC_API:AssignUnassignedAsMain(name)
+    local r = DesolateLootcouncil:GetModule("Roster", true)
+    if r and r.AssignAsMain then r:AssignAsMain(name) end
+end
+
+--- Assigns an unassigned player as an Alt linked to a Main character.
+---@param altName string
+---@param mainName string
+function DLC_API:AssignUnassignedAsAlt(altName, mainName)
+    local r = DesolateLootcouncil:GetModule("Roster", true)
+    if r and r.AssignAsAlt then r:AssignAsAlt(altName, mainName) end
+end
+
+--- Dismisses an unassigned player from the review queue.
+---@param name string
+function DLC_API:DismissUnassignedPlayer(name)
+    local r = DesolateLootcouncil:GetModule("Roster", true)
+    if r and r.DismissUnassignedPlayer then r:DismissUnassignedPlayer(name) end
+end
+
 --- Returns the formatted roster list for display in the UI.
 ---@return string
 function DLC_API:GetRosterText()
@@ -1046,52 +1079,74 @@ function DLC_API:DeleteProfile(name)
 end
 
 --- Generates a serialized profile export string based on selected category options.
+--- Generates a serialized profile export string based on selected category options.
 ---@param selection table<string, boolean>
 ---@return string
 function DLC_API:ExportProfileData(selection)
     local p = DesolateLootcouncil.db.profile
     local data = {}
+    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
+        if type(t) ~= "table" then return t end
+        local res = {}
+        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
+        return res
+    end
 
-    if selection["Config"] then
+    local exportAll = selection and selection["All"]
+
+    if exportAll or selection["Config"] then
         data.config = {
-            minLootQuality = p.minLootQuality,
-            enableAutoLoot = p.enableAutoLoot,
-            DecayConfig = p.DecayConfig,
+            minLootQuality  = p.minLootQuality,
+            enableAutoLoot  = p.enableAutoLoot,
+            enableAutoTrade = p.enableAutoTrade,
+            activeTheme     = p.activeTheme,
+            DecayConfig     = DeepCopy(p.DecayConfig),
         }
     end
-    if selection["Roster"] then
+    if exportAll or selection["Roster"] then
         data.Roster = {
-            MainRoster = p.MainRoster,
-            playerRoster = p.playerRoster
+            MainRoster   = DeepCopy(p.MainRoster),
+            playerRoster = DeepCopy(p.playerRoster),
         }
     end
-    if selection["PriorityLists"] then
-        data.PriorityListsStructure = {}
+    if exportAll or selection["PriorityRankings"] or selection["PriorityLists"] or selection["PriorityContent"] then
+        data.PriorityLists = {}
         if p.PriorityLists then
-            for idx, list in ipairs(p.PriorityLists) do
-                table.insert(data.PriorityListsStructure, { name = list.name })
+            for _, list in ipairs(p.PriorityLists) do
+                table.insert(data.PriorityLists, {
+                    name    = list.name,
+                    players = DeepCopy(list.players or {})
+                })
             end
         end
-    end
-    if selection["PriorityContent"] then
-        data.PriorityListsContent = p.PriorityLists
-    end
-    if selection["IM"] then
-        data.ItemManagerContent = {}
+    elseif selection["PriorityStructure"] then
+        data.PriorityListsStructure = {}
         if p.PriorityLists then
-            for idx, list in ipairs(p.PriorityLists) do
-                table.insert(data.ItemManagerContent, {
-                    name = list.name,
-                    items = list.items
+            for _, list in ipairs(p.PriorityLists) do
+                table.insert(data.PriorityListsStructure, {
+                    name    = list.name,
+                    players = {}
                 })
             end
         end
     end
-    if selection["History"] then
+    if exportAll or selection["IM"] then
+        data.ItemManagerContent = {}
+        if p.PriorityLists then
+            for _, list in ipairs(p.PriorityLists) do
+                table.insert(data.ItemManagerContent, {
+                    name  = list.name,
+                    items = DeepCopy(list.items or {})
+                })
+            end
+        end
+    end
+    if exportAll or selection["History"] then
         data.History = {
-            session = p.session,
-            AttendanceHistory = p.AttendanceHistory,
-            PriorityLog = p.PriorityLog
+            session            = DeepCopy(p.session),
+            AttendanceHistory  = DeepCopy(p.AttendanceHistory),
+            PriorityLog        = DeepCopy(p.PriorityLog),
+            SessionPositionLog = DeepCopy(p.SessionPositionLog),
         }
     end
 
@@ -1103,6 +1158,7 @@ end
 --- Imports profile data from a serialized string and switches to the new profile.
 ---@param importStringRaw string
 ---@param importName string
+---@param importToCurrent boolean?
 ---@return boolean success, string errorMsg
 function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
     if not importStringRaw or importStringRaw == "" then
@@ -1120,57 +1176,108 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
     end
 
     local success, data = DesolateLootcouncil:Deserialize(decoded)
-    if not success then
+    if not success or type(data) ~= "table" then
         return false, "Import Error: Invalid string format / Decode failed."
     end
 
     if not importToCurrent then
-        DesolateLootcouncil.db:SetProfile(importName)
+        if DesolateLootcouncil.db and DesolateLootcouncil.db.SetProfile then
+            DesolateLootcouncil.db:SetProfile(importName)
+        end
     end
 
     local p = DesolateLootcouncil.db.profile
-    if data.config then
-        for k, v in pairs(data.config) do p[k] = v end
+    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
+        if type(t) ~= "table" then return t end
+        local res = {}
+        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
+        return res
     end
+
+    -- 1. Config
+    if data.config then
+        if data.config.minLootQuality ~= nil then p.minLootQuality = data.config.minLootQuality end
+        if data.config.enableAutoLoot ~= nil then p.enableAutoLoot = data.config.enableAutoLoot end
+        if data.config.enableAutoTrade ~= nil then p.enableAutoTrade = data.config.enableAutoTrade end
+        if data.config.activeTheme ~= nil then
+            p.activeTheme = data.config.activeTheme
+            local Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+            if Theme and Theme.SetTheme then Theme:SetTheme(p.activeTheme) end
+        end
+        if data.config.DecayConfig then
+            p.DecayConfig = DeepCopy(data.config.DecayConfig)
+        end
+        p.configTimestamp = GetServerTime()
+    end
+
+    -- 2. Roster
     if data.Roster then
-        p.MainRoster = data.Roster.MainRoster
-        p.playerRoster = data.Roster.playerRoster
+        p.MainRoster = DeepCopy(data.Roster.MainRoster or {})
+        p.playerRoster = DeepCopy(data.Roster.playerRoster or { alts = {}, decay = {} })
         p.rosterTimestamp = GetServerTime()
 
         local Roster = DesolateLootcouncil:GetModule("Roster", true)
         if Roster then
-            Roster:SanitizeMainsAndAlts()
-            Roster:UpdateScoreMap()
+            if Roster.SanitizeMainsAndAlts then Roster:SanitizeMainsAndAlts() end
+            if Roster.UpdateScoreMap then Roster:UpdateScoreMap() end
         end
-
-        local Priority = DesolateLootcouncil:GetModule("Priority", true)
-        if Priority and Priority.SyncMissingPlayers then
-            Priority:SyncMissingPlayers()
+        if DesolateLootcouncil.SendMessage then
+            DesolateLootcouncil:SendMessage("DLC_ROSTER_UPDATED")
         end
     end
-    if data.PriorityListsContent then
-        for idx, list in ipairs(data.PriorityListsContent) do
-            if list.items then
+
+    -- 3. Priority Lists (Rankings or Empty Structure)
+    local incomingLists = data.PriorityLists or data.PriorityListsContent or data.PriorityListsStructure
+    if incomingLists then
+        p.PriorityLists = p.PriorityLists or {}
+        p.priorityTimestamps = p.priorityTimestamps or {}
+
+        for _, incoming in ipairs(incomingLists) do
+            local listObj = nil
+            for _, localList in ipairs(p.PriorityLists) do
+                if localList.name == incoming.name then
+                    listObj = localList
+                    break
+                end
+            end
+            if not listObj then
+                listObj = { name = incoming.name, players = {}, items = {} }
+                table.insert(p.PriorityLists, listObj)
+            end
+
+            -- Update players if provided, or clear if structure only
+            if incoming.players then
+                listObj.players = DeepCopy(incoming.players)
+            elseif data.PriorityListsStructure then
+                listObj.players = {}
+            end
+
+            -- Legacy fallback: If old export had items and no dedicated IM payload, import items
+            if incoming.items and not data.ItemManagerContent and not data.IM then
                 local normalizedItems = {}
-                for id, val in pairs(list.items) do
+                for id, val in pairs(incoming.items) do
                     normalizedItems[tonumber(id) or id] = val
                 end
-                list.items = normalizedItems
+                listObj.items = normalizedItems
             end
+
+            self:MarkPriorityDirty(listObj.name)
         end
-        p.PriorityLists = data.PriorityListsContent
-    elseif data.PriorityListsStructure then
-        local newLists = {}
-        for idx, l in ipairs(data.PriorityListsStructure) do
-            table.insert(newLists, { name = l.name, players = {}, items = {} })
+
+        if DesolateLootcouncil.SendMessage then
+            DesolateLootcouncil:SendMessage("DLC_PRIORITY_UPDATED")
         end
-        p.PriorityLists = newLists
     end
-    if data.ItemManagerContent then
+
+    -- 4. Item Manager Content
+    local incomingIM = data.ItemManagerContent or data.IM
+    if incomingIM then
         p.PriorityLists = p.PriorityLists or {}
-        for idx, incoming in ipairs(data.ItemManagerContent) do
+        p.imTimestamps = p.imTimestamps or {}
+
+        for _, incoming in ipairs(incomingIM) do
             local listObj = nil
-            for key, localList in ipairs(p.PriorityLists) do
+            for _, localList in ipairs(p.PriorityLists) do
                 if localList.name == incoming.name then
                     listObj = localList
                     break
@@ -1193,13 +1300,26 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
 
             self:MarkIMDirty(listObj.name)
         end
-    end
-    if data.History then
-        if data.History.session then p.session = data.History.session end
-        if data.History.AttendanceHistory then p.AttendanceHistory = data.History.AttendanceHistory end
-        if data.History.PriorityLog then p.PriorityLog = data.History.PriorityLog end
+
+        if DesolateLootcouncil.SendMessage then
+            DesolateLootcouncil:SendMessage("DLC_IM_UPDATED")
+        end
     end
 
+    -- 5. History
+    if data.History then
+        if data.History.session then p.session = DeepCopy(data.History.session) end
+        if data.History.AttendanceHistory then p.AttendanceHistory = DeepCopy(data.History.AttendanceHistory) end
+        if data.History.PriorityLog then p.PriorityLog = DeepCopy(data.History.PriorityLog) end
+        if data.History.SessionPositionLog then p.SessionPositionLog = DeepCopy(data.History.SessionPositionLog) end
+        p.historyTimestamp = GetServerTime()
+
+        if DesolateLootcouncil.SendMessage then
+            DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
+        end
+    end
+
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     return true, ""
 end
 

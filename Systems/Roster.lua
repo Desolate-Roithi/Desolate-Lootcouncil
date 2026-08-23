@@ -222,7 +222,11 @@ function Roster:StartRaidSession()
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
 
     if DesolateLootcouncil:AmILootMaster() then
-        -- Priority list propagation is now manual only via the Item Manager UI button.
+        -- Notify LM if any mains are missing from priority lists
+        local Priority = DesolateLootcouncil:GetModule("Priority", true)
+        if Priority and Priority.NotifyIfPlayersMissing then
+            Priority:NotifyIfPlayersMissing()
+        end
 
         DesolateLootcouncil:PromptAutopass()
     end
@@ -257,9 +261,13 @@ function Roster:StopRaidSession(saveHistory)
             attendeeDetails = {},
             bossLogs        = {},
             awarded         = {},
-            decayApplied    = self.decayAppliedForSession or (not config.enabled and -1 or nil)
+            decayApplied    = self.decayAppliedForSession or (not config.enabled and -1 or nil),
+            decayPenalty    = self.decayPenaltyForSession or (config.defaultPenalty or 1),
+            decayAbsent     = self.decayAbsentForSession and DesolateLootcouncil.Table.DeepCopy(self.decayAbsentForSession) or nil
         }
         self.decayAppliedForSession = nil
+        self.decayPenaltyForSession = nil
+        self.decayAbsentForSession = nil
         local session = db.session
         if session and session.awarded then
             entry.awarded = DesolateLootcouncil.Table.DeepCopy(session.awarded)
@@ -541,10 +549,6 @@ function Roster:AddMain(name)
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Added Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
     
-    local Priority = DesolateLootcouncil:GetModule("Priority")
-    if Priority and Priority.SyncMissingPlayers then
-        Priority:SyncMissingPlayers()
-    end
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
@@ -665,10 +669,6 @@ function Roster:AddAlt(altName, mainName)
     DesolateLootcouncil:DLC_Log("Linked Alt " .. DesolateLootcouncil:GetDisplayName(normalizedAlt) .. 
         " to " .. DesolateLootcouncil:GetDisplayName(normalizedMain))
         
-    local Priority = DesolateLootcouncil:GetModule("Priority")
-    if Priority and Priority.SyncMissingPlayers then
-        Priority:SyncMissingPlayers()
-    end
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
@@ -742,6 +742,121 @@ function Roster:GetMain(name)
     end
 
     return name
+end
+
+---------------------------------------------------------------------------
+-- UNASSIGNED PLAYERS REVIEW QUEUE
+---------------------------------------------------------------------------
+
+function Roster:RecordUnassignedPlayer(name, source)
+    if not DesolateLootcouncil.db or not name or name == "" then return end
+    local profile = DesolateLootcouncil.db.profile
+    if not profile then return end
+
+    local normalizedName = Ambiguate(name, "none")
+    local score = DesolateLootcouncil:GetScoreName(normalizedName)
+
+    -- Check if already known as Main or Alt
+    if score and self.scoreMap and self.scoreMap[score] then
+        return
+    end
+
+    if profile.playerRoster and profile.playerRoster.alts then
+        for altName in pairs(profile.playerRoster.alts) do
+            if DesolateLootcouncil:SmartCompare(altName, normalizedName) then
+                return
+            end
+        end
+    end
+
+    if profile.MainRoster then
+        for mainName in pairs(profile.MainRoster) do
+            if DesolateLootcouncil:SmartCompare(mainName, normalizedName) then
+                return
+            end
+        end
+    end
+
+    profile.unassignedPlayers = profile.unassignedPlayers or {}
+    if not profile.unassignedPlayers[normalizedName] then
+        profile.unassignedPlayers[normalizedName] = {
+            firstSeen = GetServerTime(),
+            source = source or "Raid",
+            class = SafeGetUnitClass(name) or "WARRIOR"
+        }
+        DesolateLootcouncil:DLC_Log(string.format("Recorded unassigned player: |cFFFFFF00%s|r (%s). Requires Loot Master assignment.", normalizedName, source or "Raid"))
+        self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+    end
+end
+
+function Roster:GetUnassignedPlayers()
+    if not DesolateLootcouncil.db then return {} end
+    local profile = DesolateLootcouncil.db.profile
+    if not profile or not profile.unassignedPlayers then return {} end
+
+    local list = {}
+    for name, data in pairs(profile.unassignedPlayers) do
+        table.insert(list, {
+            name = name,
+            firstSeen = data.firstSeen or 0,
+            source = data.source or "Raid",
+            class = data.class or SafeGetUnitClass(name) or "WARRIOR"
+        })
+    end
+    table.sort(list, function(a, b)
+        if a.firstSeen ~= b.firstSeen then
+            return a.firstSeen < b.firstSeen
+        end
+        return tostring(a.name) < tostring(b.name)
+    end)
+    return list
+end
+
+function Roster:AssignAsMain(name)
+    if not DesolateLootcouncil.db or not name then return end
+    local profile = DesolateLootcouncil.db.profile
+    if profile and profile.unassignedPlayers then
+        local norm = Ambiguate(name, "none")
+        for k in pairs(profile.unassignedPlayers) do
+            if DesolateLootcouncil:SmartCompare(k, norm) then
+                profile.unassignedPlayers[k] = nil
+                break
+            end
+        end
+    end
+    self:AddMain(name)
+    self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+end
+
+function Roster:AssignAsAlt(altName, mainName)
+    if not DesolateLootcouncil.db or not altName or not mainName then return end
+    local profile = DesolateLootcouncil.db.profile
+    if profile and profile.unassignedPlayers then
+        local norm = Ambiguate(altName, "none")
+        for k in pairs(profile.unassignedPlayers) do
+            if DesolateLootcouncil:SmartCompare(k, norm) then
+                profile.unassignedPlayers[k] = nil
+                break
+            end
+        end
+    end
+    self:AddAlt(altName, mainName)
+    self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+end
+
+function Roster:DismissUnassignedPlayer(name)
+    if not DesolateLootcouncil.db or not name then return end
+    local profile = DesolateLootcouncil.db.profile
+    if profile and profile.unassignedPlayers then
+        local norm = Ambiguate(name, "none")
+        for k in pairs(profile.unassignedPlayers) do
+            if DesolateLootcouncil:SmartCompare(k, norm) then
+                profile.unassignedPlayers[k] = nil
+                break
+            end
+        end
+    end
+    self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
 end
 
 ---------------------------------------------------------------------------
@@ -930,7 +1045,6 @@ function Roster:CheckForNewRaidMembers()
     local profile = DesolateLootcouncil.db.profile
     if not profile then return end
 
-    local addedAny = false
     local members = GetNumGroupMembers()
     for i = 1, members do
         local name = GetRaidRosterInfo(i)
@@ -974,17 +1088,9 @@ function Roster:CheckForNewRaidMembers()
                 end
 
                 if not alreadyKnown then
-                    self:AddMain(normalizedName)
-                    DesolateLootcouncil:DLC_Log(string.format("New player |cFFFFFF00%s|r appended to priority lists. Please check if this is an Alt.", normalizedName), true)
-                    addedAny = true
+                    self:RecordUnassignedPlayer(normalizedName, "Raid")
                 end
             end
-        end
-    end
-    if addedAny then
-        local Priority = DesolateLootcouncil:GetModule("Priority")
-        if Priority and Priority.SyncMissingPlayers then
-            Priority:SyncMissingPlayers()
         end
     end
 end
@@ -1065,12 +1171,6 @@ function Roster:ReceiveRosterSync(syncedRoster)
 
     -- Rebuild cache
     self:UpdateScoreMap()
-
-    -- Sync priority lists so stale removed mains/alts are pruned from priority lists
-    local Priority = DesolateLootcouncil:GetModule("Priority", true)
-    if Priority and Priority.SyncMissingPlayers then
-        Priority:SyncMissingPlayers()
-    end
 
     local mainCount = 0
     for _ in pairs(db.MainRoster) do mainCount = mainCount + 1 end

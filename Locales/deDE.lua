@@ -348,4 +348,18 @@ L["Trinkets and Cantrips"] = "Schmuckstücke & Cantrips"
 L["Recipes"] = "Rezepte"
 L["Junk/Pass"] = "Müll/Passen"
 
+-- Unassigned Players Review
+L["Unassigned"] = "Unzugeordnet"
+L["Unassigned Players Review"] = "Unzugeordnete Spieler überprüfen"
+L["Add All as Mains"] = "Alle als Mains hinzufügen"
+L["Dismiss All"] = "Alle verwerfen"
+L["Link Alt"] = "Als Alt verknüpfen"
+L["Add Main"] = "Als Main hinzufügen"
+L["Please select a Main character first."] = "Bitte wähle zuerst einen Main-Charakter aus."
+L["No unassigned players found.\nAll detected players are properly mapped."] = "Keine unzugeordneten Spieler gefunden.\nAlle erkannten Spieler sind korrekt zugewiesen."
+L["Notice: %d player(s) in Main roster are missing from priority lists (%s). Click 'Sync Missing Players' in Priority settings to append them."] = "Hinweis: %d Spieler im Main-Kader fehlen in den Prioritätslisten (%s). Klicke in den Prioritätseinstellungen auf 'Fehlende Spieler synchronisieren', um sie anzuhängen."
+L["Decay of %d applied to players: %s"] = "Verfall von %d angewendet auf Spieler: %s"
+L["Decay of %d positions was applied when session ended (no absent players)."] = "Verfall von %d Positionen wurde beim Beenden der Sitzung angewendet (keine abwesenden Spieler)."
+L["Sync to Lists"] = "Mit Listen synchronisieren"
+
 

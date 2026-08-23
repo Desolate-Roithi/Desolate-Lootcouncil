@@ -58,13 +58,33 @@ function UI_Version:ShowVersionWindow(isTest)
         self.versionFrame = frame
         self.rowPool = {}
 
-        local btnRefresh = NativeGUI:CreateButton(frame, L["Refresh / Ping"], 160, 24, "Pass")
+        local btnRefresh = NativeGUI:CreateButton(frame, L["Refresh / Ping"], 110, 24, "Pass")
         btnRefresh:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 12)
         self.btnRefresh = btnRefresh
 
-        local btnSync = NativeGUI:CreateButton(frame, L["Sync Autopass"], 160, 24, "Pass")
-        btnSync:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 12)
+        local btnUnassigned = NativeGUI:CreateButton(frame, L["Unassigned"], 110, 24, "Pass")
+        btnUnassigned:SetPoint("LEFT", btnRefresh, "RIGHT", 6, 0)
+        btnUnassigned:SetScript("OnClick", function()
+            local win = DesolateLootcouncil:GetModule("UI_UnassignedPlayers", true)
+            if win and win.ShowUnassignedWindow then
+                win:ShowUnassignedWindow()
+            end
+        end)
+        self.btnUnassigned = btnUnassigned
+
+        local btnSync = NativeGUI:CreateButton(frame, L["Sync Autopass"], 110, 24, "Pass")
+        btnSync:SetPoint("LEFT", btnUnassigned, "RIGHT", 6, 0)
         self.btnSync = btnSync
+
+        local function LayoutFooterButtons()
+            local currentW = frame:GetWidth() or 390
+            local btnW = math.max(math.floor((currentW - 24 - 12) / 3), 90)
+            btnRefresh:SetWidth(btnW)
+            btnUnassigned:SetWidth(btnW)
+            btnSync:SetWidth(btnW)
+        end
+        frame:HookScript("OnSizeChanged", LayoutFooterButtons)
+        LayoutFooterButtons()
 
         -- Repeating timer to handle button state and countdown text
         self.refreshTimer = self:ScheduleRepeatingTimer(OnVersionTimerTick, 1)
@@ -109,6 +129,15 @@ function UI_Version:UpdateVersionList(isTest)
 
     self.scrollFrame:Show()
     self.scrollContent:Show()
+
+    if self.btnUnassigned then
+        local unassigned = DesolateLootcouncil.API:GetUnassignedPlayers()
+        if #unassigned > 0 then
+            self.btnUnassigned:SetText(string.format("%s (|cffffd700%d|r)", L["Unassigned"], #unassigned))
+        else
+            self.btnUnassigned:SetText(L["Unassigned"])
+        end
+    end
 
     if not self.initialPingSent then
         local remaining = DesolateLootcouncil.API:GetVersionCheckCooldown()

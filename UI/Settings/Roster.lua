@@ -274,12 +274,48 @@ function RosterSettings:GetDisplayGroupOptions()
     return opts
 end
 
+local GetUnassignedButtonText = function()
+    local unassigned = DesolateLootcouncil.API:GetUnassignedPlayers()
+    local count = #unassigned
+    if count > 0 then
+        return string.format("Review Unassigned Players (|cffffd700%d Pending|r)", count)
+    end
+    return "Review Unassigned Players (0)"
+end
+
+local reviewUnassignedOpt = {
+    type = "execute",
+    name = GetUnassignedButtonText,
+    desc = "Open the Unassigned Players Review window to assign detected raid members as Mains or Alts.",
+    order = 1,
+    width = "full",
+    func = function()
+        local win = DesolateLootcouncil:GetModule("UI_UnassignedPlayers", true)
+        if win and win.ShowUnassignedWindow then
+            win:ShowUnassignedWindow()
+        end
+    end,
+}
+
+function RosterSettings:GetUnassignedGroupOptions()
+    local opts = {
+        type = "group",
+        name = "Unassigned Players",
+        order = 0.5,
+        inline = true,
+        args = {}
+    }
+    opts.args.reviewBtn = reviewUnassignedOpt
+    return opts
+end
+
 function RosterSettings:GetOptions()
     return {
         name = "Roster",
         type = "group",
         order = 2,
         args = {
+            unassignedGroup = self:GetUnassignedGroupOptions(),
             manageGroup = self:GetManageGroupOptions(),
             officerGroup = self:GetOfficerGroupOptions(),
             removeGroup = self:GetRemoveGroupOptions(),

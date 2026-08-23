@@ -310,7 +310,8 @@ function Persistence:ResetPositions()
         DLCAttendanceFrame = "Attendance",
         DLCAwardFrame = "Award",
         DLCItemManagerFrame = "ItemManager",
-        DLCPriorityOverride = "PriorityOverride"
+        DLCPriorityOverride = "PriorityOverride",
+        DLCUnassignedPlayersFrame = "UnassignedPlayers"
     }
 
     for name, layoutKey in pairs(frameNames) do

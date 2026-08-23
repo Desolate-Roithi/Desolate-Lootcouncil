@@ -64,6 +64,7 @@
     <Script file="UI\Windows\ItemManager.lua"/>
     <Script file="UI\Windows\EJLootImport.lua"/>
     <Script file="UI\Windows\Version.lua"/>
+    <Script file="UI\Windows\UnassignedPlayers.lua"/>
     <Script file="UI\Windows\Voting.lua"/>
     <Script file="UI\Windows\Settings.lua"/>
 </Ui>

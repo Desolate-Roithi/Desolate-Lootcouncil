@@ -239,10 +239,21 @@ local function RenderColumnItem(parent, argInfo, NativeGUI, itemL, topOffset, of
     if d.type == "toggle" then
         -- Checkbox
         local defaultVal = d.get and d.get(info) or false
+        local isDisabled = false
+        if type(d.disabled) == "function" then
+            isDisabled = d.disabled(info)
+        elseif type(d.disabled) == "boolean" then
+            isDisabled = d.disabled
+        end
+
         local cb = NativeGUI:CreateCheckBox(parent, d.name, defaultVal, function(checked)
+            if isDisabled then return end
             if d.set then d.set(info, checked) end
             C_Timer.After(0.05, function() sidebarModule:RenderTabs() end)
         end)
+        if isDisabled and cb.SetEnabled then
+            cb:SetEnabled(false)
+        end
         cb:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset - offsetY)
         return 24 + offsetY
 

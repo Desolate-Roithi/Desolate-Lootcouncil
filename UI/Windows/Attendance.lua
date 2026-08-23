@@ -281,7 +281,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
         DLC:DLC_Log(L["Decay Amount is 0. No priorities changed."])
     end
 
-    DesolateLootcouncil.API:SetSessionDecayApplied(GetServerTime())
+    DesolateLootcouncil.API:SetSessionDecayApplied(GetServerTime(), currentDecayAmount, tempAbsent)
     self:CommitAttendanceToHistory(tempAttended)
 end
 
