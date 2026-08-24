@@ -78,6 +78,10 @@ L["... and %d more entries"] = "... und %d weitere Einträge"
 L["Position log only available for current session."] = "Positionsprotokoll nur für die aktuelle Sitzung verfügbar."
 L["Decay disabled."] = "Verfall deaktiviert."
 L["No decay applied yet."] = "Noch kein Verfall angewendet."
+L["Export Event"] = "Ereignis exportieren"
+L["Export Raid Event"] = "Raid-Ereignis exportieren"
+L["Press Ctrl+C to copy the export string below. You can import this into any profile via Settings > Profiles > Import to Current Profile."] =
+"Drücke Strg+C, um die Export-Zeichenkette zu kopieren. Du kannst diese über Einstellungen > Profile > In aktuelles Profil importieren einfügen."
 L["Decay of %d positions was applied when session ended."] =
 "Ein Verfall von %d Positionen wurde beim Ende der Sitzung angewendet."
 

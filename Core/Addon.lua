@@ -187,10 +187,24 @@ function DesolateLootcouncil:OnInitialize()
 
     -- 8. Welcome Message
     if not self.db.profile.positions then self.db.profile.positions = {} end
+    if self.API and self.API.CompactRaidHistory then
+        self.API:CompactRaidHistory()
+    end
     self:DLC_Log("Desolate Lootcouncil " .. self.version .. " Loaded.")
 end
 
 function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
+    if self.db.profile.dbCreatedAt == 0 then
+        self.db.profile.dbCreatedAt = GetServerTime()
+    end
+    if not self.db.profile.positions then
+        self.db.profile.positions = {}
+    end
+
+    if self.API and self.API.CompactRaidHistory then
+        self.API:CompactRaidHistory()
+    end
+
     if self.db.profile.DecayConfig and not self.db.profile.DecayConfig.sessionActive then
         self.db.profile.DecayConfig.sessionAutopassActive = false
         self.db.profile.DecayConfig.sessionAutopassAnswered = false
@@ -675,19 +689,21 @@ end
 function DesolateLootcouncil:GetScoreName(name)
     if not name or name == "" then return nil end
 
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+
     -- Local cache for common 'player' lookup to avoid UnitName calls in loops
     if name == "player" then
         if not self._playerScore then
             local pName, pRealm = UnitName("player")
             pRealm = (pRealm and pRealm ~= "") and pRealm or GetRealmName()
-            self._playerScore = string.lower(pName .. "-" .. pRealm):gsub("%s+", "")
+            self._playerScore = safeLower(pName .. "-" .. pRealm):gsub("%s+", "")
         end
         return self._playerScore
     end
 
-    local lowName = string.lower(name)
+    local lowName = safeLower(name)
     if not string.find(lowName, "-") then
-        local realm = string.lower(GetRealmName()):gsub("%s+", "")
+        local realm = safeLower(GetRealmName()):gsub("%s+", "")
         lowName = lowName .. "-" .. realm
     end
     -- Also remove any spaces from the realm part if it was already there
@@ -702,11 +718,12 @@ function DesolateLootcouncil:GetUnitScore(unit)
     if not unit then return nil end
     if unit == "player" then return self:GetScoreName("player") end
 
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
     local name, realm = UnitName(unit)
     if not name then return nil end
 
     realm = (realm and realm ~= "") and realm or GetRealmName()
-    return string.lower(name .. "-" .. realm):gsub("%s+", "")
+    return safeLower(name .. "-" .. realm):gsub("%s+", "")
 end
 
 --- Returns the name exactly as it appears in the Roster, or simplified for UI.
@@ -736,7 +753,17 @@ end
 ---@param n2 string|nil
 ---@return boolean
 function DesolateLootcouncil:SmartCompare(n1, n2)
-    return self:GetScoreName(n1) == self:GetScoreName(n2)
+    if not n1 or not n2 then return false end
+    if n1 == n2 then return true end
+    local s1 = self:GetScoreName(n1)
+    local s2 = self:GetScoreName(n2)
+    if s1 and s2 and s1 == s2 then return true end
+
+    -- Cross-realm fallback: If one or both lack a realm or belong to different connected realms, match by short character name
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    local short1 = safeLower(Ambiguate(n1, "none"))
+    local short2 = safeLower(Ambiguate(n2, "none"))
+    return (short1 ~= "" and short1 == short2)
 end
 
 function DesolateLootcouncil:GetOptions()
@@ -778,6 +805,7 @@ function DesolateLootcouncil:GetEnchantingSkillLevel()
     end
 
     if not found then
+        -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Fallback profession rank lookup when C_TradeSkillUI is not populated
         local function GetLegacyRank(id)
             if not id then return 0 end
             local name, _, rank = GetProfessionInfo(id)

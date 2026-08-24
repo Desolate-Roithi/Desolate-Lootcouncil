@@ -32,9 +32,26 @@ end
 local CreateNewProfile = function()
     local name = ProfileSettings.newProfileName
     if name and name ~= "" then
+        local profiles = DesolateLootcouncil.API:GetProfiles()
+        local exists = false
+        for _, profileName in ipairs(profiles) do
+            if profileName == name then
+                exists = true
+                break
+            end
+        end
+
         DesolateLootcouncil.API:SetProfile(name)
+        if exists then
+            DesolateLootcouncil.API:ResetProfile()
+            DesolateLootcouncil:DLC_Log("Reset profile: " .. DesolateLootcouncil.API:GetCurrentProfile())
+        else
+            DesolateLootcouncil:DLC_Log("Created/Switched to profile: " .. DesolateLootcouncil.API:GetCurrentProfile())
+        end
         ProfileSettings.newProfileName = nil
-        DesolateLootcouncil:DLC_Log("Created/Switched to profile: " .. DesolateLootcouncil.API:GetCurrentProfile())
+        if LibStub and LibStub("AceConfigRegistry-3.0", true) then
+            LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+        end
     end
 end
 

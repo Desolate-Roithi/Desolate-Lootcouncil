@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.2.2  
-**Last Updated:** 2026-08-23  
+**Latest Version:** v1.2.3  
+**Last Updated:** 2026-08-24  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -47,6 +47,24 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v1.2.3 (2026-08-24)
+* **LibDeflate Stream Compression (`!DLC1:`)**:
+  * Integrated `LibDeflate` into the core library stack and `.pkgmeta` externals.
+  * Exports (Single Events, Full Profiles, Item Manager, History) are now stream-compressed, cutting export string lengths by **~75%–85%**.
+  * Fully backward-compatible: The importer automatically recognizes `!DLC1:` compressed strings, legacy Base64, and raw string formats.
+* **Lossless Export & History Compaction**:
+  * Item Manager lists serialize as compact numeric arrays.
+  * Stripped duplicate `fullItemData` tables from history records while preserving complete item details, winner attributes, and vote logs.
+  * Retroactive decay compaction migrates redundant decay strings into structured attendance fields, dramatically reducing SavedVariables file sizes.
+* **Single Raid History Event Export & Merge Import**:
+  * Added **Export Event** button to the Raid History window to share individual raid sessions without exporting your entire database.
+  * Importing single events merges cleanly into the active profile without overwriting existing history.
+* **Decay Filtering & Multi-Language Parsing**:
+  * Position Changes section in Raid History filters out decay messages so only manual position changes are displayed.
+  * Dynamic decay pattern matcher automatically derives localized formats across all registered `AceLocale-3.0` translations.
+* **UI & Workflow Improvements**:
+  * Opening the Item Manager from the Settings window no longer automatically closes the Settings window.
 
 ### v1.2.2 (2026-08-23)
 * **Unassigned Players Staging & Review Queue**:

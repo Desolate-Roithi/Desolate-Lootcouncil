@@ -4,6 +4,7 @@ externals:
   # GitHub
   Libs/LibStub: https://github.com/lua-wow/LibStub.git
   Libs/Ace3: https://github.com/WoWUIDev/Ace3.git
+  Libs/LibDeflate: https://github.com/SafeteeWoW/LibDeflate.git
 
 ignore:
   - .gitignore

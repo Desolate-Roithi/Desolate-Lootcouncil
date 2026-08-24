@@ -71,6 +71,9 @@ L["Position log only available for current session."] = true
 L["Decay disabled."] = true
 L["No decay applied yet."] = true
 L["Decay of %d positions was applied when session ended."] = true
+L["Export Event"] = true
+L["Export Raid Event"] = true
+L["Press Ctrl+C to copy the export string below. You can import this into any profile via Settings > Profiles > Import to Current Profile."] = true
 
 -- Monitor.lua
 L["Loot Monitor"] = true

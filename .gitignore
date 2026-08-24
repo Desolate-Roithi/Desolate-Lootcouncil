@@ -20,6 +20,7 @@ Desolate_Lootcouncil-Dev.toc
 # --- Libraries (Externals) ---
 Libs/LibStub/
 Libs/Ace3/
+Libs/LibDeflate/
 
 # --- Packager Output ---
 .release/

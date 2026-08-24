@@ -152,11 +152,10 @@ function CommHandlers:SYNC_AUTOPASS_ACK(data, sender)
 end
 
 function CommHandlers:LOOT_SESSION_START(data, sender)
-    -- Legacy/Active hook for starting loot session remotely
     ---@type Session
     local Session = DesolateLootcouncil:GetModule("Session")
     if Session and Session.StartSession then
-        -- 'data' might be the loot table or wrapped in 'data.data'
+        -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Support data wrapped in data.data or bare lootTable
         local lootTable = data.data or data
         Session:StartSession(lootTable)
     end
@@ -180,8 +179,7 @@ function Comm:OnCommReceived(prefix, message, _distribution, sender)
     local success, command, data = self:Deserialize(message)
     if not success then return end
 
-    -- Handle Deserialization format differences if any (Active used direct object, Legacy used command, data args)
-    -- Check if 'command' is actually a table (if serialized as one object)
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Handle deserialization format differences (Active used direct object, Legacy used command, data args)
     if type(command) == "table" and command.type then
         data = command
         command = data.type

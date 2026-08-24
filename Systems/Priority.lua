@@ -62,8 +62,8 @@ function Priority:OnEnable()
         db.catalogTier = activeTier
     end
 
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] DATA MIGRATION: Convert Key-Value dictionary lists to Array of Objects
     if db.PriorityLists and not db.migrated_priority_v2 then
-        -- DATA MIGRATION: Convert Key-Value to Array of Objects
         -- Check if it's the old format (Table with string keys)
         local isOldFormat = false
         if db.PriorityLists.Tier or db.PriorityLists.Weapons then
@@ -93,7 +93,7 @@ function Priority:OnEnable()
     if not db.History then db.History = {} end
     if not db.PriorityLog then db.PriorityLog = {} end
 
-    -- DATA MIGRATION: Old names to New names + Timestamps
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] DATA MIGRATION: Old playerRoster.mains to MainRoster + Timestamps
     if db.playerRoster and db.playerRoster.mains then
         if not db.MainRoster then db.MainRoster = {} end
         for name, _ in pairs(db.playerRoster.mains) do
@@ -104,7 +104,7 @@ function Priority:OnEnable()
         db.playerRoster.mains = nil
     end
 
-    -- Handle existing MainRoster if it's still using the old boolean format
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Handle existing MainRoster if it's still using the old boolean format
     if db.MainRoster then
         for name, value in pairs(db.MainRoster) do
             if type(value) == "boolean" then
@@ -195,8 +195,17 @@ function Priority:LogPriorityChange(msg)
     end
 
     -- Also log into per-session bucket (for RaidHistory display)
+    -- Skip decay messages as they are stored compactly in entry.decayAbsent on the attendance record
+    local API = DesolateLootcouncil.API or DesolateLootcouncil:GetModule("DLC_API", true)
+    local isDecay = false
+    if API and API.IsDecayLogMessage then
+        isDecay = API:IsDecayLogMessage(msg)
+    else
+        isDecay = msg:find("[Decay]", 1, true) ~= nil or msg:find("[Verfall]", 1, true) ~= nil
+    end
+
     local sessionID = db.DecayConfig and db.DecayConfig.currentSessionID
-    if sessionID then
+    if sessionID and not isDecay then
         if not db.SessionPositionLog then db.SessionPositionLog = {} end
         local key = tostring(sessionID)
         if not db.SessionPositionLog[key] then db.SessionPositionLog[key] = {} end

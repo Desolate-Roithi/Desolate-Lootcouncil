@@ -117,4 +117,12 @@ DesolateLootcouncil.DefaultLayouts = {
         width = 680,
         height = 520
     },
+    ["RaidHistoryExport"] = {
+        point = "CENTER",
+        relativePoint = "CENTER",
+        x = 0,
+        y = 0,
+        width = 520,
+        height = 320
+    },
 }

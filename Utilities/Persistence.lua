@@ -311,7 +311,8 @@ function Persistence:ResetPositions()
         DLCAwardFrame = "Award",
         DLCItemManagerFrame = "ItemManager",
         DLCPriorityOverride = "PriorityOverride",
-        DLCUnassignedPlayersFrame = "UnassignedPlayers"
+        DLCUnassignedPlayersFrame = "UnassignedPlayers",
+        DLCRaidHistoryExportFrame = "RaidHistoryExport"
     }
 
     for name, layoutKey in pairs(frameNames) do

@@ -192,7 +192,7 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
         self.sessionDrop = drop
 
         -- Delete button — aligned to dropdown top edge
-        local btnDel = NativeGUI:CreateButton(frame, L["Delete Entry"], 110, 24, "Stop")
+        local btnDel = NativeGUI:CreateButton(frame, L["Delete Entry"], 105, 24, "Stop")
         btnDel:SetPoint("LEFT", dropBtn, "RIGHT", 10, 0)
         btnDel:SetScript("OnClick", function()
             if not self.selectedIndex or self.selectedIndex == "CURRENT" then return end
@@ -201,6 +201,15 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
             self:ShowRaidHistoryWindow()
         end)
         self.btnDelete = btnDel
+
+        -- Export button — aligned to Delete button right edge
+        local btnExport = NativeGUI:CreateButton(frame, L["Export Event"], 105, 24, "Action")
+        btnExport:SetPoint("LEFT", btnDel, "RIGHT", 8, 0)
+        btnExport:SetScript("OnClick", function()
+            if not self.selectedIndex then return end
+            self:ExportSelectedEvent()
+        end)
+        self.btnExport = btnExport
 
         -- Scroll area
         local sf, sc = NativeGUI:CreateScrollFrame(frame, -80, -16)
@@ -243,8 +252,82 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
 
     self.sessionDrop:SetValue(self.selectedIndex)
     self.btnDelete:SetEnabled(self.selectedIndex ~= nil and self.selectedIndex ~= "CURRENT")
+    self.btnExport:SetEnabled(self.selectedIndex ~= nil)
 
     self:Refresh()
+end
+
+function UI_RaidHistory:ExportSelectedEvent()
+    if not self.selectedIndex then return end
+    local API = DesolateLootcouncil.API
+    local exportStr = API:ExportSingleRaidHistoryEvent(self.selectedIndex)
+    if exportStr and exportStr ~= "" then
+        self:ShowExportWindow(exportStr)
+    end
+end
+
+function UI_RaidHistory:ShowExportWindow(exportStr)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if not self.exportFrame then
+        local frame = NativeGUI:CreateWindow("DLCRaidHistoryExportFrame", L["Export Raid Event"], "RaidHistoryExport")
+        self.exportFrame = frame
+
+        local desc = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -36)
+        desc:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -36)
+        desc:SetJustifyH("LEFT")
+        desc:SetWordWrap(true)
+        desc:SetText(L["Press Ctrl+C to copy the export string below. You can import this into any profile via Settings > Profiles > Import to Current Profile."])
+        self.exportDesc = desc
+
+        local sf, sc = NativeGUI:CreateScrollFrame(frame, -85, -50)
+        self.exportScrollFrame = sf
+        self.exportScrollContent = sc
+
+        local eb = CreateFrame("EditBox", nil, sc)
+        eb:SetMultiLine(true)
+        eb:SetMaxLetters(0)
+        eb:SetAutoFocus(false)
+        eb:SetFontObject("GameFontHighlightSmall")
+        eb:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
+
+        local isResetting = false
+        eb:SetScript("OnTextChanged", function(selfEdit)
+            if isResetting then return end
+            if selfEdit.fullText and selfEdit:GetText() ~= selfEdit.fullText then
+                isResetting = true
+                selfEdit:SetText(selfEdit.fullText)
+                isResetting = false
+            end
+        end)
+        eb:SetEnabled(true)
+        eb:SetPoint("TOPLEFT", sc, "TOPLEFT", 6, -6)
+        eb:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
+        eb:SetWidth(sf:GetWidth() - 16)
+        self.exportEditBox = eb
+
+        local btnClose = NativeGUI:CreateButton(frame, L["Close"], 90, 24, "Default")
+        btnClose:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 12)
+        btnClose:SetScript("OnClick", function()
+            frame:Hide()
+        end)
+    end
+
+    self.exportFrame:Show()
+    self.exportEditBox.fullText = exportStr
+    self.exportEditBox:SetText(exportStr)
+    self.exportEditBox:SetWidth(self.exportScrollFrame:GetWidth() - 16)
+    local height = self.exportEditBox:GetHeight()
+    if height < 60 then height = 60 end
+    self.exportScrollContent:SetHeight(height + 20)
+
+    C_Timer.After(0.05, function()
+        if self.exportEditBox then
+            self.exportEditBox:SetFocus()
+            self.exportEditBox:HighlightText()
+        end
+    end)
 end
 
 -- ============================================================
@@ -595,6 +678,15 @@ function UI_RaidHistory:RenderAttendanceSection(sc, theme, NativeGUI, sessionEnt
     layoutState.yOffset = layoutState.yOffset + 6
 end
 
+local function IsDecayLogEntry(entry)
+    if type(entry) ~= "string" then return false end
+    local API = DesolateLootcouncil.API
+    if API and API.IsDecayLogMessage then
+        return API:IsDecayLogMessage(entry)
+    end
+    return entry:find("[Decay]", 1, true) ~= nil or entry:find("[Verfall]", 1, true) ~= nil
+end
+
 function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader)
     local posCollapsed = AddHeader("positions", SECTION_ICONS.positions, L["Position Changes"])
     if posCollapsed then
@@ -609,7 +701,9 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
     local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
     if splBucket then
         for _, e in ipairs(splBucket) do
-            table.insert(posChanges, e)
+            if not IsDecayLogEntry(e) then
+                table.insert(posChanges, e)
+            end
         end
     end
 
@@ -624,6 +718,7 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
                 14, { 0.5, 0.5, 0.5 })
         end
     elseif not isCurrent and not sessionEntry.sessionID then
+        -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Notice for pre-session tracking legacy records
         AddText(L["Position log not available (pre-dates session tracking)."],
             14, { 0.5, 0.5, 0.5 })
     else
@@ -656,14 +751,15 @@ local function GetSessionDecaySummary(sessionEntry, db, config)
         end
     end
 
-    -- Fallback: Extract distinct players and penalty from SessionPositionLog
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Fallback: Extract decay from SessionPositionLog for uncompacted legacy sessions
     if #absentList == 0 then
         local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
         local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
-        if splBucket then
+        local API = DesolateLootcouncil.API
+        if splBucket and API and API.ParseDecayLogMessage then
             local seen = {}
             for _, entry in ipairs(splBucket) do
-                local pName, pPen = entry:match("%[Decay%]%s+(.-)%s+moved from position #%d+ to #%d+ in .- %(%+(%d+) decay")
+                local pName, pPen = API:ParseDecayLogMessage(entry)
                 if pName then
                     if pPen then penalty = tonumber(pPen) or penalty end
                     if not seen[pName] then
@@ -749,6 +845,9 @@ function UI_RaidHistory:Refresh()
     local idx    = self.selectedIndex
     local theme  = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if self.btnDelete then self.btnDelete:SetEnabled(idx ~= nil and idx ~= "CURRENT") end
+    if self.btnExport then self.btnExport:SetEnabled(idx ~= nil) end
 
     -- ---- Cursor ----
     local layoutState = { yOffset = 6 }

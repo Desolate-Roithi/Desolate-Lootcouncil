@@ -4,7 +4,7 @@
 ## Author: Roithi
 ## Version: @project-version@
 ## SavedVariables: DesolateLootDB
-## OptionalDeps: LibStub
+## OptionalDeps: LibStub, Ace3, LibDeflate
 ## X-Curse-Project-ID: 1448287
 
 Desolate_Lootcouncil.xml

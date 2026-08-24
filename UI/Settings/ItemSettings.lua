@@ -22,10 +22,6 @@ function ItemSettings:GetItemOptions()
                 if Manager then
                     Manager:ShowItemManagerWindow()
                 end
-                local settingsFrame = DesolateLootcouncil:GetModule("UI_Settings", true)
-                if settingsFrame and settingsFrame.settingsFrame then
-                    settingsFrame.settingsFrame:Hide()
-                end
             end,
         }
     }

@@ -11,16 +11,29 @@ local function GetUnitIDForName(playerName)
 
     local targetMain = DesolateLootcouncil.API:GetMain(playerName)
     local mainScore = DesolateLootcouncil:GetScoreName(targetMain)
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    local shortTarget = safeLower(Ambiguate(playerName, "none"))
+    local shortMain = targetMain and safeLower(Ambiguate(targetMain, "none"))
 
     for i = 1, 40 do
         local unit = "raid" .. i
         local unitScore = DesolateLootcouncil:GetUnitScore(unit)
-        if unitScore and (unitScore == targetScore or unitScore == mainScore) then return unit end
+        local unitName = UnitName(unit)
+        local shortUnit = unitName and safeLower(Ambiguate(unitName, "none"))
+        if (unitScore and (unitScore == targetScore or unitScore == mainScore)) or
+           (shortUnit and (shortUnit == shortTarget or shortUnit == shortMain)) then
+            return unit
+        end
     end
     for i = 1, 4 do
         local unit = "party" .. i
         local unitScore = DesolateLootcouncil:GetUnitScore(unit)
-        if unitScore and (unitScore == targetScore or unitScore == mainScore) then return unit end
+        local unitName = UnitName(unit)
+        local shortUnit = unitName and safeLower(Ambiguate(unitName, "none"))
+        if (unitScore and (unitScore == targetScore or unitScore == mainScore)) or
+           (shortUnit and (shortUnit == shortTarget or shortUnit == shortMain)) then
+            return unit
+        end
     end
     return nil
 end

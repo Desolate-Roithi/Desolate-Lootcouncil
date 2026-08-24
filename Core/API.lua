@@ -1066,6 +1066,15 @@ function DLC_API:SetProfile(name)
     DesolateLootcouncil.db:SetProfile(name)
 end
 
+--- Resets the current active profile to its default values.
+---@param noChildren boolean?
+---@param noCallbacks boolean?
+function DLC_API:ResetProfile(noChildren, noCallbacks)
+    if DesolateLootcouncil.db and DesolateLootcouncil.db.ResetProfile then
+        DesolateLootcouncil.db:ResetProfile(noChildren, noCallbacks)
+    end
+end
+
 --- Copies data from the specified profile to the current profile.
 ---@param fromProfile string
 function DLC_API:CopyProfile(fromProfile)
@@ -1078,11 +1087,345 @@ function DLC_API:DeleteProfile(name)
     DesolateLootcouncil.db:DeleteProfile(name)
 end
 
---- Generates a serialized profile export string based on selected category options.
+local decayPatternsCache = nil
+
+--- Returns a list of matchers and tags for decay log messages across all registered and active locales.
+--- Dynamically adapts when new locale translations are added.
+---@return table
+function DLC_API:GetDecayPatterns()
+    if decayPatternsCache then return decayPatternsCache end
+
+    local rawKey = "[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."
+    local templates = {}
+
+    -- 1. Active locale
+    local currentL = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil", true)
+    if currentL and currentL[rawKey] and type(currentL[rawKey]) == "string" then
+        templates[currentL[rawKey]] = true
+    end
+    templates[rawKey] = true
+
+    -- 2. Inspect all registered locales in AceLocale-3.0
+    local AceLocale = LibStub("AceLocale-3.0", true)
+    if AceLocale and AceLocale.apps and AceLocale.apps["DesolateLootcouncil"] then
+        for _, locTable in pairs(AceLocale.apps["DesolateLootcouncil"]) do
+            if type(locTable) == "table" and locTable[rawKey] and type(locTable[rawKey]) == "string" then
+                templates[locTable[rawKey]] = true
+            end
+        end
+    end
+
+    local list = {}
+    for template in pairs(templates) do
+        local tag = template:match("^(%b[])") or "[Decay]"
+
+        -- 1. Replace format specifiers with unique tokens
+        local p = template
+        p = p:gsub("%%s", "___STR___", 1)  -- Player name
+        p = p:gsub("%%d", "___NUM___", 1)  -- Position 1
+        p = p:gsub("%%d", "___NUM___", 1)  -- Position 2
+        p = p:gsub("%%s", "___ANY___", 1)  -- List name
+        p = p:gsub("%%d", "___PEN___", 1)  -- Penalty
+
+        -- 2. Escape magic Lua regex characters
+        p = p:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+
+        -- 3. Substitute regex capture patterns
+        p = p:gsub("___STR___", "(.-)")
+        p = p:gsub("___NUM___", "%%d+")
+        p = p:gsub("___ANY___", ".-")
+        p = p:gsub("___PEN___", "(%%d+)")
+
+        table.insert(list, {
+            tag = tag,
+            matchPattern = p,
+            template = template
+        })
+    end
+
+    decayPatternsCache = list
+    return decayPatternsCache
+end
+
+--- Checks if a log message string represents an automated decay event in any registered language.
+---@param str string
+---@return boolean
+function DLC_API:IsDecayLogMessage(str)
+    if type(str) ~= "string" or str == "" then return false end
+    local patterns = self:GetDecayPatterns()
+    for _, item in ipairs(patterns) do
+        if str:find(item.tag, 1, true) then
+            return true
+        end
+    end
+    return str:find("[Decay]", 1, true) ~= nil or str:find("[Verfall]", 1, true) ~= nil
+end
+
+--- Parses player name and penalty from a decay log message string in any registered language.
+---@param str string
+---@return string? playerName, number? penalty
+function DLC_API:ParseDecayLogMessage(str)
+    if type(str) ~= "string" or str == "" then return nil, nil end
+    local cleanStr = str:gsub("^%[[^%]]+%]%s*", "")
+    local patterns = self:GetDecayPatterns()
+    for _, item in ipairs(patterns) do
+        local pName, pPen = cleanStr:match(item.matchPattern)
+        if pName then
+            return pName, tonumber(pPen)
+        end
+    end
+    -- Fallback generic matchers
+    local pName, pPen = cleanStr:match("%[Decay%]%s+(.-)%s+moved from position #%d+ to #%d+ in .- %(%+(%d+)")
+    if not pName then
+        pName, pPen = cleanStr:match("%[Verfall%]%s+(.-)%s+wurde von Position #%d+ auf #%d+ in .- %(%+(%d+)")
+    end
+    return pName, tonumber(pPen)
+end
+
+-- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Migration helper to extract decay data from legacy uncompacted SessionPositionLog strings
+local function ExtractDecayFromPositionLog(api, entry, splBucket, decayConfig, mainRoster)
+    if not entry or type(entry) ~= "table" or not entry.sessionID then return end
+    if entry.decayAbsent and next(entry.decayAbsent) then return end
+
+    local defaultPenalty = (decayConfig and decayConfig.defaultPenalty) or 1
+
+    -- Primary: Extract from SessionPositionLog
+    if splBucket and type(splBucket) == "table" then
+        local extractedAbsent = {}
+        local extractedPenalty = nil
+        for _, logStr in ipairs(splBucket) do
+            if type(logStr) == "string" then
+                local pName, pPen = api:ParseDecayLogMessage(logStr)
+                if pName then
+                    extractedAbsent[pName] = true
+                    if pPen then extractedPenalty = tonumber(pPen) end
+                end
+            end
+        end
+        if next(extractedAbsent) then
+            entry.decayAbsent = extractedAbsent
+            entry.decayPenalty = entry.decayPenalty or extractedPenalty or defaultPenalty
+            if not entry.decayApplied or entry.decayApplied == -1 then
+                entry.decayApplied = entry.sessionID
+            end
+            return
+        end
+    end
+
+    -- Fallback: If decay was applied and attendees exist
+    if entry.decayApplied and entry.decayApplied ~= -1 and entry.attendees and mainRoster then
+        local fallbackAbsent = {}
+        for mName in pairs(mainRoster) do
+            if not entry.attendees[mName] then
+                fallbackAbsent[mName] = true
+            end
+        end
+        if next(fallbackAbsent) then
+            entry.decayAbsent = fallbackAbsent
+            entry.decayPenalty = entry.decayPenalty or defaultPenalty
+        end
+    end
+end
+
+-- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] One-time migration to compact legacy history records and prune redundant decay strings
+--- Compacts raid history by migrating decay information into structured fields on attendance entries
+--- and removing redundant decay log strings from SessionPositionLog.
+--- Executes only once per profile unless force is true (e.g. on new history import).
+---@param targetProfile table? Optional profile table (defaults to DesolateLootcouncil.db.profile)
+---@param force boolean? If true, forces compaction even if previously marked as compacted
+---@return number prunedCount Number of decay log entries pruned
+function DLC_API:CompactRaidHistory(targetProfile, force)
+    local p = targetProfile or (DesolateLootcouncil.db and DesolateLootcouncil.db.profile)
+    if not p then return 0 end
+    if p.historyCompacted and not force then return 0 end
+
+    local prunedCount = 0
+    local hist = p.AttendanceHistory
+    local spl = p.SessionPositionLog
+
+    -- 1. Process each attendance history entry to ensure decayAbsent / decayPenalty are populated
+    if hist and type(hist) == "table" then
+        for _, entry in ipairs(hist) do
+            local posKey = entry and entry.sessionID and tostring(entry.sessionID)
+            local splBucket = posKey and spl and spl[posKey]
+            ExtractDecayFromPositionLog(self, entry, splBucket, p.DecayConfig, p.MainRoster)
+        end
+    end
+
+    -- 2. Prune all decay strings from SessionPositionLog
+    if spl and type(spl) == "table" then
+        for posKey, bucket in pairs(spl) do
+            if type(bucket) == "table" then
+                local filteredBucket = {}
+                for _, logStr in ipairs(bucket) do
+                    if self:IsDecayLogMessage(logStr) then
+                        prunedCount = prunedCount + 1
+                    else
+                        table.insert(filteredBucket, logStr)
+                    end
+                end
+                if #filteredBucket > 0 then
+                    spl[posKey] = filteredBucket
+                else
+                    spl[posKey] = nil
+                end
+            end
+        end
+    end
+
+    p.historyCompacted = true
+    return prunedCount
+end
+
+local function CompactItemList(items)
+    if not items or type(items) ~= "table" then return {} end
+    local list = {}
+    for itemID, val in pairs(items) do
+        if val then
+            table.insert(list, tonumber(itemID) or itemID)
+        end
+    end
+    table.sort(list, function(a, b) return tostring(a) < tostring(b) end)
+    return list
+end
+
+local function CleanAwardedItem(item, deepCopyFn)
+    if type(item) ~= "table" then return item end
+    return {
+        link          = item.link,
+        texture       = item.texture,
+        itemID        = item.itemID,
+        winner        = item.winner,
+        winnerClass   = item.winnerClass,
+        voteType      = item.voteType,
+        timestamp     = item.timestamp,
+        originalIndex = item.originalIndex,
+        traded        = item.traded,
+        votes         = deepCopyFn(item.votes or {}),
+    }
+end
+
+local function CleanAttendanceEntry(entry, deepCopyFn)
+    if type(entry) ~= "table" then return entry end
+    local cleaned = deepCopyFn(entry)
+    if cleaned.awarded and type(cleaned.awarded) == "table" then
+        local cleanedAwarded = {}
+        for _, item in ipairs(cleaned.awarded) do
+            table.insert(cleanedAwarded, CleanAwardedItem(item, deepCopyFn))
+        end
+        cleaned.awarded = cleanedAwarded
+    end
+    return cleaned
+end
+
+local function EncodePayload(data)
+    local serialized = DesolateLootcouncil:Serialize(data)
+    local LibDeflate = LibStub and LibStub:GetLibrary("LibDeflate", true)
+    if LibDeflate and type(serialized) == "string" then
+        local compressed = LibDeflate:CompressDeflate(serialized, { level = 7 })
+        if compressed then
+            local encoded = LibDeflate:EncodeForPrint(compressed)
+            if encoded then
+                return "!DLC1:" .. encoded
+            end
+        end
+    end
+    local encoded = DesolateLootcouncil.Base64 and DesolateLootcouncil.Base64:Encode(serialized) or serialized
+    return encoded
+end
+
+local function DecodePayload(importStringRaw)
+    if not importStringRaw or importStringRaw == "" then return nil end
+    local LibDeflate = LibStub and LibStub:GetLibrary("LibDeflate", true)
+
+    if importStringRaw:sub(1, 6) == "!DLC1:" and LibDeflate then
+        local payloadStr = importStringRaw:sub(7)
+        local decodedBytes = LibDeflate:DecodeForPrint(payloadStr)
+        if decodedBytes then
+            local decompressed = LibDeflate:DecompressDeflate(decodedBytes)
+            if decompressed then
+                return decompressed
+            end
+        end
+        return nil
+    end
+
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Fallback uncompressed Base64 / raw string import support
+    if DesolateLootcouncil.Base64 and not string.find(importStringRaw, "^{") and importStringRaw:sub(1, 2) ~= "^S" then
+        return DesolateLootcouncil.Base64:Decode(importStringRaw)
+    end
+    return importStringRaw
+end
+
+--- Generates a serialized export string for a single raid history event.
+---@param indexOrSession number|string|table  1-based index in AttendanceHistory, "CURRENT", or a session entry table
+---@return string
+function DLC_API:ExportSingleRaidHistoryEvent(indexOrSession)
+    self:CompactRaidHistory()
+    local p = DesolateLootcouncil.db.profile
+    local entry = nil
+
+    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
+        if type(t) ~= "table" then return t end
+        local res = {}
+        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
+        return res
+    end
+
+    if type(indexOrSession) == "table" then
+        entry = DeepCopy(indexOrSession)
+    elseif indexOrSession == "CURRENT" then
+        local config = self:GetAttendanceConfig()
+        local session = p.session or {}
+        local attendees = {}
+        if config.currentAttendees then
+            for name, val in pairs(config.currentAttendees) do
+                if val then attendees[name] = true end
+            end
+        end
+        local currentLoot = {}
+        if session.awarded then
+            for _, item in ipairs(session.awarded) do
+                table.insert(currentLoot, CleanAwardedItem(item, DeepCopy))
+            end
+        end
+        entry = {
+            sessionID = config.currentSessionID or GetServerTime(),
+            date = date("%Y-%m-%d"),
+            zone = (session and session.zone) or (GetRealZoneText and GetRealZoneText()) or "Current Raid",
+            attendees = attendees,
+            loot = currentLoot,
+            bossFights = DeepCopy(session.bossFights or {}),
+            decayApplied = -1,
+        }
+    elseif type(indexOrSession) == "number" and p.AttendanceHistory and p.AttendanceHistory[indexOrSession] then
+        entry = DeepCopy(p.AttendanceHistory[indexOrSession])
+    end
+
+    if not entry then
+        return ""
+    end
+
+    local cleanedEntry = CleanAttendanceEntry(entry, DeepCopy)
+    local posKey = cleanedEntry.sessionID and tostring(cleanedEntry.sessionID)
+    local splBucket = posKey and p.SessionPositionLog and p.SessionPositionLog[posKey]
+
+    local data = {
+        SingleRaidEvent = true,
+        History = {
+            AttendanceHistory = { cleanedEntry },
+            SessionPositionLog = splBucket and { [posKey] = DeepCopy(splBucket) } or nil,
+        }
+    }
+
+    return EncodePayload(data)
+end
+
 --- Generates a serialized profile export string based on selected category options.
 ---@param selection table<string, boolean>
 ---@return string
 function DLC_API:ExportProfileData(selection)
+    self:CompactRaidHistory()
     local p = DesolateLootcouncil.db.profile
     local data = {}
     local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
@@ -1104,9 +1447,13 @@ function DLC_API:ExportProfileData(selection)
         }
     end
     if exportAll or selection["Roster"] then
+        local playerRoster = DeepCopy(p.playerRoster)
+        if playerRoster and playerRoster.decay and not next(playerRoster.decay) then
+            playerRoster.decay = nil
+        end
         data.Roster = {
             MainRoster   = DeepCopy(p.MainRoster),
-            playerRoster = DeepCopy(p.playerRoster),
+            playerRoster = playerRoster,
         }
     end
     if exportAll or selection["PriorityRankings"] or selection["PriorityLists"] or selection["PriorityContent"] then
@@ -1136,23 +1483,37 @@ function DLC_API:ExportProfileData(selection)
             for _, list in ipairs(p.PriorityLists) do
                 table.insert(data.ItemManagerContent, {
                     name  = list.name,
-                    items = DeepCopy(list.items or {})
+                    items = CompactItemList(list.items)
                 })
             end
         end
     end
     if exportAll or selection["History"] then
+        local cleanedAttendance = {}
+        if p.AttendanceHistory and type(p.AttendanceHistory) == "table" then
+            for _, att in ipairs(p.AttendanceHistory) do
+                table.insert(cleanedAttendance, CleanAttendanceEntry(att, DeepCopy))
+            end
+        end
+
+        local cleanedSession = DeepCopy(p.session)
+        if cleanedSession and cleanedSession.awarded and type(cleanedSession.awarded) == "table" then
+            local cleanedSessionAwarded = {}
+            for _, item in ipairs(cleanedSession.awarded) do
+                table.insert(cleanedSessionAwarded, CleanAwardedItem(item, DeepCopy))
+            end
+            cleanedSession.awarded = cleanedSessionAwarded
+        end
+
         data.History = {
-            session            = DeepCopy(p.session),
-            AttendanceHistory  = DeepCopy(p.AttendanceHistory),
+            session            = cleanedSession,
+            AttendanceHistory  = cleanedAttendance,
             PriorityLog        = DeepCopy(p.PriorityLog),
             SessionPositionLog = DeepCopy(p.SessionPositionLog),
         }
     end
 
-    local serialized = DesolateLootcouncil:Serialize(data)
-    local encoded = DesolateLootcouncil.Base64 and DesolateLootcouncil.Base64:Encode(serialized) or serialized
-    return encoded
+    return EncodePayload(data)
 end
 
 --- Imports profile data from a serialized string and switches to the new profile.
@@ -1170,9 +1531,9 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
         end
     end
 
-    local decoded = importStringRaw
-    if DesolateLootcouncil.Base64 and not string.find(decoded, "^{") then
-        decoded = DesolateLootcouncil.Base64:Decode(importStringRaw)
+    local decoded = DecodePayload(importStringRaw)
+    if not decoded then
+        return false, "Import Error: Invalid string format / Decode failed."
     end
 
     local success, data = DesolateLootcouncil:Deserialize(decoded)
@@ -1252,11 +1613,17 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
                 listObj.players = {}
             end
 
-            -- Legacy fallback: If old export had items and no dedicated IM payload, import items
+            -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Legacy fallback: If old export had items embedded directly in PriorityLists
             if incoming.items and not data.ItemManagerContent and not data.IM then
                 local normalizedItems = {}
-                for id, val in pairs(incoming.items) do
-                    normalizedItems[tonumber(id) or id] = val
+                for k, val in pairs(incoming.items) do
+                    if type(k) == "number" and (type(val) == "number" or (type(val) == "string" and tonumber(val))) and val ~= true and val ~= false then
+                        normalizedItems[tonumber(val)] = true
+                    elseif val == true or val == 1 then
+                        normalizedItems[tonumber(k) or k] = true
+                    else
+                        normalizedItems[tonumber(k) or k] = val
+                    end
                 end
                 listObj.items = normalizedItems
             end
@@ -1290,8 +1657,16 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
 
             if incoming.items then
                 local normalizedItems = {}
-                for id, val in pairs(incoming.items) do
-                    normalizedItems[tonumber(id) or id] = val
+                for k, val in pairs(incoming.items) do
+                    if type(k) == "number" and (type(val) == "number" or (type(val) == "string" and tonumber(val))) and val ~= true and val ~= false then
+                        -- Array format: items = { 1001, 1002, ... }
+                        normalizedItems[tonumber(val)] = true
+                    elseif val == true or val == 1 then
+                        -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Dictionary format: items = { [1001] = true }
+                        normalizedItems[tonumber(k) or k] = true
+                    else
+                        normalizedItems[tonumber(k) or k] = val
+                    end
                 end
                 listObj.items = normalizedItems
             else
@@ -1309,14 +1684,45 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
     -- 5. History
     if data.History then
         if data.History.session then p.session = DeepCopy(data.History.session) end
-        if data.History.AttendanceHistory then p.AttendanceHistory = DeepCopy(data.History.AttendanceHistory) end
+        if data.History.AttendanceHistory then
+            if data.SingleRaidEvent and importToCurrent then
+                p.AttendanceHistory = p.AttendanceHistory or {}
+                for _, incomingEntry in ipairs(data.History.AttendanceHistory) do
+                    local updated = false
+                    if incomingEntry.sessionID then
+                        for idx, localEntry in ipairs(p.AttendanceHistory) do
+                            if localEntry.sessionID == incomingEntry.sessionID then
+                                p.AttendanceHistory[idx] = DeepCopy(incomingEntry)
+                                updated = true
+                                break
+                            end
+                        end
+                    end
+                    if not updated then
+                        table.insert(p.AttendanceHistory, 1, DeepCopy(incomingEntry))
+                    end
+                end
+            else
+                p.AttendanceHistory = DeepCopy(data.History.AttendanceHistory)
+            end
+        end
         if data.History.PriorityLog then p.PriorityLog = DeepCopy(data.History.PriorityLog) end
-        if data.History.SessionPositionLog then p.SessionPositionLog = DeepCopy(data.History.SessionPositionLog) end
+        if data.History.SessionPositionLog then
+            if data.SingleRaidEvent and importToCurrent then
+                p.SessionPositionLog = p.SessionPositionLog or {}
+                for key, bucket in pairs(data.History.SessionPositionLog) do
+                    p.SessionPositionLog[key] = DeepCopy(bucket)
+                end
+            else
+                p.SessionPositionLog = DeepCopy(data.History.SessionPositionLog)
+            end
+        end
         p.historyTimestamp = GetServerTime()
 
         if DesolateLootcouncil.SendMessage then
             DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
         end
+        self:CompactRaidHistory(p, true)
     end
 
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")

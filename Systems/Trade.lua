@@ -73,11 +73,23 @@ local function IsTradeTargetMatch(awardWinner, tradePartnerName)
         return true
     end
 
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    local shortWinner = safeLower(Ambiguate(awardWinner, "none"))
+    local shortPartner = safeLower(Ambiguate(tradePartnerName, "none"))
+    if shortWinner ~= "" and shortWinner == shortPartner then
+        return true
+    end
+
     local Roster = DesolateLootcouncil:GetModule("Roster", true)
     if Roster and Roster.GetMain then
         local awardMain = Roster:GetMain(awardWinner) or awardWinner
         local partnerMain = Roster:GetMain(tradePartnerName) or tradePartnerName
         if DesolateLootcouncil:SmartCompare(awardMain, partnerMain) then
+            return true
+        end
+        local shortAwardMain = safeLower(Ambiguate(awardMain, "none"))
+        local shortPartnerMain = safeLower(Ambiguate(partnerMain, "none"))
+        if shortAwardMain ~= "" and shortAwardMain == shortPartnerMain then
             return true
         end
     end
@@ -340,12 +352,17 @@ function Trade:HandleTradeSuccess()
 
     for _, pending in ipairs(tradedItems) do
         local normalizedPendingLink = self:NormalizeItemLink(pending.link)
+        local pendingID = pending.itemID or (pending.link and select(1, C_Item.GetItemInfoInstant(pending.link)))
         local targetWinner = pending.winner or partnerName
 
         for _, award in ipairs(session.awarded) do
             if not award.traded and IsTradeTargetMatch(award.winner, targetWinner) then
                 local normalizedAwardLink = self:NormalizeItemLink(award.link)
-                if normalizedAwardLink == normalizedPendingLink then
+                local awardID = award.itemID or (award.link and select(1, C_Item.GetItemInfoInstant(award.link)))
+                local linkMatch = (normalizedAwardLink and normalizedPendingLink and normalizedAwardLink == normalizedPendingLink)
+                local idMatch = (awardID and pendingID and awardID == pendingID)
+
+                if linkMatch or idMatch then
                     award.traded = true
                     changed = true
                     DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
