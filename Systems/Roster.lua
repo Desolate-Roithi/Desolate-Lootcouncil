@@ -784,8 +784,14 @@ function Roster:RecordUnassignedPlayer(name, source)
             source = source or "Raid",
             class = SafeGetUnitClass(name) or "WARRIOR"
         }
+        profile.unassignedTimestamp = GetServerTime()
         DesolateLootcouncil:DLC_Log(string.format("Recorded unassigned player: |cFFFFFF00%s|r (%s). Requires Loot Master assignment.", normalizedName, source or "Raid"))
         self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+
+        local Session = DesolateLootcouncil:GetModule("Session", true)
+        if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+            Session:SendDLCHeartbeat()
+        end
     end
 end
 
@@ -820,12 +826,18 @@ function Roster:AssignAsMain(name)
         for k in pairs(profile.unassignedPlayers) do
             if DesolateLootcouncil:SmartCompare(k, norm) then
                 profile.unassignedPlayers[k] = nil
+                profile.unassignedTimestamp = GetServerTime()
                 break
             end
         end
     end
     self:AddMain(name)
     self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+
+    local Session = DesolateLootcouncil:GetModule("Session", true)
+    if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+        Session:SendDLCHeartbeat()
+    end
 end
 
 function Roster:AssignAsAlt(altName, mainName)
@@ -836,12 +848,18 @@ function Roster:AssignAsAlt(altName, mainName)
         for k in pairs(profile.unassignedPlayers) do
             if DesolateLootcouncil:SmartCompare(k, norm) then
                 profile.unassignedPlayers[k] = nil
+                profile.unassignedTimestamp = GetServerTime()
                 break
             end
         end
     end
     self:AddAlt(altName, mainName)
     self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+
+    local Session = DesolateLootcouncil:GetModule("Session", true)
+    if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+        Session:SendDLCHeartbeat()
+    end
 end
 
 function Roster:DismissUnassignedPlayer(name)
@@ -852,11 +870,17 @@ function Roster:DismissUnassignedPlayer(name)
         for k in pairs(profile.unassignedPlayers) do
             if DesolateLootcouncil:SmartCompare(k, norm) then
                 profile.unassignedPlayers[k] = nil
+                profile.unassignedTimestamp = GetServerTime()
                 break
             end
         end
     end
     self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+
+    local Session = DesolateLootcouncil:GetModule("Session", true)
+    if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+        Session:SendDLCHeartbeat()
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -1142,14 +1166,9 @@ end
 function Roster:ReceiveRosterSync(syncedRoster)
     if not syncedRoster or type(syncedRoster) ~= "table" then return end
     local db = DesolateLootcouncil.db.profile
+    if not db then return end
 
-    local localTs = db.rosterTimestamp or 0
     local incomingTs = syncedRoster.timestamp or 0
-    local hasRoster = db.MainRoster and next(db.MainRoster) ~= nil
-    if hasRoster and incomingTs <= localTs then
-        DesolateLootcouncil:DLC_Log(string.format("Ignored ROSTER sync: local roster is newer or same age (local: %s, incoming: %s).", tostring(localTs), tostring(incomingTs)))
-        return
-    end
 
     -- Overwrite MainRoster
     db.MainRoster = {}

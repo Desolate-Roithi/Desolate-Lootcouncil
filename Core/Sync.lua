@@ -71,7 +71,10 @@ function Sync:ShareDataWithOfficers(dataType, payload)
             for id, val in pairs(listObj.items or {}) do itemsCopy[id] = val end
             table.insert(lists, { name = listObj.name, players = playersCopy, items = itemsCopy })
         end
-        finalPayload = lists
+        finalPayload = {
+            lists = lists,
+            timestamps = db.priorityTimestamps or {}
+        }
     elseif dataType == "ROSTER" then
         command = "SYNC_ROSTER"
         local db = DesolateLootcouncil.db.profile
@@ -101,6 +104,19 @@ function Sync:ShareDataWithOfficers(dataType, payload)
         if data.isOfficer and not DesolateLootcouncil:SmartCompare(name, "player") then
             if DesolateLootcouncil:IsUnitInRaid(name) and DesolateLootcouncil:IsUnitOnline(name) then
                 table.insert(targets, name)
+            else
+                -- Check if an alt of this officer is currently in the raid
+                if db.playerRoster and db.playerRoster.alts then
+                    local mainScore = DesolateLootcouncil:GetScoreName(name)
+                    for alt, main in pairs(db.playerRoster.alts) do
+                        if DesolateLootcouncil:GetScoreName(main) == mainScore then
+                            if DesolateLootcouncil:IsUnitInRaid(alt) and DesolateLootcouncil:IsUnitOnline(alt) then
+                                table.insert(targets, alt)
+                                break
+                            end
+                        end
+                    end
+                end
             end
         end
     end
@@ -396,6 +412,11 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     local db = DesolateLootcouncil.db.profile
     local Comm = DesolateLootcouncil:GetModule("Comm", true)
 
+    -- Auto-switch profile if roster hash matches an existing profile
+    if data.rosterHash and not DesolateLootcouncil:AmILootMaster() then
+        DesolateLootcouncil:CheckProfileAutoSwitch(data.rosterHash)
+    end
+
     if data.officers then
         DesolateLootcouncil.officerScores = {}
         for _, officerName in ipairs(data.officers) do
@@ -408,13 +429,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
         DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
     end
 
-    if data.rosterTimestamp and Comm and not DesolateLootcouncil:AmILootMaster() then
-        local localRosterTs = db.rosterTimestamp or 0
-        if data.rosterTimestamp > localRosterTs then
-            Comm:SendComm("ROSTER_PULL_REQUEST", {}, sender)
-        end
-    end
-
+    -- All raiders pull Item Manager updates so autopass and bidding lists match LM
     if data.imTimestamps and Comm then
         db.imTimestamps = db.imTimestamps or {}
         for listName, incomingTs in pairs(data.imTimestamps) do
@@ -425,34 +440,44 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
         end
     end
 
-    if data.priorityTimestamps and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
-        db.priorityTimestamps = db.priorityTimestamps or {}
-        for listName, incomingTs in pairs(data.priorityTimestamps) do
-            local localTs = db.priorityTimestamps[listName] or 0
-            if incomingTs > localTs then
-                Comm:SendComm("PRIORITY_PULL_REQUEST", { listName = listName }, sender)
+    -- Officers pull Roster, Priority, Config, History, and Unassigned players
+    if DesolateLootcouncil:AmIOfficerOrLM() and Comm then
+        if data.rosterTimestamp then
+            local localRosterTs = db.rosterTimestamp or 0
+            if data.rosterTimestamp > localRosterTs then
+                Comm:SendComm("ROSTER_PULL_REQUEST", {}, sender)
             end
         end
-    end
 
-    if data.configTimestamp and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
-        local localConfigTs = db.configTimestamp or 0
-        if data.configTimestamp > localConfigTs then
-            Comm:SendComm("CONFIG_PULL_REQUEST", {}, sender)
+        if data.priorityTimestamps then
+            db.priorityTimestamps = db.priorityTimestamps or {}
+            for listName, incomingTs in pairs(data.priorityTimestamps) do
+                local localTs = db.priorityTimestamps[listName] or 0
+                if incomingTs > localTs then
+                    Comm:SendComm("PRIORITY_PULL_REQUEST", { listName = listName }, sender)
+                end
+            end
         end
-    end
 
-    if data.historyTimestamp and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
-        local localHistoryTs = db.historyTimestamp or 0
-        if data.historyTimestamp > localHistoryTs then
-            Comm:SendComm("HISTORY_PULL_REQUEST", {}, sender)
+        if data.configTimestamp then
+            local localConfigTs = db.configTimestamp or 0
+            if data.configTimestamp > localConfigTs then
+                Comm:SendComm("CONFIG_PULL_REQUEST", {}, sender)
+            end
         end
-    end
 
-    if data.rosterTimestamp and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
-        local localRosterTs = db.rosterTimestamp or 0
-        if data.rosterTimestamp > localRosterTs then
-            Comm:SendComm("ROSTER_PULL_REQUEST", {}, sender)
+        if data.historyTimestamp then
+            local localHistoryTs = db.historyTimestamp or 0
+            if data.historyTimestamp > localHistoryTs then
+                Comm:SendComm("HISTORY_PULL_REQUEST", {}, sender)
+            end
+        end
+
+        if data.unassignedTimestamp then
+            local localUnassignedTs = db.unassignedTimestamp or 0
+            if data.unassignedTimestamp > localUnassignedTs then
+                Comm:SendComm("UNASSIGNED_PULL_REQUEST", {}, sender)
+            end
         end
     end
 end
@@ -460,6 +485,7 @@ end
 function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
+    if not DesolateLootcouncil:IsOfficer(sender) then return end
 
     local db = DesolateLootcouncil.db.profile
     local payload = {
@@ -522,6 +548,7 @@ end
 function SyncHandlers:HISTORY_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
+    if not DesolateLootcouncil:IsOfficer(sender) then return end
 
     local db = DesolateLootcouncil.db.profile
     local payload = {
@@ -563,6 +590,7 @@ end
 function SyncHandlers:ROSTER_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
+    if not DesolateLootcouncil:IsOfficer(sender) then return end
 
     local db = DesolateLootcouncil.db.profile
     local mainsCopy = {}
@@ -608,13 +636,12 @@ function SyncHandlers:PRIORITY_PULL_REQUEST(data, sender)
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not data or not data.listName then return end
 
-    local db = DesolateLootcouncil.db.profile
-    local rosterEntry = db.MainRoster and db.MainRoster[sender]
-    if not rosterEntry or not rosterEntry.isOfficer then
+    if not DesolateLootcouncil:IsOfficer(sender) then
         DesolateLootcouncil:DLC_Log(string.format("PRIORITY_PULL_REQUEST from non-officer '%s' ignored.", tostring(sender)))
         return
     end
 
+    local db = DesolateLootcouncil.db.profile
     local listObj = nil
     for idx, list in ipairs(db.PriorityLists or {}) do
         if list.name == data.listName then
@@ -635,6 +662,52 @@ function SyncHandlers:PRIORITY_PULL_REQUEST(data, sender)
         }
         local ts = db.priorityTimestamps and db.priorityTimestamps[data.listName] or GetServerTime()
         Comm:SendComm("SYNC_PRIORITY", { lists = singleListPayload, timestamps = { [data.listName] = ts } }, sender)
+    end
+end
+
+function SyncHandlers:UNASSIGNED_PULL_REQUEST(data, sender)
+    if not IsInGroup() then return end
+    if not DesolateLootcouncil:AmILootMaster() then return end
+    if not DesolateLootcouncil:IsOfficer(sender) then return end
+
+    local db = DesolateLootcouncil.db.profile
+    local payload = {
+        unassigned = db.unassignedPlayers or {},
+        timestamp = db.unassignedTimestamp or 0
+    }
+
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm then
+        Comm:SendComm("SYNC_UNASSIGNED", payload, sender)
+    end
+end
+
+function SyncHandlers:SYNC_UNASSIGNED(data, sender)
+    if not IsInGroup() then return end
+    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
+    if not data or type(data) ~= "table" then return end
+
+    local db = DesolateLootcouncil.db.profile
+    local incomingTs = data.timestamp or 0
+    local localTs = db.unassignedTimestamp or 0
+
+    if incomingTs > localTs or (db.unassignedPlayers == nil or next(db.unassignedPlayers) == nil) then
+        db.unassignedPlayers = {}
+        for name, uData in pairs(data.unassigned or {}) do
+            db.unassignedPlayers[name] = {
+                firstSeen = uData.firstSeen,
+                source = uData.source,
+                class = uData.class
+            }
+        end
+        db.unassignedTimestamp = incomingTs
+
+        local RosterSys = DesolateLootcouncil:GetModule("Roster")
+        if RosterSys then
+            RosterSys:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+        end
+        DesolateLootcouncil:DLC_Log(string.format("Synced unassigned players database with Loot Master %s.", DesolateLootcouncil:GetDisplayName(sender)))
     end
 end
 

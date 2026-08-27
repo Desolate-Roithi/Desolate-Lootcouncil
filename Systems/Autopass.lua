@@ -79,6 +79,7 @@ local function DebugLog(msg)
 end
 
 function Autopass:ProcessRoll(rollID)
+    self.autoRolledItems = self.autoRolledItems or {}
     if self.autoRolledItems[rollID] then
         DebugLog(string.format("Skipped RollID %d: Item was already auto-rolled.", rollID))
         return

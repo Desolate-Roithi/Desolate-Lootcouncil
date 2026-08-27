@@ -337,4 +337,10 @@ L["Notice: %d player(s) in Main roster are missing from priority lists (%s). Cli
 L["Decay of %d applied to players: %s"] = true
 L["Decay of %d positions was applied when session ended (no absent players)."] = true
 L["Sync to Lists"] = true
+L["View Only - Loot Master controls assignment"] = true
+L["Select Main..."] = true
+L["Auto-switched profile to '%s' (matched Loot Master raid roster)."] = true
+L["Add as Main"] = true
+L["Link to Main"] = true
+L["Added new Priority List: %s"] = true
 

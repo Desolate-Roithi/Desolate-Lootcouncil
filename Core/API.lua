@@ -670,6 +670,20 @@ function DLC_API:MovePlayerInPriorityList(listKey, fromIndex, toIndex)
     local msg = string.format("Manual Override: Moved %s from %d to %d in %s.", player, fromIndex, toIndex, list.name or tostring(listKey))
     local p = Priority()
     if p and p.LogPriorityChange then p:LogPriorityChange(msg) end
+    if list.name then self:MarkPriorityDirty(list.name) end
+end
+
+--- Returns the deterministic 8-digit hex roster hash.
+---@return string
+function DLC_API:GetRosterHash()
+    return DesolateLootcouncil:CalculateRosterHash(DesolateLootcouncil.db.profile.MainRoster)
+end
+
+--- Returns true if the player is an officer (alt-aware).
+---@param name string
+---@return boolean
+function DLC_API:IsOfficer(name)
+    return DesolateLootcouncil:IsOfficer(name)
 end
 
 --- Returns the global addon version.

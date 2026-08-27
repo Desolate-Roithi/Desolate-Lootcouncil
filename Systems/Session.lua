@@ -243,6 +243,7 @@ function Session:SendDLCHeartbeat()
             end
         end
     end
+    local rosterHash = DesolateLootcouncil.CalculateRosterHash and DesolateLootcouncil:CalculateRosterHash(db.MainRoster) or "00000000"
     local payload = {
         imTimestamps = db.imTimestamps or {},
         priorityTimestamps = db.priorityTimestamps or {},
@@ -250,6 +251,8 @@ function Session:SendDLCHeartbeat()
         configTimestamp = db.configTimestamp or 0,
         historyTimestamp = db.historyTimestamp or 0,
         rosterTimestamp = db.rosterTimestamp or 0,
+        unassignedTimestamp = db.unassignedTimestamp or 0,
+        rosterHash = rosterHash,
     }
     local Comm = DesolateLootcouncil:GetModule("Comm")
     if Comm then
@@ -756,6 +759,17 @@ function Session:_ApplyAutopassState(payload, isHeartbeat)
         local changed = (DesolateLootcouncil.sessionAutopassActive ~= payload.autopassActive)
         DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
 
+        if payload.autopassActive then
+            if DesolateLootcouncil.db and DesolateLootcouncil.db.profile then
+                DesolateLootcouncil.db.profile.enableAutoLoot = true
+            end
+        end
+
+        if payload.activeLM and payload.activeLM ~= "" then
+            DesolateLootcouncil.activeAddonUsers = DesolateLootcouncil.activeAddonUsers or {}
+            DesolateLootcouncil.activeAddonUsers[payload.activeLM] = true
+        end
+
         if not isHeartbeat or changed then
             local Autopass = DesolateLootcouncil:GetModule("Autopass")
             if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
@@ -1008,10 +1022,12 @@ function Session:HandleVote(payload, sender)
             self.sessionVotes[data.guid][sender] = nil
             DesolateLootcouncil:DLC_Log("Vote retracted by " .. DesolateLootcouncil:GetDisplayName(sender))
         else
-            -- Record unassigned voter for LM review if unknown
-            local Roster = DesolateLootcouncil:GetModule("Roster", true)
-            if Roster and Roster.RecordUnassignedPlayer then
-                Roster:RecordUnassignedPlayer(sender, "Bid")
+            -- Record unassigned voter for LM review if unknown (LM only)
+            if DesolateLootcouncil:AmILootMaster() then
+                local Roster = DesolateLootcouncil:GetModule("Roster", true)
+                if Roster and Roster.RecordUnassignedPlayer then
+                    Roster:RecordUnassignedPlayer(sender, "Bid")
+                end
             end
 
             -- Use authoritative roll from sender if available, or fallback to local generation

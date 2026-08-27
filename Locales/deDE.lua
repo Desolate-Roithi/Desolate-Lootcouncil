@@ -365,5 +365,11 @@ L["Notice: %d player(s) in Main roster are missing from priority lists (%s). Cli
 L["Decay of %d applied to players: %s"] = "Verfall von %d angewendet auf Spieler: %s"
 L["Decay of %d positions was applied when session ended (no absent players)."] = "Verfall von %d Positionen wurde beim Beenden der Sitzung angewendet (keine abwesenden Spieler)."
 L["Sync to Lists"] = "Mit Listen synchronisieren"
+L["View Only - Loot Master controls assignment"] = "Nur Ansicht - Plündermeister verwaltet Zuweisung"
+L["Select Main..."] = "Main auswählen..."
+L["Auto-switched profile to '%s' (matched Loot Master raid roster)."] = "Profil automatisch zu '%s' gewechselt (Kader des Plündermeisters erkannt)."
+L["Add as Main"] = "Als Main hinzufügen"
+L["Link to Main"] = "Als Alt verknüpfen"
+L["Added new Priority List: %s"] = "Neue Prioritätsliste hinzugefügt: %s"
 
 

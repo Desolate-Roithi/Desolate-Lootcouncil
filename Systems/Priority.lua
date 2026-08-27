@@ -152,6 +152,7 @@ function Priority:AddPriorityList(name)
     end
 
     table.insert(db.PriorityLists, { name = name, players = newList, items = {} })
+    DesolateLootcouncil.API:MarkPriorityDirty(name)
     local msg = string.format(L["Added new Priority List: %s"], name)
     DesolateLootcouncil:DLC_Log(msg)
     self:LogPriorityChange(msg)
@@ -163,6 +164,7 @@ function Priority:RemovePriorityList(index)
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] then
         local removed = table.remove(db.PriorityLists, index)
+        DesolateLootcouncil.API:MarkPriorityDirty(removed.name)
         local msg = string.format(L["Removed Priority List: %s"], removed.name)
         DesolateLootcouncil:DLC_Log(msg)
         self:LogPriorityChange(msg)
@@ -174,7 +176,10 @@ function Priority:RenamePriorityList(index, newName)
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
     if db.PriorityLists[index] and newName ~= "" then
+        local oldName = db.PriorityLists[index].name
         db.PriorityLists[index].name = newName
+        DesolateLootcouncil.API:MarkPriorityDirty(newName)
+        if oldName then DesolateLootcouncil.API:MarkPriorityDirty(oldName) end
         local msg = string.format(L["Renamed list to: %s"], newName)
         DesolateLootcouncil:DLC_Log(msg)
         self:LogPriorityChange(msg)
@@ -541,10 +546,12 @@ end
 function Priority:ReceivePrioritySync(syncedLists)
     if not syncedLists or type(syncedLists) ~= "table" then return end
     local db = DesolateLootcouncil.db.profile
-    if not db.PriorityLists then return end
+    if not db then return end
+    if not db.PriorityLists then db.PriorityLists = {} end
 
     local updated = 0
     for _, incoming in ipairs(syncedLists) do
+        local found = false
         for _, localList in ipairs(db.PriorityLists) do
             if localList.name == incoming.name then
                 -- Deep copy players
@@ -552,8 +559,18 @@ function Priority:ReceivePrioritySync(syncedLists)
                 -- Deep copy items
                 localList.items = DesolateLootcouncil.Table.DeepCopy(incoming.items or {})
                 updated = updated + 1
+                found = true
                 break
             end
+        end
+
+        if not found then
+            table.insert(db.PriorityLists, {
+                name = incoming.name,
+                players = DesolateLootcouncil.Table.DeepCopy(incoming.players or {}),
+                items = DesolateLootcouncil.Table.DeepCopy(incoming.items or {})
+            })
+            updated = updated + 1
         end
     end
 
@@ -617,4 +634,5 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
 
     -- Write the sorted result back into the DB object in-place
     listObj.players = newList
+    DesolateLootcouncil.API:MarkPriorityDirty(listName)
 end

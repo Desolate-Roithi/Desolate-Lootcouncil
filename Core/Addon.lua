@@ -534,6 +534,82 @@ function DesolateLootcouncil:AmILootMaster()
     return self.amILM
 end
 
+function DesolateLootcouncil:IsOfficer(name)
+    if not name or name == "" then return false end
+    if self:SmartCompare(name, "player") and self.amILM then return true end
+
+    local db = self.db and self.db.profile
+    if not db then return false end
+
+    -- Check if name is an alt, resolve to Main
+    local mainName = name
+    if db.playerRoster and db.playerRoster.alts then
+        local score = self:GetScoreName(name)
+        for alt, main in pairs(db.playerRoster.alts) do
+            if self:GetScoreName(alt) == score then
+                mainName = main
+                break
+            end
+        end
+    end
+
+    local mainScore = self:GetScoreName(mainName)
+    if db.MainRoster then
+        for rName, data in pairs(db.MainRoster) do
+            if self:GetScoreName(rName) == mainScore then
+                return type(data) == "table" and data.isOfficer == true
+            end
+        end
+    end
+
+    return false
+end
+
+function DesolateLootcouncil:CalculateRosterHash(mainRoster)
+    if not mainRoster then return "00000000" end
+    local names = {}
+    for name in pairs(mainRoster) do
+        local score = self:GetScoreName(name) or name
+        table.insert(names, score)
+    end
+    table.sort(names)
+    local str = table.concat(names, ",")
+
+    local hash = 5381
+    for i = 1, #str do
+        hash = ((hash * 33) + string.byte(str, i)) % 4294967296
+    end
+    return string.format("%08x", hash)
+end
+
+function DesolateLootcouncil:CheckProfileAutoSwitch(incomingRosterHash)
+    if not incomingRosterHash or incomingRosterHash == "00000000" or incomingRosterHash == "" then
+        return true
+    end
+
+    local currentHash = self:CalculateRosterHash(self.db.profile.MainRoster)
+    if currentHash == incomingRosterHash then
+        return true
+    end
+
+    -- Scan other profiles for a match
+    local profiles = self.db.sv and self.db.sv.profiles
+    if profiles then
+        for profName, profData in pairs(profiles) do
+            if profData and profData.MainRoster then
+                local profHash = self:CalculateRosterHash(profData.MainRoster)
+                if profHash == incomingRosterHash then
+                    self.db:SetProfile(profName)
+                    self:Print(string.format(L["Auto-switched profile to '%s' (matched Loot Master raid roster)."], profName))
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 function DesolateLootcouncil:AmIOfficerOrLM()
     -- Tier 1: Solo mode — player is always LM when not in any group.
     if self.amILM then return true end
@@ -545,29 +621,9 @@ function DesolateLootcouncil:AmIOfficerOrLM()
         return false -- LM not yet identified; deny access until handshake completes
     end
 
-    -- Tier 3: Roster flag lookup — check if our MainRoster entry has isOfficer = true.
+    -- Tier 3: Roster flag lookup
     local myName = UnitName("player")
-    local myMain = myName
-    local db = self.db.profile
-    if db.playerRoster and db.playerRoster.alts then
-        local myScoreName = self:GetScoreName(myName)
-        for alt, main in pairs(db.playerRoster.alts) do
-            if self:GetScoreName(alt) == myScoreName then
-                myMain = main
-                break
-            end
-        end
-    end
-    local myScore = self:GetScoreName(myMain)
-    if db.MainRoster then
-        for name, data in pairs(db.MainRoster) do
-            if self:GetScoreName(name) == myScore then
-                return data.isOfficer == true
-            end
-        end
-    end
-
-    return false
+    return self:IsOfficer(myName)
 end
 
 -- Backward compatibility stub calling AmIOfficerOrLM()
@@ -864,7 +920,7 @@ function DesolateLootcouncil:DoAllGroupMembersHaveAddon()
 end
 
 function DesolateLootcouncil:IsLMAddonUser()
-    local lm = self:DetermineLootMaster()
+    local lm = self:DetermineLootMaster() or self.activeLootMaster
     if not lm or lm == "" then return false end
     if self:SmartCompare(lm, "player") then return true end
     local activeUsers = self.activeAddonUsers or {}
@@ -874,6 +930,7 @@ function DesolateLootcouncil:IsLMAddonUser()
             return true
         end
     end
+    if self.sessionAutopassActive then return true end
     return false
 end
 

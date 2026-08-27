@@ -228,9 +228,9 @@ function UI_Theme:ApplyTheme(widgetOrFrame, windowType)
     end
 
     -- 3. Apply theme backdrop and border
-    local NativeGUI_ref = DesolateLootcouncil:GetModule("UI_NativeGUI", true)
-    if NativeGUI_ref then
-        NativeGUI_ref:ApplyTiledBackdrop(f)
+    local nativeGuiRef = DesolateLootcouncil:GetModule("UI_NativeGUI", true)
+    if nativeGuiRef then
+        nativeGuiRef:ApplyTiledBackdrop(f)
     else
         f:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -282,10 +282,10 @@ function UI_Theme:StyleRow(rowWidget, isActive)
         Mixin(f, BackdropTemplateMixin)
     end
 
-    local NativeGUI_ref = DesolateLootcouncil:GetModule("UI_NativeGUI", true)
-    if NativeGUI_ref then
-        NativeGUI_ref:ApplyTiledBackdrop(f)
-        NativeGUI_ref:StyleRowBackdrop(f, theme, isActive)
+    local nativeGuiRef = DesolateLootcouncil:GetModule("UI_NativeGUI", true)
+    if nativeGuiRef then
+        nativeGuiRef:ApplyTiledBackdrop(f)
+        nativeGuiRef:StyleRowBackdrop(f, theme, isActive)
     else
         f:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",

@@ -78,8 +78,7 @@ function CommHandlers:VERSION_REQ(data, sender)
         
         -- History Bulk Sync for late-joining / reloading officers
         local db = DesolateLootcouncil.db.profile
-        local rosterEntry = db.MainRoster and db.MainRoster[sender]
-        if rosterEntry and rosterEntry.isOfficer then
+        if DesolateLootcouncil:IsOfficer(sender) then
             local SessionMod = DesolateLootcouncil:GetModule("Session")
             SessionMod.officerSyncedThisSession = SessionMod.officerSyncedThisSession or {}
             if not SessionMod.officerSyncedThisSession[sender] then
