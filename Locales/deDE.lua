@@ -75,6 +75,11 @@ L["No position changes recorded."] = "Keine Positionsänderungen aufgezeichnet."
 L["Position log not available (pre-dates session tracking)."] =
 "Positionsprotokoll nicht verfügbar (älter als Sitzungsverfolgung)."
 L["... and %d more entries"] = "... und %d weitere Einträge"
+L["... and %d older entries"] = "... und %d ältere Einträge"
+L["Copy All Position Changes"] = "Alle Positionsänderungen kopieren"
+L["Position Changes Log"] = "Positionsänderungsprotokoll"
+L["Press Ctrl+C to copy all position changes for this session."] =
+    "Drücke Strg+C, um alle Positionsänderungen dieser Sitzung zu kopieren."
 L["Position log only available for current session."] = "Positionsprotokoll nur für die aktuelle Sitzung verfügbar."
 L["Decay disabled."] = "Verfall deaktiviert."
 L["No decay applied yet."] = "Noch kein Verfall angewendet."
@@ -215,6 +220,15 @@ L["No (Keep Active)"] = "Nein (Aktiv lassen)"
 L["Are you sure you want to perform this action?"] = "Bist du sicher, dass du diese Aktion ausführen möchtest?"
 L["Resume Session"] = "Lootsession fortsetzen"
 L["Resuming active raid session."] = "Aktive Raid-Lootsession wird fortgesetzt."
+L["An active raid session from %s was found.\nWould you like to save and close the previous session and start a new one for today?"] =
+"Eine aktive Raidsitzung vom %s wurde gefunden.\nMöchtest du die vorherige Sitzung speichern und schließen und eine neue für heute starten?"
+L["Save & Start New"] = "Speichern & Neu starten"
+L["Keep Previous"] = "Vorherige behalten"
+L["Keeping previous session active."] = "Vorherige Sitzung bleibt aktiv."
+L["The raid group has disbanded. Would you like to end and save the current raid session?"] =
+"Die Raidgruppe wurde aufgelöst. Möchtest du die aktuelle Raidsitzung beenden und speichern?"
+L["End & Save Session"] = "Beenden & Speichern"
+L["Keep Active"] = "Aktiv lassen"
 
 
 L["Award Log"] = "Vergabe-Log"

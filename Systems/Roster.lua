@@ -56,6 +56,40 @@ StaticPopupDialogs["DLC_ACTIVE_SESSION_PROMPT"] = {
     hideOnEscape = false,
 }
 
+StaticPopupDialogs["DLC_NEW_DATE_SESSION_PROMPT"] = {
+    text = L["An active raid session from %s was found.\nWould you like to save and close the previous session and start a new one for today?"],
+    button1 = L["Save & Start New"],
+    button2 = L["Keep Previous"],
+    OnAccept = function()
+        local RosterMod = DesolateLootcouncil:GetModule("Roster")
+        if RosterMod then
+            RosterMod:StopRaidSession(true)
+            RosterMod:StartRaidSession()
+        end
+    end,
+    OnCancel = function()
+        DesolateLootcouncil:Print(L["Keeping previous session active."])
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = false,
+}
+
+StaticPopupDialogs["DLC_DISBAND_CLOSE_SESSION"] = {
+    text = L["The raid group has disbanded. Would you like to end and save the current raid session?"],
+    button1 = L["End & Save Session"],
+    button2 = L["Keep Active"],
+    OnAccept = function()
+        local RosterMod = DesolateLootcouncil:GetModule("Roster")
+        if RosterMod then
+            RosterMod:StopRaidSession(true)
+        end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
 ---@class (partial) DLC_Ref_Roster
 ---@field db table
 ---@field GetModule fun(self: any, name: string): any
@@ -181,9 +215,24 @@ end
 function Roster:StartRaidSession()
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if config.sessionActive then
+        local prevDate = config.currentSessionID and date("%Y-%m-%d", config.currentSessionID)
+        local todayDate = date("%Y-%m-%d", time())
+        if prevDate and prevDate ~= todayDate and DesolateLootcouncil:AmILootMaster() then
+            StaticPopup_Show("DLC_NEW_DATE_SESSION_PROMPT", prevDate)
+            return
+        end
         self:Printf("Session already active (Started: %s). Auto-saving and stopping previous session.", date("%c", config.currentSessionID))
         self:StopRaidSession(true)
     end
+
+    if DesolateLootcouncil:AmILootMaster() and self:HasPendingDecay() then
+        local db = DesolateLootcouncil.db.profile
+        local entry = db.AttendanceHistory and db.AttendanceHistory[1]
+        self.pendingStartRaidSession = true
+        StaticPopup_Show("DLC_PENDING_DECAY", (entry and entry.date) or "N/A", (entry and entry.zone) or "Unknown")
+        return
+    end
+    self.pendingStartRaidSession = nil
 
     local _, instanceType = GetInstanceInfo()
     if instanceType ~= "raid" then
@@ -249,91 +298,148 @@ function Roster:StopRaidSession(saveHistory)
     end
 
     if saveHistory then
-        -- Commit to global history
-        local db = DesolateLootcouncil.db.profile
-        if not db.AttendanceHistory then db.AttendanceHistory = {} end
+        local isOfficerOrLM = DesolateLootcouncil:AmIOfficerOrLM()
+        if isOfficerOrLM then
+            -- Commit to global history
+            local db = DesolateLootcouncil.db.profile
+            if not db.AttendanceHistory then db.AttendanceHistory = {} end
 
-        local entry = {
-            date            = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
-            zone            = GetRealZoneText() or "Unknown",
-            sessionID       = config.currentSessionID,
-            attendees       = {},
-            attendeeDetails = {},
-            bossLogs        = {},
-            awarded         = {},
-            decayApplied    = self.decayAppliedForSession or (not config.enabled and -1 or nil),
-            decayPenalty    = self.decayPenaltyForSession or (config.defaultPenalty or 1),
-            decayAbsent     = self.decayAbsentForSession and DesolateLootcouncil.Table.DeepCopy(self.decayAbsentForSession) or nil
-        }
-        self.decayAppliedForSession = nil
-        self.decayPenaltyForSession = nil
-        self.decayAbsentForSession = nil
-        local session = db.session
-        if session and session.awarded then
-            entry.awarded = DesolateLootcouncil.Table.DeepCopy(session.awarded)
-        end
-        if session and session.publicAwardLog then
-            entry.publicAwardLog = DesolateLootcouncil.Table.DeepCopy(session.publicAwardLog)
-        end
-        -- Deep copy attendees
-        for name, _ in pairs(config.currentAttendees) do
-            entry.attendees[name] = true
-        end
-        -- Deep copy attendee details
-        if config.attendeeDetails then
-            for mainName, chars in pairs(config.attendeeDetails) do
-                entry.attendeeDetails[mainName] = {}
-                for charName, charData in pairs(chars) do
-                    entry.attendeeDetails[mainName][charName] = {
-                        class = charData.class,
-                        kills = charData.kills
-                    }
-                end
+            local entry = {
+                date            = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
+                zone            = GetRealZoneText() or "Unknown",
+                sessionID       = config.currentSessionID,
+                attendees       = {},
+                attendeeDetails = {},
+                bossLogs        = {},
+                awarded         = {},
+                decayApplied    = self.decayAppliedForSession or (not config.enabled and -1 or nil),
+                decayPenalty    = self.decayPenaltyForSession or (config.defaultPenalty or 1),
+                decayAbsent     = self.decayAbsentForSession and DesolateLootcouncil.Table.DeepCopy(self.decayAbsentForSession) or nil
+            }
+            self.decayAppliedForSession = nil
+            self.decayPenaltyForSession = nil
+            self.decayAbsentForSession = nil
+            local session = db.session
+            local API = DesolateLootcouncil.API
+            if session and session.awarded then
+                entry.awarded = DesolateLootcouncil.Table.DeepCopy(session.awarded)
+                table.sort(entry.awarded, function(a, b)
+                    local tA = (API and API.ParseItemTimestamp and API:ParseItemTimestamp(a)) or (a.timestamp or 0)
+                    local tB = (API and API.ParseItemTimestamp and API:ParseItemTimestamp(b)) or (b.timestamp or 0)
+                    return tA < tB
+                end)
             end
-        end
-        -- Deep copy boss logs
-        if config.bossLogs then
-            for _, b in ipairs(config.bossLogs) do
-                local bRoster = nil
-                if b.roster then
-                    bRoster = {}
-                    for _, p in ipairs(b.roster) do
-                        table.insert(bRoster, {
-                            name = p.name,
-                            main = p.main,
-                            class = p.class
-                        })
+            if session and session.publicAwardLog then
+                entry.publicAwardLog = DesolateLootcouncil.Table.DeepCopy(session.publicAwardLog)
+                table.sort(entry.publicAwardLog, function(a, b)
+                    local tA = (API and API.ParseItemTimestamp and API:ParseItemTimestamp(a)) or (a.timestamp or 0)
+                    local tB = (API and API.ParseItemTimestamp and API:ParseItemTimestamp(b)) or (b.timestamp or 0)
+                    return tA < tB
+                end)
+            end
+            -- Deep copy attendees
+            for name, _ in pairs(config.currentAttendees or {}) do
+                entry.attendees[name] = true
+            end
+            -- Deep copy attendee details
+            if config.attendeeDetails then
+                for mainName, chars in pairs(config.attendeeDetails) do
+                    entry.attendeeDetails[mainName] = {}
+                    for charName, charData in pairs(chars) do
+                        entry.attendeeDetails[mainName][charName] = {
+                            class = charData.class,
+                            kills = charData.kills
+                        }
                     end
                 end
-                table.insert(entry.bossLogs, {
-                    encounterID = b.encounterID,
-                    name = b.name,
-                    pulls = b.pulls,
-                    killed = b.killed,
-                    killedTime = b.killedTime,
-                    roster = bRoster
-                })
             end
-        end
-        table.insert(db.AttendanceHistory, 1, entry) -- Insert at top (Newest)
+            -- Deep copy boss logs
+            if config.bossLogs then
+                for origIdx, b in ipairs(config.bossLogs) do
+                    local bRoster = nil
+                    if b.roster then
+                        bRoster = {}
+                        for _, p in ipairs(b.roster) do
+                            table.insert(bRoster, {
+                                name = p.name,
+                                main = p.main,
+                                class = p.class
+                            })
+                        end
+                    end
+                    table.insert(entry.bossLogs, {
+                        encounterID = b.encounterID,
+                        name = b.name,
+                        pulls = b.pulls,
+                        killed = b.killed,
+                        killedTime = b.killedTime,
+                        roster = bRoster,
+                        origIdx = origIdx
+                    })
+                end
+                table.sort(entry.bossLogs, function(a, b)
+                    local kA = (a.killed and a.killedTime) or nil
+                    local kB = (b.killed and b.killedTime) or nil
+                    if kA and kB then
+                        if kA ~= kB then return kA < kB end
+                        return (a.origIdx or 0) < (b.origIdx or 0)
+                    elseif kA and not kB then
+                        return true
+                    elseif not kA and kB then
+                        return false
+                    else
+                        return (a.origIdx or 0) < (b.origIdx or 0)
+                    end
+                end)
+                for _, bLog in ipairs(entry.bossLogs) do
+                    bLog.origIdx = nil
+                end
+            end
 
-        -- Commit to individual player history (Legacy/Detail)
-        local count = 0
-        for mainName, _ in pairs(config.currentAttendees) do
-            -- Ensure roster structure exists
-            local roster = db.MainRoster
-            if not roster[mainName] then roster[mainName] = {} end
-            if not roster[mainName].sessionsAttended then roster[mainName].sessionsAttended = {} end
+            -- Split multi-date entries if awards/kills span multiple days
+            local splitEntries = (API and API.SplitMultiDateAttendanceEntry and API:SplitMultiDateAttendanceEntry(entry)) or { entry }
+            for _, sEntry in ipairs(splitEntries) do
+                table.insert(db.AttendanceHistory, 1, sEntry)
+            end
+            table.sort(db.AttendanceHistory, function(a, b)
+                local sA = tostring(a.date or a.sessionID or "")
+                local sB = tostring(b.date or b.sessionID or "")
+                return sA > sB
+            end)
 
-            table.insert(roster[mainName].sessionsAttended, {
-                id = config.currentSessionID,
-                timestamp = time()
-            })
-            count = count + 1
+            -- Commit to individual player history (Legacy/Detail)
+            local count = 0
+            for mainName, _ in pairs(config.currentAttendees or {}) do
+                -- Ensure roster structure exists
+                local roster = db.MainRoster
+                if not roster[mainName] then roster[mainName] = {} end
+                if not roster[mainName].sessionsAttended then roster[mainName].sessionsAttended = {} end
+
+                table.insert(roster[mainName].sessionsAttended, {
+                    id = config.currentSessionID,
+                    timestamp = time()
+                })
+                count = count + 1
+            end
+            self:Printf("Session ENDED. Saved attendance for %d players.", count)
+            db.historyTimestamp = GetServerTime()
+            db.rosterTimestamp = GetServerTime()
+
+            -- Sync history to officers if we are LM
+            if DesolateLootcouncil:AmILootMaster() then
+                local Comm = DesolateLootcouncil:GetModule("Comm", true)
+                if Comm then
+                    local payload = {
+                        AttendanceHistory = db.AttendanceHistory or {},
+                        awarded = db.session and db.session.awarded or {},
+                        historyTimestamp = db.historyTimestamp or 0
+                    }
+                    Comm:SendComm("SYNC_HISTORY", payload, "RAID")
+                end
+            end
+        else
+            self:Printf("Session ENDED. (Non-officer: history managed by LM).")
         end
-        self:Printf("Session ENDED. Saved attendance for %d players.", count)
-        db.historyTimestamp = GetServerTime()
-        db.rosterTimestamp = GetServerTime()
     else
         self:Printf("Session ABORTED. No history saved.")
     end
@@ -928,7 +1034,9 @@ function Roster:ENCOUNTER_START(event, encounterID, encounterName, difficultyID,
 
     local bossEntry = nil
     for _, b in ipairs(config.bossLogs) do
-        if b.encounterID == encounterID then
+        local sameEncounter = (b.encounterID == encounterID) or (b.name == encounterName)
+        local sameDifficulty = (not b.difficultyID or not difficultyID or b.difficultyID == difficultyID)
+        if sameEncounter and sameDifficulty then
             bossEntry = b
             break
         end
@@ -938,10 +1046,15 @@ function Roster:ENCOUNTER_START(event, encounterID, encounterName, difficultyID,
         bossEntry = {
             encounterID = encounterID,
             name = encounterName,
+            difficultyID = difficultyID,
             pulls = 0,
             killed = false,
         }
         table.insert(config.bossLogs, bossEntry)
+    else
+        if difficultyID and not bossEntry.difficultyID then
+            bossEntry.difficultyID = difficultyID
+        end
     end
 
     bossEntry.pulls = bossEntry.pulls + 1
@@ -963,7 +1076,9 @@ function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, g
 
     local bossEntry = nil
     for _, b in ipairs(config.bossLogs) do
-        if b.encounterID == encounterID then
+        local sameEncounter = (b.encounterID == encounterID) or (b.name == encounterName)
+        local sameDifficulty = (not b.difficultyID or not difficultyID or b.difficultyID == difficultyID)
+        if sameEncounter and sameDifficulty then
             bossEntry = b
             break
         end
@@ -973,10 +1088,15 @@ function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, g
         bossEntry = {
             encounterID = encounterID,
             name = encounterName,
+            difficultyID = difficultyID,
             pulls = 1,
             killed = false,
         }
         table.insert(config.bossLogs, bossEntry)
+    else
+        if difficultyID and not bossEntry.difficultyID then
+            bossEntry.difficultyID = difficultyID
+        end
     end
 
     if success == 1 then
@@ -1137,6 +1257,26 @@ local function ResetAutopassSession()
     end
 end
 
+local function HandleRaidDisband()
+    if IsInRaid() then return end
+    local config = DesolateLootcouncil.db.profile.DecayConfig
+    if not config then return end
+
+    if config.sessionActive then
+        if DesolateLootcouncil:AmILootMaster() then
+            -- Prompt LM whether they want to close and save the raid session
+            StaticPopup_Show("DLC_DISBAND_CLOSE_SESSION")
+        else
+            -- Officers & raiders: autoclose session without saving locally (LM syncs saved history when closed)
+            local RosterMod = DesolateLootcouncil:GetModule("Roster")
+            if RosterMod then
+                RosterMod:StopRaidSession(false)
+            end
+        end
+    end
+    ResetAutopassSession()
+end
+
 local function BroadcastAutopassState()
     if not DesolateLootcouncil:AmILootMaster() then return end
     local Sync = DesolateLootcouncil:GetModule("Sync")
@@ -1150,8 +1290,8 @@ function Roster:GROUP_ROSTER_UPDATE()
     gruResetTimer = C_Timer.NewTimer(0.5, function()
         gruResetTimer = nil
         if not IsInRaid() then
-            -- Double check after 5 seconds to ensure this isn't a brief loading screen or portal blip
-            C_Timer.After(5.0, ResetAutopassSession)
+            -- Double check after 3 seconds to ensure this isn't a brief loading screen or portal blip
+            C_Timer.After(3.0, HandleRaidDisband)
             return
         end
         self:CheckForNewRaidMembers()

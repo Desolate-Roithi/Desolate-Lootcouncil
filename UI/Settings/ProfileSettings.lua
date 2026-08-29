@@ -101,7 +101,7 @@ local GetExportString = function()
 end
 
 local ImportStringSet = function(info, val)
-    ProfileSettings.importStringRaw = val
+    ProfileSettings.importStringRaw = val and val:gsub("^%s+", ""):gsub("%s+$", "")
 end
 
 local ImportStringGet = function()

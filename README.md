@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.2.3  
-**Last Updated:** 2026-08-24  
+**Latest Version:** v1.2.4  
+**Last Updated:** 2026-08-29  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -47,6 +47,15 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v1.2.4 (2026-08-29)
+* **Dynamic Item & Class Icon Resolution**:
+  * Raid History now dynamically resolves all item icons on-demand via Blizzard's native APIs (`C_Item.GetItemInfo` / `C_Item.GetItemIconByID`) with `Item:CreateFromItemID` async load hooks matching Item Manager.
+  * Resolved character class colors dynamically for attendees using Main Roster and alt mappings.
+* **Robust Profile Import & Serialization**:
+  * Enhanced `DecodePayload` to strip enclosing whitespace and markdown backticks from imported strings.
+  * Ensured complete Main Roster class attributes and uncorrupted boss kill rosters across profile exports.
+  * Instant config dialog refresh via `AceConfigRegistry-3.0` notification upon profile import.
 
 ### v1.2.3 (2026-08-24)
 * **LibDeflate Stream Compression (`!DLC1:`)**:

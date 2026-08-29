@@ -168,6 +168,10 @@ function Session:OnEnable()
             local RosterSys = DesolateLootcouncil:GetModule("Roster")
             if RosterSys and RosterSys.ApplyDecayForLastSession then
                 RosterSys:ApplyDecayForLastSession()
+                if RosterSys.pendingStartRaidSession then
+                    RosterSys.pendingStartRaidSession = nil
+                    RosterSys:StartRaidSession()
+                end
             end
         end,
         OnCancel = function(_, _, reason)
@@ -175,6 +179,10 @@ function Session:OnEnable()
                 local RosterSys = DesolateLootcouncil:GetModule("Roster")
                 if RosterSys and RosterSys.ApplyDecayForLastSession then
                     RosterSys:ApplyDecayForLastSession(true)
+                    if RosterSys.pendingStartRaidSession then
+                        RosterSys.pendingStartRaidSession = nil
+                        RosterSys:StartRaidSession()
+                    end
                 end
             end
         end,

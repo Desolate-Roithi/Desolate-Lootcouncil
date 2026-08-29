@@ -1242,6 +1242,282 @@ local function ExtractDecayFromPositionLog(api, entry, splBucket, decayConfig, m
 end
 
 -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] One-time migration to compact legacy history records and prune redundant decay strings
+local function ParseItemTimestamp(item)
+    if not item or type(item) ~= "table" then return 0 end
+    local ts = item.timestamp or item.time or item.awardedAt or item.date
+    if type(ts) == "number" then
+        return ts
+    elseif type(ts) == "string" then
+        local num = tonumber(ts)
+        if num then return num end
+        local y, m, d, h, min, s = ts:match("(%d+)-(%d+)-(%d+)%s+(%d+):(%d+):(%d+)")
+        if y then
+            local tTable = { year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = tonumber(h), min = tonumber(min), sec = tonumber(s) }
+            local parsed = time(tTable)
+            if parsed then return parsed end
+        end
+        local h2, m2, s2 = ts:match("(%d+):(%d+):(%d+)")
+        if h2 then
+            return tonumber(h2) * 3600 + tonumber(m2) * 60 + tonumber(s2)
+        end
+        local h3, m3 = ts:match("(%d+):(%d+)")
+        if h3 then
+            return tonumber(h3) * 3600 + tonumber(m3) * 60
+        end
+    end
+    return 0
+end
+
+function DLC_API:ParseItemTimestamp(item)
+    return ParseItemTimestamp(item)
+end
+
+local function CompactItemList(items)
+    if not items or type(items) ~= "table" then return {} end
+    local list = {}
+    for itemID, val in pairs(items) do
+        if val then
+            table.insert(list, tonumber(itemID) or itemID)
+        end
+    end
+    table.sort(list, function(a, b) return tostring(a) < tostring(b) end)
+    return list
+end
+
+local function CleanAwardedItem(item, deepCopyFn)
+    if type(item) ~= "table" then return item end
+    local ts = item.timestamp or item.time or item.awardedAt or item.date
+    if type(ts) == "string" then
+        ts = tonumber(ts) or ts
+    end
+    return {
+        link          = item.link,
+        texture       = item.texture,
+        itemID        = item.itemID,
+        winner        = item.winner,
+        winnerClass   = item.winnerClass,
+        voteType      = item.voteType,
+        timestamp     = ts,
+        originalIndex = item.originalIndex,
+        traded        = item.traded,
+        votes         = deepCopyFn(item.votes or {}),
+    }
+end
+
+local function CleanAttendanceEntry(entry, deepCopyFn)
+    if type(entry) ~= "table" then return entry end
+    local cleaned = deepCopyFn(entry)
+
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Migrate legacy 'loot' field to 'awarded'
+    if cleaned.loot and not cleaned.awarded then
+        cleaned.awarded = cleaned.loot
+        cleaned.loot = nil
+    end
+
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Migrate legacy 'bossFights' field to 'bossLogs'
+    if cleaned.bossFights and not cleaned.bossLogs then
+        cleaned.bossLogs = cleaned.bossFights
+        cleaned.bossFights = nil
+    end
+
+    if cleaned.awarded and type(cleaned.awarded) == "table" then
+        local cleanedAwarded = {}
+        for origIdx, item in pairs(cleaned.awarded) do
+            local numIdx = tonumber(origIdx) or 999
+            local cItem = CleanAwardedItem(item, deepCopyFn)
+            cItem.origIdx = numIdx
+            table.insert(cleanedAwarded, cItem)
+        end
+        -- Always order awarded loot chronologically by timestamp ascending
+        table.sort(cleanedAwarded, function(a, b)
+            local tA = ParseItemTimestamp(a)
+            local tB = ParseItemTimestamp(b)
+            if tA ~= tB then return tA < tB end
+            return (a.origIdx or 0) < (b.origIdx or 0)
+        end)
+        for _, itm in ipairs(cleanedAwarded) do
+            itm.origIdx = nil
+        end
+        cleaned.awarded = cleanedAwarded
+    end
+
+    if cleaned.publicAwardLog and type(cleaned.publicAwardLog) == "table" then
+        table.sort(cleaned.publicAwardLog, function(a, b)
+            return ParseItemTimestamp(a) < ParseItemTimestamp(b)
+        end)
+    end
+
+    if cleaned.bossLogs and type(cleaned.bossLogs) == "table" then
+        for origIdx, b in pairs(cleaned.bossLogs) do
+            b.origIdx = tonumber(origIdx) or 999
+            if not b.pulls or b.pulls < 1 then
+                b.pulls = 1
+            end
+        end
+        -- Always order killed bosses chronologically by timestamp (killedTime) ascending
+        table.sort(cleaned.bossLogs, function(a, b)
+            local kA = (a.killed and a.killedTime) or nil
+            local kB = (b.killed and b.killedTime) or nil
+            if kA and kB then
+                if kA ~= kB then return kA < kB end
+                return (a.origIdx or 0) < (b.origIdx or 0)
+            elseif kA and not kB then
+                return true
+            elseif not kA and kB then
+                return false
+            else
+                return (a.origIdx or 0) < (b.origIdx or 0)
+            end
+        end)
+        for _, b in ipairs(cleaned.bossLogs) do
+            b.origIdx = nil
+        end
+    end
+
+    return cleaned
+end
+
+local function GetItemDatePrefix(item)
+    local ts = ParseItemTimestamp(item)
+    if ts and ts > 0 then
+        -- 86400+ seconds implies a real epoch timestamp
+        if ts > 86400 then
+            return date("%Y-%m-%d", ts), ts
+        end
+    end
+    return nil, 0
+end
+
+local function SplitMultiDateAttendanceEntry(entry, deepCopyFn)
+    if not entry or type(entry) ~= "table" then return { entry } end
+    local baseDatePrefix = entry.date and entry.date:sub(1, 10)
+
+    -- Collect all distinct date buckets from awarded items and bossLogs
+    local datesFound = {}
+    local dateOrder = {}
+    local function markDate(dStr)
+        if dStr and type(dStr) == "string" and #dStr == 10 and not datesFound[dStr] then
+            datesFound[dStr] = true
+            table.insert(dateOrder, dStr)
+        end
+    end
+
+    if baseDatePrefix and #baseDatePrefix == 10 then
+        markDate(baseDatePrefix)
+    end
+
+    local rawAwarded = entry.awarded or entry.loot
+    if rawAwarded and type(rawAwarded) == "table" then
+        for _, itm in pairs(rawAwarded) do
+            local dStr = GetItemDatePrefix(itm)
+            if dStr then markDate(dStr) end
+        end
+    end
+
+    local rawBossLogs = entry.bossLogs or entry.bossFights
+    if rawBossLogs and type(rawBossLogs) == "table" then
+        for _, b in pairs(rawBossLogs) do
+            if b.killed and b.killedTime and b.killedTime > 86400 then
+                local dStr = date("%Y-%m-%d", b.killedTime)
+                if dStr then markDate(dStr) end
+            end
+        end
+    end
+
+    -- If there is only 1 date or 0 dates, no splitting required
+    if #dateOrder <= 1 then
+        return { CleanAttendanceEntry(entry, deepCopyFn) }
+    end
+
+    -- Sort dates chronologically descending (newest on top)
+    table.sort(dateOrder, function(a, b) return a > b end)
+
+    local splitEntries = {}
+    for _, dStr in ipairs(dateOrder) do
+        local subEntry = deepCopyFn(entry)
+        subEntry.loot = nil
+        subEntry.bossFights = nil
+
+        -- Filter awarded for this specific date
+        local subAwarded = {}
+        if rawAwarded and type(rawAwarded) == "table" then
+            for _, itm in pairs(rawAwarded) do
+                local itmDate = GetItemDatePrefix(itm)
+                if (itmDate and itmDate == dStr) or (not itmDate and dStr == baseDatePrefix) then
+                    table.insert(subAwarded, deepCopyFn(itm))
+                end
+            end
+        end
+        subEntry.awarded = subAwarded
+
+        -- Filter publicAwardLog for this specific date
+        local subPubAwarded = {}
+        if entry.publicAwardLog and type(entry.publicAwardLog) == "table" then
+            for _, itm in pairs(entry.publicAwardLog) do
+                local itmDate = GetItemDatePrefix(itm)
+                if (itmDate and itmDate == dStr) or (not itmDate and dStr == baseDatePrefix) then
+                    table.insert(subPubAwarded, deepCopyFn(itm))
+                end
+            end
+        end
+        subEntry.publicAwardLog = subPubAwarded
+
+        -- Filter bossLogs for this specific date
+        local subBosses = {}
+        if rawBossLogs and type(rawBossLogs) == "table" then
+            for _, b in pairs(rawBossLogs) do
+                local bDate = (b.killed and b.killedTime and b.killedTime > 86400 and date("%Y-%m-%d", b.killedTime)) or nil
+                if (bDate and bDate == dStr) or (not bDate and dStr == baseDatePrefix) then
+                    table.insert(subBosses, deepCopyFn(b))
+                end
+            end
+        end
+        subEntry.bossLogs = subBosses
+
+        -- Determine earliest timestamp on this day for date/sessionID
+        local earliestTs = 0
+        for _, itm in ipairs(subAwarded) do
+            local ts = ParseItemTimestamp(itm)
+            if ts > 86400 and (earliestTs == 0 or ts < earliestTs) then
+                earliestTs = ts
+            end
+        end
+        for _, b in ipairs(subBosses) do
+            if b.killed and b.killedTime and b.killedTime > 86400 then
+                if earliestTs == 0 or b.killedTime < earliestTs then
+                    earliestTs = b.killedTime
+                end
+            end
+        end
+
+        if earliestTs > 0 then
+            subEntry.date = date("%Y-%m-%d %H:%M:%S", earliestTs)
+            if dStr ~= baseDatePrefix then
+                subEntry.sessionID = earliestTs
+            end
+        else
+            subEntry.date = dStr .. " 00:00:00"
+        end
+
+        -- Only keep split entries that have content
+        if #subAwarded > 0 or #subBosses > 0 or dStr == baseDatePrefix then
+            table.insert(splitEntries, CleanAttendanceEntry(subEntry, deepCopyFn))
+        end
+    end
+
+    return splitEntries
+end
+
+function DLC_API:SplitMultiDateAttendanceEntry(entry)
+    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
+        if type(t) ~= "table" then return t end
+        local res = {}
+        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
+        return res
+    end
+    return SplitMultiDateAttendanceEntry(entry, DeepCopy)
+end
+
 --- Compacts raid history by migrating decay information into structured fields on attendance entries
 --- and removing redundant decay log strings from SessionPositionLog.
 --- Executes only once per profile unless force is true (e.g. on new history import).
@@ -1257,13 +1533,32 @@ function DLC_API:CompactRaidHistory(targetProfile, force)
     local hist = p.AttendanceHistory
     local spl = p.SessionPositionLog
 
-    -- 1. Process each attendance history entry to ensure decayAbsent / decayPenalty are populated
+    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
+        if type(t) ~= "table" then return t end
+        local res = {}
+        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
+        return res
+    end
+
+    -- 1. Process each attendance history entry to ensure decayAbsent / decayPenalty are populated, multi-date sessions split, and fields normalized
     if hist and type(hist) == "table" then
+        local newHist = {}
         for _, entry in ipairs(hist) do
             local posKey = entry and entry.sessionID and tostring(entry.sessionID)
             local splBucket = posKey and spl and spl[posKey]
             ExtractDecayFromPositionLog(self, entry, splBucket, p.DecayConfig, p.MainRoster)
+            local splitList = SplitMultiDateAttendanceEntry(entry, DeepCopy)
+            for _, subE in ipairs(splitList) do
+                table.insert(newHist, subE)
+            end
         end
+        -- Order attendance entries chronologically by date descending (newest on top)
+        table.sort(newHist, function(a, b)
+            local sA = tostring(a.date or a.sessionID or "")
+            local sB = tostring(b.date or b.sessionID or "")
+            return sA > sB
+        end)
+        p.AttendanceHistory = newHist
     end
 
     -- 2. Prune all decay strings from SessionPositionLog
@@ -1287,49 +1582,22 @@ function DLC_API:CompactRaidHistory(targetProfile, force)
         end
     end
 
+    -- 3. Also normalize live session awards if present
+    if p.session then
+        if p.session.awarded and type(p.session.awarded) == "table" then
+            table.sort(p.session.awarded, function(a, b)
+                return ParseItemTimestamp(a) < ParseItemTimestamp(b)
+            end)
+        end
+        if p.session.publicAwardLog and type(p.session.publicAwardLog) == "table" then
+            table.sort(p.session.publicAwardLog, function(a, b)
+                return ParseItemTimestamp(a) < ParseItemTimestamp(b)
+            end)
+        end
+    end
+
     p.historyCompacted = true
     return prunedCount
-end
-
-local function CompactItemList(items)
-    if not items or type(items) ~= "table" then return {} end
-    local list = {}
-    for itemID, val in pairs(items) do
-        if val then
-            table.insert(list, tonumber(itemID) or itemID)
-        end
-    end
-    table.sort(list, function(a, b) return tostring(a) < tostring(b) end)
-    return list
-end
-
-local function CleanAwardedItem(item, deepCopyFn)
-    if type(item) ~= "table" then return item end
-    return {
-        link          = item.link,
-        texture       = item.texture,
-        itemID        = item.itemID,
-        winner        = item.winner,
-        winnerClass   = item.winnerClass,
-        voteType      = item.voteType,
-        timestamp     = item.timestamp,
-        originalIndex = item.originalIndex,
-        traded        = item.traded,
-        votes         = deepCopyFn(item.votes or {}),
-    }
-end
-
-local function CleanAttendanceEntry(entry, deepCopyFn)
-    if type(entry) ~= "table" then return entry end
-    local cleaned = deepCopyFn(entry)
-    if cleaned.awarded and type(cleaned.awarded) == "table" then
-        local cleanedAwarded = {}
-        for _, item in ipairs(cleaned.awarded) do
-            table.insert(cleanedAwarded, CleanAwardedItem(item, deepCopyFn))
-        end
-        cleaned.awarded = cleanedAwarded
-    end
-    return cleaned
 end
 
 local function EncodePayload(data)
@@ -1350,10 +1618,11 @@ end
 
 local function DecodePayload(importStringRaw)
     if not importStringRaw or importStringRaw == "" then return nil end
+    local cleanStr = importStringRaw:gsub("^%s+", ""):gsub("%s+$", "")
     local LibDeflate = LibStub and LibStub:GetLibrary("LibDeflate", true)
 
-    if importStringRaw:sub(1, 6) == "!DLC1:" and LibDeflate then
-        local payloadStr = importStringRaw:sub(7)
+    if cleanStr:sub(1, 6) == "!DLC1:" and LibDeflate then
+        local payloadStr = cleanStr:sub(7):gsub("%s+", "")
         local decodedBytes = LibDeflate:DecodeForPrint(payloadStr)
         if decodedBytes then
             local decompressed = LibDeflate:DecompressDeflate(decodedBytes)
@@ -1365,10 +1634,10 @@ local function DecodePayload(importStringRaw)
     end
 
     -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Fallback uncompressed Base64 / raw string import support
-    if DesolateLootcouncil.Base64 and not string.find(importStringRaw, "^{") and importStringRaw:sub(1, 2) ~= "^S" then
-        return DesolateLootcouncil.Base64:Decode(importStringRaw)
+    if DesolateLootcouncil.Base64 and not string.find(cleanStr, "^{") and cleanStr:sub(1, 2) ~= "^S" then
+        return DesolateLootcouncil.Base64:Decode(cleanStr:gsub("%s+", ""))
     end
-    return importStringRaw
+    return cleanStr
 end
 
 --- Generates a serialized export string for a single raid history event.
@@ -1408,8 +1677,8 @@ function DLC_API:ExportSingleRaidHistoryEvent(indexOrSession)
             date = date("%Y-%m-%d"),
             zone = (session and session.zone) or (GetRealZoneText and GetRealZoneText()) or "Current Raid",
             attendees = attendees,
-            loot = currentLoot,
-            bossFights = DeepCopy(session.bossFights or {}),
+            awarded = currentLoot,
+            bossLogs = DeepCopy(config.bossLogs or {}),
             decayApplied = -1,
         }
     elseif type(indexOrSession) == "number" and p.AttendanceHistory and p.AttendanceHistory[indexOrSession] then
@@ -1449,9 +1718,9 @@ function DLC_API:ExportProfileData(selection)
         return res
     end
 
-    local exportAll = selection and selection["All"]
+    local exportAll = (not selection) or selection["All"]
 
-    if exportAll or selection["Config"] then
+    if exportAll or (selection and selection["Config"]) then
         data.config = {
             minLootQuality  = p.minLootQuality,
             enableAutoLoot  = p.enableAutoLoot,
@@ -1460,7 +1729,7 @@ function DLC_API:ExportProfileData(selection)
             DecayConfig     = DeepCopy(p.DecayConfig),
         }
     end
-    if exportAll or selection["Roster"] then
+    if exportAll or (selection and selection["Roster"]) then
         local playerRoster = DeepCopy(p.playerRoster)
         if playerRoster and playerRoster.decay and not next(playerRoster.decay) then
             playerRoster.decay = nil
@@ -1470,7 +1739,7 @@ function DLC_API:ExportProfileData(selection)
             playerRoster = playerRoster,
         }
     end
-    if exportAll or selection["PriorityRankings"] or selection["PriorityLists"] or selection["PriorityContent"] then
+    if exportAll or (selection and (selection["PriorityRankings"] or selection["PriorityLists"] or selection["PriorityContent"])) then
         data.PriorityLists = {}
         if p.PriorityLists then
             for _, list in ipairs(p.PriorityLists) do
@@ -1480,7 +1749,7 @@ function DLC_API:ExportProfileData(selection)
                 })
             end
         end
-    elseif selection["PriorityStructure"] then
+    elseif selection and selection["PriorityStructure"] then
         data.PriorityListsStructure = {}
         if p.PriorityLists then
             for _, list in ipairs(p.PriorityLists) do
@@ -1491,7 +1760,7 @@ function DLC_API:ExportProfileData(selection)
             end
         end
     end
-    if exportAll or selection["IM"] then
+    if exportAll or (selection and selection["IM"]) then
         data.ItemManagerContent = {}
         if p.PriorityLists then
             for _, list in ipairs(p.PriorityLists) do
@@ -1502,7 +1771,7 @@ function DLC_API:ExportProfileData(selection)
             end
         end
     end
-    if exportAll or selection["History"] then
+    if exportAll or (selection and selection["History"]) then
         local cleanedAttendance = {}
         if p.AttendanceHistory and type(p.AttendanceHistory) == "table" then
             for _, att in ipairs(p.AttendanceHistory) do
@@ -1697,11 +1966,33 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
 
     -- 5. History
     if data.History then
-        if data.History.session then p.session = DeepCopy(data.History.session) end
+        if data.History.session then
+            p.session = DeepCopy(data.History.session)
+            -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Sort live session awards chronologically on import
+            if p.session.awarded and type(p.session.awarded) == "table" then
+                table.sort(p.session.awarded, function(a, b)
+                    return ParseItemTimestamp(a) < ParseItemTimestamp(b)
+                end)
+            end
+            if p.session.publicAwardLog and type(p.session.publicAwardLog) == "table" then
+                table.sort(p.session.publicAwardLog, function(a, b)
+                    return ParseItemTimestamp(a) < ParseItemTimestamp(b)
+                end)
+            end
+        end
         if data.History.AttendanceHistory then
+            -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Clean, split multi-date, and sort history entries on import
+            local cleanedList = {}
+            for _, att in ipairs(data.History.AttendanceHistory) do
+                local splitList = SplitMultiDateAttendanceEntry(att, DeepCopy)
+                for _, subE in ipairs(splitList) do
+                    table.insert(cleanedList, subE)
+                end
+            end
+
             if data.SingleRaidEvent and importToCurrent then
                 p.AttendanceHistory = p.AttendanceHistory or {}
-                for _, incomingEntry in ipairs(data.History.AttendanceHistory) do
+                for _, incomingEntry in ipairs(cleanedList) do
                     local updated = false
                     if incomingEntry.sessionID then
                         for idx, localEntry in ipairs(p.AttendanceHistory) do
@@ -1717,8 +2008,15 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
                     end
                 end
             else
-                p.AttendanceHistory = DeepCopy(data.History.AttendanceHistory)
+                p.AttendanceHistory = cleanedList
             end
+
+            -- Ensure AttendanceHistory is always sorted descending by date/ID
+            table.sort(p.AttendanceHistory, function(a, b)
+                local sA = tostring(a.date or a.sessionID or "")
+                local sB = tostring(b.date or b.sessionID or "")
+                return sA > sB
+            end)
         end
         if data.History.PriorityLog then p.PriorityLog = DeepCopy(data.History.PriorityLog) end
         if data.History.SessionPositionLog then
@@ -1745,6 +2043,8 @@ end
 
 --- Calculates and applies decay to a priority list.
 ---@param listObj table
+--- Calculates and applies decay to a priority list.
+---@param listObj table
 ---@param penalty number
 ---@param absentMap table
 function DLC_API:CalculateListDecay(listObj, penalty, absentMap)
@@ -1753,6 +2053,63 @@ function DLC_API:CalculateListDecay(listObj, penalty, absentMap)
         p:CalculateListDecay(listObj, penalty, absentMap)
     end
 end
+
+--- Returns a colored difficulty badge string (e.g. |cff1eff00[NHC]|r, |cff0070dd[HC]|r, |cffff8000[M]|r, |cff00ccff[LFR]|r)
+---@param difficultyID number|string|nil
+---@param bossName string|nil
+---@return string|nil
+function DLC_API:GetDifficultyBadge(difficultyID, bossName)
+    if type(self) ~= "table" then
+        bossName = difficultyID
+        difficultyID = self
+    end
+    local diff = tonumber(difficultyID)
+    if diff == 14 or difficultyID == "NHC" or difficultyID == "Normal" then
+        return "|cff1eff00[NHC]|r"
+    elseif diff == 15 or difficultyID == "HC" or difficultyID == "Heroic" then
+        return "|cff0070dd[HC]|r"
+    elseif diff == 16 or difficultyID == "M" or difficultyID == "Mythic" then
+        return "|cffff8000[M]|r"
+    elseif diff == 17 or difficultyID == "LFR" or difficultyID == "Looking For Raid" then
+        return "|cff00ccff[LFR]|r"
+    end
+
+    if bossName and type(bossName) == "string" then
+        local lowerName = bossName:lower()
+        if lowerName:find("%(heroic%)") or lowerName:find("%[hc%]") or lowerName:find("%(hc%)") then
+            return "|cff0070dd[HC]|r"
+        elseif lowerName:find("%(mythic%)") or lowerName:find("%[m%]") or lowerName:find("%(m%)") then
+            return "|cffff8000[M]|r"
+        elseif lowerName:find("%(normal%)") or lowerName:find("%[nhc%]") or lowerName:find("%(nhc%)") then
+            return "|cff1eff00[NHC]|r"
+        elseif lowerName:find("%(lfr%)") or lowerName:find("%[lfr%]") then
+            return "|cff00ccff[LFR]|r"
+        end
+    end
+
+    return nil
+end
+
+--- Strips difficulty suffix patterns from a boss name string
+---@param bossName string
+---@return string
+function DLC_API:StripDifficultySuffix(bossName)
+    local name = (type(self) ~= "table" and self) or bossName
+    if not name or type(name) ~= "string" then return name or "" end
+    local clean = name:gsub("%s*%(%s*[Hh]eroic%s*%)", "")
+    clean = clean:gsub("%s*%(%s*[Nn]ormal%s*%)", "")
+    clean = clean:gsub("%s*%(%s*[Mm]ythic%s*%)", "")
+    clean = clean:gsub("%s*%(%s*[Nn][Hh][Cc]%s*%)", "")
+    clean = clean:gsub("%s*%(%s*[Hh][Cc]%s*%)", "")
+    clean = clean:gsub("%s*%(%s*[Mm]%s*%)", "")
+    clean = clean:gsub("%s*%(%s*[Ll][Ff][Rr]%s*%)", "")
+    clean = clean:gsub("%s*%[%s*[Nn][Hh][Cc]%s*%]", "")
+    clean = clean:gsub("%s*%[%s*[Hh][Cc]%s*%]", "")
+    clean = clean:gsub("%s*%[%s*[Mm]%s*%]", "")
+    clean = clean:gsub("%s*%[%s*[Ll][Ff][Rr]%s*%]", "")
+    return clean:match("^%s*(.-)%s*$") or clean
+end
+
 
 
 

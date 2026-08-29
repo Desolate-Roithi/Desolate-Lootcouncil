@@ -67,6 +67,10 @@ L["Decay Applied"] = true
 L["No position changes recorded."] = true
 L["Position log not available (pre-dates session tracking)."] = true
 L["... and %d more entries"] = true
+L["... and %d older entries"] = true
+L["Copy All Position Changes"] = true
+L["Position Changes Log"] = true
+L["Press Ctrl+C to copy all position changes for this session."] = true
 L["Position log only available for current session."] = true
 L["Decay disabled."] = true
 L["No decay applied yet."] = true
@@ -212,6 +216,13 @@ L["No (Keep Active)"] = true
 L["Are you sure you want to perform this action?"] = true
 L["Resume Session"] = true
 L["Resuming active raid session."] = true
+L["An active raid session from %s was found.\nWould you like to save and close the previous session and start a new one for today?"] = true
+L["Save & Start New"] = true
+L["Keep Previous"] = true
+L["Keeping previous session active."] = true
+L["The raid group has disbanded. Would you like to end and save the current raid session?"] = true
+L["End & Save Session"] = true
+L["Keep Active"] = true
 
 -- New Keys
 L["All window positions have been reset."] = true

@@ -145,6 +145,19 @@ local function FactoryLootRow(parent)
     return row
 end
 
+-- ---- Factory: button row ----
+local function FactoryButtonRow(parent)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetHeight(28)
+
+    local btn = NativeGUI:CreateButton(row, "", 220, 24, "Action")
+    btn:SetPoint("LEFT", 14, 0)
+    row.btn = btn
+
+    return row
+end
+
 -- ============================================================
 -- Helpers
 -- ============================================================
@@ -177,11 +190,12 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
         self.collapsed = { loot = false, boss = false, attend = false, positions = false, decay = false }
 
         -- Widget pools (grow lazily; cleared on each Refresh)
-        self.pHeaders  = {}   -- section header frames
-        self.pTextRows = {}   -- plain text rows
-        self.pNameTags = {}   -- attendee name tags
-        self.pLootRows = {}   -- loot item rows
-        self.pBossRows = {}   -- boss rows
+        self.pHeaders    = {}   -- section header frames
+        self.pTextRows   = {}   -- plain text rows
+        self.pNameTags   = {}   -- attendee name tags
+        self.pLootRows   = {}   -- loot item rows
+        self.pBossRows   = {}   -- boss rows
+        self.pButtonRows = {}   -- action button rows
 
         -- Dropdown
         local drop, dropBtn = NativeGUI:CreateDropdown(frame, L["Select Session"], 320, {}, nil, function(key)
@@ -330,11 +344,103 @@ function UI_RaidHistory:ShowExportWindow(exportStr)
     end)
 end
 
+function UI_RaidHistory:ShowPositionChangesCopyWindow(posChanges)
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if not self.posCopyFrame then
+        local frame = NativeGUI:CreateWindow("DLCRaidHistoryPosCopyFrame", L["Position Changes Log"], "RaidHistoryPosCopy")
+        self.posCopyFrame = frame
+
+        local desc = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -36)
+        desc:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -36)
+        desc:SetJustifyH("LEFT")
+        desc:SetWordWrap(true)
+        desc:SetText(L["Press Ctrl+C to copy all position changes for this session."])
+        self.posCopyDesc = desc
+
+        local sf, sc = NativeGUI:CreateScrollFrame(frame, -85, -50)
+        self.posCopyScrollFrame = sf
+        self.posCopyScrollContent = sc
+
+        local eb = CreateFrame("EditBox", nil, sc)
+        eb:SetMultiLine(true)
+        eb:SetMaxLetters(0)
+        eb:SetAutoFocus(false)
+        eb:SetFontObject("GameFontHighlightSmall")
+        eb:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
+
+        local isResetting = false
+        eb:SetScript("OnTextChanged", function(selfEdit)
+            if isResetting then return end
+            if selfEdit.fullText and selfEdit:GetText() ~= selfEdit.fullText then
+                isResetting = true
+                selfEdit:SetText(selfEdit.fullText)
+                isResetting = false
+            end
+        end)
+        eb:SetEnabled(true)
+        eb:SetPoint("TOPLEFT", sc, "TOPLEFT", 6, -6)
+        eb:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
+        eb:SetWidth(sf:GetWidth() - 16)
+        self.posCopyEditBox = eb
+
+        local btnClose = NativeGUI:CreateButton(frame, L["Close"], 90, 24, "Default")
+        btnClose:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 12)
+        btnClose:SetScript("OnClick", function()
+            frame:Hide()
+        end)
+    end
+
+    local textContent = table.concat(posChanges or {}, "\n")
+    self.posCopyFrame:Show()
+    self.posCopyEditBox.fullText = textContent
+    self.posCopyEditBox:SetText(textContent)
+    self.posCopyEditBox:SetWidth(self.posCopyScrollFrame:GetWidth() - 16)
+    local height = self.posCopyEditBox:GetHeight()
+    if height < 60 then height = 60 end
+    self.posCopyScrollContent:SetHeight(height + 20)
+
+    C_Timer.After(0.05, function()
+        if self.posCopyEditBox then
+            self.posCopyEditBox:SetFocus()
+            self.posCopyEditBox:HighlightText()
+        end
+    end)
+end
+
 -- ============================================================
 -- Section Renderers
 -- ============================================================
 
+local function ParseItemTimestamp(item)
+    if not item or type(item) ~= "table" then return 0 end
+    local ts = item.timestamp or item.time or item.awardedAt or item.date
+    if type(ts) == "number" then
+        return ts
+    elseif type(ts) == "string" then
+        local num = tonumber(ts)
+        if num then return num end
+        local y, m, d, h, min, s = ts:match("(%d+)-(%d+)-(%d+)%s+(%d+):(%d+):(%d+)")
+        if y then
+            local tTable = { year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = tonumber(h), min = tonumber(min), sec = tonumber(s) }
+            local parsed = time(tTable)
+            if parsed then return parsed end
+        end
+        local h2, m2, s2 = ts:match("(%d+):(%d+):(%d+)")
+        if h2 then
+            return tonumber(h2) * 3600 + tonumber(m2) * 60 + tonumber(s2)
+        end
+        local h3, m3 = ts:match("(%d+):(%d+)")
+        if h3 then
+            return tonumber(h3) * 3600 + tonumber(m3) * 60
+        end
+    end
+    return 0
+end
+
 local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme, lootCount, isOfficer)
+    NativeGUI = NativeGUI or DesolateLootcouncil:GetModule("UI_NativeGUI")
     -- Alternating stripe
     if lootCount % 2 == 0 then
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 0 })
@@ -344,8 +450,29 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
         row:SetBackdropColor(0, 0, 0, 0)
     end
 
-    -- Icon
-    row.iconTex:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+    -- Icon: Dynamically load from Blizzard Item API (matching ItemManager)
+    local itemID = item.itemID or (item.link and select(1, C_Item.GetItemInfoInstant(item.link)))
+    local itemTexture = nil
+    if itemID then
+        local _, itemLink, _, _, _, _, _, _, _, tex = C_Item.GetItemInfo(itemID)
+        if not itemLink and Item and Item.CreateFromItemID then
+            local itemObj = Item:CreateFromItemID(itemID)
+            if not itemObj:IsItemEmpty() then
+                itemObj:ContinueOnItemLoad(function()
+                    if row.iconTex and row:IsShown() then
+                        local _, _, _, _, _, _, _, _, _, loadedTex = C_Item.GetItemInfo(itemID)
+                        row.iconTex:SetTexture(loadedTex or C_Item.GetItemIconByID(itemID) or 134400)
+                    end
+                end)
+            end
+            itemTexture = C_Item.GetItemIconByID(itemID)
+        else
+            itemTexture = tex or C_Item.GetItemIconByID(itemID)
+        end
+    elseif item.link and C_Item and C_Item.GetItemInfoInstant then
+        itemTexture = select(5, C_Item.GetItemInfoInstant(item.link))
+    end
+    row.iconTex:SetTexture(itemTexture or 134400)
     row.iconBtn:SetScript("OnEnter", function()
         if item.link then
             GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
@@ -357,7 +484,10 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
 
     -- Info (item + winner)
     local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
-    local colWinner  = NativeGUI:FormatClassColor(item.winnerClass, winnerDisp)
+    local colWinner  = NativeGUI and NativeGUI.FormatClassColor and NativeGUI:FormatClassColor(item.winnerClass, winnerDisp) or winnerDisp
+
+    local ts = ParseItemTimestamp(item)
+    local timeText = (NativeGUI and NativeGUI.FormatTime and ts > 0 and NativeGUI:FormatTime(ts)) or (ts > 0 and date("%H:%M", ts)) or ""
 
     if isOfficer then
         row.btnReaward:Show()
@@ -374,12 +504,12 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
         -- Time
         row.timeLbl:ClearAllPoints()
         row.timeLbl:SetPoint("RIGHT", row.btnReaward, "LEFT", -6, 0)
-        row.timeLbl:SetText(NativeGUI:FormatTime(item.timestamp))
+        row.timeLbl:SetText(timeText)
 
         -- Vote type
         local vt    = item.voteType or "?"
         local vtCol = { 0.6, 0.6, 0.6 }
-        local vc = NativeGUI.VOTE_COLORS[vt]
+        local vc = NativeGUI and NativeGUI.VOTE_COLORS and NativeGUI.VOTE_COLORS[vt]
         if vc then vtCol = { vc.r, vc.g, vc.b } end
         row.vtLbl:Show()
         row.vtLbl:ClearAllPoints()
@@ -398,7 +528,7 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
         -- Time
         row.timeLbl:ClearAllPoints()
         row.timeLbl:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-        row.timeLbl:SetText(NativeGUI:FormatTime(item.timestamp))
+        row.timeLbl:SetText(timeText)
 
         row.infoLbl:ClearAllPoints()
         row.infoLbl:SetPoint("LEFT",  row.iconBtn, "RIGHT", 6, 0)
@@ -406,6 +536,10 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
         row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
     end
 end
+
+-- ============================================================
+-- SECTION RENDERERS
+-- ============================================================
 
 local function SetupBossTooltip(row, b, NativeGUI)
     if b.killed and b.roster and #b.roster > 0 then
@@ -442,74 +576,77 @@ local function SetupBossTooltip(row, b, NativeGUI)
     end
 end
 
-local function SetupAttendeeTooltip(nt, displayName, attendedList, NativeGUI)
-    if attendedList and #attendedList > 0 then
-        nt:SetScript("OnEnter", function()
-            GameTooltip:SetOwner(nt, "ANCHOR_TOP")
-            GameTooltip:ClearLines()
-            GameTooltip:AddLine(displayName, 1, 1, 1)
-            GameTooltip:AddLine(" ", 1, 1, 1)
-            GameTooltip:AddLine("Characters Attended:", 0.93, 0.65, 0.37)
-            for _, char in ipairs(attendedList) do
-                local classColor = NativeGUI:GetClassColorHex(char.class)
-                local charDisp = "|c" .. classColor .. char.name .. "|r"
-                local killsStr = string.format("%d boss kills", char.kills)
-                GameTooltip:AddLine(string.format("• %s (%s, %s)", charDisp, char.class, killsStr), 0.7, 0.7, 0.7)
+local function SetupAttendeeTooltip(tagWidget, displayName, attendedList, NativeGUI)
+    tagWidget:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(tagWidget, "ANCHOR_RIGHT")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(displayName, 1, 1, 1)
+        if attendedList and #attendedList > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(L["Characters in attendance:"], 0.8, 0.8, 0.8)
+            for _, charEntry in ipairs(attendedList) do
+                local charName = charEntry.name or charEntry
+                local charClass = charEntry.class
+                local isAlt = charEntry.isAlt
+                local cIcon = NativeGUI:GetClassIconMarkup(charClass, 12)
+                local col = NativeGUI:FormatClassColor(charClass, charName)
+                local lineText = cIcon .. " " .. col
+                if isAlt then
+                    lineText = lineText .. " |cff888888(" .. L["Alt"] .. ")|r"
+                end
+                GameTooltip:AddLine(lineText, 1, 1, 1)
             end
-            GameTooltip:Show()
-        end)
-        nt:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    else
-        nt:SetScript("OnEnter", function()
-            GameTooltip:SetOwner(nt, "ANCHOR_TOP")
-            GameTooltip:ClearLines()
-            GameTooltip:AddLine(displayName, 1, 1, 1)
-            GameTooltip:AddLine("No detailed character/boss kills data available.", 0.5, 0.5, 0.5)
-            GameTooltip:Show()
-        end)
-        nt:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
+        end
+        GameTooltip:Show()
+    end)
+    tagWidget:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
 local function SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, db, API)
-    local displayName = API:GetDisplayName(rawName)
-    local chars = sessionEntry.attendeeDetails and sessionEntry.attendeeDetails[rawName]
+    local displayName = DesolateLootcouncil:GetDisplayName(rawName)
+    local details = sessionEntry.attendeeDetails and sessionEntry.attendeeDetails[rawName]
 
-    if chars and next(chars) ~= nil then
-        local maxKills = -1
-        local bestClass = nil
+    if details then
+        local mainClass = details.mainClass or (db.MainRoster and db.MainRoster[rawName] and db.MainRoster[rawName].class) or "WARRIOR"
+        local icon = NativeGUI:GetClassIconMarkup(mainClass, 13)
+        local colName = NativeGUI:FormatClassColor(mainClass, displayName)
+        nt.lbl:SetText("- " .. icon .. " " .. colName)
+
         local attendedList = {}
-        local iconMarkups = ""
-
-        local charNames = {}
-        for cName in pairs(chars) do
-            table.insert(charNames, cName)
-        end
-        table.sort(charNames)
-
-        for _, cName in ipairs(charNames) do
-            local cData = chars[cName]
-            local charClass = cData.class or "WARRIOR"
-            local kills = cData.kills or 0
-
-            iconMarkups = iconMarkups .. NativeGUI:GetClassIconMarkup(charClass, 13)
-
-            if kills > maxKills then
-                maxKills = kills
-                bestClass = charClass
+        if details.attendedChars then
+            for charName, charData in pairs(details.attendedChars) do
+                if type(charData) == "table" then
+                    table.insert(attendedList, {
+                        name  = charName,
+                        class = charData.class or "WARRIOR",
+                        isAlt = charData.isAlt or false
+                    })
+                else
+                    local charClass = API:GetUnitClass(charName) or "WARRIOR"
+                    local isAlt = (rawName ~= charName)
+                    table.insert(attendedList, {
+                        name  = charName,
+                        class = charClass,
+                        isAlt = isAlt
+                    })
+                end
             end
-
-            table.insert(attendedList, { name = cName, class = charClass, kills = kills })
         end
-
-        local colName = NativeGUI:FormatClassColor(bestClass or "WARRIOR", displayName)
-        nt.lbl:SetText("- " .. iconMarkups .. " " .. colName)
+        table.sort(attendedList, function(a, b)
+            if a.isAlt ~= b.isAlt then return not a.isAlt end
+            return a.name < b.name
+        end)
 
         SetupAttendeeTooltip(nt, displayName, attendedList, NativeGUI)
     else
         local class = "WARRIOR"
-        local rData = db.MainRoster and db.MainRoster[rawName]
-        if rData and rData.class then class = rData.class end
+        local mainName = (db.playerRoster and db.playerRoster.alts and db.playerRoster.alts[rawName]) or rawName
+        local rData = db.MainRoster and (db.MainRoster[mainName] or db.MainRoster[rawName] or db.MainRoster[displayName])
+        if rData and rData.class then
+            class = rData.class
+        elseif db.playerRoster and db.playerRoster.classMap then
+            class = db.playerRoster.classMap[rawName] or db.playerRoster.classMap[mainName] or class
+        end
         local icon = NativeGUI:GetClassIconMarkup(class, 13)
         local colName = NativeGUI:FormatClassColor(class, displayName)
         nt.lbl:SetText("- " .. icon .. " " .. colName)
@@ -525,6 +662,7 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
         return
     end
 
+    NativeGUI = NativeGUI or DesolateLootcouncil:GetModule("UI_NativeGUI")
     local API = DesolateLootcouncil.API
     local awarded
     local checkTimestamp = false
@@ -533,8 +671,8 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
         if isCurrent then
             awarded = API:GetAwardedList()
         else
-            if sessionEntry.awarded then
-                awarded = sessionEntry.awarded
+            if sessionEntry.awarded or sessionEntry.loot then
+                awarded = sessionEntry.awarded or sessionEntry.loot
             else
                 awarded = API:GetAwardedList()
                 checkTimestamp = true
@@ -545,8 +683,8 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
             local db = DesolateLootcouncil.db.profile
             awarded = db.session and db.session.publicAwardLog or {}
         else
-            if sessionEntry.publicAwardLog then
-                awarded = sessionEntry.publicAwardLog
+            if sessionEntry.publicAwardLog or sessionEntry.publicLoot then
+                awarded = sessionEntry.publicAwardLog or sessionEntry.publicLoot
             else
                 local db = DesolateLootcouncil.db.profile
                 awarded = db.session and db.session.publicAwardLog or {}
@@ -557,25 +695,42 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
     local lootCount         = 0
     local sessionDatePrefix = sessionEntry.date and sessionEntry.date:sub(1, 10)
 
-    for awardIdx, item in ipairs(awarded) do
-        local include
-        if checkTimestamp then
-            local d = item.timestamp and date("%Y-%m-%d", item.timestamp)
-            include = (d and sessionDatePrefix and d == sessionDatePrefix) or false
-        else
-            include = true
+    local itemsToRender = {}
+    if type(awarded) == "table" then
+        for awardIdx, item in pairs(awarded) do
+            local numIdx = tonumber(awardIdx) or 999
+            local include = true
+            if checkTimestamp then
+                local ts = ParseItemTimestamp(item)
+                local d = ts > 0 and date("%Y-%m-%d", ts)
+                include = (d and sessionDatePrefix and d == sessionDatePrefix) or false
+            end
+
+            if include then
+                table.insert(itemsToRender, { item = item, origIdx = numIdx })
+            end
         end
+    end
 
-        if include then
-            lootCount = lootCount + 1
-            local row = NextLootRow()
-            row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  0,   -layoutState.yOffset)
-            row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
-
-            SetupLootRow(row, item, awardIdx, self, NativeGUI, theme, lootCount, isOfficer)
-
-            layoutState.yOffset = layoutState.yOffset + 32
+    -- Always order awarded loot chronologically by timestamp ascending
+    table.sort(itemsToRender, function(a, b)
+        local tA = ParseItemTimestamp(a.item)
+        local tB = ParseItemTimestamp(b.item)
+        if tA ~= tB then
+            return tA < tB
         end
+        return (a.origIdx or 0) < (b.origIdx or 0)
+    end)
+
+    for _, entry in ipairs(itemsToRender) do
+        lootCount = lootCount + 1
+        local row = NextLootRow()
+        row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  0,   -layoutState.yOffset)
+        row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
+
+        SetupLootRow(row, entry.item, entry.origIdx, self, NativeGUI, theme, lootCount, isOfficer)
+
+        layoutState.yOffset = layoutState.yOffset + 32
     end
 
     if lootCount == 0 then
@@ -592,6 +747,7 @@ function UI_RaidHistory:RenderBossSection(sc, theme, NativeGUI, sessionEntry, la
         return
     end
 
+    NativeGUI = NativeGUI or DesolateLootcouncil:GetModule("UI_NativeGUI")
     local bossLogs = sessionEntry.bossLogs
     if not bossLogs or #bossLogs == 0 then
         AddText(L["No boss logs recorded for this session."], 14, { 0.5, 0.5, 0.5 })
@@ -599,7 +755,29 @@ function UI_RaidHistory:RenderBossSection(sc, theme, NativeGUI, sessionEntry, la
         return
     end
 
-    for _, b in ipairs(bossLogs) do
+    local sortedBosses = {}
+    for origIdx, b in ipairs(bossLogs) do
+        table.insert(sortedBosses, { boss = b, origIdx = origIdx })
+    end
+
+    -- Order killed bosses chronologically by timestamp (killedTime) ascending, placing unkilled afterward
+    table.sort(sortedBosses, function(a, b)
+        local kA = (a.boss.killed and a.boss.killedTime) or nil
+        local kB = (b.boss.killed and b.boss.killedTime) or nil
+        if kA and kB then
+            if kA ~= kB then return kA < kB end
+            return a.origIdx < b.origIdx
+        elseif kA and not kB then
+            return true
+        elseif not kA and kB then
+            return false
+        else
+            return a.origIdx < b.origIdx
+        end
+    end)
+
+    for _, entry in ipairs(sortedBosses) do
+        local b = entry.boss
         local row = NextBossRow()
         row:SetPoint("TOPLEFT",  sc, "TOPLEFT",  14, -layoutState.yOffset)
         row:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
@@ -607,7 +785,7 @@ function UI_RaidHistory:RenderBossSection(sc, theme, NativeGUI, sessionEntry, la
         -- Icon: boss skull
         row.iconTex:SetTexture("Interface\\Icons\\inv_misc_skull_02")
 
-        -- Construct display text
+        -- Construct display text (session pulls)
         local statusStr, statusColor
         if b.killed then
             local timeStr = b.killedTime and date("%H:%M", b.killedTime) or "?"
@@ -618,7 +796,28 @@ function UI_RaidHistory:RenderBossSection(sc, theme, NativeGUI, sessionEntry, la
             statusColor = "|cffff3030" -- red
         end
 
-        local displayName = string.format("%s - Pulls: %d (%s%s|r)", b.name, b.pulls or 1, statusColor, statusStr)
+        local API = DesolateLootcouncil.API
+        local diffBadge = (API and API.GetDifficultyBadge and API:GetDifficultyBadge(b.difficultyID, b.name))
+        if not diffBadge or diffBadge == "" then
+            local diff = tonumber(b.difficultyID)
+            if diff == 14 or b.difficultyID == "NHC" or b.difficultyID == "Normal" then
+                diffBadge = "|cff1eff00[NHC]|r"
+            elseif diff == 15 or b.difficultyID == "HC" or b.difficultyID == "Heroic" then
+                diffBadge = "|cff0070dd[HC]|r"
+            elseif diff == 16 or b.difficultyID == "M" or b.difficultyID == "Mythic" then
+                diffBadge = "|cffff8000[M]|r"
+            elseif diff == 17 or b.difficultyID == "LFR" then
+                diffBadge = "|cff00ccff[LFR]|r"
+            end
+        end
+        local cleanName = (API and API.StripDifficultySuffix and API:StripDifficultySuffix(b.name)) or b.name
+
+        local displayName
+        if diffBadge and diffBadge ~= "" then
+            displayName = string.format("%s %s - Pulls: %d (%s%s|r)", cleanName, diffBadge, b.pulls or 1, statusColor, statusStr)
+        else
+            displayName = string.format("%s - Pulls: %d (%s%s|r)", cleanName, b.pulls or 1, statusColor, statusStr)
+        end
         row.lbl:SetText(displayName)
 
         -- Tooltip for the kill roster
@@ -687,7 +886,7 @@ local function IsDecayLogEntry(entry)
     return entry:find("[Decay]", 1, true) ~= nil or entry:find("[Verfall]", 1, true) ~= nil
 end
 
-function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader)
+function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader, NextButtonRow)
     local posCollapsed = AddHeader("positions", SECTION_ICONS.positions, L["Position Changes"])
     if posCollapsed then
         layoutState.yOffset = layoutState.yOffset + 6
@@ -708,14 +907,25 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
     end
 
     if #posChanges > 0 then
-        -- Show newest-first, cap at 30
-        local startIdx = math.max(1, #posChanges - 29)
+        -- Show newest-first, cap inline display at 10
+        local startIdx = math.max(1, #posChanges - 9)
         for i = #posChanges, startIdx, -1 do
             AddText(posChanges[i], 14)
         end
-        if #posChanges > 30 then
-            AddText(string.format(L["... and %d more entries"], #posChanges - 30),
+        if #posChanges > 10 then
+            AddText(string.format(L["... and %d older entries"], #posChanges - 10),
                 14, { 0.5, 0.5, 0.5 })
+        end
+
+        if NextButtonRow then
+            local btnRow = NextButtonRow()
+            btnRow:SetPoint("TOPLEFT",  sc, "TOPLEFT",  14, -layoutState.yOffset)
+            btnRow:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
+            btnRow.btn:SetText(L["Copy All Position Changes"])
+            btnRow.btn:SetScript("OnClick", function()
+                self:ShowPositionChangesCopyWindow(posChanges)
+            end)
+            layoutState.yOffset = layoutState.yOffset + 30
         end
     elseif not isCurrent and not sessionEntry.sessionID then
         -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Notice for pre-session tracking legacy records
@@ -834,9 +1044,10 @@ function UI_RaidHistory:Refresh()
     PoolReset(self.pNameTags)
     PoolReset(self.pLootRows)
     PoolReset(self.pBossRows)
+    if self.pButtonRows then PoolReset(self.pButtonRows) end
 
     -- Pool cursors
-    local hN, tN, nN, lN, bN = 0, 0, 0, 0, 0
+    local hN, tN, nN, lN, bN, btnN = 0, 0, 0, 0, 0, 0
 
     local sc     = self.scrollContent
     local API    = DesolateLootcouncil.API
@@ -880,6 +1091,13 @@ function UI_RaidHistory:Refresh()
     local function NextBossRow()
         bN = bN + 1
         return PoolGet(self.pBossRows, bN, FactoryBossRow, sc)
+    end
+
+    -- ---- Helper: next pooled button row ----
+    local function NextButtonRow()
+        btnN = btnN + 1
+        self.pButtonRows = self.pButtonRows or {}
+        return PoolGet(self.pButtonRows, btnN, FactoryButtonRow, sc)
     end
 
     -- ---- Helper: add a plain text row ----
@@ -976,7 +1194,7 @@ function UI_RaidHistory:Refresh()
     -- SECTION 3 — PRIORITY POSITION CHANGES
     -- ================================================================
     if DesolateLootcouncil:AmIOfficerOrLM() then
-        self:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader)
+        self:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader, NextButtonRow)
     end
 
     -- ================================================================
