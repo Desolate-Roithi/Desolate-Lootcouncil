@@ -373,6 +373,17 @@ end
 function UI_Theme:ApplyThemeToAllOpenWindows()
     local clientLootList = DesolateLootcouncil.API and DesolateLootcouncil.API.GetBiddingList and DesolateLootcouncil.API:GetBiddingList()
 
+    -- 1. Universal Native Window Styling
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI", true)
+    if NativeGUI and NativeGUI.registeredWindows then
+        for winFrame in pairs(NativeGUI.registeredWindows) do
+            if winFrame and winFrame.IsShown and winFrame:IsShown() then
+                self:StyleNativeWindow(winFrame)
+            end
+        end
+    end
+
+    -- 2. Module-specific dynamic re-renders
     -- Settings Window
     local SettingsUI = DesolateLootcouncil:GetModule("UI_Settings", true)
     if SettingsUI and SettingsUI.settingsFrame and SettingsUI.settingsFrame:IsShown() then
@@ -380,10 +391,23 @@ function UI_Theme:ApplyThemeToAllOpenWindows()
         if SettingsUI.sidebar then
             local theme = self:GetActiveTheme()
             SettingsUI.sidebar:SetBackdropColor(theme.bg[1] * 0.6, theme.bg[2] * 0.6, theme.bg[3] * 0.6, 0.5)
-            SettingsUI.sidebar:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4,
-                0.5)
+            SettingsUI.sidebar:SetBackdropBorderColor(theme.border[1] * 0.4, theme.border[2] * 0.4, theme.border[3] * 0.4, 0.5)
         end
         SettingsUI:RenderTabs()
+    end
+
+    -- Item Manager Window
+    local ItemManagerUI = DesolateLootcouncil:GetModule("UI_ItemManager", true)
+    if ItemManagerUI and ItemManagerUI.frame and ItemManagerUI.frame:IsShown() then
+        self:StyleNativeWindow(ItemManagerUI.frame)
+        if ItemManagerUI.RefreshWindow then ItemManagerUI:RefreshWindow() end
+    end
+
+    -- Raid History Window
+    local RaidHistoryUI = DesolateLootcouncil:GetModule("UI_RaidHistory", true)
+    if RaidHistoryUI and RaidHistoryUI.frame and RaidHistoryUI.frame:IsShown() then
+        self:StyleNativeWindow(RaidHistoryUI.frame)
+        if RaidHistoryUI.Refresh then RaidHistoryUI:Refresh() end
     end
 
     -- Loot Window
@@ -432,10 +456,19 @@ function UI_Theme:ApplyThemeToAllOpenWindows()
         TradeUI:ShowTradeListWindow()
     end
 
-    -- History Window
+    -- Session History Window
     local HistoryUI = DesolateLootcouncil:GetModule("UI_History", true)
-    if HistoryUI and HistoryUI.historyFrame and HistoryUI.historyFrame.frame and HistoryUI.historyFrame.frame:IsShown() then
-        self:StyleNativeWindow(HistoryUI.historyFrame.frame)
-        HistoryUI:ShowHistoryWindow()
+    if HistoryUI and HistoryUI.historyFrame then
+        local hf = HistoryUI.historyFrame.frame or HistoryUI.historyFrame
+        if hf and hf.IsShown and hf:IsShown() then
+            self:StyleNativeWindow(hf)
+            if HistoryUI.ShowHistoryWindow then HistoryUI:ShowHistoryWindow() end
+        end
+    end
+
+    -- Priority Override Window
+    local OverrideUI = DesolateLootcouncil:GetModule("UI_PriorityOverride", true)
+    if OverrideUI and OverrideUI.priorityOverrideFrame and OverrideUI.priorityOverrideFrame:IsShown() then
+        self:StyleNativeWindow(OverrideUI.priorityOverrideFrame)
     end
 end

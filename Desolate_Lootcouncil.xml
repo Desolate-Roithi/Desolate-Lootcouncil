@@ -6,9 +6,12 @@
     <!-- 1. Core -->
     <Script file="Core\Addon.lua"/>
     <Script file="Core\Constants.lua"/>
+    <Script file="Core\DBMigrator.lua"/>
 
     <!-- 2. Utilities -->
     <Script file="Utilities\Logger.lua"/>
+    <Script file="Utilities\Legacy.lua"/>
+    <Script file="Utilities\Serializer.lua"/>
     <Script file="Utilities\Persistence.lua"/>
     <Script file="Utilities\Debug.lua"/>
     <Script file="Utilities\Simulation.lua"/>
@@ -31,12 +34,15 @@
     <Script file="UI\Settings\ProfileSettings.lua"/>
 
     <!-- 5. Systems -->
+    <Script file="Systems\ItemCatalog.lua"/>
     <Script file="Systems\Priority.lua"/>
     <Script file="Systems\Loot.lua"/>
     <Script file="Systems\Session.lua"/>
     <Script file="Systems\Autopass.lua"/>
     <Script file="Systems\Roster.lua"/>
+    <Script file="Systems\Attendance.lua"/>
     <Script file="Systems\Trade.lua"/>
+    <Script file="Systems\TestSuite.lua"/>
 
     <!-- 6. API Facade (loaded after all Systems, before any UI) -->
     <Script file="Core\API.lua"/>
@@ -67,4 +73,5 @@
     <Script file="UI\Windows\UnassignedPlayers.lua"/>
     <Script file="UI\Windows\Voting.lua"/>
     <Script file="UI\Windows\Settings.lua"/>
+    <Script file="UI\Windows\TestSuite.lua"/>
 </Ui>

@@ -843,3 +843,26 @@ function SyncHandlers:LM_UPDATE_CONFIGURED(payload, sender)
         Session:HandleUpdateConfigured(payload, sender)
     end
 end
+
+function Sync:SyncItemManagerToRaid(isManual)
+    if isManual == nil then isManual = true end
+    if not isManual and IsInRaid() and GetNumGroupMembers() < 10 then
+        return
+    end
+    local db = DesolateLootcouncil.db.profile
+    local lists = {}
+    for _, listObj in ipairs(db.PriorityLists or {}) do
+        if listObj.name and listObj.items then
+            lists[listObj.name] = listObj.items
+        end
+    end
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm then
+        Comm:SendComm("IM_SYNC", { lists = lists, isManual = isManual })
+    end
+end
+
+function Sync:AutoSyncItemManager()
+    self:SyncItemManagerToRaid(false)
+end
+

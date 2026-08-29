@@ -57,24 +57,7 @@ function UI_PriorityLogHistory:ShowLogWindow()
         if self.emptyLabel then self.emptyLabel:Hide() end
 
         if not self.editBox then
-            local eb = CreateFrame("EditBox", nil, self.scrollContent)
-            eb:SetMultiLine(true)
-            eb:SetMaxLetters(0)
-            eb:SetAutoFocus(false)
-            eb:SetFontObject("GameFontHighlightSmall")
-            eb:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
-            
-            local isResetting = false
-            eb:SetScript("OnTextChanged", function(selfEdit)
-                if isResetting then return end
-                if selfEdit.fullText and selfEdit:GetText() ~= selfEdit.fullText then
-                    isResetting = true
-                    selfEdit:SetText(selfEdit.fullText)
-                    isResetting = false
-                end
-            end)
-            eb:SetEnabled(true)
-            self.editBox = eb
+            self.editBox = NativeGUI:CreateReadOnlyCopyBox(self.scrollContent)
         end
 
         self.editBox:ClearAllPoints()

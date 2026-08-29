@@ -70,10 +70,12 @@ function Loot:OnEnable()
     end
 end
 
--- --- Item Categorization (Merged from ItemManager) --- --
+-- --- Item Categorization (Delegated to ItemCatalog) --- --
 
 ---@param link number|string
 function Loot:GetItemIDFromLink(link)
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.GetItemIDFromLink then return Catalog:GetItemIDFromLink(link) end
     if not link then return nil end
     if type(link) == "number" then return link end
     local id = string.match(link, "item:(%d+)")
@@ -81,96 +83,29 @@ function Loot:GetItemIDFromLink(link)
 end
 
 function Loot:GetItemCategory(itemID)
-    local db = DesolateLootcouncil.db.profile
-    if not db or not db.PriorityLists then return "Junk/Pass" end
-    if not itemID then return "Junk/Pass" end
-
-    local searchID = tonumber(itemID)
-    if not searchID then return "Junk/Pass" end
-
-    for _, list in ipairs(db.PriorityLists) do
-        if list.items then
-            for storedID, _ in pairs(list.items) do
-                if tonumber(storedID) == searchID then
-                    return list.name
-                end
-            end
-        end
-    end
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.GetItemCategory then return Catalog:GetItemCategory(itemID) end
     return "Junk/Pass"
 end
 
 function Loot:SetItemCategory(itemID, targetListIndex)
-    local db = DesolateLootcouncil.db.profile
-    if not db or not db.PriorityLists then return end
-
-    itemID = tonumber(itemID)
-    if not itemID then return end
-    if not db.PriorityLists[targetListIndex] then return end
-
-    -- Remove from others
-    for i, list in ipairs(db.PriorityLists) do
-        if list.items and list.items[itemID] then
-            if i ~= targetListIndex then
-                list.items[itemID] = nil
-                DesolateLootcouncil.API:MarkIMDirty(list.name)
-            else
-                -- Already here
-                return
-            end
-        end
-    end
-
-    -- Add to target
-    local targetList = db.PriorityLists[targetListIndex]
-    if not targetList.items then targetList.items = {} end
-    targetList.items[itemID] = true
-    DesolateLootcouncil.API:MarkIMDirty(targetList.name)
-
-    DesolateLootcouncil:DLC_Log(string.format(L["Added Item %d to '%s'"], itemID, targetList.name))
-    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.SetItemCategory then Catalog:SetItemCategory(itemID, targetListIndex) end
 end
 
 function Loot:UnassignItem(itemID)
-    local db = DesolateLootcouncil.db.profile
-    if not db or not db.PriorityLists then return end
-    local searchID = tonumber(itemID)
-    if not searchID then return end
-    for _, list in ipairs(db.PriorityLists) do
-        if list.items then
-            for storedID, _ in pairs(list.items) do
-                if tonumber(storedID) == searchID then
-                    list.items[storedID] = nil
-                    DesolateLootcouncil.API:MarkIMDirty(list.name)
-                end
-            end
-        end
-    end
-    DesolateLootcouncil:DLC_Log(L["Item unassigned from all priority lists."])
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.UnassignItem then Catalog:UnassignItem(itemID) end
 end
 
 function Loot:AddItemToList(rawLink, listIndex)
-    local itemID = self:GetItemIDFromLink(rawLink)
-    if itemID then
-        self:SetItemCategory(itemID, listIndex)
-    end
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.AddItemToList then Catalog:AddItemToList(rawLink, listIndex) end
 end
 
 function Loot:CategorizeItem(itemLink, fallbackQuality)
-    local itemID, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemLink)
-    if not itemID then return "Junk/Pass" end
-
-    -- Check configured DB first
-    local dbCat = self:GetItemCategory(itemID)
-    if dbCat ~= "Junk/Pass" then return dbCat end
-
-    -- Fallback Heuristics
-    if classID == 2 then return "Weapons" end -- Weapon
-    if classID == 4 then                      -- Armor
-        local quality = select(3, C_Item.GetItemInfo(itemLink)) or fallbackQuality
-        if quality and quality > 1 then return "Rest" end
-    end
-
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.CategorizeItem then return Catalog:CategorizeItem(itemLink, fallbackQuality) end
     return "Junk/Pass"
 end
 
@@ -394,6 +329,7 @@ function Loot:AddManualItem(rawLink)
         if not icon then icon = C_Item.GetItemIconByID(itemID) end
 
         local session = DesolateLootcouncil.db.profile.session
+        session.loot = session.loot or {}
         table.insert(session.loot, {
             link = link,
             itemID = itemID,

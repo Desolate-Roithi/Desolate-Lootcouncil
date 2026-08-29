@@ -37,13 +37,28 @@ function SlashCommands.Handle(input)
             DesolateLootcouncil:Print("No active voting session to show.")
         end
 
+        -- Test Suite (In-Game Testing Window)
+    elseif cmd == "testsuite" or cmd == "suite" or cmd == "dev" then
+        local UI = DesolateLootcouncil:GetModule("UI_TestSuite", true)
+        if UI and UI.ShowTestSuiteWindow then
+            UI:ShowTestSuiteWindow()
+        else
+            DesolateLootcouncil:Print("TestSuite module not available.")
+        end
+
         -- Test Items (LM Only)
     elseif cmd == "test" then
         if DesolateLootcouncil:AmILootMaster() then
             local Loot = DesolateLootcouncil:GetModule("Loot")
             if Loot and Loot.AddTestItems then Loot:AddTestItems() end
         else
-            DesolateLootcouncil:Print("Only the Loot Master can allow test items.")
+            -- If not LM, show TestSuite window
+            local UI = DesolateLootcouncil:GetModule("UI_TestSuite", true)
+            if UI and UI.ShowTestSuiteWindow then
+                UI:ShowTestSuiteWindow()
+            else
+                DesolateLootcouncil:Print("Only the Loot Master can allow test items.")
+            end
         end
 
         -- Loot Window (LM Only)

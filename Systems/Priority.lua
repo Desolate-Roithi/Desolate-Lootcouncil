@@ -90,56 +90,15 @@ function Priority:OnEnable()
         end
     end
 
-    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] DATA MIGRATION: Convert Key-Value dictionary lists to Array of Objects
-    if db.PriorityLists and not db.migrated_priority_v2 then
-        -- Check if it's the old format (Table with string keys)
-        local isOldFormat = false
-        if db.PriorityLists.Tier or db.PriorityLists.Weapons then
-            isOldFormat = true
-        end
-
-        if isOldFormat then
-            DesolateLootcouncil:DLC_Log("Migrating Priority Lists to Dynamic Format...")
-            local old = db.PriorityLists
-            local new = {}
-
-            -- Preserve Order: Tier, Weapons, Rest, Collectables
-            local order = { "Tier", "Weapons", "Rest", "Collectables" }
-            for _, key in ipairs(order) do
-                if old[key] then
-                    table.insert(new, { name = key, players = old[key] })
-                end
-            end
-
-            -- Rescue any other keys? (Unlikely, but let's stick to standard 4 for now)
-            db.PriorityLists = new
-        end
-        db.migrated_priority_v2 = true
+    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Delegate schema and format migrations to Legacy module
+    if DesolateLootcouncil.Legacy then
+        DesolateLootcouncil.Legacy:MigratePriorityLists(db)
+        DesolateLootcouncil.Legacy:MigrateMainRoster(db)
     end
 
     -- History Log Initialization
     if not db.History then db.History = {} end
     if not db.PriorityLog then db.PriorityLog = {} end
-
-    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] DATA MIGRATION: Old playerRoster.mains to MainRoster + Timestamps
-    if db.playerRoster and db.playerRoster.mains then
-        if not db.MainRoster then db.MainRoster = {} end
-        for name, _ in pairs(db.playerRoster.mains) do
-            if not db.MainRoster[name] then
-                db.MainRoster[name] = { addedAt = time() }
-            end
-        end
-        db.playerRoster.mains = nil
-    end
-
-    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Handle existing MainRoster if it's still using the old boolean format
-    if db.MainRoster then
-        for name, value in pairs(db.MainRoster) do
-            if type(value) == "boolean" then
-                db.MainRoster[name] = { addedAt = time() }
-            end
-        end
-    end
 end
 
 -- --- Globally Attached Functions ---
@@ -154,6 +113,23 @@ function Priority:GetPriorityListNames()
         end
     end
     return names
+end
+
+--- Returns the PriorityList object matching the name or index.
+---@param listNameOrIndex string|number
+---@return table?
+function Priority:GetPriorityList(listNameOrIndex)
+    if not DesolateLootcouncil.db then return nil end
+    local db = DesolateLootcouncil.db.profile
+    if not db or not db.PriorityLists then return nil end
+    if type(listNameOrIndex) == "number" then
+        return db.PriorityLists[listNameOrIndex]
+    elseif type(listNameOrIndex) == "string" then
+        for _, l in ipairs(db.PriorityLists) do
+            if l.name == listNameOrIndex then return l end
+        end
+    end
+    return nil
 end
 
 function Priority:AddPriorityList(name)
@@ -230,7 +206,7 @@ function Priority:LogPriorityChange(msg)
     -- Also log into per-session bucket (for RaidHistory display)
     -- Skip decay messages as they are stored compactly in entry.decayAbsent on the attendance record
     local API = DesolateLootcouncil.API or DesolateLootcouncil:GetModule("DLC_API", true)
-    local isDecay = false
+    local isDecay
     if API and API.IsDecayLogMessage then
         isDecay = API:IsDecayLogMessage(msg)
     else
@@ -328,7 +304,7 @@ function Priority:SyncMissingPlayers()
     local removedCount = 0
 
     for _, listObj in ipairs(db.PriorityLists) do
-        local currentList = listObj.players
+        local currentList = listObj.players or listObj.order or {}
         local listChanged = false
 
         -- 1. Add Missing (O(N+M) using Scored Sets)
@@ -614,11 +590,19 @@ end
 ---@param penalty  number Positions to decay each absent player
 ---@param absentMap table  Map of absent player names { [playerName] = true }
 function Priority:CalculateListDecay(listObj, penalty, absentMap)
-    local listName = listObj.name
+    if not listObj then return end
+    if type(listObj) == "string" or type(listObj) == "number" then
+        listObj = self:GetPriorityList(listObj)
+    end
+    if not listObj or type(listObj) ~= "table" then return end
+    local listName = listObj.name or "Unknown"
+    local players = listObj.players or listObj.order or {}
+    penalty = tonumber(penalty) or 1
+    absentMap = absentMap or {}
 
     -- Shallow-copy so we can iterate safely while mutating
     local newList = {}
-    for _, name in ipairs(listObj.players) do
+    for _, name in ipairs(players) do
         table.insert(newList, name)
     end
 
@@ -664,3 +648,118 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
     listObj.players = newList
     DesolateLootcouncil.API:MarkPriorityDirty(listName)
 end
+
+-- ---------------------------------------------------------------------------
+-- Manual Priority Moves & Decay Pattern Parsing
+-- ---------------------------------------------------------------------------
+
+--- Moves a player within a priority list and logs the change.
+---@param listKey number|string  Index or key of the priority list
+---@param fromIndex number
+---@param toIndex number
+function Priority:MovePlayerInList(listKey, fromIndex, toIndex)
+    local list = self:GetPriorityList(listKey)
+    if not list then return end
+    local players = list.players or list.order
+    if not players then return end
+
+    if fromIndex < 1 or fromIndex > #players or toIndex < 1 or toIndex > #players then return end
+
+    local player = table.remove(players, fromIndex)
+    table.insert(players, toIndex, player)
+
+    local msg = string.format("Manual Override: Moved %s from %d to %d in %s.", player, fromIndex, toIndex, list.name or tostring(listKey))
+    self:LogPriorityChange(msg)
+    if list.name and DesolateLootcouncil.API and DesolateLootcouncil.API.MarkPriorityDirty then
+        DesolateLootcouncil.API:MarkPriorityDirty(list.name)
+    end
+end
+Priority.MovePlayerInPriorityList = Priority.MovePlayerInList
+
+--- Returns a list of matchers and tags for decay log messages across all registered and active locales.
+---@return table
+function Priority:GetDecayPatterns()
+    local rawKey = "[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."
+    local templates = {}
+
+    local currentL = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil", true)
+    if currentL and currentL[rawKey] and type(currentL[rawKey]) == "string" then
+        templates[currentL[rawKey]] = true
+    end
+    templates[rawKey] = true
+
+    local AceLocale = LibStub("AceLocale-3.0", true)
+    if AceLocale and AceLocale.apps then
+        for _, appLocales in pairs(AceLocale.apps) do
+            if type(appLocales) == "table" then
+                for _, locTable in pairs(appLocales) do
+                    if type(locTable) == "table" and locTable[rawKey] and type(locTable[rawKey]) == "string" then
+                        templates[locTable[rawKey]] = true
+                    end
+                end
+            end
+        end
+    end
+
+    local list = {}
+    for template in pairs(templates) do
+        local tag = template:match("^(%b[])") or "[Decay]"
+
+        local p = template
+        p = p:gsub("%%s", "___STR___", 1)
+        p = p:gsub("%%d", "___NUM___", 1)
+        p = p:gsub("%%d", "___NUM___", 1)
+        p = p:gsub("%%s", "___ANY___", 1)
+        p = p:gsub("%%d", "___PEN___", 1)
+
+        p = p:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+
+        p = p:gsub("___STR___", "(.-)")
+        p = p:gsub("___NUM___", "%%d+")
+        p = p:gsub("___ANY___", ".-")
+        p = p:gsub("___PEN___", "(%%d+)")
+
+        table.insert(list, {
+            tag = tag,
+            matchPattern = p,
+            template = template
+        })
+    end
+
+    return list
+end
+
+--- Checks if a log message string represents an automated decay event in any registered language.
+---@param str string
+---@return boolean
+function Priority:IsDecayLogMessage(str)
+    if type(str) ~= "string" or str == "" then return false end
+    local patterns = self:GetDecayPatterns()
+    for _, item in ipairs(patterns) do
+        if str:find(item.tag, 1, true) then
+            return true
+        end
+    end
+    return str:find("[Decay]", 1, true) ~= nil or str:find("[Verfall]", 1, true) ~= nil
+end
+
+--- Parses player name and penalty from a decay log message string in any registered language.
+---@param str string
+---@return string? playerName, number? penalty
+function Priority:ParseDecayLogMessage(str)
+    if type(str) ~= "string" or str == "" then return nil, nil end
+    local cleanStr = str:gsub("^%[[^%]]+%]%s*", "")
+    local patterns = self:GetDecayPatterns()
+    for _, item in ipairs(patterns) do
+        local pName, pPen = cleanStr:match(item.matchPattern)
+        if pName then
+            return pName, tonumber(pPen)
+        end
+    end
+    local pName, pPen = cleanStr:match("%[Decay%]%s+(.-)%s+moved from position #%d+ to #%d+ in .- %(%+(%d+)")
+    if not pName then
+        pName, pPen = cleanStr:match("%[Verfall%]%s+(.-)%s+wurde von Position #%d+ auf #%d+ in .- %(%+(%d+)")
+    end
+    return pName, tonumber(pPen)
+end
+

@@ -355,4 +355,8 @@ L["Auto-switched profile to '%s' (matched Loot Master raid roster)."] = true
 L["Add as Main"] = true
 L["Link to Main"] = true
 L["Added new Priority List: %s"] = true
+L["Alt"] = true
+L["Characters in attendance:"] = true
+L["Systems/Attendance Loaded"] = true
+L["Systems/ItemCatalog Loaded"] = true
 

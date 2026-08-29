@@ -68,6 +68,39 @@ local GetRemoveValues = function()
     return DesolateLootcouncil.API:GetAllPlayersList()
 end
 
+local GetPlayerSorting = function()
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if not db or not db.MainRoster then return {} end
+
+    local mains = {}
+    for main in pairs(db.MainRoster) do
+        table.insert(mains, main)
+    end
+    table.sort(mains, function(a, b) return a:lower() < b:lower() end)
+
+    local mainToAlts = {}
+    if db.playerRoster and db.playerRoster.alts then
+        for alt, main in pairs(db.playerRoster.alts) do
+            if not mainToAlts[main] then mainToAlts[main] = {} end
+            table.insert(mainToAlts[main], alt)
+        end
+    end
+    for _, altList in pairs(mainToAlts) do
+        table.sort(altList, function(a, b) return a:lower() < b:lower() end)
+    end
+
+    local sorted = {}
+    for _, main in ipairs(mains) do
+        table.insert(sorted, main)
+        if mainToAlts[main] then
+            for _, alt in ipairs(mainToAlts[main]) do
+                table.insert(sorted, alt)
+            end
+        end
+    end
+    return sorted
+end
+
 local GetTempRemove = function()
     return RosterSettings.tempRemove
 end
@@ -80,6 +113,35 @@ local RemovePlayer = function()
     if RosterSettings.tempRemove then
         DesolateLootcouncil.API:RemovePlayer(RosterSettings.tempRemove)
         RosterSettings.tempRemove = nil
+    end
+end
+
+-- Rename Player
+local GetTempRenameSelect = function()
+    return RosterSettings.tempRenameSelect
+end
+
+local SetTempRenameSelect = function(info, val)
+    RosterSettings.tempRenameSelect = val
+end
+
+local GetTempRenameNew = function()
+    return RosterSettings.tempRenameNew or ""
+end
+
+local SetTempRenameNew = function(info, val)
+    RosterSettings.tempRenameNew = val
+end
+
+local RenamePlayerAction = function()
+    local oldName = RosterSettings.tempRenameSelect
+    local newName = RosterSettings.tempRenameNew
+    if oldName and newName and newName ~= "" then
+        local ok = DesolateLootcouncil.API:RenamePlayer(oldName, newName)
+        if ok then
+            RosterSettings.tempRenameSelect = nil
+            RosterSettings.tempRenameNew = ""
+        end
     end
 end
 
@@ -119,23 +181,23 @@ local targetMainOpt = {
     set = SetTempMain,
 }
 
-local saveBtnOpt = {
-    type = "execute",
-    name = "Add / Save",
-    desc = "Add or update the player in the roster.",
-    order = 4,
-    width = "full",
-    func = SavePlayer,
-}
-
 local isOfficerOpt = {
     type = "toggle",
     name = "Is Officer?",
-    desc = "Check if this player is an officer.",
-    order = 3.5,
+    desc = "Grant council officer permissions to this player.",
+    order = 4,
+    width = "half",
     hidden = function() return RosterSettings.tempIsAlt end,
-    get = function() return RosterSettings.tempIsOfficer end,
-    set = function(info, val) RosterSettings.tempIsOfficer = val end,
+    get = GetTempIsOfficer,
+    set = SetTempIsOfficer,
+}
+
+local saveBtnOpt = {
+    type = "execute",
+    name = "Add / Save",
+    order = 5,
+    width = "full",
+    func = SavePlayer,
 }
 
 local GetOfficerValues = function()
@@ -184,12 +246,41 @@ local officerToggleOpt = {
     set = SetOfficerToggle,
 }
 
+-- Rename Options
+local renameSelectOpt = {
+    type = "select",
+    name = "Select Player to Rename",
+    order = 1,
+    width = "double",
+    values = GetRemoveValues,
+    sorting = GetPlayerSorting,
+    get = GetTempRenameSelect,
+    set = SetTempRenameSelect,
+}
+
+local renameNewInputOpt = {
+    type = "input",
+    name = "New Name (Name-Realm)",
+    order = 2,
+    width = "normal",
+    get = GetTempRenameNew,
+    set = SetTempRenameNew,
+}
+
+local renameBtnOpt = {
+    type = "execute",
+    name = "Rename",
+    order = 3,
+    func = RenamePlayerAction,
+}
+
 local removeSelectOpt = {
     type = "select",
     name = "Select Player to Remove",
     order = 1,
     width = "double",
     values = GetRemoveValues,
+    sorting = GetPlayerSorting,
     get = GetTempRemove,
     set = SetTempRemove,
 }
@@ -214,6 +305,8 @@ function RosterSettings:OnInitialize()
     self.tempMain = nil
     self.tempRemove = nil
     self.tempOfficerSelect = nil
+    self.tempRenameSelect = nil
+    self.tempRenameNew = ""
 end
 
 function RosterSettings:GetManageGroupOptions()
@@ -244,6 +337,21 @@ function RosterSettings:GetOfficerGroupOptions()
     local args = opts.args
     args.officerSelect = officerSelectOpt
     args.officerToggle = officerToggleOpt
+    return opts
+end
+
+function RosterSettings:GetRenameGroupOptions()
+    local opts = {
+        type = "group",
+        name = "Rename Player",
+        order = 1.8,
+        inline = true,
+        args = {}
+    }
+    local args = opts.args
+    args.renameSelect = renameSelectOpt
+    args.renameNewName = renameNewInputOpt
+    args.renameBtn = renameBtnOpt
     return opts
 end
 
@@ -318,6 +426,7 @@ function RosterSettings:GetOptions()
             unassignedGroup = self:GetUnassignedGroupOptions(),
             manageGroup = self:GetManageGroupOptions(),
             officerGroup = self:GetOfficerGroupOptions(),
+            renameGroup = self:GetRenameGroupOptions(),
             removeGroup = self:GetRemoveGroupOptions(),
             displayGroup = self:GetDisplayGroupOptions()
         }

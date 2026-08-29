@@ -448,7 +448,14 @@ function UI_NativeGUI:CreateWindow(name, titleText, widthOrWindowName, height, w
     -- Persistence Integration
     DesolateLootcouncil:RestoreFramePosition(frame, winName)
 
+    self.registeredWindows = self.registeredWindows or {}
+    self.registeredWindows[frame] = true
+
     frame:HookScript("OnShow", function()
+        local Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+        if Theme and Theme.StyleNativeWindow then
+            Theme:StyleNativeWindow(frame)
+        end
         if frame.startCollapsed then
             C_Timer.After(0.05, function()
                 if frame.startCollapsed and not frame.isCollapsed then
@@ -483,6 +490,8 @@ function UI_NativeGUI:AcquireRow(rowPool, index, parent, isActive)
         rowPool[index] = self:CreateRowContainer(parent, isActive)
     end
     local row = rowPool[index]
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+    self:StyleRowBackdrop(row, theme, isActive)
     row:Show()
     return row
 end
@@ -806,6 +815,29 @@ function UI_NativeGUI:CreateEditBox(parent, labelText)
 
     container.editbox = eb
     return container, eb
+end
+
+--- Creates a multiline read-only copyable editbox that prevents typing mutations while allowing Ctrl+C selection.
+---@param parent Frame
+---@return EditBox
+function UI_NativeGUI:CreateReadOnlyCopyBox(parent)
+    local eb = CreateFrame("EditBox", nil, parent)
+    eb:SetMultiLine(true)
+    eb:SetMaxLetters(0)
+    eb:SetAutoFocus(false)
+    eb:SetFontObject("GameFontHighlightSmall")
+    eb:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
+    local isResetting = false
+    eb:SetScript("OnTextChanged", function(selfEdit)
+        if isResetting then return end
+        if selfEdit.fullText and selfEdit:GetText() ~= selfEdit.fullText then
+            isResetting = true
+            selfEdit:SetText(selfEdit.fullText)
+            isResetting = false
+        end
+    end)
+    eb:SetEnabled(true)
+    return eb
 end
 
 --- Creates a flat, taint-free dropdown button and selection popup frame.

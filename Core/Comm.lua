@@ -238,8 +238,11 @@ function Comm:SendVersionCheck()
 
     -- 1. Explicitly update self (Always refresh local state even if throttled)
     local myName = UnitName("player")
+    self.playerVersions = self.playerVersions or {}
+    self.playerEnchantingSkill = self.playerEnchantingSkill or {}
+    self.playerAutopassStates = self.playerAutopassStates or {}
     self.playerVersions[myName] = DesolateLootcouncil.version
-    local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
+    local mySkill = (DesolateLootcouncil.GetEnchantingSkillLevel and DesolateLootcouncil:GetEnchantingSkillLevel()) or 0
     self.playerEnchantingSkill[myName] = mySkill
     self.playerAutopassStates[myName] = DesolateLootcouncil.sessionAutopassActive
 
@@ -267,7 +270,8 @@ end
 --- Returns how many seconds remain in the version check cooldown (0 if ready).
 --- Safe to call at any time with no side effects.
 function Comm:GetVersionCheckRemaining()
-    local remaining = VERSION_CHECK_COOLDOWN - (GetTime() - self.lastVersionCheck)
+    local last = self.lastVersionCheck or 0
+    local remaining = VERSION_CHECK_COOLDOWN - (GetTime() - last)
     return remaining > 0 and remaining or 0
 end
 
@@ -282,12 +286,13 @@ function Comm:SeedSelf()
     if not myName or myName == "Unknown Entity" then return end
     if self.playerVersions[myName] then return end -- already seeded
     local myVersion = DesolateLootcouncil.version or "0.0.0"
-    local mySkill = DesolateLootcouncil:GetEnchantingSkillLevel()
+    local mySkill = (DesolateLootcouncil.GetEnchantingSkillLevel and DesolateLootcouncil:GetEnchantingSkillLevel()) or 0
     self:UpdatePlayerInfo(myName, myVersion, mySkill)
     DesolateLootcouncil:DLC_Log("[Conn] Self-seeded " .. myName .. " as version " .. myVersion)
 end
 
 function Comm:GetActiveUserCount()
+    if not self.playerVersions then return 0 end
     local count = 0
     for _ in pairs(self.playerVersions) do
         count = count + 1

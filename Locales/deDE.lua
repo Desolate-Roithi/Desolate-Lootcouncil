@@ -386,5 +386,9 @@ L["Auto-switched profile to '%s' (matched Loot Master raid roster)."] = "Profil 
 L["Add as Main"] = "Als Main hinzufügen"
 L["Link to Main"] = "Als Alt verknüpfen"
 L["Added new Priority List: %s"] = "Neue Prioritätsliste hinzugefügt: %s"
+L["Alt"] = "Alt"
+L["Characters in attendance:"] = "Anwesende Charaktere:"
+L["Systems/Attendance Loaded"] = "Systems/Attendance geladen"
+L["Systems/ItemCatalog Loaded"] = "Systems/ItemCatalog geladen"
 
 

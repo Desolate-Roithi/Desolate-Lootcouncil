@@ -8,7 +8,7 @@ local UI_Voting  = DesolateLootcouncil:NewModule("UI_Voting", "AceEvent-3.0")
 local L          = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local VOTE_TEXT  = { [1] = L["Bid"], [2] = L["Roll"], [3] = L["Offspec"], [4] = L["T-Mog"], [5] = L["Pass"] }
 local VOTE_COLOR = setmetatable({}, {
-    __index = function(_, key)
+    __index = function(tbl, key)
         local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
         local vc = NativeGUI and NativeGUI.VOTE_COLORS and NativeGUI.VOTE_COLORS[key]
         return vc and vc.hex or "|cffffffff"

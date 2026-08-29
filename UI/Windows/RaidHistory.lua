@@ -299,23 +299,7 @@ function UI_RaidHistory:ShowExportWindow(exportStr)
         self.exportScrollFrame = sf
         self.exportScrollContent = sc
 
-        local eb = CreateFrame("EditBox", nil, sc)
-        eb:SetMultiLine(true)
-        eb:SetMaxLetters(0)
-        eb:SetAutoFocus(false)
-        eb:SetFontObject("GameFontHighlightSmall")
-        eb:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
-
-        local isResetting = false
-        eb:SetScript("OnTextChanged", function(selfEdit)
-            if isResetting then return end
-            if selfEdit.fullText and selfEdit:GetText() ~= selfEdit.fullText then
-                isResetting = true
-                selfEdit:SetText(selfEdit.fullText)
-                isResetting = false
-            end
-        end)
-        eb:SetEnabled(true)
+        local eb = NativeGUI:CreateReadOnlyCopyBox(sc)
         eb:SetPoint("TOPLEFT", sc, "TOPLEFT", 6, -6)
         eb:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
         eb:SetWidth(sf:GetWidth() - 16)
@@ -363,23 +347,7 @@ function UI_RaidHistory:ShowPositionChangesCopyWindow(posChanges)
         self.posCopyScrollFrame = sf
         self.posCopyScrollContent = sc
 
-        local eb = CreateFrame("EditBox", nil, sc)
-        eb:SetMultiLine(true)
-        eb:SetMaxLetters(0)
-        eb:SetAutoFocus(false)
-        eb:SetFontObject("GameFontHighlightSmall")
-        eb:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
-
-        local isResetting = false
-        eb:SetScript("OnTextChanged", function(selfEdit)
-            if isResetting then return end
-            if selfEdit.fullText and selfEdit:GetText() ~= selfEdit.fullText then
-                isResetting = true
-                selfEdit:SetText(selfEdit.fullText)
-                isResetting = false
-            end
-        end)
-        eb:SetEnabled(true)
+        local eb = NativeGUI:CreateReadOnlyCopyBox(sc)
         eb:SetPoint("TOPLEFT", sc, "TOPLEFT", 6, -6)
         eb:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
         eb:SetWidth(sf:GetWidth() - 16)
@@ -414,29 +382,11 @@ end
 -- ============================================================
 
 local function ParseItemTimestamp(item)
-    if not item or type(item) ~= "table" then return 0 end
-    local ts = item.timestamp or item.time or item.awardedAt or item.date
-    if type(ts) == "number" then
-        return ts
-    elseif type(ts) == "string" then
-        local num = tonumber(ts)
-        if num then return num end
-        local y, m, d, h, min, s = ts:match("(%d+)-(%d+)-(%d+)%s+(%d+):(%d+):(%d+)")
-        if y then
-            local tTable = { year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = tonumber(h), min = tonumber(min), sec = tonumber(s) }
-            local parsed = time(tTable)
-            if parsed then return parsed end
-        end
-        local h2, m2, s2 = ts:match("(%d+):(%d+):(%d+)")
-        if h2 then
-            return tonumber(h2) * 3600 + tonumber(m2) * 60 + tonumber(s2)
-        end
-        local h3, m3 = ts:match("(%d+):(%d+)")
-        if h3 then
-            return tonumber(h3) * 3600 + tonumber(m3) * 60
-        end
+    if DesolateLootcouncil.API and DesolateLootcouncil.API.ParseItemTimestamp then
+        return DesolateLootcouncil.API:ParseItemTimestamp(item)
     end
-    return 0
+    if not item or type(item) ~= "table" then return 0 end
+    return tonumber(item.timestamp) or 0
 end
 
 local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme, lootCount, isOfficer)

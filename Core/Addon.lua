@@ -185,8 +185,11 @@ function DesolateLootcouncil:OnInitialize()
     self:RegisterChatCommand("dlc", function(input) self.SlashCommands.Handle(input) end)
     self:RegisterChatCommand("dl", function(input) self.SlashCommands.Handle(input) end)
 
-    -- 8. Welcome Message
+    -- 8. Welcome Message & 2.0 DB Sanitization
     if not self.db.profile.positions then self.db.profile.positions = {} end
+    if self.DBMigrator and self.DBMigrator.SanitizeProfileDatabase then
+        self.DBMigrator:SanitizeProfileDatabase(self.db.profile)
+    end
     if self.API and self.API.CompactRaidHistory then
         self.API:CompactRaidHistory()
     end
@@ -199,6 +202,10 @@ function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
     end
     if not self.db.profile.positions then
         self.db.profile.positions = {}
+    end
+
+    if self.DBMigrator and self.DBMigrator.SanitizeProfileDatabase then
+        self.DBMigrator:SanitizeProfileDatabase(self.db.profile)
     end
 
     if self.API and self.API.CompactRaidHistory then
