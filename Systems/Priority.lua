@@ -62,6 +62,34 @@ function Priority:OnEnable()
         db.catalogTier = activeTier
     end
 
+    -- Self-healing check: Repair lists corrupted with 1..N item IDs from legacy array-compaction export bug
+    if db.PriorityLists then
+        local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
+        for _, list in ipairs(db.PriorityLists) do
+            if list.items and next(list.items) then
+                local isCorruptedSequential = true
+                local count = 0
+                for id, _ in pairs(list.items) do
+                    local num = tonumber(id)
+                    count = count + 1
+                    if not num or num > 200 then
+                        isCorruptedSequential = false
+                        break
+                    end
+                end
+                if isCorruptedSequential and count > 0 then
+                    for _, def in ipairs(defaultLists) do
+                        if def.name == list.name and def.items then
+                            list.items = DesolateLootcouncil.Table.DeepCopy(def.items)
+                            DesolateLootcouncil:DLC_Log("Self-healed corrupted Item Manager items for list: " .. tostring(list.name))
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] DATA MIGRATION: Convert Key-Value dictionary lists to Array of Objects
     if db.PriorityLists and not db.migrated_priority_v2 then
         -- Check if it's the old format (Table with string keys)

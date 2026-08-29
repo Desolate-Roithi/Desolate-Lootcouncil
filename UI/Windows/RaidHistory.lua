@@ -798,18 +798,6 @@ function UI_RaidHistory:RenderBossSection(sc, theme, NativeGUI, sessionEntry, la
 
         local API = DesolateLootcouncil.API
         local diffBadge = (API and API.GetDifficultyBadge and API:GetDifficultyBadge(b.difficultyID, b.name))
-        if not diffBadge or diffBadge == "" then
-            local diff = tonumber(b.difficultyID)
-            if diff == 14 or b.difficultyID == "NHC" or b.difficultyID == "Normal" then
-                diffBadge = "|cff1eff00[NHC]|r"
-            elseif diff == 15 or b.difficultyID == "HC" or b.difficultyID == "Heroic" then
-                diffBadge = "|cff0070dd[HC]|r"
-            elseif diff == 16 or b.difficultyID == "M" or b.difficultyID == "Mythic" then
-                diffBadge = "|cffff8000[M]|r"
-            elseif diff == 17 or b.difficultyID == "LFR" then
-                diffBadge = "|cff00ccff[LFR]|r"
-            end
-        end
         local cleanName = (API and API.StripDifficultySuffix and API:StripDifficultySuffix(b.name)) or b.name
 
         local displayName

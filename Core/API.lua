@@ -1275,12 +1275,31 @@ end
 local function CompactItemList(items)
     if not items or type(items) ~= "table" then return {} end
     local list = {}
-    for itemID, val in pairs(items) do
-        if val then
-            table.insert(list, tonumber(itemID) or itemID)
+    for k, val in pairs(items) do
+        if val == true or val == 1 then
+            -- Dictionary format: { [itemID] = true } -> k is itemID
+            local numID = tonumber(k)
+            if numID then
+                table.insert(list, numID)
+            end
+        elseif type(k) == "number" and (type(val) == "number" or (type(val) == "string" and tonumber(val))) and val ~= false then
+            -- Array format: { itemID1, itemID2, ... } -> val is itemID
+            local numID = tonumber(val)
+            if numID then
+                table.insert(list, numID)
+            end
+        elseif val then
+            local numID = tonumber(k) or tonumber(val)
+            if numID then
+                table.insert(list, numID)
+            end
         end
     end
-    table.sort(list, function(a, b) return tostring(a) < tostring(b) end)
+    table.sort(list, function(a, b)
+        local numA, numB = tonumber(a), tonumber(b)
+        if numA and numB then return numA < numB end
+        return tostring(a) < tostring(b)
+    end)
     return list
 end
 
@@ -1940,17 +1959,41 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
 
             if incoming.items then
                 local normalizedItems = {}
+                local isCorruptedSequential = true
+                local count = 0
+
                 for k, val in pairs(incoming.items) do
+                    local itemID = nil
                     if type(k) == "number" and (type(val) == "number" or (type(val) == "string" and tonumber(val))) and val ~= true and val ~= false then
                         -- Array format: items = { 1001, 1002, ... }
-                        normalizedItems[tonumber(val)] = true
+                        itemID = tonumber(val)
                     elseif val == true or val == 1 then
                         -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Dictionary format: items = { [1001] = true }
-                        normalizedItems[tonumber(k) or k] = true
+                        itemID = tonumber(k) or k
                     else
-                        normalizedItems[tonumber(k) or k] = val
+                        itemID = tonumber(k) or tonumber(val) or k
+                    end
+
+                    if itemID then
+                        normalizedItems[itemID] = true
+                        count = count + 1
+                        if type(itemID) ~= "number" or itemID > 200 then
+                            isCorruptedSequential = false
+                        end
                     end
                 end
+
+                -- Detect legacy corrupted 1..N sequential exports and restore valid defaults
+                if isCorruptedSequential and count > 0 then
+                    local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
+                    for _, def in ipairs(defaultLists) do
+                        if def.name == listObj.name and def.items then
+                            normalizedItems = DeepCopy(def.items)
+                            break
+                        end
+                    end
+                end
+
                 listObj.items = normalizedItems
             else
                 listObj.items = {}

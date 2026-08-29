@@ -1,8 +1,8 @@
 local _, AT = ...
 if AT.abortLoad then return end
 
----@class UI_ItemManager : AceModule
-local UI_ItemManager = DesolateLootcouncil:NewModule("UI_ItemManager")
+---@class UI_ItemManager : AceModule, AceEvent-3.0, AceTimer-3.0
+local UI_ItemManager = DesolateLootcouncil:NewModule("UI_ItemManager", "AceEvent-3.0", "AceTimer-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- Local helper functions
@@ -40,22 +40,34 @@ local OnViewListChanged = function(value)
 end
 
 local OnRemoveItemClicked = function(list, itemID)
-    list.items[itemID] = nil
-    DesolateLootcouncil:DLC_Log(string.format(L["Removed item ID: %s"], itemID))
+    DesolateLootcouncil.API:UnassignItem(itemID)
     UI_ItemManager:RefreshWindow()
 end
 
-local OnLinkLabelClicked = function(itemLink)
-    if itemLink then
+local OnLinkLabelClicked = function(itemLink, itemID)
+    local linkToSend = itemLink
+    if not linkToSend and itemID then
+        local _, fetchedLink = C_Item.GetItemInfo(tonumber(itemID) or itemID)
+        linkToSend = fetchedLink
+    end
+    if linkToSend then
         local chatbox = ChatEdit_ChooseBoxForSend()
         ChatEdit_ActivateChat(chatbox)
-        chatbox:Insert(itemLink)
+        chatbox:Insert(linkToSend)
     end
 end
 
 local OnItemLoadCallback = function()
     if UI_ItemManager.frame and UI_ItemManager.frame:IsShown() then
-        UI_ItemManager:RefreshWindow()
+        if UI_ItemManager.itemLoadTimer then
+            UI_ItemManager:CancelTimer(UI_ItemManager.itemLoadTimer)
+        end
+        UI_ItemManager.itemLoadTimer = UI_ItemManager:ScheduleTimer(function()
+            UI_ItemManager.itemLoadTimer = nil
+            if UI_ItemManager.frame and UI_ItemManager.frame:IsShown() then
+                UI_ItemManager:UpdateScrollList()
+            end
+        end, 0.15)
     end
 end
 
@@ -65,24 +77,36 @@ end
 
 local ShowItemTooltip = function(iconBtn, itemLink, itemID)
     GameTooltip:SetOwner(iconBtn, "ANCHOR_CURSOR")
+    local numID = tonumber(itemID)
     if itemLink then
         GameTooltip:SetHyperlink(itemLink)
-    else
-        GameTooltip:SetItemByID(itemID)
+    elseif numID then
+        GameTooltip:SetItemByID(numID)
     end
     GameTooltip:Show()
 end
 
 local PopulateRow = function(row, itemID, list)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local numID = tonumber(itemID)
+    local queryID = numID or itemID
 
-    -- Fetch item information
-    local name, itemLink, _, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemID)
+    -- Fetch item information from client cache
+    local name, itemLink, _, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(queryID)
     if not itemLink then
-        local itemObj = Item:CreateFromItemID(itemID)
-        if not itemObj:IsItemEmpty() then itemObj:ContinueOnItemLoad(OnItemLoadCallback) end
-        name = L["Loading..."]
-        itemTexture = C_Item.GetItemIconByID(itemID)
+        if numID and C_Item.RequestLoadItemDataByID then
+            C_Item.RequestLoadItemDataByID(numID)
+        end
+        if numID and Item and Item.CreateFromItemID then
+            local itemObj = Item:CreateFromItemID(numID)
+            if itemObj and not itemObj:IsItemEmpty() then
+                itemObj:ContinueOnItemLoad(OnItemLoadCallback)
+            end
+        end
+
+        local _, _, _, _, instantIcon = C_Item.GetItemInfoInstant(queryID)
+        itemTexture = instantIcon or (numID and C_Item.GetItemIconByID(numID)) or 134400
+        name = name or (numID and string.format(L["Item #%d (Loading...)"], numID)) or L["Loading..."]
     end
 
     -- Remove Button
@@ -124,9 +148,17 @@ local PopulateRow = function(row, itemID, list)
     row.linkLabel:SetPoint("RIGHT", row.btnRemove, "LEFT", -10, 0)
     row.linkLabel.text:SetText(itemLink or name)
     row.linkLabel:Show()
-    row.linkLabel:SetScript("OnClick", function() OnLinkLabelClicked(itemLink) end)
+    row.linkLabel:SetScript("OnClick", function() OnLinkLabelClicked(itemLink, itemID) end)
     row.linkLabel:SetScript("OnEnter", ShowTip)
     row.linkLabel:SetScript("OnLeave", OnRowIconLeave)
+end
+
+function UI_ItemManager:OnEnable()
+    self:RegisterEvent("GET_ITEM_INFO_RECEIVED", function()
+        if self.frame and self.frame:IsShown() then
+            OnItemLoadCallback()
+        end
+    end)
 end
 
 function UI_ItemManager:ShowItemManagerWindow()
@@ -219,15 +251,23 @@ function UI_ItemManager:RefreshWindow()
     self.scrollFrame:Show()
     self.scrollContent:Show()
 
-    -- Gather and sort itemIDs so list is deterministic
+    -- Gather and sort itemIDs so list is deterministic and type-safe
     self.sortedIDs = {}
     local list = (db.PriorityLists and self.viewListKey) and db.PriorityLists[self.viewListKey]
     local items = list and list.items
     if items then
         for id in pairs(items) do
-            table.insert(self.sortedIDs, id)
+            local numID = tonumber(id) or id
+            table.insert(self.sortedIDs, numID)
         end
-        table.sort(self.sortedIDs)
+        table.sort(self.sortedIDs, function(a, b)
+            local numA = tonumber(a)
+            local numB = tonumber(b)
+            if numA and numB then
+                return numA < numB
+            end
+            return tostring(a) < tostring(b)
+        end)
     end
 
     self:UpdateScrollList()

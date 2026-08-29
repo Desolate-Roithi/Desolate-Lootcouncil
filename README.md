@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.2.4  
+**Latest Version:** v1.2.5  
 **Last Updated:** 2026-08-29  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,18 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v1.2.5 (2026-08-29)
+* **Item Manager Loading State & Asynchronous Pipeline**:
+  * Item Manager now listens to `GET_ITEM_INFO_RECEIVED` with debounced virtual scroll redraws (`UpdateScrollList`) to prevent UI thrashing.
+  * Added instant client DBC fallbacks via `C_Item.GetItemInfoInstant` to populate icons immediately.
+  * Added descriptive localized placeholders (`Item #<ID> (Loading...)`) for pending queries in `enUS` and `deDE`.
+* **Profile Compaction Array Fix & Automated Self-Healing**:
+  * Fixed `CompactItemList` to properly extract numeric item IDs from array-formatted lists rather than inserting table key indices.
+  * Added automatic self-healing in `Priority:OnEnable` and `DLC_API:ImportProfileData` to detect and repair legacy corrupted `1..N` items back to authentic expansion catalog items while preserving player rankings.
+* **Architecture & UI-API Decoupling**:
+  * Refactored Item Manager item removal to route strictly through `DesolateLootcouncil.API:UnassignItem`.
+  * Deduplicated difficulty badge parsing in Raid History to route directly through `DLC_API:GetDifficultyBadge`.
 
 ### v1.2.4 (2026-08-29)
 * **Dynamic Item & Class Icon Resolution**:
