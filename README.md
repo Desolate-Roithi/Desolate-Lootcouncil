@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.2.5  
-**Last Updated:** 2026-08-29  
+**Latest Version:** v1.2.6  
+**Last Updated:** 2026-08-30  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -47,6 +47,14 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v1.2.6 (2026-08-30)
+* **Raid Disband Prompt Gating**:
+  * Tracked active Loot Master character name in `DecayConfig.currentSessionLM` across session start, handover, and config sync.
+  * Gated `DLC_DISBAND_CLOSE_SESSION` prompt strictly to the designated Loot Master, allowing raiders and officers to automatically close session states cleanly without popup interruptions.
+* **Addon Comm Whisper Safety**:
+  * Fixed `Roster:StopRaidSession` to only broadcast history synchronization if the player is still in a group and removed the hardcoded `"RAID"` target parameter.
+  * Hardened `Comm:SendComm` to properly recognize channel names (`"RAID"`, `"PARTY"`, `"GUILD"`, `"INSTANCE_CHAT"`) and route via group chat channels instead of whisper targets.
 
 ### v1.2.5 (2026-08-29)
 * **Item Manager Loading State & Asynchronous Pipeline**:

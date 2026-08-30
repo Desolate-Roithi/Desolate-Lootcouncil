@@ -249,6 +249,7 @@ function Roster:StartRaidSession()
 
     config.sessionActive = true
     config.currentSessionID = time()
+    config.currentSessionLM = UnitName("player")
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.bossLogs = {}
@@ -425,8 +426,8 @@ function Roster:StopRaidSession(saveHistory)
             db.historyTimestamp = GetServerTime()
             db.rosterTimestamp = GetServerTime()
 
-            -- Sync history to officers if we are LM
-            if DesolateLootcouncil:AmILootMaster() then
+            -- Sync history to officers if we are LM and still in group
+            if DesolateLootcouncil:AmILootMaster() and IsInGroup() then
                 local Comm = DesolateLootcouncil:GetModule("Comm", true)
                 if Comm then
                     local payload = {
@@ -434,7 +435,7 @@ function Roster:StopRaidSession(saveHistory)
                         awarded = db.session and db.session.awarded or {},
                         historyTimestamp = db.historyTimestamp or 0
                     }
-                    Comm:SendComm("SYNC_HISTORY", payload, "RAID")
+                    Comm:SendComm("SYNC_HISTORY", payload)
                 end
             end
         else
@@ -446,6 +447,7 @@ function Roster:StopRaidSession(saveHistory)
 
     config.sessionActive = false
     config.currentSessionID = nil
+    config.currentSessionLM = nil
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.bossLogs = {}
@@ -1263,7 +1265,14 @@ local function HandleRaidDisband()
     if not config then return end
 
     if config.sessionActive then
-        if DesolateLootcouncil:AmILootMaster() then
+        local isLM = false
+        if config.currentSessionLM and config.currentSessionLM ~= "" then
+            isLM = DesolateLootcouncil:SmartCompare(config.currentSessionLM, "player")
+        else
+            isLM = DesolateLootcouncil:AmILootMaster()
+        end
+
+        if isLM then
             -- Prompt LM whether they want to close and save the raid session
             StaticPopup_Show("DLC_DISBAND_CLOSE_SESSION")
         else

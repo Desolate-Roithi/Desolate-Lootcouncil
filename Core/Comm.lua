@@ -35,17 +35,21 @@ end
 
 function Comm:SendComm(command, data, target)
     local serialized = self:Serialize(command, data)
-    if target then
+    if target == "RAID" or target == "PARTY" or target == "GUILD" or target == "INSTANCE_CHAT" then
+        if (target == "RAID" and IsInRaid()) or (target == "PARTY" and IsInGroup()) or (target == "GUILD" and IsInGuild()) or target == "INSTANCE_CHAT" then
+            self:SendCommMessage("DLC_COMM", serialized, target)
+        end
+    elseif target then
         self:SendCommMessage("DLC_COMM", serialized, "WHISPER", target)
     else
         -- Smart channel selection
-        local channel = "GUILD"
-        if IsInRaid() then
-            channel = "RAID"
-        elseif IsInGroup() then
-            channel = "PARTY"
+        local channel = DesolateLootcouncil:GetBroadcastChannel()
+        if not channel and IsInGuild() then
+            channel = "GUILD"
         end
-        self:SendCommMessage("DLC_COMM", serialized, channel)
+        if channel then
+            self:SendCommMessage("DLC_COMM", serialized, channel)
+        end
     end
 end
 
