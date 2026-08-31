@@ -10,7 +10,6 @@
 
     <!-- 2. Utilities -->
     <Script file="Utilities\Logger.lua"/>
-    <Script file="Utilities\Legacy.lua"/>
     <Script file="Utilities\Serializer.lua"/>
     <Script file="Utilities\Persistence.lua"/>
     <Script file="Utilities\Debug.lua"/>
@@ -42,6 +41,7 @@
     <Script file="Systems\Roster.lua"/>
     <Script file="Systems\Attendance.lua"/>
     <Script file="Systems\Trade.lua"/>
+    <Script file="Systems\Audit.lua"/>
     <Script file="Systems\TestSuite.lua"/>
 
     <!-- 6. API Facade (loaded after all Systems, before any UI) -->
@@ -73,5 +73,6 @@
     <Script file="UI\Windows\UnassignedPlayers.lua"/>
     <Script file="UI\Windows\Voting.lua"/>
     <Script file="UI\Windows\Settings.lua"/>
+    <Script file="UI\Windows\InteractiveTestBar.lua"/>
     <Script file="UI\Windows\TestSuite.lua"/>
 </Ui>

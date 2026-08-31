@@ -497,6 +497,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
             end
         end
     end
+end
 
 function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end

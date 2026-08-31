@@ -46,18 +46,20 @@ function SlashCommands.Handle(input)
             DesolateLootcouncil:Print("TestSuite module not available.")
         end
 
-        -- Test Items (LM Only)
+        -- Interactive Live Loot & Voting Test Session
     elseif cmd == "test" then
-        if DesolateLootcouncil:AmILootMaster() then
-            local Loot = DesolateLootcouncil:GetModule("Loot")
-            if Loot and Loot.AddTestItems then Loot:AddTestItems() end
-        else
-            -- If not LM, show TestSuite window
-            local UI = DesolateLootcouncil:GetModule("UI_TestSuite", true)
-            if UI and UI.ShowTestSuiteWindow then
-                UI:ShowTestSuiteWindow()
+        local sub = args[2] and string.lower(args[2])
+        if sub == "auto" or sub == "quick" then
+            if DesolateLootcouncil:AmILootMaster() then
+                local Loot = DesolateLootcouncil:GetModule("Loot")
+                if Loot and Loot.AddTestItems then Loot:AddTestItems() end
             else
-                DesolateLootcouncil:Print("Only the Loot Master can allow test items.")
+                DesolateLootcouncil:Print(L["Only the Loot Master can allow test items."])
+            end
+        else
+            local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+            if Sim and Sim.StartInteractiveLootTest then
+                Sim:StartInteractiveLootTest()
             end
         end
 
@@ -88,6 +90,18 @@ function SlashCommands.Handle(input)
             if UI and UI.ShowHistoryWindow then UI:ShowHistoryWindow() end
         else
             DesolateLootcouncil:Print(L["Only the Loot Master or Officers can view the Loot History."])
+        end
+
+        -- Audit & Priority Ledger
+    elseif cmd == "audit" or cmd == "auditlog" or cmd == "log" or cmd == "ledger" then
+        if DesolateLootcouncil:AmIOfficerOrLM() then
+            local LogUI = DesolateLootcouncil:GetModule("UI_PriorityLogHistory", true)
+            if LogUI and LogUI.ShowLogWindow then
+                local sID = args[2]
+                LogUI:ShowLogWindow(sID)
+            end
+        else
+            DesolateLootcouncil:Print(L["Only the Loot Master or Officers can view the Audit Ledger."])
         end
 
         -- Trade List (LM Only)
@@ -185,6 +199,7 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:Print("  |cff33ff99/dlc trade|r - Open Trade List")
         DesolateLootcouncil:Print("  |cff33ff99/dlc session|r - Manage Sessions (start/stop)")
         DesolateLootcouncil:Print("  |cff33ff99/dlc test|r - Generate Test Items")
+        DesolateLootcouncil:Print("  |cff33ff99/dlc testsuite|r (or |cff33ff99/dlc dev|r) - In-Game Automated Test Suite")
         DesolateLootcouncil:Print("  |cff33ff99/dlc testunassigned|r - Inject Mock Unassigned Players")
     end
 end

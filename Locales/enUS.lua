@@ -176,7 +176,11 @@ L["Manual Override: Moved %s from %d to %d in %s."] = true
 
 -- PriorityLogHistory.lua
 L["Priority Log History"] = true
+L["Audit & Priority Ledger"] = true
+L["View Session Audit Trail"] = true
 L["No history logs found."] = true
+L["No audit log entries recorded."] = true
+L["Only the Loot Master or Officers can view the Audit Ledger."] = true
 
 -- Loot.lua (Systems)
 L["Addon Connection: [%d] / [%d]"] = true
@@ -359,4 +363,16 @@ L["Alt"] = true
 L["Characters in attendance:"] = true
 L["Systems/Attendance Loaded"] = true
 L["Systems/ItemCatalog Loaded"] = true
+
+-- Audit Ledger Viewer
+L["All Events"] = true
+L["Loot Awards"] = true
+L["Decay Penalties"] = true
+L["Manual Shifts"] = true
+L["Roster Changes"] = true
+L["Copy Audit Ledger"] = true
+L["Filter:"] = true
+L["Search:"] = true
+L["Audit ledger copied to clipboard."] = true
+
 

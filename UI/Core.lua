@@ -117,6 +117,11 @@ function UI:ShowHistoryWindow()
     if M then M:ShowHistoryWindow() end
 end
 
+function UI:ShowAuditLogWindow(sessionID)
+    local M = DesolateLootcouncil:GetModule("UI_PriorityLogHistory", true)
+    if M and M.ShowLogWindow then M:ShowLogWindow(sessionID) end
+end
+
 function UI:ShowAttendanceWindow()
     local M = DesolateLootcouncil:GetModule("UI_Attendance")
     if M then M:ShowAttendanceWindow() end
@@ -196,7 +201,7 @@ function UI:CloseAllWindows()
                 "frame", "mainFrame", "window", "monitorFrame", "votingFrame",
                 "lootFrame", "awardFrame", "attendanceFrame", "historyFrame", "sessionFrame",
                 "tradeListFrame", "versionFrame", "overrideFrame", "priorityOverrideFrame",
-                "itemManagerFrame", "settingsFrame", "logFrame", "deFrame"
+                "itemManagerFrame", "settingsFrame", "logFrame", "deFrame", "exportFrame"
             }
             for _, prop in ipairs(frameProps) do
                 if mod[prop] and type(mod[prop]) == "table" and mod[prop].Hide then
@@ -204,5 +209,9 @@ function UI:CloseAllWindows()
                 end
             end
         end
+    end
+
+    if StaticPopup_Hide then
+        pcall(function() StaticPopup_Hide("DLC_DISBAND_CLOSE_SESSION") end)
     end
 end

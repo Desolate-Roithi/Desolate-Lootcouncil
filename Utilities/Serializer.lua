@@ -94,7 +94,27 @@ function Serializer:CompactItemList(items)
     return list
 end
 
---- Clones an awarded item record without the duplicate fullItemData sub-table.
+--- Parses an item timestamp into a unix epoch integer.
+---@param item table
+---@return number
+function Serializer:ParseItemTimestamp(item)
+    if type(item) ~= "table" then return 0 end
+    local ts = item.timestamp or item.time or item.awardedAt
+    if type(ts) == "number" then return ts end
+    if type(ts) == "string" then
+        local num = tonumber(ts)
+        if num then return num end
+    end
+    if type(item.date) == "string" and #item.date >= 10 then
+        local y, m, d, h, min, s = item.date:match("(%d+)-(%d+)-(%d+)%s*(%d*):*(%d*):*(%d*)")
+        if y and m and d then
+            return os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = tonumber(h) or 0, min = tonumber(min) or 0, sec = tonumber(s) or 0 })
+        end
+    end
+    return 0
+end
+
+--- Normalizes awarded item structure for history persistence.
 ---@param item table
 ---@param deepCopyFn function?
 ---@return table
@@ -192,19 +212,117 @@ function Serializer:CleanAttendanceEntry(entry, deepCopyFn)
     return cleaned
 end
 
---- Delegates multi-date attendance splitting to Legacy module if available.
+--- Splits an attendance history entry if awarded items or boss kills span multiple calendar dates.
 ---@param entry table
 ---@param deepCopyFn function?
 ---@return table[]
 function Serializer:SplitMultiDateAttendanceEntry(entry, deepCopyFn)
+    if not entry or type(entry) ~= "table" then return { entry } end
     deepCopyFn = deepCopyFn or (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t) return t end
-    if DesolateLootcouncil.Legacy and DesolateLootcouncil.Legacy.CleanAndSplitAttendanceHistory then
-        local selfRef = self
-        local parseFn = function(itm) return selfRef:ParseItemTimestamp(itm) end
-        local cleanFn = function(e, dcf) return selfRef:CleanAttendanceEntry(e, dcf) end
-        return DesolateLootcouncil.Legacy:CleanAndSplitAttendanceHistory(entry, deepCopyFn, parseFn, cleanFn)
+
+    local function getItemDatePrefix(item)
+        if type(item) ~= "table" then return nil end
+        if type(item.date) == "string" and #item.date >= 10 then
+            return item.date:sub(1, 10)
+        end
+        local rawTs = item.timestamp or item.time or item.awardedAt
+        if type(rawTs) == "string" and #rawTs >= 10 and rawTs:match("^%d%d%d%d%-%d%d%-%d%d") then
+            return rawTs:sub(1, 10)
+        end
+        local numTs = tonumber(rawTs)
+        if numTs and numTs > 86400 then
+            return date("%Y-%m-%d", numTs)
+        end
+        return nil
     end
-    return { self:CleanAttendanceEntry(entry, deepCopyFn) }
+
+    local baseDatePrefix = entry.date and entry.date:sub(1, 10)
+    local datesFound = {}
+    local dateOrder = {}
+
+    local function markDate(dStr)
+        if dStr and type(dStr) == "string" and #dStr == 10 and not datesFound[dStr] then
+            datesFound[dStr] = true
+            table.insert(dateOrder, dStr)
+        end
+    end
+
+    if baseDatePrefix and #baseDatePrefix == 10 then
+        markDate(baseDatePrefix)
+    end
+
+    local rawAwarded = entry.awarded or entry.loot
+    if rawAwarded and type(rawAwarded) == "table" then
+        for _, itm in pairs(rawAwarded) do
+            local dStr = getItemDatePrefix(itm)
+            if dStr then markDate(dStr) end
+        end
+    end
+
+    local rawBossLogs = entry.bossLogs or entry.bossFights
+    if rawBossLogs and type(rawBossLogs) == "table" then
+        for _, b in pairs(rawBossLogs) do
+            if b.killed and b.killedTime and b.killedTime > 86400 then
+                local dStr = date("%Y-%m-%d", b.killedTime)
+                if dStr then markDate(dStr) end
+            end
+        end
+    end
+
+    if #dateOrder <= 1 then
+        return { self:CleanAttendanceEntry(entry, deepCopyFn) }
+    end
+
+    table.sort(dateOrder, function(a, b) return a > b end)
+
+    local buckets = {}
+    for _, dStr in ipairs(dateOrder) do
+        buckets[dStr] = {
+            sessionID    = entry.sessionID,
+            date         = dStr,
+            zone         = entry.zone or "Raid",
+            attendees    = deepCopyFn(entry.attendees or {}),
+            decayApplied = entry.decayApplied,
+            decayPenalty = entry.decayPenalty,
+            decayAbsent  = deepCopyFn(entry.decayAbsent),
+            awarded      = {},
+            bossLogs     = {},
+        }
+    end
+
+    local fallbackBucket = buckets[dateOrder[1]]
+
+    if rawAwarded and type(rawAwarded) == "table" then
+        for origIdx, itm in pairs(rawAwarded) do
+            local dStr = getItemDatePrefix(itm)
+            local targetBucket = (dStr and buckets[dStr]) or fallbackBucket
+            local itemCopy = deepCopyFn(itm)
+            itemCopy.origIdx = tonumber(origIdx) or 999
+            table.insert(targetBucket.awarded, itemCopy)
+        end
+    end
+
+    if rawBossLogs and type(rawBossLogs) == "table" then
+        for origIdx, b in pairs(rawBossLogs) do
+            local dStr = (b.killed and b.killedTime and b.killedTime > 86400) and date("%Y-%m-%d", b.killedTime) or nil
+            local targetBucket = (dStr and buckets[dStr]) or fallbackBucket
+            local bossCopy = deepCopyFn(b)
+            bossCopy.origIdx = tonumber(origIdx) or 999
+            table.insert(targetBucket.bossLogs, bossCopy)
+        end
+    end
+
+    local result = {}
+    for idx, dStr in ipairs(dateOrder) do
+        local bkt = buckets[dStr]
+        bkt.date = (entry.date and #entry.date > 10) and (dStr .. entry.date:sub(11)) or dStr
+        if idx > 1 then
+            bkt.sessionID = tonumber(tostring(entry.sessionID) .. tostring(idx)) or (entry.sessionID + idx)
+        end
+        table.insert(result, self:CleanAttendanceEntry(bkt, deepCopyFn))
+    end
+
+    return result
 end
 
 --- Compacts raid history in SavedVariables, pruning redundant decay strings and splitting multi-date sessions.
@@ -224,25 +342,11 @@ function Serializer:CompactRaidHistory(arg1, arg2)
         return res
     end
 
-    local PriorityMod = DesolateLootcouncil:GetModule("Priority", true)
-    local getPatternsFn = PriorityMod and PriorityMod.GetDecayPatterns and function() return PriorityMod:GetDecayPatterns() end
-    local parseDecayFn = PriorityMod and PriorityMod.ParseDecayLogMessage and function(msg) return PriorityMod:ParseDecayLogMessage(msg) end
-    local isDecayFn = (PriorityMod and PriorityMod.IsDecayLogMessage and function(msg) return PriorityMod:IsDecayLogMessage(msg) end) or function(msg)
-        return msg:find("[Decay]", 1, true) ~= nil or msg:find("[Verfall]", 1, true) ~= nil
-    end
-
     local prunedCount = 0
     if p.AttendanceHistory and type(p.AttendanceHistory) == "table" then
         local newAttendance = {}
         for _, entry in ipairs(p.AttendanceHistory) do
             if entry and type(entry) == "table" then
-                if (not entry.decayApplied or entry.decayApplied == -1 or entry.decayApplied == 0) and p.SessionPositionLog and DesolateLootcouncil.Legacy then
-                    local extractedDecay = DesolateLootcouncil.Legacy:ExtractDecayFromPositionLog(entry, getPatternsFn, parseDecayFn)
-                    if extractedDecay and extractedDecay > 0 then
-                        entry.decayApplied = extractedDecay
-                    end
-                end
-
                 local splitEntries = self:SplitMultiDateAttendanceEntry(entry, DeepCopy)
                 for _, sEntry in ipairs(splitEntries) do
                     table.insert(newAttendance, sEntry)
@@ -250,26 +354,6 @@ function Serializer:CompactRaidHistory(arg1, arg2)
             end
         end
         p.AttendanceHistory = newAttendance
-    end
-
-    if p.SessionPositionLog and type(p.SessionPositionLog) == "table" then
-        for sessionID, logBucket in pairs(p.SessionPositionLog) do
-            if type(logBucket) == "table" then
-                local filteredBucket = {}
-                for _, logMsg in ipairs(logBucket) do
-                    if type(logMsg) == "string" and isDecayFn(logMsg) then
-                        prunedCount = prunedCount + 1
-                    else
-                        table.insert(filteredBucket, logMsg)
-                    end
-                end
-                if #filteredBucket == 0 then
-                    p.SessionPositionLog[sessionID] = nil
-                else
-                    p.SessionPositionLog[sessionID] = filteredBucket
-                end
-            end
-        end
     end
 
     p.historyCompacted = true
@@ -378,13 +462,14 @@ function Serializer:ExportSingleRaidHistoryEvent(indexOrSession)
 
     local cleanedEntry = self:CleanAttendanceEntry(entry, DeepCopy)
     local posKey = cleanedEntry.sessionID and tostring(cleanedEntry.sessionID)
-    local splBucket = posKey and p.SessionPositionLog and p.SessionPositionLog[posKey]
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    local sessionAudit = (Audit and Audit.GetLog and Audit:GetLog(posKey)) or nil
 
     local data = {
         SingleRaidEvent = true,
         History = {
             AttendanceHistory = { cleanedEntry },
-            SessionPositionLog = splBucket and { [posKey] = DeepCopy(splBucket) } or nil,
+            AuditLog          = sessionAudit and DeepCopy(sessionAudit) or nil,
         }
     }
 
@@ -479,12 +564,56 @@ function Serializer:ExportProfileData(selection)
         data.History = {
             session            = cleanedSession,
             AttendanceHistory  = cleanedAttendance,
-            PriorityLog        = DeepCopy(p.PriorityLog),
-            SessionPositionLog = DeepCopy(p.SessionPositionLog),
+            AuditLog           = DeepCopy(p.AuditLog),
         }
     end
 
     return self:EncodePayload(data)
+end
+
+--- Normalizes imported item lists from dictionary or corrupted sequential formats.
+---@param incomingItems table
+---@param defaultLists table
+---@param listName string
+---@param deepCopyFn function
+---@return table normalizedItems
+function Serializer:NormalizeImportedItems(incomingItems, defaultLists, listName, deepCopyFn)
+    if not incomingItems or type(incomingItems) ~= "table" then return {} end
+    deepCopyFn = deepCopyFn or (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t) return t end
+
+    local normalized = {}
+    local isCorruptedSequential = true
+    local count = 0
+
+    for k, val in pairs(incomingItems) do
+        local itemID
+        if type(k) == "number" and (type(val) == "number" or (type(val) == "string" and tonumber(val))) and val ~= true and val ~= false then
+            itemID = tonumber(val)
+        elseif val == true or val == 1 then
+            itemID = tonumber(k) or k
+        else
+            itemID = tonumber(k) or tonumber(val) or k
+        end
+
+        if itemID then
+            normalized[itemID] = true
+            count = count + 1
+            if type(itemID) ~= "number" or itemID > 200 then
+                isCorruptedSequential = false
+            end
+        end
+    end
+
+    -- Auto-heal corrupted 1..N sequential exports back to default catalog
+    if isCorruptedSequential and count > 0 and defaultLists then
+        for _, def in ipairs(defaultLists) do
+            if def.name == listName and def.items then
+                return deepCopyFn(def.items)
+            end
+        end
+    end
+
+    return normalized
 end
 
 --- Imports profile data from a serialized string and switches to the new profile or merges into active.
@@ -586,10 +715,8 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
             end
 
             if incoming.items and not data.ItemManagerContent and not data.IM then
-                if DesolateLootcouncil.Legacy and DesolateLootcouncil.Legacy.NormalizeImportedItems then
-                    local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
-                    listObj.items = DesolateLootcouncil.Legacy:NormalizeImportedItems(incoming.items, defaultLists, listObj.name, DeepCopy)
-                end
+                local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
+                listObj.items = self:NormalizeImportedItems(incoming.items, defaultLists, listObj.name, DeepCopy)
             end
 
             if DesolateLootcouncil.API and DesolateLootcouncil.API.MarkPriorityDirty then
@@ -622,12 +749,8 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
             end
 
             if incoming.items then
-                if DesolateLootcouncil.Legacy and DesolateLootcouncil.Legacy.NormalizeImportedItems then
-                    local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
-                    listObj.items = DesolateLootcouncil.Legacy:NormalizeImportedItems(incoming.items, defaultLists, listObj.name, DeepCopy)
-                else
-                    listObj.items = DeepCopy(incoming.items)
-                end
+                local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
+                listObj.items = self:NormalizeImportedItems(incoming.items, defaultLists, listObj.name, DeepCopy)
             else
                 listObj.items = {}
             end
@@ -687,25 +810,33 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
             end
         end
 
-        if data.History.PriorityLog then
-            p.PriorityLog = DeepCopy(data.History.PriorityLog)
-        end
-        if data.History.SessionPositionLog then
-            if importToCurrent and p.SessionPositionLog then
-                for sID, logBucket in pairs(data.History.SessionPositionLog) do
-                    p.SessionPositionLog[sID] = DeepCopy(logBucket)
+        if data.History.AuditLog then
+            if importToCurrent and p.AuditLog then
+                for _, logEntry in ipairs(data.History.AuditLog) do
+                    table.insert(p.AuditLog, DeepCopy(logEntry))
                 end
             else
-                p.SessionPositionLog = DeepCopy(data.History.SessionPositionLog)
+                p.AuditLog = DeepCopy(data.History.AuditLog)
             end
+        elseif not importToCurrent then
+            p.AuditLog = {}
         end
 
         p.historyTimestamp = GetServerTime()
-        self:CompactRaidHistory()
+        if DesolateLootcouncil.API and DesolateLootcouncil.API.CompactRaidHistory then
+            DesolateLootcouncil.API:CompactRaidHistory()
+        end
+
+        if DesolateLootcouncil.DBMigrator and DesolateLootcouncil.DBMigrator.SanitizeProfileDatabase then
+            DesolateLootcouncil.DBMigrator:SanitizeProfileDatabase(p)
+        end
 
         if DesolateLootcouncil.SendMessage then
             DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
         end
+    elseif not importToCurrent then
+        p.AttendanceHistory = {}
+        p.AuditLog = {}
     end
 
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")

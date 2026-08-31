@@ -377,6 +377,13 @@ function UI_RaidHistory:ShowPositionChangesCopyWindow(posChanges)
     end)
 end
 
+function UI_RaidHistory:ShowTextCopyWindow(title, text)
+    local LogUI = DesolateLootcouncil:GetModule("UI_PriorityLogHistory", true)
+    if LogUI and LogUI.ShowCopyWindow then
+        LogUI:ShowCopyWindow(text)
+    end
+end
+
 -- ============================================================
 -- Section Renderers
 -- ============================================================
@@ -539,10 +546,14 @@ local function SetupAttendeeTooltip(tagWidget, displayName, attendedList, Native
                 local charClass = charEntry.class
                 local isAlt = charEntry.isAlt
                 local cIcon = NativeGUI:GetClassIconMarkup(charClass, 12)
-                local col = NativeGUI:FormatClassColor(charClass, charName)
+                local charDisplay = Ambiguate(charName, "none")
+                local col = NativeGUI:FormatClassColor(charClass, charDisplay)
                 local lineText = cIcon .. " " .. col
                 if isAlt then
                     lineText = lineText .. " |cff888888(" .. L["Alt"] .. ")|r"
+                end
+                if charEntry.kills and charEntry.kills > 0 then
+                    lineText = lineText .. " |cffcccccc(" .. charEntry.kills .. " " .. (charEntry.kills == 1 and "kill" or "kills") .. ")|r"
                 end
                 GameTooltip:AddLine(lineText, 1, 1, 1)
             end
@@ -569,15 +580,8 @@ local function SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, db, API)
                     table.insert(attendedList, {
                         name  = charName,
                         class = charData.class or "WARRIOR",
-                        isAlt = charData.isAlt or false
-                    })
-                else
-                    local charClass = API:GetUnitClass(charName) or "WARRIOR"
-                    local isAlt = (rawName ~= charName)
-                    table.insert(attendedList, {
-                        name  = charName,
-                        class = charClass,
-                        isAlt = isAlt
+                        isAlt = charData.isAlt or false,
+                        kills = charData.kills or 0,
                     })
                 end
             end
@@ -815,15 +819,6 @@ function UI_RaidHistory:RenderAttendanceSection(sc, theme, NativeGUI, sessionEnt
     layoutState.yOffset = layoutState.yOffset + 6
 end
 
-local function IsDecayLogEntry(entry)
-    if type(entry) ~= "string" then return false end
-    local API = DesolateLootcouncil.API
-    if API and API.IsDecayLogMessage then
-        return API:IsDecayLogMessage(entry)
-    end
-    return entry:find("[Decay]", 1, true) ~= nil or entry:find("[Verfall]", 1, true) ~= nil
-end
-
 function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader, NextButtonRow)
     local posCollapsed = AddHeader("positions", SECTION_ICONS.positions, L["Position Changes"])
     if posCollapsed then
@@ -831,16 +826,18 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
         return
     end
 
-    local db  = DesolateLootcouncil.db.profile
     local posChanges = {}
     local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
 
-    local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
-    if splBucket then
-        for _, e in ipairs(splBucket) do
-            if not IsDecayLogEntry(e) then
-                table.insert(posChanges, e)
-            end
+    -- Read from AuditLog (2.0 Unified Ledger)
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    local auditEntries = Audit and Audit.GetLog and Audit:GetLog(posKey)
+    if auditEntries and #auditEntries > 0 then
+        for _, e in ipairs(auditEntries) do
+            local playerTag = e.p and string.format(" | %s", DesolateLootcouncil:GetDisplayName(e.p)) or ""
+            local listTag   = e.l and string.format(" (%s)", e.l) or ""
+            local detTag    = e.det and string.format(" - %s", e.det) or ""
+            table.insert(posChanges, string.format("[%s] %s%s%s%s", e.d or tostring(e.t or ""), e.act or "EVENT", playerTag, listTag, detTag))
         end
     end
 
@@ -859,16 +856,15 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
             local btnRow = NextButtonRow()
             btnRow:SetPoint("TOPLEFT",  sc, "TOPLEFT",  14, -layoutState.yOffset)
             btnRow:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -12, -layoutState.yOffset)
-            btnRow.btn:SetText(L["Copy All Position Changes"])
+            btnRow.btn:SetText(L["View Session Audit Trail"])
             btnRow.btn:SetScript("OnClick", function()
-                self:ShowPositionChangesCopyWindow(posChanges)
+                local LogUI = DesolateLootcouncil:GetModule("UI_PriorityLogHistory", true)
+                if LogUI and LogUI.ShowLogWindow then
+                    LogUI:ShowLogWindow(sessionEntry.sessionID)
+                end
             end)
             layoutState.yOffset = layoutState.yOffset + 30
         end
-    elseif not isCurrent and not sessionEntry.sessionID then
-        -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Notice for pre-session tracking legacy records
-        AddText(L["Position log not available (pre-dates session tracking)."],
-            14, { 0.5, 0.5, 0.5 })
     else
         AddText(L["No position changes recorded."], 14, { 0.5, 0.5, 0.5 })
     end
@@ -889,42 +885,12 @@ local function GetSessionDecaySummary(sessionEntry, db, config)
         return { isCurrent = true }
     end
 
-    -- Check if explicitly stored in sessionEntry
     local absentList = {}
     local penalty = sessionEntry.decayPenalty or defaultPenalty
 
     if sessionEntry.decayAbsent then
         for p in pairs(sessionEntry.decayAbsent) do
             table.insert(absentList, p)
-        end
-    end
-
-    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Fallback: Extract decay from SessionPositionLog for uncompacted legacy sessions
-    if #absentList == 0 then
-        local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
-        local splBucket = posKey and db.SessionPositionLog and db.SessionPositionLog[posKey]
-        local API = DesolateLootcouncil.API
-        if splBucket and API and API.ParseDecayLogMessage then
-            local seen = {}
-            for _, entry in ipairs(splBucket) do
-                local pName, pPen = API:ParseDecayLogMessage(entry)
-                if pName then
-                    if pPen then penalty = tonumber(pPen) or penalty end
-                    if not seen[pName] then
-                        seen[pName] = true
-                        table.insert(absentList, pName)
-                    end
-                end
-            end
-        end
-    end
-
-    -- Second Fallback: Compare sessionEntry.attendees against MainRoster if decayApplied is set
-    if #absentList == 0 and sessionEntry.decayApplied and sessionEntry.decayApplied ~= -1 and sessionEntry.attendees and db.MainRoster then
-        for mName in pairs(db.MainRoster) do
-            if not sessionEntry.attendees[mName] then
-                table.insert(absentList, mName)
-            end
         end
     end
 

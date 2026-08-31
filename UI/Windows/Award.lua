@@ -262,9 +262,14 @@ end
 local function RenderAwardHeader(self, itemData, isLM)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
-    local _, properLink, quality = C_Item.GetItemInfo(itemData.link)
-    if not quality then
-        local _, _, itemQuality = C_Item.GetItemInfoInstant(itemData.link)
+    local properLink, quality = nil, nil
+    if itemData.link or itemData.itemID then
+        local _, linkStr, q = C_Item.GetItemInfo(itemData.link or itemData.itemID)
+        properLink = linkStr
+        quality = q
+    end
+    if not quality and (itemData.link or itemData.itemID) then
+        local _, _, itemQuality = C_Item.GetItemInfoInstant(itemData.link or itemData.itemID)
         quality = itemQuality
     end
 

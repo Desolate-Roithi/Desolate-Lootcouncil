@@ -25,9 +25,11 @@ if AT.abortLoad then return end
 ---@type DLC_Ref_Sim_Util
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Sim_Util]]
 local Simulation = DesolateLootcouncil:NewModule("Simulation", "AceConsole-3.0") --[[@as Simulation]]
+local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 -- State
 Simulation.activeSims = {}
+Simulation.offlineSims = {}
 
 function Simulation:OnEnable()
     -- Nothing to init specifically
@@ -43,6 +45,7 @@ function Simulation:Add(name, enchantingSkill)
     end
 
     self.activeSims[name] = true
+    if self.offlineSims then self.offlineSims[name] = nil end
 
     -- Ensure temp Roster Entry exists to prevent "Unknown" errors
     local db = DesolateLootcouncil.db.profile
@@ -70,14 +73,63 @@ end
 function Simulation:Remove(name)
     if self.activeSims[name] then
         self.activeSims[name] = nil
+        if self.offlineSims then self.offlineSims[name] = nil end
         DesolateLootcouncil:DLC_Log("Simulated Player Removed: " .. name, true)
     else
         DesolateLootcouncil:DLC_Log("Simulated Player '" .. name .. "' not found.", true)
     end
 end
 
+function Simulation:Disconnect(name)
+    if not name or name == "" then return end
+    self.offlineSims = self.offlineSims or {}
+    self.offlineSims[name] = true
+    DesolateLootcouncil:DLC_Log("Simulated Player Disconnected (Offline): " .. name, true)
+    
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm then
+        Comm:SendMessage("DLC_VERSION_UPDATE")
+    end
+end
+
+function Simulation:Reconnect(name)
+    if not name or name == "" then return end
+    self.offlineSims = self.offlineSims or {}
+    self.offlineSims[name] = nil
+    DesolateLootcouncil:DLC_Log("Simulated Player Reconnected (Online): " .. name, true)
+
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm then
+        Comm:SendMessage("DLC_VERSION_UPDATE")
+    end
+end
+
+function Simulation:IsOffline(name)
+    return self.offlineSims and self.offlineSims[name] == true
+end
+
+function Simulation:SwapCharacter(oldName, newName, class)
+    if not oldName or not newName or oldName == "" or newName == "" then return end
+    
+    self:Remove(oldName)
+    self:Add(newName)
+    if class then
+        local db = DesolateLootcouncil.db.profile
+        if db and db.MainRoster and db.MainRoster[newName] then
+            db.MainRoster[newName].class = class
+        end
+    end
+    DesolateLootcouncil:DLC_Log(string.format("Simulated Player Swapped from %s to %s.", oldName, newName), true)
+
+    local RosterSys = DesolateLootcouncil:GetModule("Roster", true)
+    if RosterSys and RosterSys.GROUP_ROSTER_UPDATE then
+        RosterSys:GROUP_ROSTER_UPDATE()
+    end
+end
+
 function Simulation:Clear()
     self.activeSims = {}
+    self.offlineSims = {}
     DesolateLootcouncil:DLC_Log("All simulated players cleared.", true)
 end
 
@@ -175,53 +227,226 @@ function Simulation:SimulateVote()
     DesolateLootcouncil:DLC_Log("Simulated random votes cast for " .. votedCount .. " simulated players.", true)
 end
 
-function Simulation:RunTest(count)
-    if not DesolateLootcouncil:AmILootMaster() then
-        DesolateLootcouncil:DLC_Log("Error: You must be Loot Master to start a test.", true)
-        return
+--- Starts a live interactive loot distribution test with full voting and monitor integration.
+---@return boolean success
+function Simulation:StartInteractiveLootTest()
+    -- 1. Ensure Player has Loot Master role & active identity
+    local myName = (UnitName and UnitName("player")) or "Player"
+    DesolateLootcouncil.amILM = true
+    DesolateLootcouncil.activeLootMaster = myName
+
+    -- 2. Populate standard simulated raiders matching player's realm
+    local rawRealm = GetRealmName and GetRealmName()
+    local realm = (rawRealm and rawRealm ~= "") and rawRealm or "Thrall"
+    local simRoster = self:GetRoster()
+    if #simRoster < 4 then
+        self:Add("Klacku-" .. realm, 0)
+        self:Add("Nonu-" .. realm, 0)
+        self:Add("Roithi-" .. realm, 0)
+        self:Add("Schorsch-" .. realm, 300) -- Primary Disenchanter
+        self:Add("Sydneyfox-" .. realm, 0)
+        self:Add("Vala-" .. realm, 275)    -- Backup Disenchanter
+        self:Add("Laenni-" .. realm, 0)
+        self:Add("Dekayline-" .. realm, 0)
     end
 
-    local numItems = tonumber(count) or 3
-    if numItems > 10 then numItems = 10 end
-
-    -- Dummy Data
-    local dummyItems = {
-        "item:19019", -- Thunderfury
-        "item:18832", -- Brutality Blade
-        "item:16914", -- Bloodfang Hood
-        "item:19352", -- Chromatically Tempered Sword
-        "item:19375"  -- Mish'undare
+    -- 3. Staged test items covering major priority categories
+    local testDefs = {
+        { id = 16914, cat = "Tier",         name = "Netherwind Belt",        icon = 132514 },
+        { id = 17075, cat = "Weapons",      name = "Vis'kag the Bloodletter",icon = 135328 },
+        { id = 19136, cat = "Rest",         name = "Mana Igniting Cord",     icon = 132518 },
+        { id = 13335, cat = "Collectables", name = "Deathcharger's Reins",   icon = 132249 },
+        { id = 16223, cat = "Recipes",      name = "Formula: Crusader",      icon = 134954 },
     }
 
     local items = {}
-    for i = 1, numItems do
-        local link = dummyItems[math.random(#dummyItems)]
-        local name, _, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(link)
-        if not name then
-            -- Fallback if item info not cached
-            name = "Test Item " .. i
-            link = "[" .. name .. "]"
-            icon = 134400 -- Question Mark
-        end
-
-        local uniqueID = "TestGUID_" .. string.format("%.3f", GetTime()) .. "_" .. i
+    for i, def in ipairs(testDefs) do
+        local link = string.format("|cffa335ee|Hitem:%d::::::::20:257::::::|h[%s]|h|r", def.id, def.name)
+        local uniqueID = "InteractiveTest_" .. string.format("%.3f", GetTime()) .. "_" .. i
         table.insert(items, {
             link = link,
-            itemID = tonumber(link:match("item:(%d+)")),
-            texture = icon,
-            category = "Rest",
+            itemID = def.id,
+            texture = def.icon,
+            category = def.cat,
             sourceGUID = uniqueID,
             quantity = 1,
             isTest = true
         })
     end
 
+    -- 4. Start Live Bidding Session
     ---@type Session
     local Session = DesolateLootcouncil:GetModule("Session")
     if Session and Session.StartSession then
         Session:StartSession(items)
-        DesolateLootcouncil:DLC_Log("Test Session started with " .. #items .. " items.", true)
+        DesolateLootcouncil:DLC_Log("Interactive Live Test Session started with " .. #items .. " items.", true)
     end
+
+    -- 5. Open Interactive Windows
+    local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
+    if Voting and Voting.ShowVotingWindow then
+        Voting:ShowVotingWindow(items)
+    end
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.ShowMonitorWindow then
+        Monitor:ShowMonitorWindow()
+    end
+
+    -- 6. Open Floating Interactive Test Bar if available
+    local TestBar = DesolateLootcouncil:GetModule("UI_InteractiveTestBar", true)
+    if TestBar and TestBar.ShowBar then
+        TestBar:ShowBar()
+    end
+
+    return true
+end
+
+--- Simulates realistic raider votes for all active items in the bidding queue.
+---@return number castCount
+function Simulation:SimulateRaiderVotes()
+    ---@type Session
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if not Session then return 0 end
+
+    local session = DesolateLootcouncil.db.profile.session
+    if not session or not session.bidding or #session.bidding == 0 then
+        return 0
+    end
+
+    Session.sessionVotes = Session.sessionVotes or {}
+    local castCount = 0
+    local voteOptions = { 1, 2, 2, 3, 4, 5 } -- Weighted distribution: Bid, Roll, Roll, OS, TM, Pass
+
+    for simName, _ in pairs(self.activeSims) do
+        local normName = DesolateLootcouncil:NormalizeName(simName)
+        for _, item in ipairs(session.bidding) do
+            local guid = item.sourceGUID or item.link
+            local chosenVote = voteOptions[math.random(#voteOptions)]
+            local isRecipe = item.itemID and DesolateLootcouncil.API:IsRecipe(item.itemID) or false
+            if isRecipe then
+                chosenVote = (math.random(1, 2) == 1) and 2 or 5
+            end
+
+            Session.sessionVotes[guid] = Session.sessionVotes[guid] or {}
+            local serverRoll = math.random(1, 100)
+            Session.sessionVotes[guid][normName] = { type = chosenVote, roll = serverRoll, note = "" }
+
+            local payload = {
+                command = "VOTE",
+                data = {
+                    guid = guid,
+                    vote = chosenVote,
+                    roll = serverRoll,
+                    note = ""
+                }
+            }
+            if Session.HandleVote then
+                Session:HandleVote(payload, normName)
+            end
+            castCount = castCount + 1
+        end
+    end
+
+    -- Save state and refresh UIs
+    if Session.SaveSessionState then Session:SaveSessionState() end
+    local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
+    if Voting and Voting.ShowVotingWindow then Voting:ShowVotingWindow(nil, true) end
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.ShowMonitorWindow then Monitor:ShowMonitorWindow() end
+
+    DesolateLootcouncil:DLC_Log(string.format("Cast %d simulated votes across %d items.", castCount, #session.bidding), true)
+    return castCount
+end
+
+--- Automatically awards the next item in the bidding queue to its top eligible bidder.
+---@return table|nil awardedItem, string|nil winnerName
+function Simulation:AutoAwardNext()
+    local session = DesolateLootcouncil.db.profile.session
+    if not session or not session.bidding or #session.bidding == 0 then return nil, nil end
+
+    local itemData = session.bidding[1]
+    local guid = itemData.sourceGUID or itemData.link
+    local Session = DesolateLootcouncil:GetModule("Session")
+    local votes = (Session and Session.sessionVotes and Session.sessionVotes[guid]) or {}
+
+    -- Find top bidder or roller
+    local winner = nil
+    local bestVote = 99
+    for voter, vData in pairs(votes) do
+        local vVal = type(vData) == "table" and vData.vote or tonumber(vData) or 5
+        if vVal < bestVote and vVal <= 4 then
+            bestVote = vVal
+            winner = voter
+        end
+    end
+
+    -- If no active bids, assign to a simulated raider
+    if not winner then
+        local firstSim = next(self.activeSims)
+        if firstSim then
+            winner = firstSim
+            bestVote = 2 -- Default to Roll
+        end
+    end
+    winner = winner or (UnitName and UnitName("player")) or "SimWinner"
+
+    local voteText = (bestVote == 1 and "Bid") or (bestVote == 2 and "Roll") or (bestVote == 3 and "Offspec") or (bestVote == 4 and "T-Mog") or "Pass"
+
+    local Loot = DesolateLootcouncil:GetModule("Loot")
+    if Loot and Loot.AwardItem then
+        Loot:AwardItem(guid, winner, voteText, 1)
+    end
+
+    return itemData, winner
+end
+
+--- Completes any remaining items in the bidding queue, records all awards, and generates verification results.
+---@return table results
+function Simulation:CompleteAndVerify()
+    local session = DesolateLootcouncil.db.profile.session
+    local awardedCount = 0
+
+    while session.bidding and #session.bidding > 0 do
+        local _, winner = self:AutoAwardNext()
+        if winner then awardedCount = awardedCount + 1 end
+    end
+
+    -- Stop test session
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session and Session.SendStopSession then
+        Session:SendStopSession()
+    end
+
+    -- Hide test bar
+    local TestBar = DesolateLootcouncil:GetModule("UI_InteractiveTestBar", true)
+    if TestBar and TestBar.HideBar then
+        TestBar:HideBar()
+    end
+
+    -- Open Audit Log to view receipts
+    local AuditUI = DesolateLootcouncil:GetModule("UI_PriorityLogHistory", true)
+    if AuditUI and AuditUI.ShowLogWindow then
+        AuditUI:ShowLogWindow()
+    end
+
+    DesolateLootcouncil:Print(string.format(L["Interactive Test Session completed. Total awards: %d."], #session.awarded))
+
+    return {
+        success = true,
+        awardsCount = #session.awarded
+    }
+end
+
+function Simulation:StopInteractiveLootTest()
+    local Session = DesolateLootcouncil:GetModule("Session")
+    if Session and Session.SendStopSession then
+        Session:SendStopSession()
+    end
+    local TestBar = DesolateLootcouncil:GetModule("UI_InteractiveTestBar", true)
+    if TestBar and TestBar.HideBar then
+        TestBar:HideBar()
+    end
+    DesolateLootcouncil:Print(L["Interactive Test Session cancelled."])
 end
 
 -- Slash Command Handler
@@ -233,6 +458,12 @@ function Simulation:HandleSlashCommand(input)
         if args[2] then self:Add(args[2], args[3]) end
     elseif cmd == "remove" then
         if args[2] then self:Remove(args[2]) end
+    elseif cmd == "dc" then
+        if args[2] then self:Disconnect(args[2]) end
+    elseif cmd == "rc" then
+        if args[2] then self:Reconnect(args[2]) end
+    elseif cmd == "swap" then
+        if args[2] and args[3] then self:SwapCharacter(args[2], args[3], args[4]) end
     elseif cmd == "clear" then
         self:Clear()
     elseif cmd == "vote" then
@@ -246,7 +477,7 @@ function Simulation:HandleSlashCommand(input)
         end
     else
         DesolateLootcouncil:DLC_Log(
-            "Sim Usage: /dlc sim [add <name> <optional:enchantingSkill> | remove <name> | clear | vote | list]", true)
+            "Sim Usage: /dlc sim [add <name> <optional:skill> | remove <name> | dc <name> | rc <name> | swap <old> <new> | clear | vote | list]", true)
     end
 end
 

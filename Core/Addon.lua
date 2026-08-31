@@ -94,6 +94,8 @@ local defaults = {
             sessionAutopassAnswered = false,
         },
         AttendanceHistory  = {},        -- List of past sessions { date, zone, attendees }
+        AuditLog           = {},        -- Unified 2.0 Audit Ledger
+        auditTimestamp     = 0,
         positions          = {},        -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
         activeTheme        = "Midnight", -- Default UI Theme (Midnight Void)
         dbCreatedAt        = 0,         -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
@@ -322,6 +324,18 @@ function DesolateLootcouncil:_RefreshOpenWindows(session)
         if HistoryUI and HistoryUI.sessionFrame and HistoryUI.sessionFrame:IsShown() then
             HistoryUI:ShowHistoryWindow()
         end
+    end
+
+    ---@type UI_PriorityLogHistory
+    local PriorityLogUI = self:GetModule("UI_PriorityLogHistory", true)
+    if PriorityLogUI and PriorityLogUI.logFrame and PriorityLogUI.logFrame:IsShown() then
+        PriorityLogUI:RefreshView()
+    end
+
+    ---@type UI_RaidHistory
+    local RaidHistUI = self:GetModule("UI_RaidHistory", true)
+    if RaidHistUI and RaidHistUI.frame and RaidHistUI.frame:IsShown() then
+        RaidHistUI:RefreshHistoryWindow()
     end
 
     ---@type UI_ItemManager
@@ -563,14 +577,15 @@ function DesolateLootcouncil:AmILootMaster()
 end
 
 function DesolateLootcouncil:IsOfficer(name)
-    if not name or name == "" then return false end
-    if self:SmartCompare(name, "player") and self.amILM then return true end
+    local targetName = name or UnitName("player")
+    if not targetName or targetName == "" then return false end
+    if self:SmartCompare(targetName, "player") and self.amILM then return true end
 
     local db = self.db and self.db.profile
     if not db then return false end
 
     -- Check if name is an alt, resolve to Main
-    local mainName = name
+    local mainName = targetName
     if db.playerRoster and db.playerRoster.alts then
         local score = self:GetScoreName(name)
         for alt, main in pairs(db.playerRoster.alts) do
@@ -722,7 +737,12 @@ function DesolateLootcouncil:IsUnitOnline(unitName)
     if not unitName or unitName == "" then return false end
 
     local Sim = self:GetModule("Simulation", true)
-    if Sim and Sim.IsSimulated and Sim:IsSimulated(unitName) then return true end
+    if Sim and Sim.IsSimulated and Sim:IsSimulated(unitName) then
+        if Sim.IsOffline and Sim:IsOffline(unitName) then
+            return false
+        end
+        return true
+    end
 
     if self:SmartCompare(unitName, "player") then
         return true
@@ -777,12 +797,14 @@ function DesolateLootcouncil:GetScoreName(name)
 
     -- Local cache for common 'player' lookup to avoid UnitName calls in loops
     if name == "player" then
-        if not self._playerScore then
-            local pName, pRealm = UnitName("player")
-            pRealm = (pRealm and pRealm ~= "") and pRealm or GetRealmName()
-            self._playerScore = safeLower(pName .. "-" .. pRealm):gsub("%s+", "")
+        local pName, pRealm = UnitName("player")
+        pRealm = (pRealm and pRealm ~= "") and pRealm or GetRealmName()
+        if pName then
+            local currentScore = safeLower(pName .. "-" .. pRealm):gsub("%s+", "")
+            self.cachedPlayerScore = currentScore
+            return currentScore
         end
-        return self._playerScore
+        return self.cachedPlayerScore
     end
 
     local lowName = safeLower(name)
@@ -830,6 +852,32 @@ function DesolateLootcouncil:GetDisplayName(name)
 
     -- 2. Fallback: Ambiguate the input
     return Ambiguate(name, "none")
+end
+
+--- Formats a character name for clean UI display:
+--- Strips the realm tag if the character is on the local player's realm,
+--- but preserves '-OtherRealm' if cross-realm.
+---@param fullName string|nil
+---@return string
+function DesolateLootcouncil:Ambiguate(fullName)
+    if not fullName or fullName == "" then return "" end
+    local charName, realm = tostring(fullName):match("^([^-]+)%-(.+)$")
+    if not charName or not realm then
+        return tostring(fullName)
+    end
+
+    local myRealm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+    local normRealm = realm:gsub("%s+", ""):lower()
+    local normMyRealm = myRealm:gsub("%s+", ""):lower()
+
+    if normMyRealm ~= "" and normRealm == normMyRealm then
+        return charName
+    end
+
+    return tostring(fullName)
+end
+addonTable.Ambiguate = function(fullName)
+    return DesolateLootcouncil:Ambiguate(fullName)
 end
 
 --- Efficiently compares two names for case-insensitive and realm-aware equivalence.
@@ -966,7 +1014,10 @@ function DesolateLootcouncil:PromptAutopass(isRetry)
     if not self:AmILootMaster() then return end
 
     if not IsInGroup() or self:DoAllGroupMembersHaveAddon() then
-        StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+        -- Only show the UI popup during a live session, not during automated test runs
+        if not self.isTestRunning and StaticPopup_Show then
+            StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+        end
         return
     end
 

@@ -39,7 +39,7 @@ function Comm:SendComm(command, data, target)
     local upperTarget = trimmedTarget and string.upper(trimmedTarget)
 
     if upperTarget == "RAID" or upperTarget == "PARTY" or upperTarget == "GUILD" or upperTarget == "INSTANCE_CHAT" then
-        if (upperTarget == "RAID" and IsInRaid()) or (upperTarget == "PARTY" and IsInGroup()) or (upperTarget == "GUILD" and IsInGuild()) or upperTarget == "INSTANCE_CHAT" then
+        if (upperTarget == "RAID" and IsInRaid and IsInRaid()) or (upperTarget == "PARTY" and IsInGroup and IsInGroup()) or (upperTarget == "GUILD" and IsInGuild and IsInGuild()) or upperTarget == "INSTANCE_CHAT" then
             self:SendCommMessage("DLC_COMM", serialized, upperTarget)
         end
     elseif trimmedTarget and trimmedTarget ~= "" and upperTarget ~= "WHISPER" then
@@ -47,7 +47,7 @@ function Comm:SendComm(command, data, target)
     else
         -- Smart channel selection
         local channel = DesolateLootcouncil:GetBroadcastChannel()
-        if not channel and IsInGuild() then
+        if not channel and IsInGuild and IsInGuild() then
             channel = "GUILD"
         end
         if channel then

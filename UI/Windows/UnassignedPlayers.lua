@@ -36,20 +36,7 @@ function UI_UnassignedPlayers:ShowUnassignedWindow()
         self.frame = frame
 
         -- Scroll Container
-        local scroll = CreateFrame("ScrollFrame", "DLCUnassignedScroll", frame, "UIPanelScrollFrameTemplate")
-        scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -50)
-        scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -36, 45)
-        NativeGUI:StyleScrollBar(scroll)
-
-        local content = CreateFrame("Frame", nil, scroll)
-        content:SetWidth(scroll:GetWidth() or 468)
-        content:SetHeight(1)
-        scroll:SetScrollChild(content)
-
-        scroll:SetScript("OnSizeChanged", function(_, w)
-            content:SetWidth(w)
-        end)
-
+        local scroll, content = NativeGUI:CreateScrollFrame(frame, -50, 45)
         self.scroll = scroll
         self.content = content
 

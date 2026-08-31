@@ -90,15 +90,7 @@ function Priority:OnEnable()
         end
     end
 
-    -- [LEGACY_COMPAT: v1.x -> Deprecate in v2.0] Delegate schema and format migrations to Legacy module
-    if DesolateLootcouncil.Legacy then
-        DesolateLootcouncil.Legacy:MigratePriorityLists(db)
-        DesolateLootcouncil.Legacy:MigrateMainRoster(db)
-    end
-
-    -- History Log Initialization
-    if not db.History then db.History = {} end
-    if not db.PriorityLog then db.PriorityLog = {} end
+    -- Audit Log is managed by Systems/Audit.lua and DBMigrator
 end
 
 -- --- Globally Attached Functions ---
@@ -192,42 +184,16 @@ function Priority:RenamePriorityList(index, newName)
 end
 
 function Priority:LogPriorityChange(msg)
-    if not DesolateLootcouncil.db then return end
-    local db = DesolateLootcouncil.db.profile
-    if not db.History then db.History = {} end
-    local timestamp = date("%Y-%m-%d %H:%M:%S")
-    local entry = string.format("[%s] %s", timestamp, msg)
-    table.insert(db.History, entry)
-    -- Cap history log? (Optional, but good practice). Let's keep last 100 entries.
-    if #db.History > 100 then
-        table.remove(db.History, 1)
-    end
-
-    -- Also log into per-session bucket (for RaidHistory display)
-    -- Skip decay messages as they are stored compactly in entry.decayAbsent on the attendance record
-    local API = DesolateLootcouncil.API or DesolateLootcouncil:GetModule("DLC_API", true)
-    local isDecay
-    if API and API.IsDecayLogMessage then
-        isDecay = API:IsDecayLogMessage(msg)
-    else
-        isDecay = msg:find("[Decay]", 1, true) ~= nil or msg:find("[Verfall]", 1, true) ~= nil
-    end
-
-    local sessionID = db.DecayConfig and db.DecayConfig.currentSessionID
-    if sessionID and not isDecay then
-        if not db.SessionPositionLog then db.SessionPositionLog = {} end
-        local key = tostring(sessionID)
-        if not db.SessionPositionLog[key] then db.SessionPositionLog[key] = {} end
-        table.insert(db.SessionPositionLog[key], entry)
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("PRIO_CHANGE", nil, nil, nil, msg)
     end
 end
 
 function Priority:ShuffleLists()
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile
-    -- CLEAR HISTORY on season reset
-    db.History = {}
-    self:LogPriorityChange("Season Started - All lists shuffled and history cleared.")
+    self:LogPriorityChange("Season Started - All lists shuffled.")
 
     local mains = {}
     -- Retrieve the existing MainRoster directly from DB
@@ -427,6 +393,11 @@ function Priority:MovePlayerToBottom(listName, playerName)
             to = #players
         })
 
+        local Audit = DesolateLootcouncil:GetModule("Audit", true)
+        if Audit and Audit.Log then
+            Audit:Log("TO_BOTTOM", nil, targetName, listName, string.format("Rank %d -> %d", foundIndex, #players))
+        end
+
         return foundIndex
     end
     return nil
@@ -501,6 +472,7 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
         self:LogPriorityChange(logMsg)
 
         -- 5. Structured Logging
+        if not db.PriorityLog then db.PriorityLog = {} end
         table.insert(db.PriorityLog, {
             time = time(),
             type = "RESTORE",
@@ -509,6 +481,12 @@ function Priority:RestorePlayerPosition(listName, playerName, index)
             from = currentIndex,
             to = savedIndex
         })
+
+        local Audit = DesolateLootcouncil:GetModule("Audit", true)
+        if Audit and Audit.Log then
+            Audit:Log("RESTORE", nil, targetMain, listName, string.format("Rank %d -> %d", currentIndex, savedIndex))
+        end
+
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
@@ -631,6 +609,11 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
             )
             DesolateLootcouncil:DLC_Log(logMsg)
             self:LogPriorityChange(logMsg)
+
+            local Audit = DesolateLootcouncil:GetModule("Audit", true)
+            if Audit and Audit.Log then
+                Audit:Log("DECAY", nil, name, listName, string.format("Moved %d -> %d (+%d penalty)", origPos, targetIdx, penalty))
+            end
         end
     end
 
@@ -670,6 +653,12 @@ function Priority:MovePlayerInList(listKey, fromIndex, toIndex)
 
     local msg = string.format("Manual Override: Moved %s from %d to %d in %s.", player, fromIndex, toIndex, list.name or tostring(listKey))
     self:LogPriorityChange(msg)
+
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("PRIO_REORDER", nil, player, list.name or tostring(listKey), string.format("Rank %d -> %d", fromIndex, toIndex))
+    end
+
     if list.name and DesolateLootcouncil.API and DesolateLootcouncil.API.MarkPriorityDirty then
         DesolateLootcouncil.API:MarkPriorityDirty(list.name)
     end

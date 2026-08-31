@@ -306,23 +306,25 @@ function UI_Attendance:GetSettingsGroupOptions(config)
     return {
         settingsHeader = {
             type = "header",
-            name = L["Settings"],
+            name = L["Priority Decay Rules"],
             order = 1,
         },
         enabled = {
             type = "toggle",
-            name = L["Enable Priority Decay"],
-            desc = L["If enabled, absent players will suffer priority decay."],
+            name = L["Enable Priority Decay for Absences"],
+            desc = L["If enabled, unexcused absent players will suffer rank decay on priority lists at the end of the raid session."],
             order = 2,
+            width = "double",
             get = function() return config.enabled end,
             set = function(_, val) DesolateLootcouncil.API:SetDecayEnabled(val) end,
         },
         defaultPenalty = {
             type = "select",
-            name = L["Default Penalty"],
-            desc = L["Amount of priority lost per missed raid."],
+            name = L["Default Penalty (Ranks)"],
+            desc = L["Amount of priority positions lost per missed raid session."],
             order = 3,
-            values = { [0] = "0", [1] = "1", [2] = "2", [3] = "3" },
+            width = "normal",
+            values = { [0] = "0 (No Decay)", [1] = "1 (Standard)", [2] = "2 (Severe)", [3] = "3 (Critical)" },
             get = function() return config.defaultPenalty end,
             set = function(_, val) DesolateLootcouncil.API:SetDecayPenalty(val) end,
         }
@@ -333,21 +335,29 @@ function UI_Attendance:GetSessionControlOptions(config)
     return {
         sessionHeader = {
             type = "header",
-            name = L["Session Control"],
+            name = L["Live Raid Session Control"],
             order = 10,
         },
         status = {
             type = "description",
             name = function()
-                if config.sessionActive then return "|cff00ff00" .. L["Session Active"] .. "|r"
-                else return "|cffff0000" .. L["Session Inactive"] .. "|r" end
+                if config.sessionActive then
+                    local count = 0
+                    if config.currentAttendees then
+                        for _ in pairs(config.currentAttendees) do count = count + 1 end
+                    end
+                    return string.format("|cff00ff00● %s|r  |cff888888(%d Active Attendees)|r", L["Session Active"], count)
+                else
+                    return "|cffff0000● " .. L["Session Inactive"] .. "|r"
+                end
             end,
             fontSize = "medium",
             order = 11,
+            width = "double",
         },
         controlBtn = {
             type = "execute",
-            name = function() return config.sessionActive and L["End Session"] or L["Start Session"] end,
+            name = function() return config.sessionActive and L["End Session & Review"] or L["Start Session"] end,
             desc = function()
                 return config.sessionActive and
                     L["Open the Attendance Review window to process decay and end the session."] or
@@ -364,6 +374,7 @@ function UI_Attendance:GetSessionControlOptions(config)
                 end
             end,
             order = 12,
+            width = "normal",
         }
     }
 end
@@ -372,12 +383,12 @@ function UI_Attendance:GetRaidHistoryOptions(config)
     return {
         historyHeader = {
             type = "header",
-            name = L["Raid History"],
+            name = L["Raid Attendance & Award History"],
             order = 20,
         },
         historyList = {
             type = "select",
-            name = L["Select Session"],
+            name = L["Select Saved Session"],
             desc = L["View details of current or past raid sessions."],
             order = 21,
             values = function()
@@ -403,20 +414,11 @@ function UI_Attendance:GetRaidHistoryOptions(config)
             set = function(_, val) self.selectedHistoryIndex = val end,
             width = "double",
         },
-        deleteBtn = {
-            type = "execute",
-            name = L["Delete Entry"],
-            desc = L["Permanently delete the selected history record."],
-            order = 23,
-            disabled = function() return not self.selectedHistoryIndex or self.selectedHistoryIndex == "CURRENT" end,
-            func = function() StaticPopup_Show("DLC_CONFIRM_DELETE_HISTORY") end,
-            width = "half",
-        },
         viewBtn = {
             type = "execute",
             name = L["Open Full History"],
             desc = L["Open the combined raid history window for the selected session."],
-            order = 24,
+            order = 22,
             disabled = function() return not self.selectedHistoryIndex end,
             func = function()
                 local RaidHistory = DesolateLootcouncil:GetModule("UI_RaidHistory", true)
@@ -424,6 +426,15 @@ function UI_Attendance:GetRaidHistoryOptions(config)
                     RaidHistory:ShowRaidHistoryWindow(self.selectedHistoryIndex)
                 end
             end,
+            width = "normal",
+        },
+        deleteBtn = {
+            type = "execute",
+            name = L["Delete Entry"],
+            desc = L["Permanently delete the selected history record."],
+            order = 23,
+            disabled = function() return not self.selectedHistoryIndex or self.selectedHistoryIndex == "CURRENT" end,
+            func = function() StaticPopup_Show("DLC_CONFIRM_DELETE_HISTORY") end,
             width = "normal",
         },
     }

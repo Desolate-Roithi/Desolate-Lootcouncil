@@ -130,14 +130,22 @@ function Roster:SanitizeMainsAndAlts()
     if not profile or not profile.MainRoster then return end
 
     if profile.playerRoster and profile.playerRoster.alts then
-        for altName in pairs(profile.playerRoster.alts) do
-            local altScore = DesolateLootcouncil:GetScoreName(altName)
-            if altScore then
-                for mainKey in pairs(profile.MainRoster) do
-                    if DesolateLootcouncil:GetScoreName(mainKey) == altScore then
-                        profile.MainRoster[mainKey] = nil
-                        DesolateLootcouncil:DLC_Log(string.format("Sanitized roster: Removed alt '%s' from MainRoster.", mainKey))
-                        break
+        for altName, mainName in pairs(profile.playerRoster.alts) do
+            if DesolateLootcouncil:SmartCompare(altName, mainName) then
+                profile.playerRoster.alts[altName] = nil
+                if not profile.MainRoster[altName] then
+                    profile.MainRoster[altName] = { isOfficer = false, addedAt = GetServerTime() }
+                end
+                DesolateLootcouncil:DLC_Log(string.format("Sanitized roster: Removed self-referencing alt '%s' and restored as Main.", altName))
+            else
+                local altScore = DesolateLootcouncil:GetScoreName(altName)
+                if altScore then
+                    for mainKey in pairs(profile.MainRoster) do
+                        if DesolateLootcouncil:GetScoreName(mainKey) == altScore then
+                            profile.MainRoster[mainKey] = nil
+                            DesolateLootcouncil:DLC_Log(string.format("Sanitized roster: Removed alt '%s' from MainRoster.", mainKey))
+                            break
+                        end
                     end
                 end
             end
@@ -252,25 +260,63 @@ function Roster:AddMain(name)
     if not devDB.playerRoster then devDB.playerRoster = { alts = {}, decay = {} } end
     if not devDB.playerRoster.alts then devDB.playerRoster.alts = {} end
 
-    -- Normalize for storage: realmless if local realm
-    local normalizedName = Ambiguate(name, "none")
+    -- Store with full Name-Realm key; SmartCompare handles realm-agnostic lookups
+    local normalizedName = name
 
     -- Duplicate Check
     for existingName in pairs(devDB.MainRoster) do
         if DesolateLootcouncil:SmartCompare(existingName, normalizedName) then
             DesolateLootcouncil:DLC_Log("Error: " .. DesolateLootcouncil:GetDisplayName(normalizedName) .. 
                 " already exists in Roster as " .. DesolateLootcouncil:GetDisplayName(existingName), true)
-            return
+            return false
+        end
+    end
+
+    -- Clear from alts if previously registered as an alt
+    if devDB.playerRoster and devDB.playerRoster.alts then
+        for altKey in pairs(devDB.playerRoster.alts) do
+            if DesolateLootcouncil:SmartCompare(altKey, normalizedName) then
+                devDB.playerRoster.alts[altKey] = nil
+            end
         end
     end
 
     devDB.MainRoster[normalizedName] = { addedAt = time(), isOfficer = false } -- Store main with timestamp
-    devDB.playerRoster.alts[normalizedName] = nil           -- Ensure not an alt
     devDB.rosterTimestamp = GetServerTime()
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Added Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
+
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("ROSTER_ADD_MAIN", nil, normalizedName, nil, "Added main character")
+    end
     
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+    return true
+end
+
+function Roster:IsMain(name)
+    if not name or name == "" then return false end
+    local devDB = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if not devDB or not devDB.MainRoster then return false end
+    for rosterName in pairs(devDB.MainRoster) do
+        if DesolateLootcouncil:SmartCompare(rosterName, name) then
+            return true
+        end
+    end
+    return false
+end
+
+function Roster:IsAlt(name)
+    if not name or name == "" then return false end
+    local devDB = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if not devDB or not devDB.playerRoster or not devDB.playerRoster.alts then return false end
+    for altName in pairs(devDB.playerRoster.alts) do
+        if DesolateLootcouncil:SmartCompare(altName, name) then
+            return true
+        end
+    end
+    return false
 end
 
 function Roster:SetOfficer(name, flag)
@@ -281,9 +327,9 @@ function Roster:SetOfficer(name, flag)
     if not devDB then return end
     if not devDB.MainRoster then devDB.MainRoster = {} end
     
-    -- If this name is an alt, resolve it to their Main
+    -- Resolve alt to Main; store with full Name-Realm key
     local targetMain = self:GetMain(name) or name
-    local normalizedName = Ambiguate(targetMain, "none")
+    local normalizedName = targetMain
 
     for existingName, data in pairs(devDB.MainRoster) do
         if DesolateLootcouncil:SmartCompare(existingName, normalizedName) then
@@ -346,17 +392,17 @@ function Roster:AddAlt(altName, mainName)
     if not DesolateLootcouncil.db then return end
     if not altName or not mainName then return end
 
-    -- Normalize for storage
-    local normalizedAlt = Ambiguate(altName, "none")
-    local normalizedMain = Ambiguate(mainName, "none")
+    -- Store with full Name-Realm keys
+    local normalizedAlt = altName
+    local normalizedMain = mainName
 
     if DesolateLootcouncil:SmartCompare(normalizedAlt, normalizedMain) then
         DesolateLootcouncil:DLC_Log("Error: Cannot add a player as an alt to themselves.")
-        return
+        return false
     end
 
     local profile = DesolateLootcouncil.db.profile
-    if not profile then return end
+    if not profile then return false end
     if not profile.MainRoster then profile.MainRoster = {} end
     if not profile.playerRoster then profile.playerRoster = { alts = {}, decay = {} } end
     if not profile.playerRoster.alts then profile.playerRoster.alts = {} end
@@ -389,8 +435,14 @@ function Roster:AddAlt(altName, mainName)
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Linked Alt " .. DesolateLootcouncil:GetDisplayName(normalizedAlt) .. 
         " to " .. DesolateLootcouncil:GetDisplayName(normalizedMain))
+
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("ALT_LINK", nil, normalizedAlt, nil, string.format("Linked to Main %s", normalizedMain))
+    end
         
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+    return true
 end
 
 function Roster:RemovePlayer(name)
@@ -403,8 +455,8 @@ function Roster:RemovePlayer(name)
     if not profile.playerRoster then profile.playerRoster = { alts = {}, decay = {} } end
     if not profile.playerRoster.alts then profile.playerRoster.alts = {} end
 
-    -- Normalize lookup
-    local normalizedName = Ambiguate(name, "none")
+    -- Use raw Name-Realm for lookup; SmartCompare handles matching
+    local normalizedName = name
 
     -- Try delete as Main
     if profile.MainRoster and profile.MainRoster[normalizedName] then
@@ -421,6 +473,10 @@ function Roster:RemovePlayer(name)
         end
         self:UpdateScoreMap()
         DesolateLootcouncil:DLC_Log("Removed Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
+        local Audit = DesolateLootcouncil:GetModule("Audit", true)
+        if Audit and Audit.Log then
+            Audit:Log("ROSTER_REMOVE", nil, normalizedName, nil, "Removed main character")
+        end
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
         return
     end
@@ -431,6 +487,10 @@ function Roster:RemovePlayer(name)
         profile.rosterTimestamp = GetServerTime()
         self:UpdateScoreMap()
         DesolateLootcouncil:DLC_Log("Removed Alt: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
+        local Audit = DesolateLootcouncil:GetModule("Audit", true)
+        if Audit and Audit.Log then
+            Audit:Log("ALT_UNLINK", nil, normalizedName, nil, "Removed alt character")
+        end
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
@@ -474,7 +534,7 @@ function Roster:RecordUnassignedPlayer(name, source)
     local profile = DesolateLootcouncil.db.profile
     if not profile then return end
 
-    local normalizedName = Ambiguate(name, "none")
+    local normalizedName = name
     local score = DesolateLootcouncil:GetScoreName(normalizedName)
 
     -- Check if already known as Main or Alt
@@ -550,7 +610,7 @@ function Roster:AssignAsMain(name)
     if not DesolateLootcouncil.db or not name then return end
     local profile = DesolateLootcouncil.db.profile
     if profile and profile.unassignedPlayers then
-        local norm = Ambiguate(name, "none")
+        local norm = name
         for k in pairs(profile.unassignedPlayers) do
             if DesolateLootcouncil:SmartCompare(k, norm) then
                 profile.unassignedPlayers[k] = nil
@@ -559,20 +619,21 @@ function Roster:AssignAsMain(name)
             end
         end
     end
-    self:AddMain(name)
+    local ok = self:AddMain(name)
     self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
 
     local Session = DesolateLootcouncil:GetModule("Session", true)
     if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
         Session:SendDLCHeartbeat()
     end
+    return ok
 end
 
 function Roster:AssignAsAlt(altName, mainName)
-    if not DesolateLootcouncil.db or not altName or not mainName then return end
+    if not DesolateLootcouncil.db or not altName or not mainName then return false end
     local profile = DesolateLootcouncil.db.profile
     if profile and profile.unassignedPlayers then
-        local norm = Ambiguate(altName, "none")
+        local norm = altName
         for k in pairs(profile.unassignedPlayers) do
             if DesolateLootcouncil:SmartCompare(k, norm) then
                 profile.unassignedPlayers[k] = nil
@@ -581,20 +642,21 @@ function Roster:AssignAsAlt(altName, mainName)
             end
         end
     end
-    self:AddAlt(altName, mainName)
+    local ok = self:AddAlt(altName, mainName)
     self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
 
     local Session = DesolateLootcouncil:GetModule("Session", true)
     if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
         Session:SendDLCHeartbeat()
     end
+    return ok
 end
 
 function Roster:DismissUnassignedPlayer(name)
     if not DesolateLootcouncil.db or not name then return end
     local profile = DesolateLootcouncil.db.profile
     if profile and profile.unassignedPlayers then
-        local norm = Ambiguate(name, "none")
+        local norm = name
         for k in pairs(profile.unassignedPlayers) do
             if DesolateLootcouncil:SmartCompare(k, norm) then
                 profile.unassignedPlayers[k] = nil
@@ -826,7 +888,7 @@ function Roster:CheckForNewRaidMembers()
             end
 
             if isAddonUser then
-                local normalizedName = Ambiguate(name, "none")
+                local normalizedName = name
                 local score = DesolateLootcouncil:GetScoreName(normalizedName)
 
                 -- Check if already known as Main or Alt
@@ -1084,6 +1146,22 @@ function Roster:StripDifficultySuffix(bossName)
     return clean
 end
 
+local function FormatDisplayName(fullName)
+    if DesolateLootcouncil and DesolateLootcouncil.Ambiguate then
+        return DesolateLootcouncil:Ambiguate(fullName)
+    end
+    if not fullName or fullName == "" then return "" end
+    local charName, realm = tostring(fullName):match("^([^-]+)%-(.+)$")
+    if not charName or not realm then return tostring(fullName) end
+    local myRealm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+    local normRealm = realm:gsub("%s+", ""):lower()
+    local normMyRealm = myRealm:gsub("%s+", ""):lower()
+    if normMyRealm ~= "" and normRealm == normMyRealm then
+        return charName
+    end
+    return tostring(fullName)
+end
+
 function Roster:GetRosterText()
     local db = DesolateLootcouncil.db.profile
     if not db.MainRoster then return "No Roster Found." end
@@ -1092,14 +1170,18 @@ function Roster:GetRosterText()
     for name in pairs(db.MainRoster) do table.insert(sortedMains, name) end
     table.sort(sortedMains)
     for _, main in ipairs(sortedMains) do
-        local mainText = main
+        local displayMain = FormatDisplayName(main)
+        local mainText = displayMain
         local data = db.MainRoster[main]
         if data and data.isOfficer then mainText = mainText .. " (Officer)" end
         text = text .. mainText
         local alts = {}
         if db.playerRoster and db.playerRoster.alts then
             for alt, parent in pairs(db.playerRoster.alts) do
-                if parent == main then table.insert(alts, alt) end
+                if parent == main then
+                    local displayAlt = FormatDisplayName(alt)
+                    table.insert(alts, displayAlt)
+                end
             end
         end
         if #alts > 0 then
@@ -1116,7 +1198,8 @@ function Roster:GetMainRosterList()
     local db = DesolateLootcouncil.db.profile
     if db.MainRoster then
         for name, data in pairs(db.MainRoster) do
-            list[name] = (data and data.isOfficer) and (name .. " (Officer)") or name
+            local displayName = FormatDisplayName(name)
+            list[name] = (data and data.isOfficer) and (displayName .. " (Officer)") or displayName
         end
     end
     return list
@@ -1127,7 +1210,9 @@ function Roster:GetAllPlayersList()
     local db = DesolateLootcouncil.db.profile
     if db.playerRoster and db.playerRoster.alts then
         for alt, main in pairs(db.playerRoster.alts) do
-            list[alt] = "   └ " .. alt .. " (Alt of " .. main .. ")"
+            local displayAlt = FormatDisplayName(alt)
+            local displayMain = FormatDisplayName(main)
+            list[alt] = displayAlt .. " (Alt of " .. displayMain .. ")"
         end
     end
     return list
@@ -1191,6 +1276,10 @@ function Roster:RenamePlayer(oldName, newName)
         end
 
         DesolateLootcouncil:DLC_Log(string.format("Renamed Main player '%s' to '%s'.", oldName, newName))
+        local Audit = DesolateLootcouncil:GetModule("Audit", true)
+        if Audit and Audit.Log then
+            Audit:Log("ROSTER_RENAME", nil, newName, nil, string.format("Renamed Main from %s to %s", oldName, newName))
+        end
         self:SnapshotRoster()
         return true
     end
@@ -1202,6 +1291,10 @@ function Roster:RenamePlayer(oldName, newName)
         db.playerRoster.alts[oldName] = nil
 
         DesolateLootcouncil:DLC_Log(string.format("Renamed Alt player '%s' to '%s' (Main: %s).", oldName, newName, main))
+        local Audit = DesolateLootcouncil:GetModule("Audit", true)
+        if Audit and Audit.Log then
+            Audit:Log("ROSTER_RENAME", nil, newName, nil, string.format("Renamed Alt from %s to %s (Main: %s)", oldName, newName, main))
+        end
         self:SnapshotRoster()
         return true
     end

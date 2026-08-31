@@ -178,7 +178,11 @@ L["Manual Override: Moved %s from %d to %d in %s."] = "Manuelles Überschreiben:
 
 -- PriorityLogHistory.lua
 L["Priority Log History"] = "Prioritäts-Logverlauf"
+L["Audit & Priority Ledger"] = "Audit- & Prioritäts-Ledger"
+L["View Session Audit Trail"] = "Session-Audit-Trail anzeigen"
 L["No history logs found."] = "Keine Verlaufs-Logs gefunden."
+L["No audit log entries recorded."] = "Keine Audit-Einträge erfasst."
+L["Only the Loot Master or Officers can view the Audit Ledger."] = "Nur der Plündermeister oder Offiziere können das Audit-Ledger einsehen."
 
 -- Loot.lua (Systems)
 L["Addon Connection: [%d] / [%d]"] = "Addon-Verbindung: [%d] / [%d]"
@@ -390,5 +394,17 @@ L["Alt"] = "Alt"
 L["Characters in attendance:"] = "Anwesende Charaktere:"
 L["Systems/Attendance Loaded"] = "Systems/Attendance geladen"
 L["Systems/ItemCatalog Loaded"] = "Systems/ItemCatalog geladen"
+
+-- Audit Ledger Viewer
+L["All Events"] = "Alle Ereignisse"
+L["Loot Awards"] = "Beutevergaben"
+L["Decay Penalties"] = "Verfallstrafen"
+L["Manual Shifts"] = "Manuelle Änderungen"
+L["Roster Changes"] = "Kaderänderungen"
+L["Copy Audit Ledger"] = "Audit-Protokoll kopieren"
+L["Filter:"] = "Filter:"
+L["Search:"] = "Suche:"
+L["Audit ledger copied to clipboard."] = "Audit-Protokoll in die Zwischenablage kopiert."
+
 
 

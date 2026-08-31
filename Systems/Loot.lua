@@ -280,8 +280,10 @@ function Loot:OnLootMessage(event, msg)
 end
 
 function Loot:AddSessionItem(link, itemGUID, texture, quantity, category, itemID)
+    self.sessionItems = self.sessionItems or {}
     if self.sessionItems[itemGUID] then return false end
     local session = DesolateLootcouncil.db.profile.session
+    session.loot = session.loot or {}
     table.insert(session.loot, {
         link = link,
         itemID = itemID,
@@ -295,6 +297,21 @@ function Loot:AddSessionItem(link, itemGUID, texture, quantity, category, itemID
     return true
 end
 
+function Loot:AddManualItem(rawLink)
+    if not rawLink or rawLink == "" then return end
+    local itemID = self:GetItemIDFromLink(rawLink) or (C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(rawLink))
+    if not itemID then return end
+
+    local category = self:GetItemCategory(itemID)
+    if not category or category == "Junk/Pass" then
+        category = self:CategorizeItem(rawLink, 4) or "Tier"
+    end
+    local guid = "Manual-" .. itemID .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000, 9999))
+    self:AddSessionItem(rawLink, guid, nil, 1, category, itemID)
+    local session = DesolateLootcouncil.db.profile.session
+    self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
+end
+
 function Loot:ClearLootBacklog()
     local session = DesolateLootcouncil.db.profile.session
     -- Bug 1: ONLY wipe the loot queue, NOT sessionItems.
@@ -303,45 +320,6 @@ function Loot:ClearLootBacklog()
     -- It is only reset on addon load (OnEnable) for the full raid night.
     if session and session.loot then wipe(session.loot) end
     DesolateLootcouncil:DLC_Log(L["Loot backlog cleared (dedup store preserved)."])
-end
-
-function Loot:AddManualItem(rawLink)
-    if not DesolateLootcouncil:AmILootMaster() then return end
-    local itemID = self:GetItemIDFromLink(rawLink)
-    if itemID then
-        local category = self:GetItemCategory(itemID)
-        if category == "Junk/Pass" then category = self:CategorizeItem(rawLink) end
-
-        -- 1. Try to get full info from the provided string (in case it's a full hyperlink)
-        local _, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(rawLink)
-
-        -- 2. Fallback to ID if needed
-        if not link then
-            _, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
-        end
-
-        -- 3. If STILL no link (uncached), use the provided raw string as a placeholder
-        --    This will allow the UI to catch it and trigger a refresh.
-        if not link then
-            link = rawLink
-        end
-
-        if not icon then icon = C_Item.GetItemIconByID(itemID) end
-
-        local session = DesolateLootcouncil.db.profile.session
-        session.loot = session.loot or {}
-        table.insert(session.loot, {
-            link = link,
-            itemID = itemID,
-            category = category,
-            sourceGUID = "Manual-" .. itemID .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
-            stackIndex = 1,
-            texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark"
-        })
-        DesolateLootcouncil:DLC_Log(string.format(L["Manually added: %s"], link), true)
-
-        self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
-    end
 end
 
 -- --- Awarding --- --
@@ -401,6 +379,11 @@ function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, or
         traded        = isSelf,
     }
     table.insert(session.awarded, entry)
+
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("AWARD", nil, winnerName, itemData.category, string.format("Awarded %s (%s)", tostring(itemData.link or itemData.itemID), tostring(voteType)))
+    end
 
     if Session and Session.SendHistoryUpdate then Session:SendHistoryUpdate(entry) end
 
@@ -474,6 +457,11 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             db.global.activeRaidLastActivity = time()
         end
     end
+
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("AWARD", nil, winnerName, itemData.category, string.format("Item: %s (%s) | Vote: %s", tostring(itemData.link or itemData.itemID), tostring(itemData.itemID or ""), tostring(voteType or "Bid")))
+    end
 end
 
 --- Copies the original votes back onto the new item GUID so the Monitor
@@ -504,15 +492,15 @@ function Loot:ReawardItem(index)
 
     -- 1. Push item back onto the live bidding list (generate a new GUID to avoid
     --    conflicts with the original loot-bag entry, which may have already been consumed)
-    table.insert(session.bidding, awardedItem.fullItemData or {
-        link       = awardedItem.link,
-        itemID     = awardedItem.itemID,
-        texture    = awardedItem.texture,
-        category   = "Re-awarded",
-        sourceGUID = "Reaward-" ..
-            (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
-        stackIndex = 1,
-    })
+    local newGUID = "Reaward-" .. (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000))
+    local newItemData = (awardedItem.fullItemData and DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(awardedItem.fullItemData)) or {}
+    newItemData.link       = newItemData.link or awardedItem.link
+    newItemData.itemID     = newItemData.itemID or awardedItem.itemID
+    newItemData.texture    = newItemData.texture or awardedItem.texture
+    newItemData.category   = newItemData.category or (awardedItem.fullItemData and awardedItem.fullItemData.category) or "Re-awarded"
+    newItemData.stackIndex = newItemData.stackIndex or 1
+    newItemData.sourceGUID = newGUID
+    table.insert(session.bidding, newItemData)
 
     -- 2. Restore priority position so the original winner isn't penalised
     if awardedItem.originalIndex and awardedItem.winner then
@@ -532,6 +520,11 @@ function Loot:ReawardItem(index)
     table.remove(session.awarded, index)
     DesolateLootcouncil:DLC_Log(string.format(L["Re-awarded item: %s"], (awardedItem.link or "???")))
 
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("REAWARD", nil, awardedItem.winner, awardedItem.fullItemData and awardedItem.fullItemData.category, string.format("Re-awarded %s (Winner restored)", tostring(awardedItem.link or awardedItem.itemID)))
+    end
+
     -- 5. Broadcast the restored item so assistants see it in their Monitor
     local newItem = session.bidding[#session.bidding]
     local Session = DesolateLootcouncil:GetModule("Session")
@@ -547,7 +540,7 @@ function Loot:ReawardItem(index)
             } },
             duration = 300,
             endTime  = GetServerTime() + 300,
-            votes    = { [newItem.sourceGUID] = DesolateLootcouncil.Table.DeepCopy(awardedItem.votes or {}) },
+            votes    = newItem.sourceGUID and { [newItem.sourceGUID] = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(awardedItem.votes or {})) or {} } or {},
         }
         local serialized = Session:Serialize(payload)
         local channel = DesolateLootcouncil:GetBroadcastChannel()

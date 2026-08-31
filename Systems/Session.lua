@@ -1283,8 +1283,7 @@ function Session:ClearVotes()
 end
 
 function Session:ClaimLMRole()
-    if not IsInGroup() then return end
-    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    if not (DesolateLootcouncil:IsOfficer() or DesolateLootcouncil:AmIOfficerOrLM()) then return end
     if DesolateLootcouncil:AmILootMaster() then return end
 
     local myName = UnitName("player")
@@ -1303,16 +1302,18 @@ function Session:ClaimLMRole()
 
     DesolateLootcouncil:Print("You have claimed the Loot Master role.")
 
-    local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
-    if not amILeader then
-        local rl = DesolateLootcouncil:GetGroupLeader()
-        local CommMod = DesolateLootcouncil:GetModule("Comm", true)
-        if rl and CommMod then
-            CommMod:SendComm("LM_UPDATE_CONFIGURED", { configuredLM = myName, isClaim = true }, rl)
+    if IsInGroup() then
+        local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
+        if not amILeader then
+            local rl = DesolateLootcouncil:GetGroupLeader()
+            local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+            if rl and CommMod then
+                CommMod:SendComm("LM_UPDATE_CONFIGURED", { configuredLM = myName, isClaim = true }, rl)
+            end
         end
-    end
 
-    self:SendSyncLM(myName)
+        self:SendSyncLM(myName)
+    end
 
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 

@@ -5,7 +5,6 @@ if AT.abortLoad then return end
 --- Public Data Abstraction Layer (DAL) and stateless facade for Desolate Lootcouncil.
 --- Wraps subsystem operations to protect internal state and isolate execution paths.
 local DLC_API = {}
-_G["DLC_API"] = DLC_API
 AT.DLC_API = DLC_API
 DesolateLootcouncil.API = DLC_API
 
@@ -192,8 +191,16 @@ end
 ---@return string?
 function DLC_API:GetScoreName(name)
     if not name or name == "" then return nil end
-    local clean = name:match("^([^%-]+)") or name
-    return clean:lower()
+    if DesolateLootcouncil.GetScoreName then
+        return DesolateLootcouncil:GetScoreName(name)
+    end
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    local lowName = safeLower(name)
+    if not string.find(lowName, "-") then
+        local realm = (GetRealmName and safeLower(GetRealmName()):gsub("%s+", "")) or ""
+        if realm ~= "" then lowName = lowName .. "-" .. realm end
+    end
+    return lowName:gsub("%s+", "")
 end
 
 --- Returns whether debug logging mode is enabled.
@@ -429,10 +436,52 @@ function DLC_API:SyncMissingPlayers()
     if p and p.SyncMissingPlayers then p:SyncMissingPlayers() end
 end
 
---- Returns the priority history audit log lines.
----@return string[]
+local function Audit() return DesolateLootcouncil:GetModule("Audit", true) end
+
+--- Appends an immutable structured audit event into the ledger.
+---@param action string
+---@param player string|nil
+---@param listName string|nil
+---@param details string|nil
+---@param sessionID number|string|nil
+---@return table|nil
+function DLC_API:LogAuditEvent(action, player, listName, details, sessionID)
+    local a = Audit()
+    if a and a.Log then
+        return a:Log(action, nil, player, listName, details, sessionID)
+    end
+    return nil
+end
+
+--- Returns filtered audit log entries.
+---@param sessionID number|string|nil
+---@param actionFilter string|nil
+---@return table[]
+function DLC_API:GetAuditLog(sessionID, actionFilter)
+    local a = Audit()
+    if a and a.GetLog then
+        return a:GetLog(sessionID, actionFilter)
+    end
+    return (DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.AuditLog) or {}
+end
+
+--- Exports the audit log as a formatted text ledger.
+---@param sessionID number|string|nil
+---@return string
+function DLC_API:ExportAuditLog(sessionID)
+    local a = Audit()
+    if a and a.ExportLog then
+        return a:ExportLog(sessionID)
+    end
+    return ""
+end
+
+--- Returns the priority history audit log lines (Backward compatibility).
+---@return table[]
 function DLC_API:GetPriorityLog()
-    return DesolateLootcouncil.db.profile.PriorityLog or {}
+    local a = Audit()
+    if a and a.GetLog then return a:GetLog(nil, "PRIO") end
+    return DesolateLootcouncil.db.profile.AuditLog or DesolateLootcouncil.db.profile.PriorityLog or {}
 end
 
 --- Marks a Priority list as modified by updating its timestamp.
@@ -954,8 +1003,13 @@ end
 function DLC_API:GetAwardedGUIDs()
     local result = {}
     for _, award in ipairs(self:GetAwardedList()) do
+        if award.link then result[award.link] = true end
+        if award.sourceGUID then result[award.sourceGUID] = true end
         if award.fullItemData and award.fullItemData.sourceGUID then
             result[award.fullItemData.sourceGUID] = true
+        end
+        if award.fullItemData and award.fullItemData.link then
+            result[award.fullItemData.link] = true
         end
     end
     return result
@@ -979,23 +1033,42 @@ function DLC_API:GetVoteSummary(guid)
     return self:GetSessionItemVotes(guid)
 end
 
+--- Returns the current active bidding list.
+---@return table
+function DLC_API:GetBiddingList()
+    local s = Session()
+    if s and s.clientLootList and #s.clientLootList > 0 then return s.clientLootList end
+    if DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session then
+        return DesolateLootcouncil.db.profile.session.bidding or {}
+    end
+    return {}
+end
+
 --- Returns item data table for a given GUID from bidding or client loot.
 ---@param guid string
 ---@return table?
 function DLC_API:GetItemData(guid)
+    if not guid then return nil end
     local s = Session()
-    if s and s.GetItemData then return s:GetItemData(guid) end
+    if s and s.GetItemData then
+        local item = s:GetItemData(guid)
+        if item then return item end
+    end
     if DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session then
         local bidding = DesolateLootcouncil.db.profile.session.bidding
         if bidding then
             for _, item in ipairs(bidding) do
-                if item.guid == guid then return item end
+                if (item.sourceGUID or item.link or item.guid) == guid or item.itemID == tonumber(guid) then
+                    return item
+                end
             end
         end
     end
     if s and s.clientLootList then
         for _, item in ipairs(s.clientLootList) do
-            if item.guid == guid then return item end
+            if (item.sourceGUID or item.link or item.guid) == guid or item.itemID == tonumber(guid) then
+                return item
+            end
         end
     end
     return nil
@@ -1221,17 +1294,21 @@ end
 
 --- Adds a main character to the roster.
 ---@param name string
+---@return boolean
 function DLC_API:AddMain(name)
     local r = Roster()
-    if r and r.AddMain then r:AddMain(name) end
+    if r and r.AddMain then return r:AddMain(name) end
+    return false
 end
 
 --- Adds an alt character linked to a main.
 ---@param name string
 ---@param main string
+---@return boolean
 function DLC_API:AddAlt(name, main)
     local r = Roster()
-    if r and r.AddAlt then r:AddAlt(name, main) end
+    if r and r.AddAlt then return r:AddAlt(name, main) end
+    return false
 end
 
 --- Removes a player from the roster.
@@ -1258,17 +1335,21 @@ end
 
 --- Assigns an unassigned player as a Main.
 ---@param name string
+---@return boolean
 function DLC_API:AssignUnassignedAsMain(name)
     local r = Roster()
-    if r and r.AssignAsMain then r:AssignAsMain(name) end
+    if r and r.AssignAsMain then return r:AssignAsMain(name) end
+    return false
 end
 
 --- Assigns an unassigned player as an Alt linked to a Main.
 ---@param altName string
 ---@param mainName string
+---@return boolean
 function DLC_API:AssignUnassignedAsAlt(altName, mainName)
     local r = Roster()
-    if r and r.AssignAsAlt then r:AssignAsAlt(altName, mainName) end
+    if r and r.AssignAsAlt then return r:AssignAsAlt(altName, mainName) end
+    return false
 end
 
 --- Dismisses an unassigned player from the review queue.
@@ -1276,6 +1357,36 @@ end
 function DLC_API:DismissUnassignedPlayer(name)
     local r = Roster()
     if r and r.DismissUnassignedPlayer then r:DismissUnassignedPlayer(name) end
+end
+
+--- Awards an item from the live bidding session.
+---@param sourceGUID string
+---@param winner string
+---@param voteType string
+function DLC_API:AwardItem(sourceGUID, winner, voteType)
+    local l = Loot()
+    if l and l.AwardItem then l:AwardItem(sourceGUID, winner, voteType) end
+end
+
+--- Formats a character name for clean UI display:
+--- Strips the realm tag if the character is on the local player's realm,
+--- but preserves '-OtherRealm' if cross-realm.
+---@param fullName string|nil
+---@return string
+function DLC_API:Ambiguate(fullName)
+    if DesolateLootcouncil and DesolateLootcouncil.Ambiguate then
+        return DesolateLootcouncil:Ambiguate(fullName)
+    end
+    if not fullName or fullName == "" then return "" end
+    local charName, realm = tostring(fullName):match("^([^-]+)%-(.+)$")
+    if not charName or not realm then return tostring(fullName) end
+    local myRealm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+    local normRealm = realm:gsub("%s+", ""):lower()
+    local normMyRealm = myRealm:gsub("%s+", ""):lower()
+    if normMyRealm ~= "" and normRealm == normMyRealm then
+        return charName
+    end
+    return tostring(fullName)
 end
 
 --- Returns formatted roster summary text.
@@ -1292,7 +1403,8 @@ function DLC_API:GetRosterText()
     table.sort(sortedMains)
 
     for _, main in ipairs(sortedMains) do
-        local mainText = main
+        local displayMain = self:Ambiguate(main)
+        local mainText = displayMain
         local data = db.MainRoster[main]
         if data and data.isOfficer then
             mainText = mainText .. " (Officer)"
@@ -1302,7 +1414,8 @@ function DLC_API:GetRosterText()
         if db.playerRoster and db.playerRoster.alts then
             for alt, parent in pairs(db.playerRoster.alts) do
                 if parent == main then
-                    table.insert(alts, alt)
+                    local displayAlt = self:Ambiguate(alt)
+                    table.insert(alts, displayAlt)
                 end
             end
         end
@@ -1326,10 +1439,11 @@ function DLC_API:GetMainRosterList()
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if db and db.MainRoster then
         for name, data in pairs(db.MainRoster) do
+            local displayName = self:Ambiguate(name)
             if data and data.isOfficer then
-                list[name] = name .. " (Officer)"
+                list[name] = displayName .. " (Officer)"
             else
-                list[name] = name
+                list[name] = displayName
             end
         end
     end
@@ -1345,7 +1459,9 @@ function DLC_API:GetAllPlayersList()
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if db and db.playerRoster and db.playerRoster.alts then
         for alt, main in pairs(db.playerRoster.alts) do
-            list[alt] = alt .. " (Alt of " .. main .. ")"
+            local displayAlt = self:Ambiguate(alt)
+            local displayMain = self:Ambiguate(main)
+            list[alt] = displayAlt .. " (Alt of " .. displayMain .. ")"
         end
     end
     return list
@@ -1764,3 +1880,42 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
     end
     return false, "Serializer module not found."
 end
+
+-- ===========================================================================
+-- Audit & Ledger APIs
+-- ===========================================================================
+
+local function Audit()
+    return DesolateLootcouncil:GetModule("Audit", true)
+end
+
+--- Retrieves filtered audit log entries.
+---@param sessionID string|number|nil
+---@param actionFilter string|nil
+---@return table[]
+function DLC_API:GetAuditLog(sessionID, actionFilter)
+    local a = Audit()
+    return (a and a.GetLog and a:GetLog(sessionID, actionFilter)) or {}
+end
+
+--- Exports the formatted audit ledger as text.
+---@param sessionID string|number|nil
+---@return string
+function DLC_API:ExportAuditLog(sessionID)
+    local a = Audit()
+    return (a and a.ExportLog and a:ExportLog(sessionID)) or ""
+end
+
+--- Records an immutable structured audit entry.
+---@param action string
+---@param actor string|nil
+---@param player string|nil
+---@param listName string|nil
+---@param details string|nil
+---@param sessionID string|number|nil
+---@return table|nil
+function DLC_API:LogAuditEvent(action, actor, player, listName, details, sessionID)
+    local a = Audit()
+    return (a and a.Log and a:Log(action, actor, player, listName, details, sessionID)) or nil
+end
+

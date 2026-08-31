@@ -294,7 +294,7 @@ function UI_Voting:CancelAllTimers()
 end
 
 function UI_Voting:RemoveVotingItem(guid)
-    if not self.cachedVotingItems then return end
+    if not self.cachedVotingItems or type(self.cachedVotingItems) ~= "table" then return end
     for i, item in ipairs(self.cachedVotingItems) do
         if (item.sourceGUID or item.link) == guid then
             table.remove(self.cachedVotingItems, i)
@@ -404,7 +404,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     self.myNotes = self.myNotes or {}
     self.noteExpanded = self.noteExpanded or {}
 
-    if lootTable then
+    if type(lootTable) == "table" then
         self.cachedVotingItems   = lootTable
         self.myVotes             = self.myVotes or {}
         -- New session: reset milestone state so all thresholds fire fresh
@@ -414,11 +414,24 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         if self.votingFrame.isCollapsed then
             NativeGUI:ExpandWindow(self.votingFrame, "Voting")
         end
+    else
+        local bidding = (API and API.GetBiddingList and API:GetBiddingList()) or {}
+        self.cachedVotingItems = bidding
     end
     local awardedGUIDs = API:GetAwardedGUIDs()
 
     local items = self.cachedVotingItems
-    if not items then return end
+    if not items or #items == 0 then
+        if self.votingFrame and not isRefresh then
+            self.votingFrame:Hide()
+            self:StopMilestoneChecker()
+            DesolateLootcouncil:Print(L["No active items to vote on."])
+        elseif self.votingFrame then
+            self.votingFrame:Hide()
+            self:StopMilestoneChecker()
+        end
+        return
+    end
 
     if not isRefresh then
         self.votingFrame:Show()
@@ -460,6 +473,15 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         if self:_LayoutVotingRow(rowCount + 1, data, guid, now, awardedGUIDs) then
             rowCount = rowCount + 1
         end
+    end
+
+    if rowCount == 0 then
+        if self.votingFrame then self.votingFrame:Hide() end
+        self:StopMilestoneChecker()
+        if not isRefresh then
+            DesolateLootcouncil:Print(L["No active items to vote on."])
+        end
+        return
     end
 
     RebuildScrollLayout(self, rowCount)
@@ -758,13 +780,21 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
     row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 10, 0)
     row.itemLabel:SetPoint("RIGHT", row.actionFrame, "LEFT", -15, 0)
 
-    local _, properLink = C_Item.GetItemInfo(data.link)
+    local query = data.link or data.itemID
+    local properLink = nil
+    if query then
+        local _, fetchedLink = C_Item.GetItemInfo(query)
+        properLink = fetchedLink
+    end
     if not properLink then
-        local itemObj = Item:CreateFromItemID(data.itemID)
-        if not itemObj:IsItemEmpty() then
-            itemObj:ContinueOnItemLoad(function() self:ShowVotingWindow(nil, true) end)
+        local itemID = tonumber(data.itemID) or (data.link and tonumber(data.link:match("item:(%d+)")))
+        if itemID then
+            local itemObj = Item:CreateFromItemID(itemID)
+            if not itemObj:IsItemEmpty() then
+                itemObj:ContinueOnItemLoad(function() self:ShowVotingWindow(nil, true) end)
+            end
         end
-        row.itemLabel:SetText(L["Loading..."])
+        row.itemLabel:SetText(data.link or (itemID and ("[item:" .. itemID .. "]")) or L["Loading..."])
     else
         row.itemLabel:SetText(properLink)
     end

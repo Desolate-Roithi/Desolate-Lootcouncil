@@ -132,6 +132,11 @@ function Attendance:StartRaidSession()
     if SessionMod and SessionMod.SendDLCHeartbeat then
         SessionMod:SendDLCHeartbeat()
     end
+
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("SESSION_START", nil, nil, nil, string.format("Raid session started (ID: %s)", tostring(config.currentSessionID)), config.currentSessionID)
+    end
 end
 
 --- Stops the current tracking session and optionally commits it to AttendanceHistory.
@@ -181,14 +186,8 @@ function Attendance:StopRaidSession(saveHistory)
             end
 
             if config.attendeeDetails then
-                for mainName, chars in pairs(config.attendeeDetails) do
-                    entry.attendeeDetails[mainName] = {}
-                    for charName, charData in pairs(chars) do
-                        entry.attendeeDetails[mainName][charName] = {
-                            class = charData.class,
-                            kills = charData.kills
-                        }
-                    end
+                for mainName, mainEntry in pairs(config.attendeeDetails) do
+                    entry.attendeeDetails[mainName] = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(mainEntry)) or mainEntry
                 end
             end
 
@@ -255,6 +254,11 @@ function Attendance:StopRaidSession(saveHistory)
             self:Printf("Session ENDED. Saved attendance for %d players.", count)
             db.historyTimestamp = GetServerTime()
             db.rosterTimestamp = GetServerTime()
+
+            local Audit = DesolateLootcouncil:GetModule("Audit", true)
+            if Audit and Audit.Log then
+                Audit:Log("SESSION_STOP", nil, nil, nil, string.format("Raid session ended (Saved: %d attendees)", count), config.currentSessionID)
+            end
 
             if DesolateLootcouncil:AmILootMaster() and IsInGroup() then
                 local Comm = DesolateLootcouncil:GetModule("Comm", true)
@@ -367,19 +371,23 @@ function Attendance:RegisterAttendance(unitName, isEncounterKill)
         end
 
         config.attendeeDetails = config.attendeeDetails or {}
-        config.attendeeDetails[mainName] = config.attendeeDetails[mainName] or {}
+        config.attendeeDetails[mainName] = config.attendeeDetails[mainName] or {
+            mainClass     = self:GetUnitClass(mainName),
+            attendedChars = {}
+        }
+        local chars = config.attendeeDetails[mainName].attendedChars
 
-        local cleanUnitName = DesolateLootcouncil:GetDisplayName(unitName)
-        if not config.attendeeDetails[mainName][cleanUnitName] then
-            local class = self:GetUnitClass(unitName)
-            config.attendeeDetails[mainName][cleanUnitName] = {
-                class = class,
-                kills = 0
+        -- Store with full Name-Realm key — Ambiguate is for UI display only
+        if not chars[unitName] then
+            chars[unitName] = {
+                class = self:GetUnitClass(unitName),
+                kills = 0,
+                isAlt = (unitName ~= mainName)
             }
         end
 
         if isEncounterKill then
-            config.attendeeDetails[mainName][cleanUnitName].kills = config.attendeeDetails[mainName][cleanUnitName].kills + 1
+            chars[unitName].kills = chars[unitName].kills + 1
         end
     else
         local formattedMain = DesolateLootcouncil:GetDisplayName(mainName)
@@ -467,12 +475,7 @@ function Attendance:DeleteAttendanceHistoryEntry(index)
         return false
     end
 
-    local removed = table.remove(db.AttendanceHistory, numIdx)
-    if removed and removed.sessionID and db.SessionPositionLog then
-        db.SessionPositionLog[tostring(removed.sessionID)] = nil
-        db.SessionPositionLog[tonumber(removed.sessionID)] = nil
-    end
-
+    table.remove(db.AttendanceHistory, numIdx)
     db.historyTimestamp = GetServerTime()
     return true
 end
@@ -507,6 +510,7 @@ end
 
 function Attendance:OnEncounterStart(event, encounterID, encounterName, difficultyID, groupSize)
     if not self:IsSessionActive() then return end
+    self.pullCounts = self.pullCounts or {}
     self.currentEncounter = encounterID
     self.pullCounts[encounterID] = (self.pullCounts[encounterID] or 0) + 1
     self:SnapshotRoster(false)
