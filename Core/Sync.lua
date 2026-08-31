@@ -404,6 +404,21 @@ function SyncHandlers:SYNC_OFFICER_FLAG(data, sender)
     end
 end
 
+local PULL_COOLDOWN = 10
+
+local function CanSendPull(pullKey)
+    local SyncMod = DesolateLootcouncil:GetModule("Sync", true)
+    if not SyncMod then return true end
+    SyncMod.lastPullRequests = SyncMod.lastPullRequests or {}
+    local now = GetServerTime()
+    local last = SyncMod.lastPullRequests[pullKey] or 0
+    if now - last >= PULL_COOLDOWN then
+        SyncMod.lastPullRequests[pullKey] = now
+        return true
+    end
+    return false
+end
+
 function SyncHandlers:DLC_HEARTBEAT(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
@@ -434,7 +449,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
         db.imTimestamps = db.imTimestamps or {}
         for listName, incomingTs in pairs(data.imTimestamps) do
             local localTs = db.imTimestamps[listName] or 0
-            if incomingTs > localTs then
+            if incomingTs > localTs and CanSendPull("IM_" .. listName) then
                 Comm:SendComm("IM_PULL_REQUEST", { listName = listName }, sender)
             end
         end
@@ -444,7 +459,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     if DesolateLootcouncil:AmIOfficerOrLM() and Comm then
         if data.rosterTimestamp then
             local localRosterTs = db.rosterTimestamp or 0
-            if data.rosterTimestamp > localRosterTs then
+            if data.rosterTimestamp > localRosterTs and CanSendPull("ROSTER") then
                 Comm:SendComm("ROSTER_PULL_REQUEST", {}, sender)
             end
         end
@@ -453,7 +468,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
             db.priorityTimestamps = db.priorityTimestamps or {}
             for listName, incomingTs in pairs(data.priorityTimestamps) do
                 local localTs = db.priorityTimestamps[listName] or 0
-                if incomingTs > localTs then
+                if incomingTs > localTs and CanSendPull("PRIORITY_" .. listName) then
                     Comm:SendComm("PRIORITY_PULL_REQUEST", { listName = listName }, sender)
                 end
             end
@@ -461,26 +476,25 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
 
         if data.configTimestamp then
             local localConfigTs = db.configTimestamp or 0
-            if data.configTimestamp > localConfigTs then
+            if data.configTimestamp > localConfigTs and CanSendPull("CONFIG") then
                 Comm:SendComm("CONFIG_PULL_REQUEST", {}, sender)
             end
         end
 
         if data.historyTimestamp then
             local localHistoryTs = db.historyTimestamp or 0
-            if data.historyTimestamp > localHistoryTs then
+            if data.historyTimestamp > localHistoryTs and CanSendPull("HISTORY") then
                 Comm:SendComm("HISTORY_PULL_REQUEST", {}, sender)
             end
         end
 
         if data.unassignedTimestamp then
             local localUnassignedTs = db.unassignedTimestamp or 0
-            if data.unassignedTimestamp > localUnassignedTs then
+            if data.unassignedTimestamp > localUnassignedTs and CanSendPull("UNASSIGNED") then
                 Comm:SendComm("UNASSIGNED_PULL_REQUEST", {}, sender)
             end
         end
     end
-end
 
 function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end

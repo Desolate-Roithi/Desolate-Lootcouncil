@@ -898,7 +898,14 @@ function Roster:RecordUnassignedPlayer(name, source)
 
         local Session = DesolateLootcouncil:GetModule("Session", true)
         if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
-            Session:SendDLCHeartbeat()
+            if not self.unassignedSyncTimer then
+                self.unassignedSyncTimer = C_Timer.NewTimer(5.0, function()
+                    self.unassignedSyncTimer = nil
+                    if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+                        Session:SendDLCHeartbeat()
+                    end
+                end)
+            end
         end
     end
 end
@@ -1268,8 +1275,10 @@ local function HandleRaidDisband()
         local isLM = false
         if config.currentSessionLM and config.currentSessionLM ~= "" then
             isLM = DesolateLootcouncil:SmartCompare(config.currentSessionLM, "player")
-        else
-            isLM = DesolateLootcouncil:AmILootMaster()
+        elseif DesolateLootcouncil.db.global and DesolateLootcouncil.db.global.activeRaidLM and DesolateLootcouncil.db.global.activeRaidLM ~= "" then
+            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.db.global.activeRaidLM, "player")
+        elseif DesolateLootcouncil.activeLootMaster and DesolateLootcouncil.activeLootMaster ~= "" then
+            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.activeLootMaster, "player")
         end
 
         if isLM then

@@ -368,11 +368,22 @@ end
 
 function DesolateLootcouncil:DetermineLootMaster()
     local myName = UnitName("player")
-    if not IsInGroup() then return myName end
 
     -- Disable entirely if we are in LFR (Match-made groups)
     if HasLFGRestrictions() then
         return nil
+    end
+
+    if not IsInGroup() then
+        -- If an active raid session exists, respect its recorded LM
+        local decayConfig = self.db and self.db.profile and self.db.profile.DecayConfig
+        if decayConfig and decayConfig.sessionActive and decayConfig.currentSessionLM and decayConfig.currentSessionLM ~= "" then
+            return decayConfig.currentSessionLM
+        end
+        if self.activeLootMaster and self.activeLootMaster ~= "" then
+            return self.activeLootMaster
+        end
+        return myName
     end
 
     -- 1. Use the active, synced Loot Master if valid and present

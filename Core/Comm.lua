@@ -35,12 +35,15 @@ end
 
 function Comm:SendComm(command, data, target)
     local serialized = self:Serialize(command, data)
-    if target == "RAID" or target == "PARTY" or target == "GUILD" or target == "INSTANCE_CHAT" then
-        if (target == "RAID" and IsInRaid()) or (target == "PARTY" and IsInGroup()) or (target == "GUILD" and IsInGuild()) or target == "INSTANCE_CHAT" then
-            self:SendCommMessage("DLC_COMM", serialized, target)
+    local trimmedTarget = (type(target) == "string") and strtrim(target) or nil
+    local upperTarget = trimmedTarget and string.upper(trimmedTarget)
+
+    if upperTarget == "RAID" or upperTarget == "PARTY" or upperTarget == "GUILD" or upperTarget == "INSTANCE_CHAT" then
+        if (upperTarget == "RAID" and IsInRaid()) or (upperTarget == "PARTY" and IsInGroup()) or (upperTarget == "GUILD" and IsInGuild()) or upperTarget == "INSTANCE_CHAT" then
+            self:SendCommMessage("DLC_COMM", serialized, upperTarget)
         end
-    elseif target then
-        self:SendCommMessage("DLC_COMM", serialized, "WHISPER", target)
+    elseif trimmedTarget and trimmedTarget ~= "" and upperTarget ~= "WHISPER" then
+        self:SendCommMessage("DLC_COMM", serialized, "WHISPER", trimmedTarget)
     else
         -- Smart channel selection
         local channel = DesolateLootcouncil:GetBroadcastChannel()
@@ -326,29 +329,6 @@ function Comm:PruneRosterData()
         end
         -- Notify UI that data has changed (pruned)
         self:SendMessage("DLC_VERSION_UPDATE")
-    end
-
-    -- Handshake: Batch detection of new members to prevent outgoing Whisper spam disconnects for the LM
-    if DesolateLootcouncil:AmILootMaster() then
-        local prefix = IsInRaid() and "raid" or (IsInGroup() and "party")
-        if prefix then
-            local unrecordedFound = false
-            for i = 1, GetNumGroupMembers() do
-                local name = GetUnitName(prefix..i, true)
-                if name and not self.playerVersions[name] and not DesolateLootcouncil:SmartCompare(name, "player") then
-                    unrecordedFound = true
-                    break
-                end
-            end
-
-            if unrecordedFound and not self.rosterSyncTimer then
-                -- Wait 5 seconds for raid forming to settle, then broadcast ONE raid-wide Request
-                self.rosterSyncTimer = self:ScheduleTimer(function()
-                    self.rosterSyncTimer = nil
-                    self:SendVersionCheck()
-                end, 5)
-            end
-        end
     end
 end
 
