@@ -491,7 +491,7 @@ function Loot:ReawardItem(index)
     local awardedItem = session.awarded[index]
 
     -- 1. Push item back onto the live bidding list (generate a new GUID to avoid
-    --    conflicts with the original loot-bag entry, which may have already been consumed)
+    -- conflicts with the original loot-bag entry, which may have already been consumed)
     local newGUID = "Reaward-" .. (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000))
     local newItemData = (awardedItem.fullItemData and DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(awardedItem.fullItemData)) or {}
     newItemData.link       = newItemData.link or awardedItem.link
@@ -500,6 +500,8 @@ function Loot:ReawardItem(index)
     newItemData.category   = newItemData.category or (awardedItem.fullItemData and awardedItem.fullItemData.category) or "Re-awarded"
     newItemData.stackIndex = newItemData.stackIndex or 1
     newItemData.sourceGUID = newGUID
+    newItemData.isClosed   = true
+    session.bidding = session.bidding or {}
     table.insert(session.bidding, newItemData)
 
     -- 2. Restore priority position so the original winner isn't penalised
@@ -528,31 +530,44 @@ function Loot:ReawardItem(index)
     -- 5. Broadcast the restored item so assistants see it in their Monitor
     local newItem = session.bidding[#session.bidding]
     local Session = DesolateLootcouncil:GetModule("Session")
-    if Session and Session.SendCommMessage then
-        local payload = {
-            command  = "LOOT_SESSION_START",
-            data     = { {
-                link       = newItem.link,
-                texture    = newItem.texture,
-                itemID     = newItem.itemID,
-                sourceGUID = newItem.sourceGUID,
-                category   = newItem.category,
-            } },
-            duration = 300,
-            endTime  = GetServerTime() + 300,
-            votes    = newItem.sourceGUID and { [newItem.sourceGUID] = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(awardedItem.votes or {})) or {} } or {},
-        }
-        local serialized = Session:Serialize(payload)
-        local channel = DesolateLootcouncil:GetBroadcastChannel()
-        if channel then
-            Session:SendCommMessage("DLC_Loot", serialized, channel)
+    if Session then
+        Session.clientLootList = Session.clientLootList or {}
+        table.insert(Session.clientLootList, newItem)
+        if not Session.closedItems then Session.closedItems = {} end
+        Session.closedItems[newGUID] = true
+        if Session.SaveSessionState then
+            Session:SaveSessionState()
+        end
+
+        if Session.SendCommMessage then
+            local payload = {
+                command  = "LOOT_SESSION_START",
+                data     = { {
+                    link       = newItem.link,
+                    texture    = newItem.texture,
+                    itemID     = newItem.itemID,
+                    sourceGUID = newItem.sourceGUID,
+                    category   = newItem.category,
+                    isClosed   = true,
+                } },
+                duration = 0,
+                endTime  = 0,
+                votes    = newItem.sourceGUID and { [newItem.sourceGUID] = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(awardedItem.votes or {})) or {} } or {},
+            }
+            local serialized = Session:Serialize(payload)
+            local channel = DesolateLootcouncil:GetBroadcastChannel()
+            if channel then
+                Session:SendCommMessage("DLC_Loot", serialized, channel)
+            end
         end
     end
 
     -- 6. Broadcast history update (automatically refreshes UI_History, UI_RaidHistory, and UI_TradeList if shown)
     self:SendMessage("DLC_HISTORY_UPDATED")
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor then Monitor:ShowMonitorWindow() end
+    self:SendMessage("DLC_SESSION_STARTED", session.bidding, DesolateLootcouncil:AmIOfficerOrLM())
+
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.ShowMonitorWindow then Monitor:ShowMonitorWindow(true) end
 
     DesolateLootcouncil:Print(L["Item reverted to monitor window."])
 
@@ -567,12 +582,12 @@ end
 
 function Loot:AddTestItems()
     local testItems = {
-        "item:16914:::::::20:257::::::", -- Tier (Netherwind Belt)
-        "item:17075:::::::20:257::::::", -- Weapons (Vis'kag)
-        "item:19136:::::::20:257::::::", -- Rest (Mana Igniting Cord)
-        "item:13335:::::::20:257::::::", -- Collectables (Deathcharger's Reins)
-        "item:19019:::::::20:257::::::", -- Extra (Thunderfury)
-        "item:16223:::::::20:257::::::", -- Recipe (Formula: Enchant Weapon - Crusader)
+        "item:217192:::::::20:257::::::", -- Tier (Slumbering Coil Curio)
+        "item:212398:::::::20:257::::::", -- Weapons (Caustic Keeper-Crusher)
+        "item:219315:::::::20:257::::::", -- Trinkets and Cantrips (Spymaster's Web)
+        "item:219300:::::::20:257::::::", -- Rest (Reckless Spirit Breastplate)
+        "item:13335:::::::20:257::::::",  -- Collectables (Deathcharger's Reins)
+        "item:223120:::::::20:257::::::", -- Recipe (Formula: Radiant Power)
     }
     for _, itemLink in ipairs(testItems) do
         self:AddManualItem(itemLink)

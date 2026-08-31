@@ -356,43 +356,55 @@ end
 function Attendance:RegisterAttendance(unitName, isEncounterKill)
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     local config = db and db.DecayConfig
-    if not config or not config.sessionActive then return end
+    if not config or not config.sessionActive or not unitName or unitName == "" then return end
 
+    local normUnit = DesolateLootcouncil:NormalizeName(unitName)
     local Roster = DesolateLootcouncil:GetModule("Roster", true)
-    local mainName = (Roster and Roster.GetMain and Roster:GetMain(unitName)) or unitName
+    local mainName = (Roster and Roster.GetMain and Roster:GetMain(normUnit)) or (Roster and Roster.GetMain and Roster:GetMain(unitName)) or normUnit
+    mainName = DesolateLootcouncil:NormalizeName(mainName)
 
-    if db.MainRoster and db.MainRoster[mainName] then
+    if db.MainRoster and (db.MainRoster[mainName] or db.MainRoster[normUnit] or db.MainRoster[unitName]) then
+        -- Canonical key from MainRoster
+        local canonicalMain = mainName
+        if not db.MainRoster[canonicalMain] then
+            if db.MainRoster[normUnit] then
+                canonicalMain = normUnit
+            elseif db.MainRoster[unitName] then
+                canonicalMain = unitName
+            end
+        end
+
         config.currentAttendees = config.currentAttendees or {}
-        if not config.currentAttendees[mainName] then
-            config.currentAttendees[mainName] = true
+        if not config.currentAttendees[canonicalMain] then
+            config.currentAttendees[canonicalMain] = true
             DesolateLootcouncil:DLC_Log(string.format("Attendance Registered: %s (Main: %s)", 
-                DesolateLootcouncil:GetDisplayName(unitName), 
-                DesolateLootcouncil:GetDisplayName(mainName)))
+                DesolateLootcouncil:GetDisplayName(normUnit), 
+                DesolateLootcouncil:GetDisplayName(canonicalMain)))
         end
 
         config.attendeeDetails = config.attendeeDetails or {}
-        config.attendeeDetails[mainName] = config.attendeeDetails[mainName] or {
-            mainClass     = self:GetUnitClass(mainName),
+        config.attendeeDetails[canonicalMain] = config.attendeeDetails[canonicalMain] or {
+            mainClass     = self:GetUnitClass(canonicalMain),
             attendedChars = {}
         }
-        local chars = config.attendeeDetails[mainName].attendedChars
+        local chars = config.attendeeDetails[canonicalMain].attendedChars
 
-        -- Store with full Name-Realm key — Ambiguate is for UI display only
-        if not chars[unitName] then
-            chars[unitName] = {
-                class = self:GetUnitClass(unitName),
+        -- Store with full canonical Name-Realm key
+        if not chars[normUnit] then
+            chars[normUnit] = {
+                class = self:GetUnitClass(normUnit),
                 kills = 0,
-                isAlt = (unitName ~= mainName)
+                isAlt = not DesolateLootcouncil:SmartCompare(normUnit, canonicalMain)
             }
         end
 
         if isEncounterKill then
-            chars[unitName].kills = chars[unitName].kills + 1
+            chars[normUnit].kills = chars[normUnit].kills + 1
         end
     else
         local formattedMain = DesolateLootcouncil:GetDisplayName(mainName)
         local formattedUnit = DesolateLootcouncil:GetDisplayName(unitName)
-        local hint = (mainName ~= unitName)
+        local hint = not DesolateLootcouncil:SmartCompare(mainName, unitName)
             and string.format("'%s' (resolved from alt '%s') is not in the MainRoster", formattedMain, formattedUnit)
             or string.format("'%s' is not in the MainRoster — use /dlc roster add to add them", formattedUnit)
         DesolateLootcouncil:DLC_Log("Attendance Rejected: " .. hint, true)

@@ -32,11 +32,8 @@ function UI_InteractiveTestBar:ShowBar()
         local btnVote = NativeGUI:CreateButton(frame, L["Simulate Votes"], 125, 24, "Bid")
         btnVote:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 12)
         btnVote:SetScript("OnClick", function()
-            local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-            if Sim and Sim.SimulateRaiderVotes then
-                local count = Sim:SimulateRaiderVotes()
-                DesolateLootcouncil:Print(string.format(L["Injected %d simulated raider votes."], count))
-            end
+            local count = DesolateLootcouncil.API:SimulateRaiderVotes()
+            DesolateLootcouncil:Print(string.format(L["Injected %d simulated raider votes."], count))
         end)
         self.btnVote = btnVote
 
@@ -44,14 +41,11 @@ function UI_InteractiveTestBar:ShowBar()
         local btnAward = NativeGUI:CreateButton(frame, L["Auto-Award Next"], 125, 24, "Action")
         btnAward:SetPoint("LEFT", btnVote, "RIGHT", 6, 0)
         btnAward:SetScript("OnClick", function()
-            local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-            if Sim and Sim.AutoAwardNext then
-                local item, winner = Sim:AutoAwardNext()
-                if item and winner then
-                    DesolateLootcouncil:Print(string.format(L["Awarded %s to %s."], item.link or item.itemID or "Item", winner))
-                else
-                    DesolateLootcouncil:Print(L["No remaining items in bidding queue."])
-                end
+            local item, winner = DesolateLootcouncil.API:AutoAwardNextSimItem()
+            if item and winner then
+                DesolateLootcouncil:Print(string.format(L["Awarded %s to %s."], item.link or item.itemID or "Item", winner))
+            else
+                DesolateLootcouncil:Print(L["No remaining items in bidding queue."])
             end
         end)
         self.btnAward = btnAward
@@ -86,10 +80,7 @@ function UI_InteractiveTestBar:ShowBar()
         local btnComplete = NativeGUI:CreateButton(frame, L["Complete & Verify"], 135, 24, "Bid")
         btnComplete:SetPoint("LEFT", btnOpenMonitor, "RIGHT", 6, 0)
         btnComplete:SetScript("OnClick", function()
-            local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-            if Sim and Sim.CompleteAndVerify then
-                Sim:CompleteAndVerify()
-            end
+            DesolateLootcouncil.API:CompleteAndVerifySim()
         end)
         self.btnComplete = btnComplete
 
@@ -97,10 +88,7 @@ function UI_InteractiveTestBar:ShowBar()
         local btnCancel = NativeGUI:CreateButton(frame, L["Cancel"], 75, 24, "Stop")
         btnCancel:SetPoint("LEFT", btnComplete, "RIGHT", 6, 0)
         btnCancel:SetScript("OnClick", function()
-            local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-            if Sim and Sim.StopInteractiveLootTest then
-                Sim:StopInteractiveLootTest()
-            end
+            DesolateLootcouncil.API:StopInteractiveLootTest()
         end)
         self.btnCancel = btnCancel
     end

@@ -85,7 +85,8 @@ local function CreateAttendanceBottomControls(self, frame, isDecayEnabled)
         end)
         stepper:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 16)
 
-        local btnApply = NativeGUI:CreateButton(frame, L["APPLY DECAY & END"], 200, 28, "Pass")
+        local btnText = self.reviewedHistoryIndex and L["APPLY DECAY"] or L["APPLY DECAY & END"]
+        local btnApply = NativeGUI:CreateButton(frame, btnText, 200, 28, "Pass")
         btnApply:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 16)
         btnApply:SetScript("OnClick", function()
             self:ApplyDecayAndEndSession()
@@ -102,30 +103,97 @@ local function CreateAttendanceBottomControls(self, frame, isDecayEnabled)
     end
 end
 
-function UI_Attendance:ShowAttendanceWindow()
+local function SmartNameCompare(a, b)
+    if not a or not b then return false end
+    if a == b then return true end
+    if DesolateLootcouncil and DesolateLootcouncil.SmartCompare then
+        return DesolateLootcouncil:SmartCompare(a, b)
+    end
+    local shortA = string.lower((Ambiguate and Ambiguate(a, "none")) or tostring(a):match("^([^-]+)") or tostring(a))
+    local shortB = string.lower((Ambiguate and Ambiguate(b, "none")) or tostring(b):match("^([^-]+)") or tostring(b))
+    return shortA == shortB
+end
+
+local function IsAttendedInSession(attendeesMap, detailsMap, mainName)
+    if not attendeesMap then return false end
+    if attendeesMap[mainName] then return true end
+
+    local API = DesolateLootcouncil.API
+    local shortMain = DesolateLootcouncil:GetDisplayName(mainName)
+
+    if attendeesMap[shortMain] then return true end
+
+    if detailsMap and (detailsMap[mainName] or detailsMap[shortMain]) then
+        return true
+    end
+
+    for attKey in pairs(attendeesMap) do
+        if SmartNameCompare(attKey, mainName) or SmartNameCompare(attKey, shortMain) then
+            return true
+        end
+        if API and API.GetMain then
+            local resolvedMain = API:GetMain(attKey)
+            if resolvedMain and (SmartNameCompare(resolvedMain, mainName) or SmartNameCompare(resolvedMain, shortMain)) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+function UI_Attendance:ShowAttendanceWindow(historyIndex)
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     local config = DesolateLootcouncil.API:GetAttendanceConfig()
-    if not config.sessionActive then
-        DesolateLootcouncil:DLC_Log(L["No active session to review."], true)
-        return
+
+    local isHistoryReview = false
+    local targetEntry = nil
+
+    if historyIndex or not (config and config.sessionActive) then
+        local targetIdx = historyIndex or 1
+        if db and db.AttendanceHistory and db.AttendanceHistory[targetIdx] then
+            targetEntry = db.AttendanceHistory[targetIdx]
+            if targetEntry.decayApplied ~= nil and not historyIndex then
+                DesolateLootcouncil:Print(L["Decay has already been applied for the last session."])
+                return
+            end
+            isHistoryReview = true
+            self.reviewedHistoryIndex = targetIdx
+        else
+            DesolateLootcouncil:Print(L["No active raid session or pending attendance history to review."])
+            return
+        end
+    else
+        self.reviewedHistoryIndex = nil
     end
 
     -- 1. Initialize Temp Lists
     tempAttended = {}
     tempAbsent = {}
-    currentDecayAmount = config.defaultPenalty or 1
+    currentDecayAmount = (targetEntry and targetEntry.decayPenalty) or (config and config.defaultPenalty) or 1
 
     local roster = DesolateLootcouncil.API:GetMainRoster()
-    for name, _ in pairs(roster) do
-        if config.currentAttendees[name] then
+    local sourceAttendees = (isHistoryReview and targetEntry and targetEntry.attendees) or (config and config.currentAttendees)
+    local sourceDetails = (isHistoryReview and targetEntry and targetEntry.attendeeDetails) or (config and config.attendeeDetails)
+
+    for name in pairs(roster) do
+        if IsAttendedInSession(sourceAttendees, sourceDetails, name) then
             tempAttended[name] = true
         else
             tempAbsent[name] = true
         end
     end
+    self.tempAttended = tempAttended
+    self.tempAbsent = tempAbsent
 
     -- 2. Create Frame
-    local isDecayEnabled = config.enabled
-    local titleText = isDecayEnabled and L["Session Attendance & Decay Review"] or L["Session Attendance Review (Decay Disabled)"]
+    local isDecayEnabled = (config and config.enabled) or isHistoryReview
+    local titleText
+    if isHistoryReview then
+        titleText = string.format("%s (%s)", L["Session Attendance & Decay Review"], targetEntry.date or "Past Raid")
+    else
+        titleText = isDecayEnabled and L["Session Attendance & Decay Review"] or L["Session Attendance Review (Decay Disabled)"]
+    end
 
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
@@ -140,7 +208,9 @@ function UI_Attendance:ShowAttendanceWindow()
     DesolateLootcouncil:MakeMovableWithSave(frame, "Attendance")
 
     -- 3. Top Label
-    local topLabel = NativeGUI:CreateLabel(frame, L["Review attendance before ending session. Click names to move them between lists."], "GameFontHighlightSmall", 600)
+    local topDesc = isHistoryReview and L["Review attendees and absences for this saved raid session. Click names to move between lists, then click Apply Decay."]
+        or L["Review attendance before ending session. Click names to move them between lists."]
+    local topLabel = NativeGUI:CreateLabel(frame, topDesc, "GameFontHighlightSmall", 600)
     topLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -45)
 
     -- 4. Columns & Controls (Extracted Helpers)
@@ -157,9 +227,9 @@ function UI_Attendance:UpdateAttendanceLists()
     if not self.attendanceFrame then return end
 
     -- Hide old children
-    local attKids = { self.scrollContentAttended:GetChildren() }
+    local attKids = (self.scrollContentAttended and self.scrollContentAttended.GetChildren and { self.scrollContentAttended:GetChildren() }) or {}
     for _, kid in ipairs(attKids) do kid:Hide(); kid:ClearAllPoints() end
-    local absKids = { self.scrollContentAbsent:GetChildren() }
+    local absKids = (self.scrollContentAbsent and self.scrollContentAbsent.GetChildren and { self.scrollContentAbsent:GetChildren() }) or {}
     for _, kid in ipairs(absKids) do kid:Hide(); kid:ClearAllPoints() end
 
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
@@ -281,8 +351,35 @@ function UI_Attendance:ApplyDecayAndEndSession()
         DLC:DLC_Log(L["Decay Amount is 0. No priorities changed."])
     end
 
-    DesolateLootcouncil.API:SetSessionDecayApplied(GetServerTime(), currentDecayAmount, tempAbsent)
-    self:CommitAttendanceToHistory(tempAttended)
+    if self.reviewedHistoryIndex then
+        local db = DesolateLootcouncil.db.profile
+        if db.AttendanceHistory and db.AttendanceHistory[self.reviewedHistoryIndex] then
+            local entry = db.AttendanceHistory[self.reviewedHistoryIndex]
+            if entry.decayApplied ~= nil then
+                DesolateLootcouncil:Print(L["Decay has already been applied for the last session."])
+                self.reviewedHistoryIndex = nil
+                return
+            end
+            entry.attendees = {}
+            for name in pairs(tempAttended) do
+                entry.attendees[name] = true
+            end
+            entry.decayApplied = GetServerTime()
+            entry.decayPenalty = currentDecayAmount
+            entry.decayAbsent = DesolateLootcouncil.Table.DeepCopy(tempAbsent)
+            db.historyTimestamp = GetServerTime()
+            db.rosterTimestamp = GetServerTime()
+
+            DesolateLootcouncil.API:LogAudit("DECAY_APPLIED", nil, nil, nil, string.format("Applied +%d decay for session %s", currentDecayAmount, tostring(entry.date or entry.sessionID)), entry.sessionID)
+            DesolateLootcouncil.API:BroadcastHistorySync()
+            DesolateLootcouncil:Print(string.format(L["Applied +%d Position Decay to all lists for absent players."], currentDecayAmount))
+            RefreshSettingsUI()
+        end
+        self.reviewedHistoryIndex = nil
+    else
+        DesolateLootcouncil.API:SetSessionDecayApplied(GetServerTime(), currentDecayAmount, tempAbsent)
+        self:CommitAttendanceToHistory(tempAttended)
+    end
 end
 
 

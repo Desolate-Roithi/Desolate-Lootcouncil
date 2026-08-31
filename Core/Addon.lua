@@ -689,10 +689,10 @@ function DesolateLootcouncil:GetActiveUserCount()
     return 0
 end
 
-function DesolateLootcouncil:OpenConfig()
+function DesolateLootcouncil:OpenConfig(initialTab)
     local UI = self:GetModule("UI", true)
     if UI and UI.ShowSettingsWindow then
-        UI:ShowSettingsWindow()
+        UI:ShowSettingsWindow(initialTab)
     end
 end
 

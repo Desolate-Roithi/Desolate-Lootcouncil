@@ -406,3 +406,32 @@ function Trade:ClearPending()
     self:UnregisterEvent("CHAT_MSG_SYSTEM")
     self:UnregisterEvent("TRADE_CLOSED")
 end
+
+--- Manually marks an item as delivered in the session trade list.
+---@param item table
+function Trade:MarkItemTraded(item)
+    if not item then return end
+    local session = DesolateLootcouncil.db.profile.session
+    if not session or not session.awarded then return end
+
+    local targetGUID = item.sourceGUID or item.link
+    local targetWinner = item.winner
+    local targetID = item.itemID or (item.link and select(1, C_Item.GetItemInfoInstant(item.link)))
+
+    for _, award in ipairs(session.awarded) do
+        local awardGUID = award.sourceGUID or award.link
+        local awardID = award.itemID or (award.link and select(1, C_Item.GetItemInfoInstant(award.link)))
+        local guidMatch = (targetGUID and awardGUID and targetGUID == awardGUID)
+        local idMatch = (targetID and awardID and targetID == awardID and (not targetWinner or award.winner == targetWinner))
+
+        if (guidMatch or idMatch) and not award.traded then
+            award.traded = true
+            local db = DesolateLootcouncil.db.profile
+            db.historyTimestamp = GetServerTime()
+            self:SendMessage("DLC_HISTORY_UPDATED")
+            DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
+                award.link or ("item:" .. tostring(targetID)), DesolateLootcouncil:GetDisplayName(award.winner or "Unknown")), true)
+            break
+        end
+    end
+end

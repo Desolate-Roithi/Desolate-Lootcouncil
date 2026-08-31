@@ -681,35 +681,58 @@ function Session:RemoveSessionItem(guid)
     self.sessionPayloadCache = nil -- Invalidate heartbeat cache; item list changed
 
     -- 2. Remove from local Bidding storage (Monitor List)
-    local session = DesolateLootcouncil.db.profile.session
+    local session = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session
     if session and session.bidding then
-        for i, item in ipairs(session.bidding) do
+        for i = #session.bidding, 1, -1 do
+            local item = session.bidding[i]
             if (item.sourceGUID or item.link) == guid then
                 table.remove(session.bidding, i)
-                break
             end
         end
     end
 
-    -- 3. Remove from Awarded list (Trade List) if it was already dealt out
+    -- 3. Remove from clientLootList
+    if self.clientLootList then
+        for i = #self.clientLootList, 1, -1 do
+            local item = self.clientLootList[i]
+            if (item.sourceGUID or item.link) == guid then
+                table.remove(self.clientLootList, i)
+            end
+        end
+    end
+
+    -- 4. Clean local vote & closed state
+    if self.sessionVotes then self.sessionVotes[guid] = nil end
+    if self.closedItems then self.closedItems[guid] = nil end
+    if self.myLocalVotes then self.myLocalVotes[guid] = nil end
+    if self.outboundVotes then self.outboundVotes[guid] = nil end
+
+    -- 5. Remove from Awarded list (Trade List) if it was already dealt out
     if session and session.awarded then
         for i = #session.awarded, 1, -1 do
             local item = session.awarded[i]
             if (item.sourceGUID or item.link) == guid then
                 table.remove(session.awarded, i)
-                -- Break isn't strictly necessary here, but good practice if guid is unique per item instance
-                break
             end
         end
     end
 
-    -- 4. Refresh Monitor
+    -- 6. Refresh Monitor
     self:SendMessage("DLC_ITEM_REMOVED", guid)
+    local MonitorUI = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
+        MonitorUI:ShowMonitorWindow(true)
+    end
 
-    -- 5. Refresh Trade List (if open)
-    ---@type UI_TradeList
-    local TradeListUI = DesolateLootcouncil:GetModule("UI_TradeList")
-    if TradeListUI and TradeListUI.ShowTradeListWindow and TradeListUI.tradeListFrame and TradeListUI.tradeListFrame:IsShown() then
+    -- 7. Refresh Voting (if open)
+    local VotingUI = DesolateLootcouncil:GetModule("UI_Voting", true)
+    if VotingUI and VotingUI.votingFrame and VotingUI.votingFrame:IsShown() then
+        VotingUI:ShowVotingWindow(nil, true)
+    end
+
+    -- 8. Refresh Trade List (if open)
+    local TradeListUI = DesolateLootcouncil:GetModule("UI_TradeList", true)
+    if TradeListUI and TradeListUI.tradeListFrame and TradeListUI.tradeListFrame:IsShown() then
         TradeListUI:ShowTradeListWindow()
     end
 

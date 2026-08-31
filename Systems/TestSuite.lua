@@ -219,6 +219,8 @@ function TestSuite:ResetToStateZero(force, silent)
         DesolateLootcouncil.db.profile.DecayConfig.attendeeDetails = {}
         DesolateLootcouncil.db.profile.DecayConfig.bossLogs = {}
     end
+    DesolateLootcouncil.amILM = true
+    DesolateLootcouncil.activeLootMaster = normPlayer
     if DesolateLootcouncil.UpdateLootMasterStatus then
         DesolateLootcouncil:UpdateLootMasterStatus()
     end
@@ -545,7 +547,7 @@ function TestSuite:OnInitialize()
         local db = DesolateLootcouncil.db.profile
 
         -- Part 1: Unassigned Raider Staging & Role Assignment
-        self:RunPart(1, 5, "Unassigned_Queue_Assignment", function()
+        self:RunPart(1, 6, "Unassigned_Queue_Assignment", function()
             if RosterMod and RosterMod.RecordUnassignedPlayer then
                 RosterMod:RecordUnassignedPlayer("GuestWarrior-Realm", "Raid")
                 RosterMod:RecordUnassignedPlayer("GuestMage-Realm", "Raid")
@@ -568,7 +570,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 2: Boss Encounter Combat Logging
-        self:RunPart(2, 5, "Boss_Encounter_Combat_Logging", function()
+        self:RunPart(2, 6, "Boss_Encounter_Combat_Logging", function()
             local prevDebug = db.debugMode
             local prevLM = DesolateLootcouncil.amILM
             db.debugMode = true
@@ -600,7 +602,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 3: Mid-Session Alt Swap & Credit Aggregation
-        self:RunPart(3, 5, "Mid_Session_Alt_Swap", function()
+        self:RunPart(3, 6, "Mid_Session_Alt_Swap", function()
             if not Sim or not Att then return end
             API:AddMain("SwapperMain-Realm", "WARRIOR", false)
             API:AddAlt("SwapperAlt-Realm", "SwapperMain-Realm")
@@ -632,7 +634,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 4: Raid History Multi-Day Splitting
-        self:RunPart(4, 5, "Midnight_Session_Splitting", function()
+        self:RunPart(4, 6, "Midnight_Session_Splitting", function()
             local multiDateEntry = {
                 date = "2026-08-30 23:50:00",
                 sessionID = 1788100000,
@@ -650,7 +652,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 5: Attendance Decay & Compaction
-        self:RunPart(5, 5, "Decay_Detection_And_Compaction", function()
+        self:RunPart(5, 6, "Decay_Detection_And_Compaction", function()
             db.DecayConfig = db.DecayConfig or {}
             db.DecayConfig.enabled = true
             db.AttendanceHistory = {
@@ -669,6 +671,62 @@ function TestSuite:OnInitialize()
             Serializer:CompactRaidHistory(true)
             assert(db.historyCompacted == true, "History compaction flag set to true")
             assert(#db.AttendanceHistory == 1, "Compacted history record preserved")
+        end)
+
+        -- Part 6: Priority Lists Shuffle & End-to-End Decay Application
+        self:RunPart(6, 6, "Priority_Shuffle_And_Decay_Application", function()
+            local PriorityMod = DesolateLootcouncil:GetModule("Priority", true)
+            if not PriorityMod then return end
+
+            -- 1. Shuffle all Priority Lists for a new season
+            API:ShuffleLists()
+            local tierList = API:GetPriorityList("Tier")
+            assert(tierList ~= nil and #tierList.players >= 5, "Tier list must be initialized with roster players after shuffle")
+
+            -- Capture pre-decay order
+            local preTier = {}
+            for _, p in ipairs(tierList.players) do table.insert(preTier, p) end
+
+            -- 2. Setup a past raid session with attendees and absences
+            -- Mark player at rank 1 as ABSENT, and player at rank 2 as PRESENT
+            local rank1Player = preTier[1]
+            local rank2Player = preTier[2]
+            local attendeeMap = {}
+            for i = 2, #preTier do
+                attendeeMap[preTier[i]] = true
+            end
+            -- rank1Player is absent (not in attendeeMap)
+
+            db.AttendanceHistory = db.AttendanceHistory or {}
+            table.insert(db.AttendanceHistory, 1, {
+                date = "2026-08-30 21:00:00",
+                zone = "Sunwell Plateau",
+                sessionID = 1788100999,
+                attendees = attendeeMap,
+                decayApplied = nil,
+                decayPenalty = 1
+            })
+
+            -- 3. Apply decay for the last session
+            assert(RosterMod and RosterMod.ApplyDecayForLastSession, "Roster:ApplyDecayForLastSession must exist")
+            RosterMod:ApplyDecayForLastSession()
+
+            -- 4. Verify that rank 1 absent player dropped to rank 2, and rank 2 present player advanced to rank 1
+            local postTier = tierList.players
+            assert(postTier[1] == rank2Player, "Present rank 2 player must advance to rank 1 after decay")
+            assert(postTier[2] == rank1Player, "Absent rank 1 player must drop to rank 2 after decay")
+            assert(db.AttendanceHistory[1].decayApplied ~= nil, "Session history must be stamped with decayApplied timestamp")
+
+            -- 5. Duplicate decay call must be blocked and leave rankings unchanged
+            RosterMod:ApplyDecayForLastSession()
+            assert(postTier[1] == rank2Player, "Duplicate decay call must not re-demote or alter rankings")
+            assert(postTier[2] == rank1Player, "Duplicate decay call must preserve post-decay order")
+
+            -- 6. All-Absent and All-Present Stability (No Rollover)
+            local allAbsentMap = {}
+            for _, p in ipairs(postTier) do allAbsentMap[p] = true end
+            PriorityMod:CalculateListDecay(tierList, 1, allAbsentMap)
+            assert(tierList.players[1] == postTier[1] and tierList.players[#tierList.players] == postTier[#postTier], "All-absent decay must never rollover or rotate priority lists")
         end)
 
         self:Log("Scenario 3 [Raider Queue, Attendance & Encounter History] completed successfully.")
@@ -947,6 +1005,88 @@ function TestSuite:OnInitialize()
 
         self:Log("Scenario 6 [Database Sanitization, Serialization & Integrity] completed successfully.")
     end)
+
+    -- =======================================================================
+    -- 7. Voting Lifecycle, Retraction, Re-award & Monitor Removal
+    -- =======================================================================
+    self:RegisterScenario("voting_monitor_workflow", "7. Voting Lifecycle, Retraction, Re-award & Monitor Removal", "Tests vote retraction, item removal from monitor, zero-timer re-awarding, and disenchanter discovery.", function()
+        local API = DesolateLootcouncil.API
+        local Session = DesolateLootcouncil:GetModule("Session", true)
+        -- Part 1: Start Session
+        self:RunPart(1, 5, "Session_Start_Staging", function()
+            local items = {
+                { link = "item:217192", itemID = 217192, sourceGUID = "TS_GUID_1", category = "Tier" },
+                { link = "item:212398", itemID = 212398, sourceGUID = "TS_GUID_2", category = "Weapons" }
+            }
+            if Session and Session.StartSession then
+                Session:StartSession(items)
+            end
+            local bidding = API:GetBiddingList()
+            assert(#bidding == 2, "Session must stage 2 active bidding items")
+            assert(not API:IsItemClosed("TS_GUID_1"), "Item 1 must be open initially")
+        end)
+
+        -- Part 2: Vote Cast and Retraction
+        self:RunPart(2, 5, "Vote_Cast_And_Retraction", function()
+            API:SendVote("TS_GUID_1", 1, "Main Need")
+            local votes = API:GetLocalVotes()
+            assert(votes["TS_GUID_1"] ~= nil, "Local vote must be registered")
+
+            -- Retract vote
+            API:CancelVote("TS_GUID_1")
+            local votesAfter = API:GetLocalVotes()
+            assert(votesAfter["TS_GUID_1"] == nil or votesAfter["TS_GUID_1"] == 0, "Local vote must be cleared on retraction")
+        end)
+
+        -- Part 3: Close Item and Award Winner
+        self:RunPart(3, 5, "Close_And_Award_Winner", function()
+            API:CloseItem("TS_GUID_1")
+            assert(API:IsItemClosed("TS_GUID_1") == true, "Item must be closed")
+
+            API:AwardItem("TS_GUID_1", "WarriorMain-Realm", "Bid")
+            local awarded = API:GetAwardedList()
+            assert(#awarded == 1, "Awarded list must contain 1 item")
+            assert(awarded[1].winner == "WarriorMain-Realm", "Winner must be WarriorMain-Realm")
+        end)
+
+        -- Part 4: Re-award Zero-Timer Integrity
+        self:RunPart(4, 5, "Reaward_Zero_Timer_Integrity", function()
+            API:ReawardItem(1)
+            local bidding = API:GetBiddingList()
+            assert(#bidding == 2, "Item must be restored to bidding list")
+            local restored = nil
+            for _, it in ipairs(bidding) do
+                if it.itemID == 217192 or (it.sourceGUID and string.find(it.sourceGUID, "^Reaward%-")) then
+                    restored = it
+                    break
+                end
+            end
+            assert(restored ~= nil, "Restored item must exist in bidding list")
+            assert(restored.isClosed == true, "Restored item must have isClosed == true")
+            assert(API:IsItemClosed(restored.sourceGUID), "Restored item must be marked closed in Session")
+        end)
+
+        -- Part 5: Monitor Item Eviction & Disenchanter Discovery
+        self:RunPart(5, 5, "Eviction_And_Disenchanter_Discovery", function()
+            local bidding = API:GetBiddingList()
+            local guidToRemove = bidding[1].sourceGUID
+            API:RemoveSessionItem(guidToRemove)
+
+            local biddingAfter = API:GetBiddingList()
+            assert(#biddingAfter == 1, "Bidding list must have 1 item after removal")
+
+            -- Disenchanter discovery
+            local Comm = DesolateLootcouncil:GetModule("Comm", true)
+            if Comm and Comm.UpdatePlayerInfo then
+                Comm:UpdatePlayerInfo("EnchanterPro-Realm", "12.0.7", 375)
+            end
+            -- Stop session and verify clean teardown
+            API:StopSession()
+            assert(#API:GetBiddingList() == 0, "Bidding list must be empty after stopping session")
+        end)
+
+        self:Log("Scenario 7 [Voting Lifecycle, Retraction, Re-award & Monitor Removal] completed successfully.")
+    end)
 end
 
 --- Executes a single scenario by ID.
@@ -957,6 +1097,8 @@ function TestSuite:RunScenario(id)
     if not scenario then return false, "Unknown scenario: " .. tostring(id) end
 
     local prevTestState = DesolateLootcouncil.isTestRunning
+    local prevAmILM = DesolateLootcouncil.amILM
+    local prevActiveLM = DesolateLootcouncil.activeLootMaster
     DesolateLootcouncil.isTestRunning = true
 
     scenario.status = "RUNNING"
@@ -992,6 +1134,8 @@ function TestSuite:RunScenario(id)
                 exportString = self.lastExportString or ""
             }
             DesolateLootcouncil.isTestRunning = prevTestState
+            DesolateLootcouncil.amILM = prevAmILM
+            DesolateLootcouncil.activeLootMaster = prevActiveLM
             return false, scenario.errorMsg
         end
 
@@ -1007,6 +1151,8 @@ function TestSuite:RunScenario(id)
             exportString = self.lastExportString or ""
         }
         DesolateLootcouncil.isTestRunning = prevTestState
+        DesolateLootcouncil.amILM = prevAmILM
+        DesolateLootcouncil.activeLootMaster = prevActiveLM
         local UI = DesolateLootcouncil:GetModule("UI", true)
         if UI and UI.CloseAllWindows then UI:CloseAllWindows() end
         return true, nil
@@ -1026,6 +1172,8 @@ function TestSuite:RunScenario(id)
             exportString = self.lastExportString or ""
         }
         DesolateLootcouncil.isTestRunning = prevTestState
+        DesolateLootcouncil.amILM = prevAmILM
+        DesolateLootcouncil.activeLootMaster = prevActiveLM
         local UI = DesolateLootcouncil:GetModule("UI", true)
         if UI and UI.CloseAllWindows then UI:CloseAllWindows() end
         return false, scenario.errorMsg

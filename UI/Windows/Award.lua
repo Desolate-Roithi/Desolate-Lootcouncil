@@ -339,6 +339,12 @@ local function RenderAwardHeader(self, itemData, isLM)
     else
         self.awardHeaderContainer.iconBorder:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
     end
+
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    self.awardHeaderContainer.iconBorder:EnableMouse(true)
+    NativeGUI:AttachItemTooltip(self.awardHeaderContainer.iconBorder, itemData)
+    self.awardHeaderContainer:EnableMouse(true)
+    NativeGUI:AttachItemTooltip(self.awardHeaderContainer, itemData)
 end
 
 local function RenderVoteList(self, voteList, isLM, itemData, NativeGUI)
@@ -515,7 +521,7 @@ function UI_Award:ShowAwardWindow(itemData)
     local API  = DesolateLootcouncil.API
     local guid = itemData.sourceGUID or itemData.link
     local summary = API:GetVoteSummary(guid)
-    local votes   = summary.votes
+    local votes   = (summary and summary.votes) or {}
 
     local disenchanters = API:GetDisenchanterList()
     local N = #disenchanters

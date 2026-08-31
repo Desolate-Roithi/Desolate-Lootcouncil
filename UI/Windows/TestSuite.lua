@@ -166,10 +166,7 @@ function UI_TestSuite:ShowTestSuiteWindow()
         local btnLiveSim = NativeGUI:CreateButton(f, "Live Loot Sim", 105, 24, "Bid")
         btnLiveSim:SetPoint("LEFT", btnRestoreProfile, "RIGHT", 6, 0)
         btnLiveSim:SetScript("OnClick", function()
-            local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-            if Sim and Sim.StartInteractiveLootTest then
-                Sim:StartInteractiveLootTest()
-            end
+            DesolateLootcouncil.API:StartInteractiveLootTest()
         end)
         self.btnLiveSim = btnLiveSim
 

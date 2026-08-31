@@ -79,10 +79,25 @@ StaticPopupDialogs["DLC_DISBAND_CLOSE_SESSION"] = {
     text = L["The raid group has disbanded. Would you like to end and save the current raid session?"],
     button1 = L["End & Save Session"],
     button2 = L["Keep Active"],
+    button3 = L["Review & Apply Decay"],
     OnAccept = function()
+        local config = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.DecayConfig
+        if config and config.enabled then
+            local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
+            if Attendance and Attendance.ShowAttendanceWindow then
+                Attendance:ShowAttendanceWindow()
+                return
+            end
+        end
         local RosterMod = DesolateLootcouncil:GetModule("Roster")
         if RosterMod then
             RosterMod:StopRaidSession(true)
+        end
+    end,
+    OnAlt = function()
+        local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
+        if Attendance and Attendance.ShowAttendanceWindow then
+            Attendance:ShowAttendanceWindow()
         end
     end,
     timeout = 0,
@@ -1050,11 +1065,18 @@ end
 
 function Roster:ApplyDecayForLastSession(skip)
     local db = DesolateLootcouncil.db.profile
-    if not db.AttendanceHistory or not db.AttendanceHistory[1] then return end
+    if not db.AttendanceHistory or not db.AttendanceHistory[1] then
+        DesolateLootcouncil:Print(L["No attendance history found."])
+        return
+    end
     local entry = db.AttendanceHistory[1]
+    if entry.decayApplied ~= nil and not skip then
+        DesolateLootcouncil:Print(L["Decay has already been applied for the last session."])
+        return
+    end
     if skip then
         entry.decayApplied = -1
-        DesolateLootcouncil:Print("Decay for last session skipped.")
+        DesolateLootcouncil:Print(L["Decay for last session skipped."])
         return
     end
 

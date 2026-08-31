@@ -772,13 +772,12 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
     row.actionFrame:SetPoint("RIGHT", row, "RIGHT", -12, (rowHeight == 92) and 24 or 0)
 
     if not row.itemLabel then
-        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        lbl:SetJustifyH("LEFT")
-        row.itemLabel = lbl
+        row.itemLabel = NativeGUI:CreateLinkLabel(row, "GameFontHighlight")
     end
     row.itemLabel:ClearAllPoints()
     row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 10, 0)
     row.itemLabel:SetPoint("RIGHT", row.actionFrame, "LEFT", -15, 0)
+    row.itemLabel:Show()
 
     local query = data.link or data.itemID
     local properLink = nil
@@ -794,10 +793,11 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
                 itemObj:ContinueOnItemLoad(function() self:ShowVotingWindow(nil, true) end)
             end
         end
-        row.itemLabel:SetText(data.link or (itemID and ("[item:" .. itemID .. "]")) or L["Loading..."])
+        row.itemLabel.text:SetText(data.link or (itemID and ("[item:" .. itemID .. "]")) or L["Loading..."])
     else
-        row.itemLabel:SetText(properLink)
+        row.itemLabel.text:SetText(properLink)
     end
+    NativeGUI:AttachItemTooltip(row.itemLabel, data)
 
     if not row.timerLbl then
         local timer = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -837,6 +837,21 @@ end
 
 function UI_Voting:OnItemClosed(eventName, guid)
     self:ShowVotingWindow(nil, true)
+end
+
+function UI_Voting:RemoveVotingItem(guid)
+    if self.cachedVotingItems then
+        for i = #self.cachedVotingItems, 1, -1 do
+            local item = self.cachedVotingItems[i]
+            if (item.sourceGUID or item.link) == guid then
+                table.remove(self.cachedVotingItems, i)
+                break
+            end
+        end
+    end
+    if self.votingFrame and self.votingFrame:IsShown() then
+        self:ShowVotingWindow(self.cachedVotingItems, true)
+    end
 end
 
 function UI_Voting:OnItemRemoved(eventName, guid)

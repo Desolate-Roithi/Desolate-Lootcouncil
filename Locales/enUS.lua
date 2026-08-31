@@ -228,6 +228,11 @@ L["Keeping previous session active."] = true
 L["The raid group has disbanded. Would you like to end and save the current raid session?"] = true
 L["End & Save Session"] = true
 L["Keep Active"] = true
+L["Review & Apply Decay"] = true
+L["APPLY DECAY"] = true
+L["Decay has already been applied for the last session."] = true
+L["No active raid session or pending attendance history to review."] = true
+L["Review attendees and absences for this saved raid session. Click names to move between lists, then click Apply Decay."] = true
 
 -- New Keys
 L["All window positions have been reset."] = true

@@ -561,23 +561,66 @@ function UI_NativeGUI:SetupItemIconButton(row, data, size, offsetX, offsetY)
     row.itemIcon:ClearAllPoints()
     row.itemIcon:SetPoint("LEFT", offsetX or 8, offsetY or 0)
 
-    local texture = data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400
-    row.itemIcon.texture:SetTexture(texture)
+    local queryID = tonumber(data.itemID) or (data.link and tonumber(data.link:match("item:(%d+)")))
+    local blizzIcon = nil
+    if queryID and C_Item and C_Item.GetItemIconByID then
+        blizzIcon = C_Item.GetItemIconByID(queryID)
+    end
+    if not blizzIcon and (data.link or queryID) and C_Item and C_Item.GetItemInfoInstant then
+        blizzIcon = select(5, C_Item.GetItemInfoInstant(data.link or queryID))
+    end
+
+    local finalTexture = blizzIcon or data.texture or 134400
+    row.itemIcon.texture:SetTexture(finalTexture)
+
+    -- Dynamic asynchronous loading from Blizzard server cache if not yet resolved
+    if (not blizzIcon or finalTexture == 134400) and queryID and Item and Item.CreateFromItemID then
+        local itemObj = Item:CreateFromItemID(queryID)
+        if itemObj and not itemObj:IsItemEmpty() then
+            itemObj:ContinueOnItemLoad(function()
+                local liveIcon = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(queryID))
+                    or (C_Item and C_Item.GetItemInfoInstant and select(5, C_Item.GetItemInfoInstant(queryID)))
+                    or (itemObj.GetItemIcon and itemObj:GetItemIcon())
+                if liveIcon and row.itemIcon and row.itemIcon.texture then
+                    row.itemIcon.texture:SetTexture(liveIcon)
+                end
+            end)
+        end
+    end
+
+    self:AttachItemTooltip(row.itemIcon, data)
+    return row.itemIcon
+end
+
+--- Attaches full GameTooltip hyperlink inspection to any UI widget or label.
+---@param frame Frame|Button
+---@param data table
+function UI_NativeGUI:AttachItemTooltip(frame, data)
+    if not frame or not data then return end
+    local queryID = data.itemID or (data.link and tonumber(data.link:match("item:(%d+)")))
 
     local function ShowTip()
-        GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
+        GameTooltip:SetOwner(frame, "ANCHOR_CURSOR")
         if data.link then
             GameTooltip:SetHyperlink(data.link)
-        elseif data.itemID then
-            GameTooltip:SetItemByID(data.itemID)
+        elseif queryID then
+            GameTooltip:SetItemByID(queryID)
         end
         GameTooltip:Show()
     end
 
-    row.itemIcon:SetScript("OnClick", ShowTip)
-    row.itemIcon:SetScript("OnEnter", ShowTip)
-    row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    return row.itemIcon
+    frame:SetScript("OnEnter", ShowTip)
+    frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    if frame.HasScript and frame:HasScript("OnClick") then
+        frame:SetScript("OnClick", function()
+            if data.link and IsModifiedClick and IsModifiedClick() and HandleModifiedItemClick then
+                HandleModifiedItemClick(data.link)
+            else
+                ShowTip()
+            end
+        end)
+    end
 end
 
 --- Creates a clickable link label button.

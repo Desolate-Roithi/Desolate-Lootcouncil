@@ -234,6 +234,11 @@ L["The raid group has disbanded. Would you like to end and save the current raid
 "Die Raidgruppe wurde aufgelöst. Möchtest du die aktuelle Raidsitzung beenden und speichern?"
 L["End & Save Session"] = "Beenden & Speichern"
 L["Keep Active"] = "Aktiv lassen"
+L["Review & Apply Decay"] = "Prüfen & Verfall anwenden"
+L["APPLY DECAY"] = "VERFALL ANWENDEN"
+L["Decay has already been applied for the last session."] = "Verfall wurde für die letzte Sitzung bereits angewendet."
+L["No active raid session or pending attendance history to review."] = "Keine aktive Raidsitzung oder ausstehende Anwesenheit zum Prüfen gefunden."
+L["Review attendees and absences for this saved raid session. Click names to move between lists, then click Apply Decay."] = "Prüfe Anwesende und Abwesende für diese gespeicherte Raidsitzung. Klicke Namen an, um sie zu verschieben, und klicke dann Verfall anwenden."
 
 
 L["Award Log"] = "Vergabe-Log"

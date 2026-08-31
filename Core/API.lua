@@ -24,7 +24,9 @@ local function Comm() return DesolateLootcouncil:GetModule("Comm", true) end
 local function Sync() return DesolateLootcouncil:GetModule("Sync", true) end
 local function UI_Theme() return DesolateLootcouncil:GetModule("UI_Theme", true) end
 local function Session() return DesolateLootcouncil:GetModule("Session", true) end
+local function Trade() return DesolateLootcouncil:GetModule("Trade", true) end
 local function Simulation() return DesolateLootcouncil:GetModule("Simulation", true) end
+local function Audit() return DesolateLootcouncil:GetModule("Audit", true) end
 local function Serializer() return DesolateLootcouncil.Serializer end
 local function Persistence() return DesolateLootcouncil.Persistence end
 
@@ -141,6 +143,40 @@ function DLC_API:GetPendingSimVoters(guid, votedPlayers)
     local sim = Simulation()
     return sim and sim.GetPendingVoters and sim:GetPendingVoters(guid, votedPlayers)
 end
+
+--- Simulates raider votes on currently active bidding items during test sessions.
+---@return number
+function DLC_API:SimulateRaiderVotes()
+    local sim = Simulation()
+    return (sim and sim.SimulateRaiderVotes and sim:SimulateRaiderVotes()) or 0
+end
+
+--- Auto-awards the next active bidding item during an interactive simulation.
+---@return table|nil item, string|nil winner
+function DLC_API:AutoAwardNextSimItem()
+    local sim = Simulation()
+    if sim and sim.AutoAwardNext then
+        return sim:AutoAwardNext()
+    end
+    return nil, nil
+end
+
+--- Completes and verifies the active interactive test session.
+function DLC_API:CompleteAndVerifySim()
+    local sim = Simulation()
+    if sim and sim.CompleteAndVerify then
+        sim:CompleteAndVerify()
+    end
+end
+
+--- Stops and cleans up the active interactive loot test.
+function DLC_API:StopInteractiveLootTest()
+    local sim = Simulation()
+    if sim and sim.StopInteractiveLootTest then
+        sim:StopInteractiveLootTest()
+    end
+end
+
 
 --- Closes all open addon UI windows.
 function DLC_API:CloseAllWindows()
@@ -436,8 +472,6 @@ function DLC_API:SyncMissingPlayers()
     if p and p.SyncMissingPlayers then p:SyncMissingPlayers() end
 end
 
-local function Audit() return DesolateLootcouncil:GetModule("Audit", true) end
-
 --- Appends an immutable structured audit event into the ledger.
 ---@param action string
 ---@param player string|nil
@@ -474,6 +508,36 @@ function DLC_API:ExportAuditLog(sessionID)
         return a:ExportLog(sessionID)
     end
     return ""
+end
+
+--- Logs an audit event to the cryptographic ledger.
+---@param action string
+---@param listName string?
+---@param player string?
+---@param itemID number|string?
+---@param details string?
+---@param sessionID number|string?
+function DLC_API:LogAudit(action, listName, player, itemID, details, sessionID)
+    local a = Audit()
+    if a and a.Log then
+        return a:Log(action, listName, player, itemID, details, sessionID)
+    end
+    return nil
+end
+
+--- Broadcasts loot history sync to group/raid officers.
+function DLC_API:BroadcastHistorySync()
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm and Comm.SendHistorySync then
+        Comm:SendHistorySync()
+    end
+end
+
+--- Starts the interactive live loot simulation.
+---@return boolean
+function DLC_API:StartInteractiveLootTest()
+    local sim = Simulation()
+    return (sim and sim.StartInteractiveLootTest and sim:StartInteractiveLootTest()) or false
 end
 
 --- Returns the priority history audit log lines (Backward compatibility).
@@ -791,7 +855,23 @@ end
 
 --- Stops the currently active loot session.
 function DLC_API:StopSession()
-    if DesolateLootcouncil.StopSession then DesolateLootcouncil:StopSession() else self:EndSession() end
+    local s = Session()
+    if s and s.SendStopSession then
+        s:SendStopSession()
+    elseif DesolateLootcouncil.StopSession then
+        DesolateLootcouncil:StopSession()
+    else
+        self:EndSession()
+    end
+end
+
+--- Removes an item from the active bidding session.
+---@param guid string
+function DLC_API:RemoveSessionItem(guid)
+    local s = Session()
+    if s and s.RemoveSessionItem then
+        s:RemoveSessionItem(guid)
+    end
 end
 
 --- Returns true if bidding on an item has been closed.
@@ -803,11 +883,21 @@ function DLC_API:IsItemClosed(guid)
     return (s and s.closedItems and s.closedItems[guid] == true) or false
 end
 
+
 --- Closes an item for voting (LM action).
 ---@param guid string
 function DLC_API:CloseItem(guid)
     local s = Session()
-    if s and s.CloseItem then s:CloseItem(guid) end
+    if s then
+        if s.SendCloseItem then
+            s:SendCloseItem(guid)
+        elseif s.CloseItem then
+            s:CloseItem(guid)
+        else
+            s.closedItems = s.closedItems or {}
+            s.closedItems[guid] = true
+        end
+    end
 end
 
 --- Reopens an item for revoting (LM action).
@@ -935,8 +1025,24 @@ end
 --- Cancels the local vote for an item.
 ---@param guid string
 function DLC_API:CancelVote(guid)
+    local s = Session()
+    if s then
+        if s.myLocalVotes then s.myLocalVotes[guid] = nil end
+        if s.outboundVotes then s.outboundVotes[guid] = nil end
+        if s.SendVote then s:SendVote(guid, 0, "") end
+    end
     local v = Voting()
-    if v and v.CancelVote then v:CancelVote(guid) end
+    if v then
+        if v.myVotes then v.myVotes[guid] = nil end
+        if v.CancelVote then v:CancelVote(guid) end
+    end
+    local UI_Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
+    if UI_Voting then
+        if UI_Voting.myVotes then UI_Voting.myVotes[guid] = nil end
+        if UI_Voting.votingFrame and UI_Voting.votingFrame:IsShown() then
+            UI_Voting:ShowVotingWindow(nil, true)
+        end
+    end
 end
 
 --- Returns the local player's confirmed votes.
@@ -1033,16 +1139,6 @@ function DLC_API:GetVoteSummary(guid)
     return self:GetSessionItemVotes(guid)
 end
 
---- Returns the current active bidding list.
----@return table
-function DLC_API:GetBiddingList()
-    local s = Session()
-    if s and s.clientLootList and #s.clientLootList > 0 then return s.clientLootList end
-    if DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session then
-        return DesolateLootcouncil.db.profile.session.bidding or {}
-    end
-    return {}
-end
 
 --- Returns item data table for a given GUID from bidding or client loot.
 ---@param guid string
@@ -1074,11 +1170,6 @@ function DLC_API:GetItemData(guid)
     return nil
 end
 
---- Removes an item from the current bidding session.
----@param guid string
-function DLC_API:RemoveSessionItem(guid)
-    if DesolateLootcouncil.RemoveSessionItem then DesolateLootcouncil:RemoveSessionItem(guid) end
-end
 
 -- ===========================================================================
 -- 5. LOOT & AWARD SURFACE
@@ -1175,7 +1266,12 @@ end
 --- Marks an item as traded.
 ---@param item table|string
 function DLC_API:MarkItemTraded(item)
-    if DesolateLootcouncil.MarkItemTraded then DesolateLootcouncil:MarkItemTraded(item) end
+    local t = Trade()
+    if t and t.MarkItemTraded then
+        t:MarkItemTraded(item)
+    elseif DesolateLootcouncil.MarkItemTraded then
+        DesolateLootcouncil:MarkItemTraded(item)
+    end
 end
 
 --- Re-awards a previously awarded item from history.
@@ -1217,7 +1313,34 @@ end
 --- Returns the list of registered disenchanters.
 ---@return table
 function DLC_API:GetDisenchanterList()
-    return (DesolateLootcouncil.GetDisenchanterList and DesolateLootcouncil:GetDisenchanterList()) or (DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.disenchanters) or {}
+    local list = {}
+    local seen = {}
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm and Comm.playerEnchantingSkill then
+        for name, skill in pairs(Comm.playerEnchantingSkill) do
+            local numSkill = tonumber(skill)
+            if numSkill and numSkill > 0 then
+                local shortName = Ambiguate(name, "none")
+                if not seen[shortName] then
+                    seen[shortName] = true
+                    table.insert(list, { name = name, skill = numSkill })
+                end
+            end
+        end
+    end
+
+    local mySkill = (DesolateLootcouncil.GetEnchantingSkillLevel and DesolateLootcouncil:GetEnchantingSkillLevel()) or 0
+    if mySkill > 0 then
+        local myName = DesolateLootcouncil:GetFullName("player")
+        local shortMy = Ambiguate(myName, "none")
+        if not seen[shortMy] then
+            seen[shortMy] = true
+            table.insert(list, { name = myName, skill = mySkill })
+        end
+    end
+
+    table.sort(list, function(a, b) return a.skill > b.skill end)
+    return list
 end
 
 -- ===========================================================================
@@ -1359,14 +1482,6 @@ function DLC_API:DismissUnassignedPlayer(name)
     if r and r.DismissUnassignedPlayer then r:DismissUnassignedPlayer(name) end
 end
 
---- Awards an item from the live bidding session.
----@param sourceGUID string
----@param winner string
----@param voteType string
-function DLC_API:AwardItem(sourceGUID, winner, voteType)
-    local l = Loot()
-    if l and l.AwardItem then l:AwardItem(sourceGUID, winner, voteType) end
-end
 
 --- Formats a character name for clean UI display:
 --- Strips the realm tag if the character is on the local player's realm,
@@ -1881,41 +1996,4 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
     return false, "Serializer module not found."
 end
 
--- ===========================================================================
--- Audit & Ledger APIs
--- ===========================================================================
-
-local function Audit()
-    return DesolateLootcouncil:GetModule("Audit", true)
-end
-
---- Retrieves filtered audit log entries.
----@param sessionID string|number|nil
----@param actionFilter string|nil
----@return table[]
-function DLC_API:GetAuditLog(sessionID, actionFilter)
-    local a = Audit()
-    return (a and a.GetLog and a:GetLog(sessionID, actionFilter)) or {}
-end
-
---- Exports the formatted audit ledger as text.
----@param sessionID string|number|nil
----@return string
-function DLC_API:ExportAuditLog(sessionID)
-    local a = Audit()
-    return (a and a.ExportLog and a:ExportLog(sessionID)) or ""
-end
-
---- Records an immutable structured audit entry.
----@param action string
----@param actor string|nil
----@param player string|nil
----@param listName string|nil
----@param details string|nil
----@param sessionID string|number|nil
----@return table|nil
-function DLC_API:LogAuditEvent(action, actor, player, listName, details, sessionID)
-    local a = Audit()
-    return (a and a.Log and a:Log(action, actor, player, listName, details, sessionID)) or nil
-end
 

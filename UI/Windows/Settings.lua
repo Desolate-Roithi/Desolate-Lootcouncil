@@ -19,8 +19,12 @@ StaticPopupDialogs["DLC_SETTINGS_CONFIRM"] = {
     preferredIndex = 3,
 }
 
-function UI_Settings:ShowSettingsWindow()
+function UI_Settings:ShowSettingsWindow(initialTab)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if initialTab and initialTab ~= "" then
+        self.activeTab = initialTab
+    end
 
     if not self.settingsFrame then
         local frame = NativeGUI:CreateWindow("DLCSettingsFrame", L["Desolate Loot Council Settings"], "Config")

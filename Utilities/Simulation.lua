@@ -252,21 +252,25 @@ function Simulation:StartInteractiveLootTest()
 
     -- 3. Staged test items covering major priority categories
     local testDefs = {
-        { id = 16914, cat = "Tier",         name = "Netherwind Belt",        icon = 132514 },
-        { id = 17075, cat = "Weapons",      name = "Vis'kag the Bloodletter",icon = 135328 },
-        { id = 19136, cat = "Rest",         name = "Mana Igniting Cord",     icon = 132518 },
-        { id = 13335, cat = "Collectables", name = "Deathcharger's Reins",   icon = 132249 },
-        { id = 16223, cat = "Recipes",      name = "Formula: Crusader",      icon = 134954 },
+        { id = 217192, cat = "Tier" },
+        { id = 212398, cat = "Weapons" },
+        { id = 219315, cat = "Trinkets and Cantrips" },
+        { id = 219300, cat = "Rest" },
+        { id = 13335,  cat = "Collectables" },
+        { id = 223120, cat = "Recipes" },
     }
 
     local items = {}
     for i, def in ipairs(testDefs) do
-        local link = string.format("|cffa335ee|Hitem:%d::::::::20:257::::::|h[%s]|h|r", def.id, def.name)
         local uniqueID = "InteractiveTest_" .. string.format("%.3f", GetTime()) .. "_" .. i
+        local fetchedLink = (C_Item and C_Item.GetItemInfo and select(2, C_Item.GetItemInfo(def.id)))
+        local link = fetchedLink or string.format("item:%d", def.id)
+        local blizzTexture = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(def.id))
+            or (C_Item and C_Item.GetItemInfoInstant and select(5, C_Item.GetItemInfoInstant(def.id)))
         table.insert(items, {
             link = link,
             itemID = def.id,
-            texture = def.icon,
+            texture = blizzTexture,
             category = def.cat,
             sourceGUID = uniqueID,
             quantity = 1,
@@ -313,48 +317,64 @@ function Simulation:SimulateRaiderVotes()
         return 0
     end
 
+    local API = DesolateLootcouncil.API
+    local awardedGUIDs = (API and API.GetAwardedGUIDs and API:GetAwardedGUIDs()) or {}
     Session.sessionVotes = Session.sessionVotes or {}
+    Session.closedItems = Session.closedItems or {}
+
     local castCount = 0
     local voteOptions = { 1, 2, 2, 3, 4, 5 } -- Weighted distribution: Bid, Roll, Roll, OS, TM, Pass
 
-    for simName, _ in pairs(self.activeSims) do
-        local normName = DesolateLootcouncil:NormalizeName(simName)
-        for _, item in ipairs(session.bidding) do
-            local guid = item.sourceGUID or item.link
-            local chosenVote = voteOptions[math.random(#voteOptions)]
-            local isRecipe = item.itemID and DesolateLootcouncil.API:IsRecipe(item.itemID) or false
-            if isRecipe then
-                chosenVote = (math.random(1, 2) == 1) and 2 or 5
-            end
+    -- Pre-calculate total group size including simulated entities
+    local totalMembers = GetNumGroupMembers()
+    if totalMembers == 0 then totalMembers = 1 end
+    totalMembers = totalMembers + self:GetCount()
 
+    for _, item in ipairs(session.bidding) do
+        local guid = item.sourceGUID or item.link
+        local isClosed = Session.closedItems[guid] or (API and API.IsItemClosed and API:IsItemClosed(guid))
+
+        -- Skip items that are already awarded or closed
+        if not awardedGUIDs[guid] and not isClosed then
             Session.sessionVotes[guid] = Session.sessionVotes[guid] or {}
-            local serverRoll = math.random(1, 100)
-            Session.sessionVotes[guid][normName] = { type = chosenVote, roll = serverRoll, note = "" }
+            local isRecipe = item.itemID and DesolateLootcouncil.API:IsRecipe(item.itemID) or false
 
-            local payload = {
-                command = "VOTE",
-                data = {
-                    guid = guid,
-                    vote = chosenVote,
-                    roll = serverRoll,
-                    note = ""
-                }
-            }
-            if Session.HandleVote then
-                Session:HandleVote(payload, normName)
+            for simName, _ in pairs(self.activeSims) do
+                local normName = DesolateLootcouncil:NormalizeName(simName)
+
+                -- Only vote if this simulated raider hasn't voted yet on this item
+                if not Session.sessionVotes[guid][normName] then
+                    local chosenVote = voteOptions[math.random(#voteOptions)]
+                    if isRecipe then
+                        chosenVote = (math.random(1, 2) == 1) and 2 or 5
+                    end
+                    local serverRoll = math.random(1, 100)
+                    Session.sessionVotes[guid][normName] = { type = chosenVote, roll = serverRoll, note = "" }
+                    castCount = castCount + 1
+                end
             end
-            castCount = castCount + 1
+
+            -- Check if all raiders have voted; if so, close the item
+            local voteCount = 0
+            for _ in pairs(Session.sessionVotes[guid]) do voteCount = voteCount + 1 end
+            if voteCount >= totalMembers then
+                Session.closedItems[guid] = true
+            end
         end
     end
 
-    -- Save state and refresh UIs
-    if Session.SaveSessionState then Session:SaveSessionState() end
-    local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
-    if Voting and Voting.ShowVotingWindow then Voting:ShowVotingWindow(nil, true) end
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
-    if Monitor and Monitor.ShowMonitorWindow then Monitor:ShowMonitorWindow() end
+    if castCount > 0 then
+        -- Batch save and single UI redraw
+        if Session.SaveSessionState then Session:SaveSessionState() end
+        local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
+        if Voting and Voting.ShowVotingWindow then Voting:ShowVotingWindow(nil, true) end
+        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+        if Monitor and Monitor.ShowMonitorWindow then Monitor:ShowMonitorWindow(true) end
+        DesolateLootcouncil:DLC_Log(string.format("Cast %d simulated votes.", castCount), true)
+    else
+        DesolateLootcouncil:DLC_Log("All open items already have simulated votes.", true)
+    end
 
-    DesolateLootcouncil:DLC_Log(string.format("Cast %d simulated votes across %d items.", castCount, #session.bidding), true)
     return castCount
 end
 

@@ -105,27 +105,32 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     row.actionFrame:SetSize(115, 26)
     row.actionFrame:SetPoint("RIGHT", row, "RIGHT", -12, 0)
 
-    local kids = { row.actionFrame:GetChildren() }
-    for _, kid in ipairs(kids) do
-        kid:Hide()
-        kid:ClearAllPoints()
+    if not row.btnAward then
+        row.btnAward = NativeGUI:CreateButton(row.actionFrame, "", 75, 24, "Bid")
     end
-
-    local btnAward = NativeGUI:CreateButton(row.actionFrame, isLM and L["Award"] or L["View Rolls"], 75, 24, "Bid")
-    btnAward:SetPoint("LEFT", 0, 0)
-    btnAward:SetScript("OnClick", function()
+    row.btnAward:SetText(isLM and L["Award"] or L["View Rolls"])
+    row.btnAward:ClearAllPoints()
+    row.btnAward:SetPoint("LEFT", 0, 0)
+    row.btnAward:SetScript("OnClick", function()
         local AwardUI = DesolateLootcouncil:GetModule("UI_Award", true)
         if AwardUI then AwardUI:ShowAwardWindow(item) end
     end)
+    row.btnAward:Show()
+
+    if not row.btnRemove then
+        row.btnRemove = NativeGUI:CreateButton(row.actionFrame, "X", 32, 24, "Stop")
+    end
+    row.btnRemove:ClearAllPoints()
+    row.btnRemove:SetPoint("LEFT", 80, 0)
+    row.btnRemove:SetScript("OnClick", function()
+        DesolateLootcouncil.API:RemoveSessionItem(guid)
+        self:ShowMonitorWindow(true)
+    end)
 
     if isLM then
-        local btnRemove = NativeGUI:CreateButton(row.actionFrame, "X", 32, 24, "Stop")
-        btnRemove:SetPoint("LEFT", 80, 0)
-        btnRemove:SetScript("OnClick", function()
-            C_Timer.After(0.05, function()
-                DesolateLootcouncil.API:RemoveSessionItem(guid)
-            end)
-        end)
+        row.btnRemove:Show()
+    else
+        row.btnRemove:Hide()
     end
 
     -- 3. Vote Counts & Pending response
@@ -213,9 +218,7 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
             row.itemIcon.texture:SetTexture(C_Item.GetItemIconByID(itemID) or 134400)
         end
     end
-    row.itemLabel:SetScript("OnClick", ShowTip)
-    row.itemLabel:SetScript("OnEnter", ShowTip)
-    row.itemLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    NativeGUI:AttachItemTooltip(row.itemLabel, item)
 
     self.scrollContent:SetHeight(topOffset + rowHeight + 10)
 end

@@ -147,9 +147,9 @@ function UI:ShowVersionWindow(isTest)
     if M then M:ShowVersionWindow(isTest) end
 end
 
-function UI:ShowSettingsWindow()
+function UI:ShowSettingsWindow(initialTab)
     local M = DesolateLootcouncil:GetModule("UI_Settings")
-    if M then M:ShowSettingsWindow() end
+    if M then M:ShowSettingsWindow(initialTab) end
 end
 
 function UI:ResetVoting()

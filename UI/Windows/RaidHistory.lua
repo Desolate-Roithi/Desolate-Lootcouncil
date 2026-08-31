@@ -134,9 +134,8 @@ local function FactoryLootRow(parent)
     timeLbl:SetTextColor(0.5, 0.5, 0.5)
     row.timeLbl = timeLbl
 
-    local infoLbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    infoLbl:SetJustifyH("LEFT")
-    infoLbl:SetWordWrap(false)
+    local infoLbl = NativeGUI:CreateLinkLabel(row)
+    infoLbl.text:SetWordWrap(false)
     row.infoLbl = infoLbl
 
     local btnReaward = NativeGUI:CreateButton(row, L["Re-award"], 72, 22, "Bid")
@@ -477,7 +476,12 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
         row.infoLbl:ClearAllPoints()
         row.infoLbl:SetPoint("LEFT",  row.iconBtn, "RIGHT", 6, 0)
         row.infoLbl:SetPoint("RIGHT", row.vtLbl,   "LEFT", -6, 0)
-        row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+        if row.infoLbl.text then
+            row.infoLbl.text:SetText((item.link or "???") .. " - " .. colWinner)
+        elseif row.infoLbl.SetText then
+            row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+        end
+        if row.infoLbl.Show then row.infoLbl:Show() end
     else
         row.btnReaward:Hide()
         row.vtLbl:Hide()
@@ -490,7 +494,15 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
         row.infoLbl:ClearAllPoints()
         row.infoLbl:SetPoint("LEFT",  row.iconBtn, "RIGHT", 6, 0)
         row.infoLbl:SetPoint("RIGHT", row.timeLbl, "LEFT", -6, 0)
-        row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+        if row.infoLbl.text then
+            row.infoLbl.text:SetText((item.link or "???") .. " - " .. colWinner)
+        elseif row.infoLbl.SetText then
+            row.infoLbl:SetText((item.link or "???") .. " - " .. colWinner)
+        end
+        if row.infoLbl.Show then row.infoLbl:Show() end
+    end
+    if NativeGUI and NativeGUI.AttachItemTooltip then
+        NativeGUI:AttachItemTooltip(row.infoLbl, item)
     end
 end
 
@@ -830,8 +842,7 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
     local posKey = sessionEntry.sessionID and tostring(sessionEntry.sessionID)
 
     -- Read from AuditLog (2.0 Unified Ledger)
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    local auditEntries = Audit and Audit.GetLog and Audit:GetLog(posKey)
+    local auditEntries = DesolateLootcouncil.API:GetAuditLog(posKey)
     if auditEntries and #auditEntries > 0 then
         for _, e in ipairs(auditEntries) do
             local playerTag = e.p and string.format(" | %s", DesolateLootcouncil:GetDisplayName(e.p)) or ""

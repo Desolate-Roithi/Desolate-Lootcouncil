@@ -578,41 +578,69 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
     penalty = tonumber(penalty) or 1
     absentMap = absentMap or {}
 
-    -- Shallow-copy so we can iterate safely while mutating
+    if penalty <= 0 or #players <= 1 then return end
+
+    -- Check if there is any attendance divergence (at least 1 absent and at least 1 present)
+    local hasAbsent = false
+    local hasPresent = false
+    for _, name in ipairs(players) do
+        if absentMap[name] then
+            hasAbsent = true
+        else
+            hasPresent = true
+        end
+    end
+
+    -- If no players were absent or all players were absent, relative priority does not change
+    if not hasAbsent or not hasPresent then
+        DesolateLootcouncil:DLC_Log("Decay skipped for [" .. listName .. "]: No relative attendance differences.")
+        return
+    end
+
+    -- Record initial positions for audit logging
+    local initialPos = {}
+    for pos, name in ipairs(players) do
+        initialPos[name] = pos
+    end
+
+    -- Shallow-copy current list
     local newList = {}
     for _, name in ipairs(players) do
         table.insert(newList, name)
     end
 
-    DesolateLootcouncil:DLC_Log("Processing List Category: [" .. listName .. "] with " .. #newList .. " entries.")
+    DesolateLootcouncil:DLC_Log("Processing Decay for Category: [" .. listName .. "] with " .. #newList .. " entries, penalty: " .. penalty)
 
-    -- Iterate backwards: bottom → top
-    for i = #newList, 1, -1 do
-        local name = newList[i]
-        if absentMap[name] then
-            local origPos = i
-            local targetIdx = i + penalty
-
-            table.remove(newList, i)
-
-            -- Cap to the last valid insertion position
-            if targetIdx > #newList + 1 then
-                targetIdx = #newList + 1
+    -- Stable step-wise decay:
+    -- Each absent player drops past up to `penalty` PRESENT players immediately behind them.
+    -- Absent players never pass other absent players, preventing circular rollover.
+    for _ = 1, penalty do
+        for i = #newList - 1, 1, -1 do
+            local currentName = newList[i]
+            local nextName = newList[i + 1]
+            if absentMap[currentName] and not absentMap[nextName] then
+                newList[i] = nextName
+                newList[i + 1] = currentName
             end
+        end
+    end
 
-            table.insert(newList, targetIdx, name)
-
+    -- Audit and log changes for any player whose rank shifted
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    for newPos, name in ipairs(newList) do
+        local oldPos = initialPos[name]
+        if oldPos and oldPos ~= newPos then
             local displayName = DesolateLootcouncil:GetDisplayName(name)
+            local stateStr = absentMap[name] and "absence decay" or "attendance advancement"
             local logMsg = string.format(
                 L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."],
-                displayName, origPos, targetIdx, listName, penalty
+                displayName, oldPos, newPos, listName, penalty
             )
             DesolateLootcouncil:DLC_Log(logMsg)
             self:LogPriorityChange(logMsg)
 
-            local Audit = DesolateLootcouncil:GetModule("Audit", true)
             if Audit and Audit.Log then
-                Audit:Log("DECAY", nil, name, listName, string.format("Moved %d -> %d (+%d penalty)", origPos, targetIdx, penalty))
+                Audit:Log("DECAY", nil, name, listName, string.format("Moved %d -> %d (%s)", oldPos, newPos, stateStr))
             end
         end
     end
