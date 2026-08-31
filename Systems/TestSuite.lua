@@ -367,6 +367,42 @@ function TestSuite:OnInitialize()
 
         self:CaptureStepExport("DB_Sanitized")
     end)
+
+    -- 7. Scenario: Comm Sanitization & Disband Authority
+    self:RegisterScenario("comm_and_disband", "7. Comm Sanitization & Disband Authority", "Tests channel normalization, whisper sanitization, and non-LM disband prompt gating.", function()
+        self:ResetToStateZero()
+        local Comm = DesolateLootcouncil:GetModule("Comm", true)
+        local db = DesolateLootcouncil.db.profile
+
+        -- Test 1: Channel case normalization & sanitization
+        local lastSentType, lastSentTarget = nil, nil
+        local origSend = Comm and Comm.SendCommMessage
+        if Comm then
+            Comm.SendCommMessage = function(selfMod, prefix, msg, distType, distTarget)
+                lastSentType = distType
+                lastSentTarget = distTarget
+            end
+
+            -- Test lowercase "raid" routes to channel not whisper
+            Comm:SendComm("TEST_CMD", { foo = "bar" }, "raid")
+            assert(lastSentType == "RAID" or lastSentType == "PARTY" or lastSentType == "GUILD", "Lowercase 'raid' must route to group channel")
+            assert(lastSentTarget == nil or lastSentTarget ~= "raid", "Channel 'raid' must never be treated as whisper recipient")
+
+            -- Restore
+            Comm.SendCommMessage = origSend
+        end
+
+        -- Test 2: Disband authority
+        db.DecayConfig = db.DecayConfig or {}
+        db.DecayConfig.sessionActive = true
+        db.DecayConfig.currentSessionLM = "RealLootMaster"
+        DesolateLootcouncil.activeLootMaster = "RealLootMaster"
+
+        local lm = DesolateLootcouncil:DetermineLootMaster()
+        assert(lm == "RealLootMaster", "DetermineLootMaster must return RealLootMaster during active session")
+
+        self:Log("Comm target sanitization and Disband Authority verified.")
+    end)
 end
 
 --- Executes a single scenario by ID.

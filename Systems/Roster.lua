@@ -511,7 +511,14 @@ function Roster:RecordUnassignedPlayer(name, source)
 
         local Session = DesolateLootcouncil:GetModule("Session", true)
         if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
-            Session:SendDLCHeartbeat()
+            if not self.unassignedSyncTimer then
+                self.unassignedSyncTimer = C_Timer.NewTimer(5.0, function()
+                    self.unassignedSyncTimer = nil
+                    if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+                        Session:SendDLCHeartbeat()
+                    end
+                end)
+            end
         end
     end
 end
@@ -878,14 +885,28 @@ local function HandleRaidDisband()
     if not config then return end
 
     if config.sessionActive then
-        if DesolateLootcouncil:AmILootMaster() then
+        local isLM = false
+        if config.currentSessionLM and config.currentSessionLM ~= "" then
+            isLM = DesolateLootcouncil:SmartCompare(config.currentSessionLM, "player")
+        elseif DesolateLootcouncil.db.global and DesolateLootcouncil.db.global.activeRaidLM and DesolateLootcouncil.db.global.activeRaidLM ~= "" then
+            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.db.global.activeRaidLM, "player")
+        elseif DesolateLootcouncil.activeLootMaster and DesolateLootcouncil.activeLootMaster ~= "" then
+            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.activeLootMaster, "player")
+        end
+
+        if isLM then
             -- Prompt LM whether they want to close and save the raid session
             StaticPopup_Show("DLC_DISBAND_CLOSE_SESSION")
         else
             -- Officers & raiders: autoclose session without saving locally (LM syncs saved history when closed)
-            local RosterMod = DesolateLootcouncil:GetModule("Roster")
-            if RosterMod then
-                RosterMod:StopRaidSession(false)
+            local Att = DesolateLootcouncil:GetModule("Attendance", true)
+            if Att and Att.StopRaidSession then
+                Att:StopRaidSession(false)
+            else
+                local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
+                if RosterMod and RosterMod.StopRaidSession then
+                    RosterMod:StopRaidSession(false)
+                end
             end
         end
     end

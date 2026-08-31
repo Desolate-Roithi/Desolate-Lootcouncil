@@ -96,6 +96,7 @@ function Attendance:StartRaidSession()
 
     config.sessionActive = true
     config.currentSessionID = time()
+    config.currentSessionLM = UnitName("player")
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.bossLogs = {}
@@ -255,7 +256,7 @@ function Attendance:StopRaidSession(saveHistory)
             db.historyTimestamp = GetServerTime()
             db.rosterTimestamp = GetServerTime()
 
-            if DesolateLootcouncil:AmILootMaster() then
+            if DesolateLootcouncil:AmILootMaster() and IsInGroup() then
                 local Comm = DesolateLootcouncil:GetModule("Comm", true)
                 if Comm then
                     local payload = {
@@ -263,7 +264,7 @@ function Attendance:StopRaidSession(saveHistory)
                         awarded = db.session and db.session.awarded or {},
                         historyTimestamp = db.historyTimestamp or 0
                     }
-                    Comm:SendComm("SYNC_HISTORY", payload, "RAID")
+                    Comm:SendComm("SYNC_HISTORY", payload)
                 end
             end
         else
@@ -275,6 +276,7 @@ function Attendance:StopRaidSession(saveHistory)
 
     config.sessionActive = false
     config.currentSessionID = nil
+    config.currentSessionLM = nil
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.bossLogs = {}

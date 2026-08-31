@@ -1146,6 +1146,11 @@ function Session:HandleSyncLM(payload, sender)
         DesolateLootcouncil:DLC_Log(string.format("Loot Master identity synced from Leader (%s): %s",
             DesolateLootcouncil:GetDisplayName(sender), DesolateLootcouncil:GetDisplayName(lm)))
 
+        -- Auto-dismiss claim prompt for other officers once LM is established
+        if StaticPopup_Hide then
+            StaticPopup_Hide("DLC_CLAIM_LM")
+        end
+
         -- Check if we have a pending autopass state cached for this newly resolved Loot Master
         local Sync = DesolateLootcouncil:GetModule("Sync", true)
         if Sync and Sync.pendingAutopass then
@@ -1282,20 +1287,37 @@ function Session:ClaimLMRole()
     if not DesolateLootcouncil:AmIOfficerOrLM() then return end
     if DesolateLootcouncil:AmILootMaster() then return end
 
-    DesolateLootcouncil.db.profile.configuredLM = UnitName("player")
-    DesolateLootcouncil.activeLootMaster = UnitName("player")
+    local myName = UnitName("player")
+    local db = DesolateLootcouncil.db.profile
+    db.configuredLM = myName
+    DesolateLootcouncil.activeLootMaster = myName
     DesolateLootcouncil.amILM = true
     DesolateLootcouncil.amIOfficer = true
 
+    if db.DecayConfig and db.DecayConfig.sessionActive then
+        db.DecayConfig.currentSessionLM = myName
+        if DesolateLootcouncil.db.global then
+            DesolateLootcouncil.db.global.activeRaidLM = myName
+        end
+    end
+
     DesolateLootcouncil:Print("You have claimed the Loot Master role.")
 
-    self:SendSyncLM(UnitName("player"))
+    local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
+    if not amILeader then
+        local rl = DesolateLootcouncil:GetGroupLeader()
+        local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+        if rl and CommMod then
+            CommMod:SendComm("LM_UPDATE_CONFIGURED", { configuredLM = myName, isClaim = true }, rl)
+        end
+    end
+
+    self:SendSyncLM(myName)
 
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 
     local RosterSys = DesolateLootcouncil:GetModule("Roster")
     if RosterSys and RosterSys.HasPendingDecay and RosterSys:HasPendingDecay() then
-        local db = DesolateLootcouncil.db.profile
         local entry = db.AttendanceHistory[1]
         StaticPopup_Show("DLC_PENDING_DECAY", entry.date or "N/A", entry.zone or "Unknown")
     end
@@ -1553,9 +1575,12 @@ function Session:HandleUpdateConfigured(payload, sender)
     local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
     if not amILeader then return end
 
-    -- SECURE SENDER CHECK: Only accept LM configuration updates from the current active LM!
     local currentLM = DesolateLootcouncil.activeLootMaster
-    if not DesolateLootcouncil:SmartCompare(sender, currentLM) then
+    local isSenderCurrentLM = currentLM and DesolateLootcouncil:SmartCompare(sender, currentLM)
+    local isLMAbsentOrOffline = not currentLM or currentLM == "" or not DesolateLootcouncil:IsUnitOnline(currentLM)
+
+    -- SECURE SENDER CHECK: Accept if sender is current LM, OR if current LM is offline/absent and sender is an officer claiming role!
+    if not isSenderCurrentLM and not (isLMAbsentOrOffline and payload.isClaim and DesolateLootcouncil:IsOfficer(sender)) then
         DesolateLootcouncil:DLC_Log(string.format("Ignored LM_UPDATE_CONFIGURED from unauthorized sender: %s", tostring(sender)))
         return
     end
@@ -1564,7 +1589,14 @@ function Session:HandleUpdateConfigured(payload, sender)
     if newLM and newLM ~= "" then
         DesolateLootcouncil.db.profile.configuredLM = newLM
         DesolateLootcouncil.activeLootMaster = newLM
+        if DesolateLootcouncil.db.profile.DecayConfig and DesolateLootcouncil.db.profile.DecayConfig.sessionActive then
+            DesolateLootcouncil.db.profile.DecayConfig.currentSessionLM = newLM
+            if DesolateLootcouncil.db.global then
+                DesolateLootcouncil.db.global.activeRaidLM = newLM
+            end
+        end
         DesolateLootcouncil:UpdateLootMasterStatus()
-        DesolateLootcouncil:Print(string.format("Configured Loot Master updated to %s by request from previous LM.", newLM))
+        DesolateLootcouncil:Print(string.format("Configured Loot Master updated to %s by request from %s.", newLM, DesolateLootcouncil:GetDisplayName(sender)))
+        self:SendSyncLM(newLM)
     end
 end
