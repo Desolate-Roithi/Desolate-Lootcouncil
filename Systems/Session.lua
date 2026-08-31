@@ -1346,6 +1346,7 @@ function Session:AcceptHandover(silent, continueSession)
     db.session = db.session or {}
     db.DecayConfig.sessionActive = state.sessionActive == true
     if continueSession then
+        db.DecayConfig.currentSessionLM = UnitName("player")
         db.session.awarded = state.awarded or {}
         db.session.loot = state.loot or {}
         db.session.bidding = state.bidding or {}
@@ -1368,6 +1369,7 @@ function Session:AcceptHandover(silent, continueSession)
         DesolateLootcouncil.sessionAutopassAnswered = false
         db.DecayConfig.sessionAutopassActive = false
         db.DecayConfig.sessionAutopassAnswered = false
+        db.DecayConfig.currentSessionLM = nil
     end
 
     local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")

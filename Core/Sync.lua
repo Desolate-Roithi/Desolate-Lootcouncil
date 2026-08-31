@@ -497,7 +497,6 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
             end
         end
     end
-end
 
 function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
@@ -517,7 +516,8 @@ function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
             enabled = db.DecayConfig and db.DecayConfig.enabled,
             defaultPenalty = db.DecayConfig and db.DecayConfig.defaultPenalty,
             sessionActive = db.DecayConfig and db.DecayConfig.sessionActive or false,
-            currentSessionID = db.DecayConfig and db.DecayConfig.currentSessionID
+            currentSessionID = db.DecayConfig and db.DecayConfig.currentSessionID,
+            currentSessionLM = db.DecayConfig and db.DecayConfig.currentSessionLM
         },
         configTimestamp = db.configTimestamp or 0
     }
@@ -553,6 +553,7 @@ function SyncHandlers:SYNC_CONFIG(data, sender)
             db.DecayConfig.defaultPenalty = data.DecayConfig.defaultPenalty
             db.DecayConfig.sessionActive = data.DecayConfig.sessionActive == true
             db.DecayConfig.currentSessionID = data.DecayConfig.currentSessionID
+            db.DecayConfig.currentSessionLM = data.DecayConfig.currentSessionLM
         end
         
         db.configTimestamp = incomingTs

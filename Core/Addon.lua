@@ -87,6 +87,7 @@ local defaults = {
             defaultPenalty = 1,     -- Configurable (0-3)
             sessionActive = false,
             currentSessionID = nil, -- Timestamp
+            currentSessionLM = nil, -- Name of the Loot Master for the session
             lastActivity = nil,     -- Timestamp for stale checks
             currentAttendees = {},  -- Table: [MainName] = true
             sessionAutopassActive = false,
@@ -445,6 +446,12 @@ function DesolateLootcouncil:DetermineLootMaster()
                 return pName
             end
         end
+    end
+
+    -- 4. Session Fallback: If a raid session is active, respect its recorded LM
+    local decayConfig = self.db and self.db.profile and self.db.profile.DecayConfig
+    if decayConfig and decayConfig.sessionActive and decayConfig.currentSessionLM and decayConfig.currentSessionLM ~= "" then
+        return decayConfig.currentSessionLM
     end
 
     return myName

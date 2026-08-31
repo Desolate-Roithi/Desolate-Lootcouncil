@@ -65,6 +65,11 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
   * Decoupled domain modules (`Attendance`, `ItemCatalog`, `Trade`, `Priority`, `Roster`).
   * Built-in native In-Game Test Suite engine (`/dlc test`).
 
+### v1.2.7 (2026-08-31)
+* **Raid Stability & Performance Hotfixes**:
+  * Channel target normalization in `Comm:SendComm` and whisper keyword filtering.
+  * Debounced unassigned member broadcasts and rate-limited pull requests on heartbeat.
+
 ### v1.2.6 (2026-08-30)
 * **Raid Disband Prompt Gating**:
   * Tracked active Loot Master character name in `DecayConfig.currentSessionLM` across session start, handover, and config sync.
