@@ -137,10 +137,7 @@ function Attendance:StartRaidSession()
         SessionMod:SendDLCHeartbeat()
     end
 
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    if Audit and Audit.Log then
-        Audit:Log("SESSION_START", nil, nil, nil, string.format("Raid session started (ID: %s)", tostring(config.currentSessionID)), config.currentSessionID)
-    end
+    DesolateLootcouncil.API:LogAudit("SESSION_START", nil, nil, nil, string.format("Raid session started (ID: %s)", tostring(config.currentSessionID)), config.currentSessionID)
 end
 
 --- Stops the current tracking session and optionally commits it to AttendanceHistory.
@@ -259,10 +256,7 @@ function Attendance:StopRaidSession(saveHistory)
             db.historyTimestamp = GetServerTime()
             db.rosterTimestamp = GetServerTime()
 
-            local Audit = DesolateLootcouncil:GetModule("Audit", true)
-            if Audit and Audit.Log then
-                Audit:Log("SESSION_STOP", nil, nil, nil, string.format("Raid session ended (Saved: %d attendees)", count), config.currentSessionID)
-            end
+            DesolateLootcouncil.API:LogAudit("SESSION_STOP", nil, nil, nil, string.format("Raid session ended (Saved: %d attendees)", count), config.currentSessionID)
 
             if DesolateLootcouncil:AmILootMaster() and IsInGroup() then
                 local Comm = DesolateLootcouncil:GetModule("Comm", true)

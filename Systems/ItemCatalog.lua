@@ -81,10 +81,7 @@ function ItemCatalog:SetItemCategory(itemID, targetListIndex)
     self:MarkIMDirty(targetList.name)
 
     DesolateLootcouncil:DLC_Log(string.format(L["Added Item %d to '%s'"], itemID, targetList.name))
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    if Audit and Audit.Log then
-        Audit:Log("CATALOG_OVERRIDE", nil, nil, targetList.name, string.format("Assigned Item %d to %s", itemID, targetList.name))
-    end
+    DesolateLootcouncil.API:LogAudit("CATALOG_OVERRIDE", nil, nil, targetList.name, string.format("Assigned Item %d to %s", itemID, targetList.name))
     if LibStub and LibStub:GetLibrary("AceConfigRegistry-3.0", true) then
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end

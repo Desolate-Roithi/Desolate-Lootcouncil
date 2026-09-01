@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.0.1  
+**Latest Version:** v2.0.2  
 **Last Updated:** 2026-09-01  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -48,6 +48,12 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 
 ## Recent Changes
 
+### v2.0.2 (2026-09-01)
+* **Audit & Priority Ledger Polish**:
+  * Fixed duplicate `[AWARD]` entries logged for each item award.
+  * Added distinct `[TRADE]` audit logging upon completing trades or manually delivering items.
+  * Fully unified all subsystem audit calls through the central `DLC_API:LogAudit` facade.
+
 ### v2.0.1 (2026-09-01)
 * **Complete LFR & Match-Made Group Suppression**:
   * Added centralized `IsLFR` check supporting `HasLFGRestrictions`, `IsPartyLFG`, `IsInLFGDungeon`, and difficulty IDs 7 & 17.
@@ -55,22 +61,20 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
   * Suppressed loot capture and autopass prompts in match-made LFR environments.
 
 ### v2.0.0 (2026-09-01)
-* **Major 2.0 Architectural Overhaul**:
-  * Decoupled backend architecture into isolated, high-performance domain modules (`Attendance`, `ItemCatalog`, `Trade`, `Priority`, `Roster`, `Session`, `Loot`, `Audit`).
-  * 100% UI decoupling through `DesolateLootcouncil.API` facade with zero direct backend mutations.
-  * Complete Midnight (12.0.7) taint safety, protected-call (`pcall`) mechanics, and zero-combat math protections on Secret types.
-* **UI Polish & Theming Synchronization**:
-  * Centralized action and vote button palettes with dynamic multi-phase row parity across all windows.
-  * Enhanced class icon rendering and responsive scroll frames across all windows.
-* **Raid Communication & Handover Hardening**:
-  * Normalization of broadcast channels and whisper keyword filtering to prevent chat errors.
-  * Rate-limited heartbeat synchronizations and debounced roster broadcasts.
-  * First-Come, First-Served (FCFS) Loot Master claim resolution and clean disband authority.
-* **Full Localization Parity**:
-  * 100% string declaration and German (deDE) localization coverage.
-* **In-Game Test Suite & Verification**:
-  * Native in-game test runner (`/dlc test`) with automated scenario execution and post-test state validation.
-  * 53 comprehensive unit and integration test suites passing at 100%.
+#### 🛡️ Raid Performance & Combat Stability
+* **Zero Combat Interference:** Completely rebuilt for WoW Midnight compatibility to ensure you never get "Action Blocked" errors or UI lockups during boss encounters.
+* **Eliminated Raid Lag on Member Join/Leave:** Optimized background syncing to prevent FPS drops and micro-stutters when players join, leave, or disconnect.
+* **Fixed Chat Spam:** Resolved the "No player named 'raid'" whisper errors in your chat window.
+
+#### 👑 Smoother Loot Master & Officer Controls
+* **Seamless Loot Master Handovers:** If your Loot Master disconnects or hands over the role, assistant officers transition instantly without conflicting prompts or lost vote data.
+* **Safer Award Corrections:** Reverting an item award now cleanly restores previous bids without disrupting other active rolls.
+* **In-Game Testing Suite (`/dlc test`):** Test your priority lists, mock item drops, and test voting workflows before raid night.
+
+#### 🎨 Visual Polish & Quality of Life
+* **Consistent Button Styling:** Cleaned up button borders, hover effects, and vote colors across all windows so everything looks crisp and readable.
+* **High-Res Class Icons & Smooth Scrolling:** Improved roster readability and scroll responsiveness when managing large raid groups and loot history.
+* **Full Localization Parity:** 100% German (deDE) and English (enUS) string coverage.
 
 ### v1.2.7 (2026-08-31)
 * **Raid Stability & Performance Hotfixes**:

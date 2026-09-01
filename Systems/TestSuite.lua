@@ -980,12 +980,11 @@ function TestSuite:OnInitialize()
 
         -- Part 3: Immutable Audit Ledger Recording & Tamper Receipts
         self:RunPart(3, 4, "Audit_Ledger_Tamper_Receipts", function()
-            if not Audit then return end
             db.AuditLog = {}
             API:AddMain("AuditTester-Realm", "WARRIOR", false)
             API:AddAlt("AuditAlt-Realm", "AuditTester-Realm")
 
-            local sessionEvents = Audit:GetLog()
+            local sessionEvents = API:GetAuditLog()
             assert(#sessionEvents >= 2, "Audit log records tamper events")
             for _, ev in ipairs(sessionEvents) do
                 assert(ev.h ~= nil and ev.h ~= "", "Audit entry contains state hash receipt")

@@ -494,18 +494,20 @@ end
 
 --- Appends an immutable structured audit event into the ledger.
 ---@param action string
+---@param actor string|nil
 ---@param player string|nil
 ---@param listName string|nil
 ---@param details string|nil
 ---@param sessionID number|string|nil
 ---@return table|nil
-function DLC_API:LogAuditEvent(action, player, listName, details, sessionID)
+function DLC_API:LogAudit(action, actor, player, listName, details, sessionID)
     local a = Audit()
     if a and a.Log then
-        return a:Log(action, nil, player, listName, details, sessionID)
+        return a:Log(action, actor, player, listName, details, sessionID)
     end
     return nil
 end
+DLC_API.LogAuditEvent = DLC_API.LogAudit
 
 --- Returns filtered audit log entries.
 ---@param sessionID number|string|nil
@@ -528,21 +530,6 @@ function DLC_API:ExportAuditLog(sessionID)
         return a:ExportLog(sessionID)
     end
     return ""
-end
-
---- Logs an audit event to the cryptographic ledger.
----@param action string
----@param listName string?
----@param player string?
----@param itemID number|string?
----@param details string?
----@param sessionID number|string?
-function DLC_API:LogAudit(action, listName, player, itemID, details, sessionID)
-    local a = Audit()
-    if a and a.Log then
-        return a:Log(action, listName, player, itemID, details, sessionID)
-    end
-    return nil
 end
 
 --- Broadcasts loot history sync to group/raid officers.

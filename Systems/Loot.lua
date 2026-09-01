@@ -383,10 +383,7 @@ function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, ori
     }
     table.insert(session.awarded, entry)
 
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    if Audit and Audit.Log then
-        Audit:Log("AWARD", nil, winnerName, itemData.category, string.format("Awarded %s (%s)", tostring(itemData.link or itemData.itemID), tostring(voteType)))
-    end
+    DesolateLootcouncil.API:LogAudit("AWARD", nil, winnerName, itemData.category, string.format("Awarded %s (%s)", tostring(itemData.link or itemData.itemID), tostring(voteType)))
 
     if Session and Session.SendHistoryUpdate then Session:SendHistoryUpdate(entry) end
 
@@ -460,11 +457,6 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             db.global.activeRaidLastActivity = time()
         end
     end
-
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    if Audit and Audit.Log then
-        Audit:Log("AWARD", nil, winnerName, itemData.category, string.format("Item: %s (%s) | Vote: %s", tostring(itemData.link or itemData.itemID), tostring(itemData.itemID or ""), tostring(voteType or "Bid")))
-    end
 end
 
 --- Copies the original votes back onto the new item GUID so the Monitor
@@ -525,10 +517,7 @@ function Loot:ReawardItem(index)
     table.remove(session.awarded, index)
     DesolateLootcouncil:DLC_Log(string.format(L["Re-awarded item: %s"], (awardedItem.link or "???")))
 
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    if Audit and Audit.Log then
-        Audit:Log("REAWARD", nil, awardedItem.winner, awardedItem.fullItemData and awardedItem.fullItemData.category, string.format("Re-awarded %s (Winner restored)", tostring(awardedItem.link or awardedItem.itemID)))
-    end
+    DesolateLootcouncil.API:LogAudit("REAWARD", nil, awardedItem.winner, awardedItem.fullItemData and awardedItem.fullItemData.category, string.format("Re-awarded %s (Winner restored)", tostring(awardedItem.link or awardedItem.itemID)))
 
     -- 5. Broadcast the restored item so assistants see it in their Monitor
     local newItem = session.bidding[#session.bidding]

@@ -301,10 +301,7 @@ function Roster:AddMain(name)
     self:UpdateScoreMap()
     DesolateLootcouncil:DLC_Log("Added Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
 
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    if Audit and Audit.Log then
-        Audit:Log("ROSTER_ADD_MAIN", nil, normalizedName, nil, "Added main character")
-    end
+    DesolateLootcouncil.API:LogAudit("ROSTER_ADD_MAIN", nil, normalizedName, nil, "Added main character")
     
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     return true
@@ -451,10 +448,7 @@ function Roster:AddAlt(altName, mainName)
     DesolateLootcouncil:DLC_Log("Linked Alt " .. DesolateLootcouncil:GetDisplayName(normalizedAlt) .. 
         " to " .. DesolateLootcouncil:GetDisplayName(normalizedMain))
 
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    if Audit and Audit.Log then
-        Audit:Log("ALT_LINK", nil, normalizedAlt, nil, string.format("Linked to Main %s", normalizedMain))
-    end
+    DesolateLootcouncil.API:LogAudit("ALT_LINK", nil, normalizedAlt, nil, string.format("Linked to Main %s", normalizedMain))
         
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     return true
@@ -488,10 +482,7 @@ function Roster:RemovePlayer(name)
         end
         self:UpdateScoreMap()
         DesolateLootcouncil:DLC_Log("Removed Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
-        local Audit = DesolateLootcouncil:GetModule("Audit", true)
-        if Audit and Audit.Log then
-            Audit:Log("ROSTER_REMOVE", nil, normalizedName, nil, "Removed main character")
-        end
+        DesolateLootcouncil.API:LogAudit("ROSTER_REMOVE", nil, normalizedName, nil, "Removed main character")
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
         return
     end
@@ -502,10 +493,7 @@ function Roster:RemovePlayer(name)
         profile.rosterTimestamp = GetServerTime()
         self:UpdateScoreMap()
         DesolateLootcouncil:DLC_Log("Removed Alt: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
-        local Audit = DesolateLootcouncil:GetModule("Audit", true)
-        if Audit and Audit.Log then
-            Audit:Log("ALT_UNLINK", nil, normalizedName, nil, "Removed alt character")
-        end
+        DesolateLootcouncil.API:LogAudit("ALT_UNLINK", nil, normalizedName, nil, "Removed alt character")
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
@@ -1304,10 +1292,7 @@ function Roster:RenamePlayer(oldName, newName)
         end
 
         DesolateLootcouncil:DLC_Log(string.format("Renamed Main player '%s' to '%s'.", oldName, newName))
-        local Audit = DesolateLootcouncil:GetModule("Audit", true)
-        if Audit and Audit.Log then
-            Audit:Log("ROSTER_RENAME", nil, newName, nil, string.format("Renamed Main from %s to %s", oldName, newName))
-        end
+        DesolateLootcouncil.API:LogAudit("ROSTER_RENAME", nil, newName, nil, string.format("Renamed Main from %s to %s", oldName, newName))
         self:SnapshotRoster()
         return true
     end
@@ -1319,10 +1304,7 @@ function Roster:RenamePlayer(oldName, newName)
         db.playerRoster.alts[oldName] = nil
 
         DesolateLootcouncil:DLC_Log(string.format("Renamed Alt player '%s' to '%s' (Main: %s).", oldName, newName, main))
-        local Audit = DesolateLootcouncil:GetModule("Audit", true)
-        if Audit and Audit.Log then
-            Audit:Log("ROSTER_RENAME", nil, newName, nil, string.format("Renamed Alt from %s to %s (Main: %s)", oldName, newName, main))
-        end
+        DesolateLootcouncil.API:LogAudit("ROSTER_RENAME", nil, newName, nil, string.format("Renamed Alt from %s to %s (Main: %s)", oldName, newName, main))
         self:SnapshotRoster()
         return true
     end

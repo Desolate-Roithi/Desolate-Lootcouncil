@@ -12,7 +12,7 @@ local ACTION_CATEGORIES = {
     },
     AWARDS = {
         label = L["Loot Awards"],
-        match = function(act) return act == "AWARD" or act == "REAWARD" end
+        match = function(act) return act == "AWARD" or act == "REAWARD" or act == "TRADE" end
     },
     MANUAL = {
         label = L["Priority Shifts"],
@@ -49,6 +49,8 @@ local function GetActionBadgeText(act)
         return "|cffff8000[AWARD]|r"
     elseif act == "REAWARD" then
         return "|cffa335ee[REAWARD]|r"
+    elseif act == "TRADE" then
+        return "|cff00ff96[TRADE]|r"
     elseif act == "DECAY" or act == "PRIORITY_DECAY" then
         return "|cffff4444[DECAY]|r"
     elseif act == "TO_BOTTOM" or act == "PRIORITY_MOVE_BOTTOM" then

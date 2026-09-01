@@ -365,6 +365,7 @@ function Trade:HandleTradeSuccess()
                 if linkMatch or idMatch then
                     award.traded = true
                     changed = true
+                    DesolateLootcouncil.API:LogAudit("TRADE", nil, award.winner, award.fullItemData and award.fullItemData.category, string.format("Traded %s to %s", tostring(award.link or award.itemID), tostring(award.winner)))
                     DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
                         award.link, DesolateLootcouncil:GetDisplayName(award.winner)))
                     break
@@ -428,6 +429,7 @@ function Trade:MarkItemTraded(item)
             award.traded = true
             local db = DesolateLootcouncil.db.profile
             db.historyTimestamp = GetServerTime()
+            DesolateLootcouncil.API:LogAudit("TRADE", nil, award.winner, award.fullItemData and award.fullItemData.category, string.format("Traded %s to %s", tostring(award.link or award.itemID), tostring(award.winner)))
             self:SendMessage("DLC_HISTORY_UPDATED")
             DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
                 award.link or ("item:" .. tostring(targetID)), DesolateLootcouncil:GetDisplayName(award.winner or "Unknown")), true)
