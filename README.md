@@ -53,9 +53,8 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
   * Decoupled backend architecture into isolated, high-performance domain modules (`Attendance`, `ItemCatalog`, `Trade`, `Priority`, `Roster`, `Session`, `Loot`, `Audit`).
   * 100% UI decoupling through `DesolateLootcouncil.API` facade with zero direct backend mutations.
   * Complete Midnight (12.0.7) taint safety, protected-call (`pcall`) mechanics, and zero-combat math protections on Secret types.
-* **UI & Theming Engine**:
-  * Obsidian theme engine featuring Midnight, Fel, Classic, and Minimalist themes with dynamic live multi-window propagation.
-  * Centralized action and vote button palettes with dynamic multi-phase row parity.
+* **UI Polish & Theming Synchronization**:
+  * Centralized action and vote button palettes with dynamic multi-phase row parity across all windows.
   * Enhanced class icon rendering and responsive scroll frames across all windows.
 * **Raid Communication & Handover Hardening**:
   * Normalization of broadcast channels and whisper keyword filtering to prevent chat errors.
