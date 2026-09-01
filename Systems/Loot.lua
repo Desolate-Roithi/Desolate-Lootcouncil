@@ -70,10 +70,12 @@ function Loot:OnEnable()
     end
 end
 
--- --- Item Categorization (Merged from ItemManager) --- --
+-- --- Item Categorization (Delegated to ItemCatalog) --- --
 
 ---@param link number|string
 function Loot:GetItemIDFromLink(link)
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.GetItemIDFromLink then return Catalog:GetItemIDFromLink(link) end
     if not link then return nil end
     if type(link) == "number" then return link end
     local id = string.match(link, "item:(%d+)")
@@ -81,96 +83,29 @@ function Loot:GetItemIDFromLink(link)
 end
 
 function Loot:GetItemCategory(itemID)
-    local db = DesolateLootcouncil.db.profile
-    if not db or not db.PriorityLists then return "Junk/Pass" end
-    if not itemID then return "Junk/Pass" end
-
-    local searchID = tonumber(itemID)
-    if not searchID then return "Junk/Pass" end
-
-    for _, list in ipairs(db.PriorityLists) do
-        if list.items then
-            for storedID, _ in pairs(list.items) do
-                if tonumber(storedID) == searchID then
-                    return list.name
-                end
-            end
-        end
-    end
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.GetItemCategory then return Catalog:GetItemCategory(itemID) end
     return "Junk/Pass"
 end
 
 function Loot:SetItemCategory(itemID, targetListIndex)
-    local db = DesolateLootcouncil.db.profile
-    if not db or not db.PriorityLists then return end
-
-    itemID = tonumber(itemID)
-    if not itemID then return end
-    if not db.PriorityLists[targetListIndex] then return end
-
-    -- Remove from others
-    for i, list in ipairs(db.PriorityLists) do
-        if list.items and list.items[itemID] then
-            if i ~= targetListIndex then
-                list.items[itemID] = nil
-                DesolateLootcouncil.API:MarkIMDirty(list.name)
-            else
-                -- Already here
-                return
-            end
-        end
-    end
-
-    -- Add to target
-    local targetList = db.PriorityLists[targetListIndex]
-    if not targetList.items then targetList.items = {} end
-    targetList.items[itemID] = true
-    DesolateLootcouncil.API:MarkIMDirty(targetList.name)
-
-    DesolateLootcouncil:DLC_Log(string.format(L["Added Item %d to '%s'"], itemID, targetList.name))
-    LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.SetItemCategory then Catalog:SetItemCategory(itemID, targetListIndex) end
 end
 
 function Loot:UnassignItem(itemID)
-    local db = DesolateLootcouncil.db.profile
-    if not db or not db.PriorityLists then return end
-    local searchID = tonumber(itemID)
-    if not searchID then return end
-    for _, list in ipairs(db.PriorityLists) do
-        if list.items then
-            for storedID, _ in pairs(list.items) do
-                if tonumber(storedID) == searchID then
-                    list.items[storedID] = nil
-                    DesolateLootcouncil.API:MarkIMDirty(list.name)
-                end
-            end
-        end
-    end
-    DesolateLootcouncil:DLC_Log(L["Item unassigned from all priority lists."])
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.UnassignItem then Catalog:UnassignItem(itemID) end
 end
 
 function Loot:AddItemToList(rawLink, listIndex)
-    local itemID = self:GetItemIDFromLink(rawLink)
-    if itemID then
-        self:SetItemCategory(itemID, listIndex)
-    end
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.AddItemToList then Catalog:AddItemToList(rawLink, listIndex) end
 end
 
 function Loot:CategorizeItem(itemLink, fallbackQuality)
-    local itemID, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemLink)
-    if not itemID then return "Junk/Pass" end
-
-    -- Check configured DB first
-    local dbCat = self:GetItemCategory(itemID)
-    if dbCat ~= "Junk/Pass" then return dbCat end
-
-    -- Fallback Heuristics
-    if classID == 2 then return "Weapons" end -- Weapon
-    if classID == 4 then                      -- Armor
-        local quality = select(3, C_Item.GetItemInfo(itemLink)) or fallbackQuality
-        if quality and quality > 1 then return "Rest" end
-    end
-
+    local Catalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    if Catalog and Catalog.CategorizeItem then return Catalog:CategorizeItem(itemLink, fallbackQuality) end
     return "Junk/Pass"
 end
 
@@ -345,8 +280,10 @@ function Loot:OnLootMessage(event, msg)
 end
 
 function Loot:AddSessionItem(link, itemGUID, texture, quantity, category, itemID)
+    self.sessionItems = self.sessionItems or {}
     if self.sessionItems[itemGUID] then return false end
     local session = DesolateLootcouncil.db.profile.session
+    session.loot = session.loot or {}
     table.insert(session.loot, {
         link = link,
         itemID = itemID,
@@ -360,6 +297,21 @@ function Loot:AddSessionItem(link, itemGUID, texture, quantity, category, itemID
     return true
 end
 
+function Loot:AddManualItem(rawLink)
+    if not rawLink or rawLink == "" then return end
+    local itemID = self:GetItemIDFromLink(rawLink) or (C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(rawLink))
+    if not itemID then return end
+
+    local category = self:GetItemCategory(itemID)
+    if not category or category == "Junk/Pass" then
+        category = self:CategorizeItem(rawLink, 4) or "Tier"
+    end
+    local guid = "Manual-" .. itemID .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000, 9999))
+    self:AddSessionItem(rawLink, guid, nil, 1, category, itemID)
+    local session = DesolateLootcouncil.db.profile.session
+    self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
+end
+
 function Loot:ClearLootBacklog()
     local session = DesolateLootcouncil.db.profile.session
     -- Bug 1: ONLY wipe the loot queue, NOT sessionItems.
@@ -370,51 +322,13 @@ function Loot:ClearLootBacklog()
     DesolateLootcouncil:DLC_Log(L["Loot backlog cleared (dedup store preserved)."])
 end
 
-function Loot:AddManualItem(rawLink)
-    if not DesolateLootcouncil:AmILootMaster() then return end
-    local itemID = self:GetItemIDFromLink(rawLink)
-    if itemID then
-        local category = self:GetItemCategory(itemID)
-        if category == "Junk/Pass" then category = self:CategorizeItem(rawLink) end
-
-        -- 1. Try to get full info from the provided string (in case it's a full hyperlink)
-        local _, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(rawLink)
-
-        -- 2. Fallback to ID if needed
-        if not link then
-            _, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
-        end
-
-        -- 3. If STILL no link (uncached), use the provided raw string as a placeholder
-        --    This will allow the UI to catch it and trigger a refresh.
-        if not link then
-            link = rawLink
-        end
-
-        if not icon then icon = C_Item.GetItemIconByID(itemID) end
-
-        local session = DesolateLootcouncil.db.profile.session
-        table.insert(session.loot, {
-            link = link,
-            itemID = itemID,
-            category = category,
-            sourceGUID = "Manual-" .. itemID .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
-            stackIndex = 1,
-            texture = icon or "Interface\\Icons\\INV_Misc_QuestionMark"
-        })
-        DesolateLootcouncil:DLC_Log(string.format(L["Manually added: %s"], link), true)
-
-        self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
-    end
-end
-
 -- --- Awarding --- --
 
 --- Announces the award result to the group and whispers the winner.
 ---@param itemData table
 ---@param winnerName string
 ---@param voteType string
-function Loot:_BroadcastAward(itemData, winnerName, voteType)
+function Loot:BroadcastAward(itemData, winnerName, voteType)
     local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName)
     local msg = string.format(L["Winner of %s is %s! (%s)"], itemData.link, winnerDisplay, voteType)
 
@@ -443,7 +357,7 @@ end
 ---@param voteType string
 ---@param origIndex number|nil   pre-award priority index (for re-award restoration)
 ---@return boolean isSelf
-function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
+function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
     if not session.awarded then return false end
 
     local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
@@ -466,6 +380,11 @@ function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, or
     }
     table.insert(session.awarded, entry)
 
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("AWARD", nil, winnerName, itemData.category, string.format("Awarded %s (%s)", tostring(itemData.link or itemData.itemID), tostring(voteType)))
+    end
+
     if Session and Session.SendHistoryUpdate then Session:SendHistoryUpdate(entry) end
 
     self:SendMessage("DLC_HISTORY_UPDATED", entry)
@@ -479,7 +398,7 @@ end
 ---@param session table
 ---@param itemGUID string
 ---@param removeIndex number
-function Loot:_CleanupAwardedItem(session, itemGUID, removeIndex)
+function Loot:CleanupAwardedItem(session, itemGUID, removeIndex)
     table.remove(session.bidding, removeIndex)
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
     if Session then
@@ -502,7 +421,7 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if not itemData then return end
 
     -- 1. Announce to raid / whisper winner
-    self:_BroadcastAward(itemData, winnerName, voteType)
+    self:BroadcastAward(itemData, winnerName, voteType)
 
     -- 2. Move priority (Bid only)
     local origIndex
@@ -514,11 +433,11 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     end
 
     -- 3. Record in history and broadcast update
-    self:_RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
+    self:RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
 
     -- 4. Remove from live session
     if removeIndex then
-        self:_CleanupAwardedItem(session, itemGUID, removeIndex)
+        self:CleanupAwardedItem(session, itemGUID, removeIndex)
     end
 
     -- 5. Refresh monitor
@@ -538,6 +457,11 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
             db.global.activeRaidLastActivity = time()
         end
     end
+
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("AWARD", nil, winnerName, itemData.category, string.format("Item: %s (%s) | Vote: %s", tostring(itemData.link or itemData.itemID), tostring(itemData.itemID or ""), tostring(voteType or "Bid")))
+    end
 end
 
 --- Copies the original votes back onto the new item GUID so the Monitor
@@ -546,7 +470,7 @@ end
 --- keyed to the new GUID — the old key is intentionally abandoned.
 ---@param session table
 ---@param awardedItem table   the history entry being reverted
-function Loot:_RestoreVotesForReaward(session, awardedItem)
+function Loot:RestoreVotesForReaward(session, awardedItem)
     if not awardedItem.votes then return end
     local Session = DesolateLootcouncil:GetModule("Session")
     if not Session then return end
@@ -567,16 +491,18 @@ function Loot:ReawardItem(index)
     local awardedItem = session.awarded[index]
 
     -- 1. Push item back onto the live bidding list (generate a new GUID to avoid
-    --    conflicts with the original loot-bag entry, which may have already been consumed)
-    table.insert(session.bidding, awardedItem.fullItemData or {
-        link       = awardedItem.link,
-        itemID     = awardedItem.itemID,
-        texture    = awardedItem.texture,
-        category   = "Re-awarded",
-        sourceGUID = "Reaward-" ..
-            (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000)),
-        stackIndex = 1,
-    })
+    -- conflicts with the original loot-bag entry, which may have already been consumed)
+    local newGUID = "Reaward-" .. (awardedItem.itemID or 0) .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000))
+    local newItemData = (awardedItem.fullItemData and DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(awardedItem.fullItemData)) or {}
+    newItemData.link       = newItemData.link or awardedItem.link
+    newItemData.itemID     = newItemData.itemID or awardedItem.itemID
+    newItemData.texture    = newItemData.texture or awardedItem.texture
+    newItemData.category   = newItemData.category or (awardedItem.fullItemData and awardedItem.fullItemData.category) or "Re-awarded"
+    newItemData.stackIndex = newItemData.stackIndex or 1
+    newItemData.sourceGUID = newGUID
+    newItemData.isClosed   = true
+    session.bidding = session.bidding or {}
+    table.insert(session.bidding, newItemData)
 
     -- 2. Restore priority position so the original winner isn't penalised
     if awardedItem.originalIndex and awardedItem.winner then
@@ -590,40 +516,58 @@ function Loot:ReawardItem(index)
     end
 
     -- 3. Re-attach the original votes to the new GUID
-    self:_RestoreVotesForReaward(session, awardedItem)
+    self:RestoreVotesForReaward(session, awardedItem)
 
     -- 4. Remove the history entry and log
     table.remove(session.awarded, index)
     DesolateLootcouncil:DLC_Log(string.format(L["Re-awarded item: %s"], (awardedItem.link or "???")))
 
+    local Audit = DesolateLootcouncil:GetModule("Audit", true)
+    if Audit and Audit.Log then
+        Audit:Log("REAWARD", nil, awardedItem.winner, awardedItem.fullItemData and awardedItem.fullItemData.category, string.format("Re-awarded %s (Winner restored)", tostring(awardedItem.link or awardedItem.itemID)))
+    end
+
     -- 5. Broadcast the restored item so assistants see it in their Monitor
     local newItem = session.bidding[#session.bidding]
     local Session = DesolateLootcouncil:GetModule("Session")
-    if Session and Session.SendCommMessage then
-        local payload = {
-            command  = "LOOT_SESSION_START",
-            data     = { {
-                link       = newItem.link,
-                texture    = newItem.texture,
-                itemID     = newItem.itemID,
-                sourceGUID = newItem.sourceGUID,
-                category   = newItem.category,
-            } },
-            duration = 300,
-            endTime  = GetServerTime() + 300,
-            votes    = { [newItem.sourceGUID] = DesolateLootcouncil.Table.DeepCopy(awardedItem.votes or {}) },
-        }
-        local serialized = Session:Serialize(payload)
-        local channel = DesolateLootcouncil:GetBroadcastChannel()
-        if channel then
-            Session:SendCommMessage("DLC_Loot", serialized, channel)
+    if Session then
+        Session.clientLootList = Session.clientLootList or {}
+        table.insert(Session.clientLootList, newItem)
+        if not Session.closedItems then Session.closedItems = {} end
+        Session.closedItems[newGUID] = true
+        if Session.SaveSessionState then
+            Session:SaveSessionState()
+        end
+
+        if Session.SendCommMessage then
+            local payload = {
+                command  = "LOOT_SESSION_START",
+                data     = { {
+                    link       = newItem.link,
+                    texture    = newItem.texture,
+                    itemID     = newItem.itemID,
+                    sourceGUID = newItem.sourceGUID,
+                    category   = newItem.category,
+                    isClosed   = true,
+                } },
+                duration = 0,
+                endTime  = 0,
+                votes    = newItem.sourceGUID and { [newItem.sourceGUID] = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(awardedItem.votes or {})) or {} } or {},
+            }
+            local serialized = Session:Serialize(payload)
+            local channel = DesolateLootcouncil:GetBroadcastChannel()
+            if channel then
+                Session:SendCommMessage("DLC_Loot", serialized, channel)
+            end
         end
     end
 
     -- 6. Broadcast history update (automatically refreshes UI_History, UI_RaidHistory, and UI_TradeList if shown)
     self:SendMessage("DLC_HISTORY_UPDATED")
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-    if Monitor then Monitor:ShowMonitorWindow() end
+    self:SendMessage("DLC_SESSION_STARTED", session.bidding, DesolateLootcouncil:AmIOfficerOrLM())
+
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.ShowMonitorWindow then Monitor:ShowMonitorWindow(true) end
 
     DesolateLootcouncil:Print(L["Item reverted to monitor window."])
 
@@ -638,12 +582,12 @@ end
 
 function Loot:AddTestItems()
     local testItems = {
-        "item:16914:::::::20:257::::::", -- Tier (Netherwind Belt)
-        "item:17075:::::::20:257::::::", -- Weapons (Vis'kag)
-        "item:19136:::::::20:257::::::", -- Rest (Mana Igniting Cord)
-        "item:13335:::::::20:257::::::", -- Collectables (Deathcharger's Reins)
-        "item:19019:::::::20:257::::::", -- Extra (Thunderfury)
-        "item:16223:::::::20:257::::::", -- Recipe (Formula: Enchant Weapon - Crusader)
+        "item:217192:::::::20:257::::::", -- Tier (Slumbering Coil Curio)
+        "item:212398:::::::20:257::::::", -- Weapons (Caustic Keeper-Crusher)
+        "item:219315:::::::20:257::::::", -- Trinkets and Cantrips (Spymaster's Web)
+        "item:219300:::::::20:257::::::", -- Rest (Reckless Spirit Breastplate)
+        "item:13335:::::::20:257::::::",  -- Collectables (Deathcharger's Reins)
+        "item:223120:::::::20:257::::::", -- Recipe (Formula: Radiant Power)
     }
     for _, itemLink in ipairs(testItems) do
         self:AddManualItem(itemLink)

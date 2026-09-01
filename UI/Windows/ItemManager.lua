@@ -159,6 +159,11 @@ function UI_ItemManager:OnEnable()
             OnItemLoadCallback()
         end
     end)
+    self:RegisterEvent("ITEM_DATA_LOAD_RESULT", function()
+        if self.frame and self.frame:IsShown() then
+            OnItemLoadCallback()
+        end
+    end)
 end
 
 function UI_ItemManager:ShowItemManagerWindow()

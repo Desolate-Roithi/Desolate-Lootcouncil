@@ -19,8 +19,12 @@ StaticPopupDialogs["DLC_SETTINGS_CONFIRM"] = {
     preferredIndex = 3,
 }
 
-function UI_Settings:ShowSettingsWindow()
+function UI_Settings:ShowSettingsWindow(initialTab)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+
+    if initialTab and initialTab ~= "" then
+        self.activeTab = initialTab
+    end
 
     if not self.settingsFrame then
         local frame = NativeGUI:CreateWindow("DLCSettingsFrame", L["Desolate Loot Council Settings"], "Config")
@@ -425,8 +429,12 @@ function UI_Settings:RenderActiveSettings(tabData)
         if isColumn then
             if d.width == "double" then
                 colSpan = 2
-            elseif d.width == "half" or d.width == "normal" or not d.width then
+            elseif d.width == "half" or d.width == 0.5 then
+                colSpan = 1.5
+            elseif d.width == "normal" or not d.width then
                 colSpan = 1
+            elseif type(d.width) == "number" then
+                colSpan = d.width
             end
         end
 
@@ -478,7 +486,7 @@ function UI_Settings:RenderActiveSettings(tabData)
                 local itemW
                 if item.span == 3 then
                     itemW = colW3
-                elseif totalSpan == 2 then
+                elseif item.span == 1.5 or (totalSpan == 3 and #row.items == 2) or totalSpan == 2 then
                     itemW = math.floor((innerW - colGap) / 2)
                 elseif totalSpan == 1 then
                     itemW = colW2

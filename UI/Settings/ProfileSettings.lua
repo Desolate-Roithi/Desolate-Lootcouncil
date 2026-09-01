@@ -140,39 +140,51 @@ end
 -- Options Definitions
 local currentProfileOpt = {
     type = "select",
-    name = "Current Profile",
-    desc = "Select an existing profile to switch to.",
-    width = 1.5,
+    name = L["Current Profile"],
+    desc = L["Select an existing profile to switch to."],
+    width = "double",
     order = 1,
     values = ValuesCurrentProfile,
     set = SetCurrentProfile,
     get = GetCurrentProfile,
 }
 
+local deleteBtnOpt = {
+    type = "execute",
+    name = L["Delete Profile"],
+    desc = L["Delete the current profile (cannot delete Default)."],
+    width = "normal",
+    order = 2,
+    confirm = true,
+    confirmText = "Delete this profile forever?",
+    func = DeleteProfile,
+}
+
 local newProfileNameOpt = {
     type = "input",
-    name = "New Profile Name",
-    width = 1.0,
-    order = 2,
+    name = L["New Profile Name"],
+    desc = L["Enter name to create a new profile or reset an existing one."],
+    width = "double",
+    order = 3,
     set = NewProfileNameSet,
     get = NewProfileNameGet,
 }
 
 local createBtnOpt = {
     type = "execute",
-    name = "Create / Reset",
-    desc = "Create a new profile with this name (or reset if it exists).",
-    width = 0.5,
-    order = 3,
+    name = L["Create / Reset"],
+    desc = L["Create a new profile with this name (or reset if it exists)."],
+    width = "normal",
+    order = 4,
     func = CreateNewProfile,
 }
 
 local copyFromOpt = {
     type = "select",
-    name = "Copy From Profile",
-    desc = "Select a profile to copy data FROM (overwrites current!).",
-    width = 1.5,
-    order = 4,
+    name = L["Copy From Profile"],
+    desc = L["Select a profile to copy data FROM (overwrites current!)."],
+    width = "double",
+    order = 5,
     values = ValuesCopyFrom,
     set = CopyTargetSet,
     get = CopyTargetGet,
@@ -180,42 +192,31 @@ local copyFromOpt = {
 
 local copyBtnOpt = {
     type = "execute",
-    name = "Copy",
-    desc = "Overwrite current profile with data from selected profile.",
-    width = 0.5,
-    order = 5,
+    name = L["Copy"],
+    desc = L["Overwrite current profile with data from selected profile."],
+    width = "normal",
+    order = 6,
     confirm = true,
     confirmText = "Are you sure you want to overwrite the CURRENT profile?",
     func = CopyProfile,
 }
 
-local deleteBtnOpt = {
-    type = "execute",
-    name = "Delete Profile",
-    desc = "Delete the current profile (cannot delete Default).",
-    width = 1.0,
-    order = 6,
-    confirm = true,
-    confirmText = "Delete this profile forever?",
-    func = DeleteProfile,
-}
-
 local descOpt = {
     type = "description",
-    name = "Export specific settings to share with others or move between profiles.\n",
+    name = L["Export specific settings to share with others or move between profiles.\n"],
     order = 0,
 }
 
 local exportOptsGroupOpt = {
     type = "group",
-    name = "Data to Export",
+    name = L["Data Domains to Export"],
     inline = true,
     order = 1,
     args = {
         all = {
             type = "toggle",
-            name = "|cffffd700Entire Profile (Export Everything)|r",
-            desc = "Exports a complete backup of all profile modules.",
+            name = "|cffffd700" .. L["Entire Profile (Export Everything)"] .. "|r",
+            desc = L["Exports a complete backup of all profile modules."],
             width = "full",
             order = 1,
             get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
@@ -235,8 +236,8 @@ local exportOptsGroupOpt = {
         },
         roster = {
             type = "toggle",
-            name = "Roster (Mains & Alts)",
-            width = 1.3,
+            name = L["Roster (Mains & Alts)"],
+            width = "half",
             order = 2,
             disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
             get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["Roster"] end,
@@ -249,9 +250,9 @@ local exportOptsGroupOpt = {
         },
         priorityRankings = {
             type = "toggle",
-            name = "Priority Lists (with Player Rankings)",
-            desc = "Exports list definitions and active player order.",
-            width = 1.6,
+            name = L["Priority Lists (with Player Rankings)"],
+            desc = L["Exports list definitions and active player order."],
+            width = "half",
             order = 3,
             disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
             get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["PriorityRankings"] end,
@@ -267,9 +268,9 @@ local exportOptsGroupOpt = {
         },
         priorityStructure = {
             type = "toggle",
-            name = "Priority Lists (Empty Structure without Players)",
-            desc = "Exports empty list definitions/templates.",
-            width = 1.6,
+            name = L["Priority Lists (Empty Structure)"],
+            desc = L["Exports empty list definitions/templates without raider rankings."],
+            width = "half",
             order = 4,
             disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
             get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["PriorityStructure"] end,
@@ -285,8 +286,9 @@ local exportOptsGroupOpt = {
         },
         im = {
             type = "toggle",
-            name = "Item Manager (Managed Item Catalogs)",
-            width = 1.6,
+            name = L["Item Manager (Catalogs)"],
+            desc = L["Exports item assignments and managed priority lists."],
+            width = "half",
             order = 5,
             disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
             get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["IM"] end,
@@ -299,8 +301,8 @@ local exportOptsGroupOpt = {
         },
         history = {
             type = "toggle",
-            name = "Raid Attendance & Award History",
-            width = 1.6,
+            name = L["Raid Attendance & Award History"],
+            width = "half",
             order = 6,
             disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
             get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["History"] end,
@@ -313,8 +315,8 @@ local exportOptsGroupOpt = {
         },
         config = {
             type = "toggle",
-            name = "General Config & Decay Rules",
-            width = 1.6,
+            name = L["General Config & Decay Rules"],
+            width = "half",
             order = 7,
             disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
             get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["Config"] end,
@@ -330,17 +332,18 @@ local exportOptsGroupOpt = {
 
 local genExportOpt = {
     type = "execute",
-    name = "Generate Export String",
-    width = 1.0,
+    name = L["Generate Export String"],
+    desc = L["Encode and package the selected domains into a shareable export string."],
+    width = "full",
     order = 2,
     func = GenerateExportString,
 }
 
 local exportStringOpt = {
     type = "input",
-    name = "Export String",
+    name = L["Export String"],
     width = "full",
-    multiline = 5,
+    multiline = 4,
     order = 3,
     set = function() end,
     get = GetExportString,
@@ -348,15 +351,16 @@ local exportStringOpt = {
 
 local importHeaderOpt = {
     type = "header",
-    name = "Import",
+    name = L["Import Profile Payload"],
     order = 10,
 }
 
 local importStringOpt = {
     type = "input",
-    name = "Paste Import String",
+    name = L["Paste Import String"],
+    desc = L["Paste a base64 export string generated from Desolate Loot Council."],
     width = "full",
-    multiline = 5,
+    multiline = 4,
     order = 11,
     set = ImportStringSet,
     get = ImportStringGet,
@@ -364,9 +368,9 @@ local importStringOpt = {
 
 local importProfileNameOpt = {
     type = "input",
-    name = "New Profile Name (Import)",
-    desc = "Imports always create a new profile for safety.",
-    width = 1.5,
+    name = L["New Profile Name (Import)"],
+    desc = L["Imports always create a new profile for safety."],
+    width = "normal",
     order = 12,
     set = ImportProfileNameSet,
     get = ImportProfileNameGet,
@@ -374,8 +378,9 @@ local importProfileNameOpt = {
 
 local doImportOpt = {
     type = "execute",
-    name = "Import Data",
-    width = 1.0,
+    name = L["Import to New Profile"],
+    desc = L["Import data into a newly created profile."],
+    width = "normal",
     order = 13,
     func = DoImport,
 }
@@ -384,7 +389,7 @@ local doImportToCurrentOpt = {
     type = "execute",
     name = L["Import to Current Profile"],
     desc = L["Import data directly into the active profile."],
-    width = 1.2,
+    width = "normal",
     order = 14,
     confirm = true,
     confirmText = L["Are you sure you want to import directly into your CURRENT active profile? This cannot be undone."],
@@ -403,25 +408,25 @@ end
 function ProfileSettings:GetManagementOptions()
     local opts = {
         type = "group",
-        name = "Profile Management",
+        name = L["Profile Management"],
         order = 1,
         inline = true,
         args = {}
     }
     local args = opts.args
     args.currentProfile = currentProfileOpt
+    args.deleteBtn = deleteBtnOpt
     args.newProfileName = newProfileNameOpt
     args.createBtn = createBtnOpt
     args.copyFrom = copyFromOpt
     args.copyBtn = copyBtnOpt
-    args.deleteBtn = deleteBtnOpt
     return opts
 end
 
 function ProfileSettings:GetImportExportOptions()
     local opts = {
         type = "group",
-        name = "Import / Export",
+        name = L["Import / Export"],
         order = 2,
         inline = true,
         args = {}

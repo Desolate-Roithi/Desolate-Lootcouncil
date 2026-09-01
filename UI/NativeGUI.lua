@@ -448,7 +448,14 @@ function UI_NativeGUI:CreateWindow(name, titleText, widthOrWindowName, height, w
     -- Persistence Integration
     DesolateLootcouncil:RestoreFramePosition(frame, winName)
 
+    self.registeredWindows = self.registeredWindows or {}
+    self.registeredWindows[frame] = true
+
     frame:HookScript("OnShow", function()
+        local Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
+        if Theme and Theme.StyleNativeWindow then
+            Theme:StyleNativeWindow(frame)
+        end
         if frame.startCollapsed then
             C_Timer.After(0.05, function()
                 if frame.startCollapsed and not frame.isCollapsed then
@@ -483,6 +490,8 @@ function UI_NativeGUI:AcquireRow(rowPool, index, parent, isActive)
         rowPool[index] = self:CreateRowContainer(parent, isActive)
     end
     local row = rowPool[index]
+    local theme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
+    self:StyleRowBackdrop(row, theme, isActive)
     row:Show()
     return row
 end
@@ -537,6 +546,20 @@ function UI_NativeGUI:CreateIcon(parent, size, leftOffset)
     return btn
 end
 
+--- Sets the class icon texture coordinates on a Texture widget safely.
+---@param iconTexture Texture
+---@param classFilename string?
+function UI_NativeGUI:SetClassIcon(iconTexture, classFilename)
+    if not iconTexture then return end
+    iconTexture:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
+    if _G.CLASS_ICON_TCOORDS and classFilename and _G.CLASS_ICON_TCOORDS[classFilename] then
+        iconTexture:SetTexCoord(unpack(_G.CLASS_ICON_TCOORDS[classFilename]))
+    else
+        iconTexture:SetTexCoord(0, 1, 0, 1)
+    end
+    iconTexture:Show()
+end
+
 --- Sets up or creates an item icon button on a row with default tooltips.
 ---@param row Frame
 ---@param data table
@@ -552,23 +575,66 @@ function UI_NativeGUI:SetupItemIconButton(row, data, size, offsetX, offsetY)
     row.itemIcon:ClearAllPoints()
     row.itemIcon:SetPoint("LEFT", offsetX or 8, offsetY or 0)
 
-    local texture = data.texture or (data.itemID and C_Item.GetItemIconByID(data.itemID)) or 134400
-    row.itemIcon.texture:SetTexture(texture)
+    local queryID = tonumber(data.itemID) or (data.link and tonumber(data.link:match("item:(%d+)")))
+    local blizzIcon = nil
+    if queryID and C_Item and C_Item.GetItemIconByID then
+        blizzIcon = C_Item.GetItemIconByID(queryID)
+    end
+    if not blizzIcon and (data.link or queryID) and C_Item and C_Item.GetItemInfoInstant then
+        blizzIcon = select(5, C_Item.GetItemInfoInstant(data.link or queryID))
+    end
+
+    local finalTexture = blizzIcon or data.texture or 134400
+    row.itemIcon.texture:SetTexture(finalTexture)
+
+    -- Dynamic asynchronous loading from Blizzard server cache if not yet resolved
+    if (not blizzIcon or finalTexture == 134400) and queryID and Item and Item.CreateFromItemID then
+        local itemObj = Item:CreateFromItemID(queryID)
+        if itemObj and not itemObj:IsItemEmpty() then
+            itemObj:ContinueOnItemLoad(function()
+                local liveIcon = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(queryID))
+                    or (C_Item and C_Item.GetItemInfoInstant and select(5, C_Item.GetItemInfoInstant(queryID)))
+                    or (itemObj.GetItemIcon and itemObj:GetItemIcon())
+                if liveIcon and row.itemIcon and row.itemIcon.texture then
+                    row.itemIcon.texture:SetTexture(liveIcon)
+                end
+            end)
+        end
+    end
+
+    self:AttachItemTooltip(row.itemIcon, data)
+    return row.itemIcon
+end
+
+--- Attaches full GameTooltip hyperlink inspection to any UI widget or label.
+---@param frame Frame|Button
+---@param data table
+function UI_NativeGUI:AttachItemTooltip(frame, data)
+    if not frame or not data then return end
+    local queryID = data.itemID or (data.link and tonumber(data.link:match("item:(%d+)")))
 
     local function ShowTip()
-        GameTooltip:SetOwner(row.itemIcon, "ANCHOR_CURSOR")
+        GameTooltip:SetOwner(frame, "ANCHOR_CURSOR")
         if data.link then
             GameTooltip:SetHyperlink(data.link)
-        elseif data.itemID then
-            GameTooltip:SetItemByID(data.itemID)
+        elseif queryID then
+            GameTooltip:SetItemByID(queryID)
         end
         GameTooltip:Show()
     end
 
-    row.itemIcon:SetScript("OnClick", ShowTip)
-    row.itemIcon:SetScript("OnEnter", ShowTip)
-    row.itemIcon:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    return row.itemIcon
+    frame:SetScript("OnEnter", ShowTip)
+    frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    if frame.HasScript and frame:HasScript("OnClick") then
+        frame:SetScript("OnClick", function()
+            if data.link and IsModifiedClick and IsModifiedClick() and HandleModifiedItemClick then
+                HandleModifiedItemClick(data.link)
+            else
+                ShowTip()
+            end
+        end)
+    end
 end
 
 --- Creates a clickable link label button.
@@ -674,18 +740,10 @@ function UI_NativeGUI:CreateButton(parent, text, width, height, buttonType)
         edgeSize = 1,
     })
 
-    local BUTTON_COLORS = {
-        ["Bid"]     = { border = { 1.0, 0.5, 0.0, 1.0 }, hover = { 0.7, 0.35, 0.0, 0.8 } },
-        ["Roll"]    = { border = { 0.64, 0.21, 0.93, 1.0 }, hover = { 0.45, 0.15, 0.65, 0.8 } },
-        ["Offspec"] = { border = { 0.0, 0.44, 0.87, 1.0 }, hover = { 0.0, 0.3, 0.6, 0.8 } },
-        ["T-Mog"]   = { border = { 0.12, 1.0, 0.0, 1.0 }, hover = { 0.08, 0.7, 0.0, 0.8 } },
-        ["Pass"]    = { border = { 1.0, 1.0, 1.0, 1.0 }, hover = { 0.7, 0.7, 0.7, 0.8 } },
-        ["Note"]    = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
-        ["Stop"]    = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.9 } },
-    }
-
-    local activeTheme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
-    local custom = BUTTON_COLORS[buttonType]
+    local API = DesolateLootcouncil.API
+    local btnColors = (API and API.GetButtonColors and API:GetButtonColors()) or {}
+    local activeTheme = (API and API.GetActiveThemeTable and API:GetActiveThemeTable()) or { border = { 0.6, 0.3, 0.9, 1.0 }, buttonBg = { 0.1, 0.1, 0.1, 0.9 }, buttonHover = { 0.2, 0.2, 0.2, 0.9 } }
+    local custom = btnColors[buttonType]
     local borderCol = custom and custom.border or activeTheme.border
     local bgCol = activeTheme.buttonBg
     local hoverCol = custom and custom.hover or activeTheme.buttonHover
@@ -806,6 +864,29 @@ function UI_NativeGUI:CreateEditBox(parent, labelText)
 
     container.editbox = eb
     return container, eb
+end
+
+--- Creates a multiline read-only copyable editbox that prevents typing mutations while allowing Ctrl+C selection.
+---@param parent Frame
+---@return EditBox
+function UI_NativeGUI:CreateReadOnlyCopyBox(parent)
+    local eb = CreateFrame("EditBox", nil, parent)
+    eb:SetMultiLine(true)
+    eb:SetMaxLetters(0)
+    eb:SetAutoFocus(false)
+    eb:SetFontObject("GameFontHighlightSmall")
+    eb:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
+    local isResetting = false
+    eb:SetScript("OnTextChanged", function(selfEdit)
+        if isResetting then return end
+        if selfEdit.fullText and selfEdit:GetText() ~= selfEdit.fullText then
+            isResetting = true
+            selfEdit:SetText(selfEdit.fullText)
+            isResetting = false
+        end
+    end)
+    eb:SetEnabled(true)
+    return eb
 end
 
 --- Creates a flat, taint-free dropdown button and selection popup frame.

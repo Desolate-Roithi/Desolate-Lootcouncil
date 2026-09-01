@@ -681,35 +681,58 @@ function Session:RemoveSessionItem(guid)
     self.sessionPayloadCache = nil -- Invalidate heartbeat cache; item list changed
 
     -- 2. Remove from local Bidding storage (Monitor List)
-    local session = DesolateLootcouncil.db.profile.session
+    local session = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session
     if session and session.bidding then
-        for i, item in ipairs(session.bidding) do
+        for i = #session.bidding, 1, -1 do
+            local item = session.bidding[i]
             if (item.sourceGUID or item.link) == guid then
                 table.remove(session.bidding, i)
-                break
             end
         end
     end
 
-    -- 3. Remove from Awarded list (Trade List) if it was already dealt out
+    -- 3. Remove from clientLootList
+    if self.clientLootList then
+        for i = #self.clientLootList, 1, -1 do
+            local item = self.clientLootList[i]
+            if (item.sourceGUID or item.link) == guid then
+                table.remove(self.clientLootList, i)
+            end
+        end
+    end
+
+    -- 4. Clean local vote & closed state
+    if self.sessionVotes then self.sessionVotes[guid] = nil end
+    if self.closedItems then self.closedItems[guid] = nil end
+    if self.myLocalVotes then self.myLocalVotes[guid] = nil end
+    if self.outboundVotes then self.outboundVotes[guid] = nil end
+
+    -- 5. Remove from Awarded list (Trade List) if it was already dealt out
     if session and session.awarded then
         for i = #session.awarded, 1, -1 do
             local item = session.awarded[i]
             if (item.sourceGUID or item.link) == guid then
                 table.remove(session.awarded, i)
-                -- Break isn't strictly necessary here, but good practice if guid is unique per item instance
-                break
             end
         end
     end
 
-    -- 4. Refresh Monitor
+    -- 6. Refresh Monitor
     self:SendMessage("DLC_ITEM_REMOVED", guid)
+    local MonitorUI = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
+        MonitorUI:ShowMonitorWindow(true)
+    end
 
-    -- 5. Refresh Trade List (if open)
-    ---@type UI_TradeList
-    local TradeListUI = DesolateLootcouncil:GetModule("UI_TradeList")
-    if TradeListUI and TradeListUI.ShowTradeListWindow and TradeListUI.tradeListFrame and TradeListUI.tradeListFrame:IsShown() then
+    -- 7. Refresh Voting (if open)
+    local VotingUI = DesolateLootcouncil:GetModule("UI_Voting", true)
+    if VotingUI and VotingUI.votingFrame and VotingUI.votingFrame:IsShown() then
+        VotingUI:ShowVotingWindow(nil, true)
+    end
+
+    -- 8. Refresh Trade List (if open)
+    local TradeListUI = DesolateLootcouncil:GetModule("UI_TradeList", true)
+    if TradeListUI and TradeListUI.tradeListFrame and TradeListUI.tradeListFrame:IsShown() then
         TradeListUI:ShowTradeListWindow()
     end
 
@@ -762,7 +785,7 @@ end
 --- Handles automatic pass roll evaluations.
 ---@param payload table
 ---@param isHeartbeat boolean
-function Session:_ApplyAutopassState(payload, isHeartbeat)
+function Session:ApplyAutopassState(payload, isHeartbeat)
     if payload.autopassActive ~= nil then
         local changed = (DesolateLootcouncil.sessionAutopassActive ~= payload.autopassActive)
         DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
@@ -790,7 +813,7 @@ end
 --- Authenticates and updates the Loot Master identity.
 ---@param payload table
 ---@param sender string
-function Session:_ApplyLMLateJoinerIdentity(payload, sender)
+function Session:ApplyLMLateJoinerIdentity(payload, sender)
     if payload.activeLM and payload.activeLM ~= "" and IsAuthorizedSessionSender(sender) then
         DesolateLootcouncil.activeLootMaster = payload.activeLM
         DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(payload.activeLM, "player")
@@ -816,7 +839,7 @@ end
 ---@param newItems table
 ---@param expiry number
 ---@return number hydratedCount
-function Session:_HydrateSessionItems(newItems, expiry)
+function Session:HydrateSessionItems(newItems, expiry)
     local hydratedCount = 0
     if not newItems then return hydratedCount end
     for _, item in ipairs(newItems) do
@@ -835,8 +858,8 @@ function Session:HandleStartSession(payload, sender)
     local expiry = payload.endTime or (GetServerTime() + duration)
     local isHeartbeat = payload.isHeartbeat == true
 
-    self:_ApplyAutopassState(payload, isHeartbeat)
-    self:_ApplyLMLateJoinerIdentity(payload, sender)
+    self:ApplyAutopassState(payload, isHeartbeat)
+    self:ApplyLMLateJoinerIdentity(payload, sender)
 
     self.clientLootList = self.clientLootList or {}
     self.myLocalVotes = self.myLocalVotes or {}
@@ -876,7 +899,7 @@ function Session:HandleStartSession(payload, sender)
     -- Receiver client does not wipe awarded history on session start (LM side manages lifecycle)
 
     -- Full session start (or late-joiner receiving heartbeat for the first time)
-    local hydratedCount = self:_HydrateSessionItems(newItems, expiry)
+    local hydratedCount = self:HydrateSessionItems(newItems, expiry)
     DesolateLootcouncil:DLC_Log("Added " .. hydratedCount .. " items to the session.")
 
     self:SendMessage("DLC_SESSION_STARTED", self.clientLootList, DesolateLootcouncil:AmIOfficerOrLM())
@@ -1283,8 +1306,7 @@ function Session:ClearVotes()
 end
 
 function Session:ClaimLMRole()
-    if not IsInGroup() then return end
-    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    if not (DesolateLootcouncil:IsOfficer() or DesolateLootcouncil:AmIOfficerOrLM()) then return end
     if DesolateLootcouncil:AmILootMaster() then return end
 
     local myName = UnitName("player")
@@ -1303,16 +1325,18 @@ function Session:ClaimLMRole()
 
     DesolateLootcouncil:Print("You have claimed the Loot Master role.")
 
-    local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
-    if not amILeader then
-        local rl = DesolateLootcouncil:GetGroupLeader()
-        local CommMod = DesolateLootcouncil:GetModule("Comm", true)
-        if rl and CommMod then
-            CommMod:SendComm("LM_UPDATE_CONFIGURED", { configuredLM = myName, isClaim = true }, rl)
+    if IsInGroup() then
+        local amILeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
+        if not amILeader then
+            local rl = DesolateLootcouncil:GetGroupLeader()
+            local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+            if rl and CommMod then
+                CommMod:SendComm("LM_UPDATE_CONFIGURED", { configuredLM = myName, isClaim = true }, rl)
+            end
         end
-    end
 
-    self:SendSyncLM(myName)
+        self:SendSyncLM(myName)
+    end
 
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 

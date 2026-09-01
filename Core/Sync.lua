@@ -129,8 +129,10 @@ function Sync:ShareDataWithOfficers(dataType, payload)
     local Comm = DesolateLootcouncil:GetModule("Comm", true)
     if Comm then
         for idx, target in ipairs(targets) do
-            local serialized = Comm:Serialize(command, finalPayload)
-            Comm:SendCommMessage("DLC_COMM", serialized, "WHISPER", target)
+            if target and target ~= "" and DesolateLootcouncil:IsUnitOnline(target) then
+                local serialized = Comm:Serialize(command, finalPayload)
+                Comm:SendCommMessage("DLC_COMM", serialized, "WHISPER", target)
+            end
         end
     end
 
@@ -139,8 +141,8 @@ function Sync:ShareDataWithOfficers(dataType, payload)
 end
 
 function Sync:SendLMHandoverOffer(targetOfficer)
-    if not DesolateLootcouncil:IsUnitInRaid(targetOfficer) or not DesolateLootcouncil:IsUnitOnline(targetOfficer) then
-        DesolateLootcouncil:Print(string.format("Cannot hand over: %s is no longer in the group or online.", targetOfficer))
+    if not targetOfficer or targetOfficer == "" or not DesolateLootcouncil:IsUnitInRaid(targetOfficer) or not DesolateLootcouncil:IsUnitOnline(targetOfficer) then
+        DesolateLootcouncil:Print(string.format("Cannot hand over: %s is no longer in the group or online.", tostring(targetOfficer)))
         return
     end
     local db = DesolateLootcouncil.db.profile
@@ -495,6 +497,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
             end
         end
     end
+end
 
 function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
@@ -859,3 +862,26 @@ function SyncHandlers:LM_UPDATE_CONFIGURED(payload, sender)
         Session:HandleUpdateConfigured(payload, sender)
     end
 end
+
+function Sync:SyncItemManagerToRaid(isManual)
+    if isManual == nil then isManual = true end
+    if not isManual and IsInRaid() and GetNumGroupMembers() < 10 then
+        return
+    end
+    local db = DesolateLootcouncil.db.profile
+    local lists = {}
+    for _, listObj in ipairs(db.PriorityLists or {}) do
+        if listObj.name and listObj.items then
+            lists[listObj.name] = listObj.items
+        end
+    end
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm then
+        Comm:SendComm("IM_SYNC", { lists = lists, isManual = isManual })
+    end
+end
+
+function Sync:AutoSyncItemManager()
+    self:SyncItemManagerToRaid(false)
+end
+

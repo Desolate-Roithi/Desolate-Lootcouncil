@@ -80,17 +80,7 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         row.classIcon = classIcon
     end
     local class = DesolateLootcouncil.API:GetUnitClass(v.name)
-    if _G.CLASS_ICON_TCOORDS then
-        local coords = _G.CLASS_ICON_TCOORDS[class]
-        if coords then
-            row.classIcon:SetTexCoord(unpack(coords))
-        else
-            row.classIcon:SetTexCoord(0, 1, 0, 1)
-        end
-    else
-        row.classIcon:SetTexCoord(0, 1, 0, 1)
-    end
-    row.classIcon:Show()
+    NativeGUI:SetClassIcon(row.classIcon, class)
 
     -- 2. Player Name
     if not row.lblName then
@@ -222,17 +212,7 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
         row.classIcon = classIcon
     end
     local class = DesolateLootcouncil.API:GetUnitClass(de.name)
-    if _G.CLASS_ICON_TCOORDS then
-        local coords = _G.CLASS_ICON_TCOORDS[class]
-        if coords then
-            row.classIcon:SetTexCoord(unpack(coords))
-        else
-            row.classIcon:SetTexCoord(0, 1, 0, 1)
-        end
-    else
-        row.classIcon:SetTexCoord(0, 1, 0, 1)
-    end
-    row.classIcon:Show()
+    NativeGUI:SetClassIcon(row.classIcon, class)
 
     -- 2. Player Name
     if not row.lblName then
@@ -262,9 +242,14 @@ end
 local function RenderAwardHeader(self, itemData, isLM)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local catText = itemData.category and (" (" .. itemData.category .. ")") or ""
-    local _, properLink, quality = C_Item.GetItemInfo(itemData.link)
-    if not quality then
-        local _, _, itemQuality = C_Item.GetItemInfoInstant(itemData.link)
+    local properLink, quality = nil, nil
+    if itemData.link or itemData.itemID then
+        local _, linkStr, q = C_Item.GetItemInfo(itemData.link or itemData.itemID)
+        properLink = linkStr
+        quality = q
+    end
+    if not quality and (itemData.link or itemData.itemID) then
+        local _, _, itemQuality = C_Item.GetItemInfoInstant(itemData.link or itemData.itemID)
         quality = itemQuality
     end
 
@@ -334,6 +319,12 @@ local function RenderAwardHeader(self, itemData, isLM)
     else
         self.awardHeaderContainer.iconBorder:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
     end
+
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    self.awardHeaderContainer.iconBorder:EnableMouse(true)
+    NativeGUI:AttachItemTooltip(self.awardHeaderContainer.iconBorder, itemData)
+    self.awardHeaderContainer:EnableMouse(true)
+    NativeGUI:AttachItemTooltip(self.awardHeaderContainer, itemData)
 end
 
 local function RenderVoteList(self, voteList, isLM, itemData, NativeGUI)
@@ -510,7 +501,7 @@ function UI_Award:ShowAwardWindow(itemData)
     local API  = DesolateLootcouncil.API
     local guid = itemData.sourceGUID or itemData.link
     local summary = API:GetVoteSummary(guid)
-    local votes   = summary.votes
+    local votes   = (summary and summary.votes) or {}
 
     local disenchanters = API:GetDisenchanterList()
     local N = #disenchanters

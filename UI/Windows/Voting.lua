@@ -8,7 +8,7 @@ local UI_Voting  = DesolateLootcouncil:NewModule("UI_Voting", "AceEvent-3.0")
 local L          = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local VOTE_TEXT  = { [1] = L["Bid"], [2] = L["Roll"], [3] = L["Offspec"], [4] = L["T-Mog"], [5] = L["Pass"] }
 local VOTE_COLOR = setmetatable({}, {
-    __index = function(_, key)
+    __index = function(tbl, key)
         local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
         local vc = NativeGUI and NativeGUI.VOTE_COLORS and NativeGUI.VOTE_COLORS[key]
         return vc and vc.hex or "|cffffffff"
@@ -294,7 +294,7 @@ function UI_Voting:CancelAllTimers()
 end
 
 function UI_Voting:RemoveVotingItem(guid)
-    if not self.cachedVotingItems then return end
+    if not self.cachedVotingItems or type(self.cachedVotingItems) ~= "table" then return end
     for i, item in ipairs(self.cachedVotingItems) do
         if (item.sourceGUID or item.link) == guid then
             table.remove(self.cachedVotingItems, i)
@@ -404,7 +404,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     self.myNotes = self.myNotes or {}
     self.noteExpanded = self.noteExpanded or {}
 
-    if lootTable then
+    if type(lootTable) == "table" then
         self.cachedVotingItems   = lootTable
         self.myVotes             = self.myVotes or {}
         -- New session: reset milestone state so all thresholds fire fresh
@@ -414,11 +414,24 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         if self.votingFrame.isCollapsed then
             NativeGUI:ExpandWindow(self.votingFrame, "Voting")
         end
+    else
+        local bidding = (API and API.GetBiddingList and API:GetBiddingList()) or {}
+        self.cachedVotingItems = bidding
     end
     local awardedGUIDs = API:GetAwardedGUIDs()
 
     local items = self.cachedVotingItems
-    if not items then return end
+    if not items or #items == 0 then
+        if self.votingFrame and not isRefresh then
+            self.votingFrame:Hide()
+            self:StopMilestoneChecker()
+            DesolateLootcouncil:Print(L["No active items to vote on."])
+        elseif self.votingFrame then
+            self.votingFrame:Hide()
+            self:StopMilestoneChecker()
+        end
+        return
+    end
 
     if not isRefresh then
         self.votingFrame:Show()
@@ -460,6 +473,15 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
         if self:_LayoutVotingRow(rowCount + 1, data, guid, now, awardedGUIDs) then
             rowCount = rowCount + 1
         end
+    end
+
+    if rowCount == 0 then
+        if self.votingFrame then self.votingFrame:Hide() end
+        self:StopMilestoneChecker()
+        if not isRefresh then
+            DesolateLootcouncil:Print(L["No active items to vote on."])
+        end
+        return
     end
 
     RebuildScrollLayout(self, rowCount)
@@ -527,9 +549,11 @@ function UI_Voting:StyleVotedChangeState(row, theme, guid, currentVote)
 
     row.statusBtn:SetText(L["Change"])
     row.statusBtn:SetEnabled(true)
-    local btnTheme = row.statusBtn.themeBorder or theme.border
+    row.statusBtn.themeBg = theme.buttonBg
+    row.statusBtn.themeBorder = theme.border
+    row.statusBtn.themeHover = theme.buttonHover
     row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
-    row.statusBtn:SetBackdropBorderColor(unpack(btnTheme))
+    row.statusBtn:SetBackdropBorderColor(unpack(theme.border))
     row.statusBtn:SetScript("OnClick", function()
         DesolateLootcouncil.API:CancelVote(guid)
     end)
@@ -689,7 +713,7 @@ local function StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isE
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     -- Setup reusable status elements to prevent memory leaks
     if not row.statusBtn then
-        row.statusBtn = NativeGUI:CreateButton(row.actionFrame, "", 100, 24, "Pass")
+        row.statusBtn = NativeGUI:CreateButton(row.actionFrame, "", 100, 24)
     end
     row.statusBtn:Hide()
     row.statusBtn:ClearAllPoints()
@@ -750,24 +774,32 @@ function UI_Voting:CreateItemRow(index, data, guid, currentVote, isClosed, isExp
     row.actionFrame:SetPoint("RIGHT", row, "RIGHT", -12, (rowHeight == 92) and 24 or 0)
 
     if not row.itemLabel then
-        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        lbl:SetJustifyH("LEFT")
-        row.itemLabel = lbl
+        row.itemLabel = NativeGUI:CreateLinkLabel(row, "GameFontHighlight")
     end
     row.itemLabel:ClearAllPoints()
     row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 10, 0)
     row.itemLabel:SetPoint("RIGHT", row.actionFrame, "LEFT", -15, 0)
+    row.itemLabel:Show()
 
-    local _, properLink = C_Item.GetItemInfo(data.link)
-    if not properLink then
-        local itemObj = Item:CreateFromItemID(data.itemID)
-        if not itemObj:IsItemEmpty() then
-            itemObj:ContinueOnItemLoad(function() self:ShowVotingWindow(nil, true) end)
-        end
-        row.itemLabel:SetText(L["Loading..."])
-    else
-        row.itemLabel:SetText(properLink)
+    local query = data.link or data.itemID
+    local properLink = nil
+    if query then
+        local _, fetchedLink = C_Item.GetItemInfo(query)
+        properLink = fetchedLink
     end
+    if not properLink then
+        local itemID = tonumber(data.itemID) or (data.link and tonumber(data.link:match("item:(%d+)")))
+        if itemID then
+            local itemObj = Item:CreateFromItemID(itemID)
+            if not itemObj:IsItemEmpty() then
+                itemObj:ContinueOnItemLoad(function() self:ShowVotingWindow(nil, true) end)
+            end
+        end
+        row.itemLabel.text:SetText(data.link or (itemID and ("[item:" .. itemID .. "]")) or L["Loading..."])
+    else
+        row.itemLabel.text:SetText(properLink)
+    end
+    NativeGUI:AttachItemTooltip(row.itemLabel, data)
 
     if not row.timerLbl then
         local timer = row.actionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -807,6 +839,21 @@ end
 
 function UI_Voting:OnItemClosed(eventName, guid)
     self:ShowVotingWindow(nil, true)
+end
+
+function UI_Voting:RemoveVotingItem(guid)
+    if self.cachedVotingItems then
+        for i = #self.cachedVotingItems, 1, -1 do
+            local item = self.cachedVotingItems[i]
+            if (item.sourceGUID or item.link) == guid then
+                table.remove(self.cachedVotingItems, i)
+                break
+            end
+        end
+    end
+    if self.votingFrame and self.votingFrame:IsShown() then
+        self:ShowVotingWindow(self.cachedVotingItems, true)
+    end
 end
 
 function UI_Voting:OnItemRemoved(eventName, guid)

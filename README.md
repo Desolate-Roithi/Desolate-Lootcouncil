@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v1.2.7  
+**Latest Version:** v2.0.0-rc  
 **Last Updated:** 2026-08-31  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -48,7 +48,7 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 
 ## Recent Changes
 
-### v1.2.7 (2026-08-31)
+### v2.0.0-rc (2026-08-31)
 * **Comm Target Normalization & Chat Spam Prevention**:
   * Case-insensitively normalized broadcast channel destinations (`RAID`, `PARTY`, `GUILD`, `INSTANCE_CHAT`) in `Comm:SendComm`, preventing lowercase channel targets from falling through to whisper calls that produced "No player named 'raid'" chat errors.
   * Sanitized whisper destinations to block empty strings or channel keywords.
@@ -61,6 +61,22 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
   * Debounced full-raid heartbeat syncs in `RecordUnassignedPlayer()` with a 5.0-second coalescing timer.
 * **LM Disconnect & Handover Race Condition Safety (FCFS)**:
   * Enforced First-Come, First-Served (FCFS) LM claim acceptance in `Session:HandleUpdateConfigured()`, automatically dismissing claim prompts on other officers once an active LM is confirmed.
+* **2.0 Architectural Overhaul & In-Game Test Suite**:
+  * Decoupled domain modules (`Attendance`, `ItemCatalog`, `Trade`, `Priority`, `Roster`).
+  * Built-in native In-Game Test Suite engine (`/dlc test`).
+
+### v1.2.7 (2026-08-31)
+* **Raid Stability & Performance Hotfixes**:
+  * Channel target normalization in `Comm:SendComm` and whisper keyword filtering.
+  * Debounced unassigned member broadcasts and rate-limited pull requests on heartbeat.
+
+### v1.2.6 (2026-08-30)
+* **Raid Disband Prompt Gating**:
+  * Tracked active Loot Master character name in `DecayConfig.currentSessionLM` across session start, handover, and config sync.
+  * Gated `DLC_DISBAND_CLOSE_SESSION` prompt strictly to the designated Loot Master, allowing raiders and officers to automatically close session states cleanly without popup interruptions.
+* **Addon Comm Whisper Safety**:
+  * Fixed `Roster:StopRaidSession` to only broadcast history synchronization if the player is still in a group and removed the hardcoded `"RAID"` target parameter.
+  * Hardened `Comm:SendComm` to properly recognize channel names (`"RAID"`, `"PARTY"`, `"GUILD"`, `"INSTANCE_CHAT"`) and route via group chat channels instead of whisper targets.
 
 ### v1.2.5 (2026-08-29)
 * **Item Manager Loading State & Asynchronous Pipeline**:

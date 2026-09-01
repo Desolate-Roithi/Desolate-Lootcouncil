@@ -11,7 +11,10 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 function UI_Monitor:GetVoteInfo(guid)
     local API                       = DesolateLootcouncil.API
     local summary                   = API:GetVoteSummary(guid)
-    local votes                     = summary.votes
+    if not summary then
+        return "", {}
+    end
+    local votes                     = summary.votes or {}
     local isClosed                  = summary.isClosed
 
     local bids, rolls, os, tm, pass = 0, 0, 0, 0, 0
@@ -102,27 +105,38 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     row.actionFrame:SetSize(115, 26)
     row.actionFrame:SetPoint("RIGHT", row, "RIGHT", -12, 0)
 
-    local kids = { row.actionFrame:GetChildren() }
-    for _, kid in ipairs(kids) do
-        kid:Hide()
-        kid:ClearAllPoints()
+    if not row.btnAward then
+        row.btnAward = NativeGUI:CreateButton(row.actionFrame, "", 75, 24)
     end
-
-    local btnAward = NativeGUI:CreateButton(row.actionFrame, isLM and L["Award"] or L["View Rolls"], 75, 24, "Bid")
-    btnAward:SetPoint("LEFT", 0, 0)
-    btnAward:SetScript("OnClick", function()
+    local theme = DesolateLootcouncil.API:GetActiveThemeTable()
+    row.btnAward:SetText(isLM and L["Award"] or L["View Rolls"])
+    row.btnAward.themeBg = theme.buttonBg
+    row.btnAward.themeBorder = theme.border
+    row.btnAward.themeHover = theme.buttonHover
+    row.btnAward:SetBackdropColor(unpack(theme.buttonBg))
+    row.btnAward:SetBackdropBorderColor(unpack(theme.border))
+    row.btnAward:ClearAllPoints()
+    row.btnAward:SetPoint("LEFT", 0, 0)
+    row.btnAward:SetScript("OnClick", function()
         local AwardUI = DesolateLootcouncil:GetModule("UI_Award", true)
         if AwardUI then AwardUI:ShowAwardWindow(item) end
     end)
+    row.btnAward:Show()
+
+    if not row.btnRemove then
+        row.btnRemove = NativeGUI:CreateButton(row.actionFrame, "X", 32, 24, "Stop")
+    end
+    row.btnRemove:ClearAllPoints()
+    row.btnRemove:SetPoint("LEFT", 80, 0)
+    row.btnRemove:SetScript("OnClick", function()
+        DesolateLootcouncil.API:RemoveSessionItem(guid)
+        self:ShowMonitorWindow(true)
+    end)
 
     if isLM then
-        local btnRemove = NativeGUI:CreateButton(row.actionFrame, "X", 32, 24, "Stop")
-        btnRemove:SetPoint("LEFT", 80, 0)
-        btnRemove:SetScript("OnClick", function()
-            C_Timer.After(0.05, function()
-                DesolateLootcouncil.API:RemoveSessionItem(guid)
-            end)
-        end)
+        row.btnRemove:Show()
+    else
+        row.btnRemove:Hide()
     end
 
     -- 3. Vote Counts & Pending response
@@ -180,28 +194,37 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     row.itemLabel:SetPoint("LEFT", row.itemIcon, "RIGHT", 10, 0)
     row.itemLabel:SetPoint("RIGHT", row.countsFrame, "LEFT", 2, 0)
 
-    local _, properLink = C_Item.GetItemInfo(link)
+    local itemQuery = link or (item and item.itemID)
+    local properLink = nil
+    if itemQuery then
+        local _, fetchedLink = C_Item.GetItemInfo(itemQuery)
+        properLink = fetchedLink
+    end
+
+    local itemID = (item and tonumber(item.itemID)) or (link and tonumber(link:match("item:(%d+)")))
     if not properLink then
-        local itemObj = Item:CreateFromItemID(item.itemID)
-        if not itemObj:IsItemEmpty() then
-            itemObj:ContinueOnItemLoad(function()
-                if self.monitorFrame and self.monitorFrame:IsShown() then
-                    if self.refreshTimer then self.refreshTimer:Cancel() end
-                    self.refreshTimer = C_Timer.NewTimer(0.15, function()
-                        self.refreshTimer = nil
-                        self:ShowMonitorWindow(true)
-                    end)
-                end
-            end)
+        if itemID then
+            local itemObj = Item:CreateFromItemID(itemID)
+            if not itemObj:IsItemEmpty() then
+                itemObj:ContinueOnItemLoad(function()
+                    if self.monitorFrame and self.monitorFrame:IsShown() then
+                        if self.refreshTimer then self.refreshTimer:Cancel() end
+                        self.refreshTimer = C_Timer.NewTimer(0.15, function()
+                            self.refreshTimer = nil
+                            self:ShowMonitorWindow(true)
+                        end)
+                    end
+                end)
+            end
         end
-        row.itemLabel.text:SetText(L["Loading..."])
+        row.itemLabel.text:SetText(link or (itemID and ("[item:" .. itemID .. "]")) or L["Loading..."])
     else
         row.itemLabel.text:SetText(properLink)
-        row.itemIcon.texture:SetTexture(C_Item.GetItemIconByID(item.itemID) or 134400)
+        if itemID then
+            row.itemIcon.texture:SetTexture(C_Item.GetItemIconByID(itemID) or 134400)
+        end
     end
-    row.itemLabel:SetScript("OnClick", ShowTip)
-    row.itemLabel:SetScript("OnEnter", ShowTip)
-    row.itemLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    NativeGUI:AttachItemTooltip(row.itemLabel, item)
 
     self.scrollContent:SetHeight(topOffset + rowHeight + 10)
 end
