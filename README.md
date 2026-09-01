@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.0.0  
+**Latest Version:** v2.0.1  
 **Last Updated:** 2026-09-01  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,12 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.0.1 (2026-09-01)
+* **Complete LFR & Match-Made Group Suppression**:
+  * Added centralized `IsLFR` check supporting `HasLFGRestrictions`, `IsPartyLFG`, `IsInLFGDungeon`, and difficulty IDs 7 & 17.
+  * Suppressed automated raid session creation, roster snapshotting, encounter/boss kill logging, and unassigned player queue ingestion in LFR.
+  * Suppressed loot capture and autopass prompts in match-made LFR environments.
 
 ### v2.0.0 (2026-09-01)
 * **Major 2.0 Architectural Overhaul**:

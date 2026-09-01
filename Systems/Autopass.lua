@@ -132,7 +132,7 @@ function Autopass:OnStartLootRoll(event, rollID)
     local isLM = DesolateLootcouncil:AmILootMaster()
 
     -- Disable entirely if we are in LFR (Match-made groups)
-    if HasLFGRestrictions() then
+    if DesolateLootcouncil:IsLFR() then
         DebugLog(string.format("Skipped RollID %d: In LFR group.", rollID))
         return
     end

@@ -143,6 +143,7 @@ function Loot:ProcessLootSlot(i, session)
 end
 
 function Loot:OnLootOpened()
+    if DesolateLootcouncil:IsLFR() then return end
     if not IsInRaid() and not DesolateLootcouncil.db.profile.debugMode then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
 
@@ -158,6 +159,7 @@ function Loot:OnLootOpened()
 end
 
 function Loot:OnStartLootRoll(event, rollID)
+    if DesolateLootcouncil:IsLFR() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
 
     local link = GetLootRollItemLink(rollID)
@@ -180,6 +182,7 @@ function Loot:OnStartLootRoll(event, rollID)
 end
 
 function Loot:OnLootMessage(event, msg)
+    if DesolateLootcouncil:IsLFR() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not canaccessvalue(msg) then return end
 

@@ -80,6 +80,10 @@ function Attendance:StartRaidSession()
     end
     self.pendingStartRaidSession = nil
 
+    if DesolateLootcouncil:IsLFR() then
+        return
+    end
+
     local _, instanceType = GetInstanceInfo()
     local Sim = DesolateLootcouncil:GetModule("Simulation", true)
     local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
@@ -414,6 +418,8 @@ end
 --- Takes a snapshot of real and simulated raid group members.
 ---@param isEncounterKill boolean|nil
 function Attendance:SnapshotRoster(isEncounterKill)
+    if DesolateLootcouncil:IsLFR() then return end
+
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     local config = db and db.DecayConfig
     if not config or not config.sessionActive then return end
@@ -509,18 +515,21 @@ end
 -- ---------------------------------------------------------------------------
 
 function Attendance:OnZoneChanged()
+    if DesolateLootcouncil:IsLFR() then return end
     if self:IsSessionActive() then
         self:SnapshotRoster(false)
     end
 end
 
 function Attendance:OnGroupRosterUpdate()
+    if DesolateLootcouncil:IsLFR() then return end
     if self:IsSessionActive() then
         self:SnapshotRoster(false)
     end
 end
 
 function Attendance:OnEncounterStart(event, encounterID, encounterName, difficultyID, groupSize)
+    if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
     if not self:IsSessionActive() then return end
     self.pullCounts = self.pullCounts or {}
     self.currentEncounter = encounterID
@@ -530,6 +539,7 @@ function Attendance:OnEncounterStart(event, encounterID, encounterName, difficul
 end
 
 function Attendance:OnEncounterEnd(event, encounterID, encounterName, difficultyID, groupSize, success)
+    if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
     if not self:IsSessionActive() then return end
     local isKill = (success == 1)
     if isKill then

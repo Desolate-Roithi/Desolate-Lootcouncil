@@ -693,6 +693,8 @@ end
 ---------------------------------------------------------------------------
 
 function Roster:ZONE_CHANGED_NEW_AREA()
+    if DesolateLootcouncil:IsLFR() then return end
+
     local name, instanceType = GetInstanceInfo()
     local config = DesolateLootcouncil.db.profile.DecayConfig
 
@@ -722,6 +724,7 @@ function Roster:ZONE_CHANGED_NEW_AREA()
 end
 
 function Roster:ENCOUNTER_START(event, encounterID, encounterName, difficultyID, groupSize)
+    if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config.sessionActive then return end
 
@@ -764,6 +767,7 @@ function Roster:ENCOUNTER_START(event, encounterID, encounterName, difficultyID,
 end
 
 function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, groupSize, success)
+    if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config.sessionActive then return end
 
@@ -880,6 +884,7 @@ end
 local gruResetTimer = nil
 
 function Roster:CheckForNewRaidMembers()
+    if DesolateLootcouncil:IsLFR() then return end
     if not IsInRaid() or not DesolateLootcouncil:AmILootMaster() then return end
     
     local config = DesolateLootcouncil.db.profile.DecayConfig
@@ -999,6 +1004,7 @@ local function BroadcastAutopassState()
 end
 
 function Roster:GROUP_ROSTER_UPDATE()
+    if DesolateLootcouncil:IsLFR() then return end
     if gruResetTimer then gruResetTimer:Cancel() end
     gruResetTimer = C_Timer.NewTimer(0.5, function()
         gruResetTimer = nil

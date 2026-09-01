@@ -387,11 +387,32 @@ function DesolateLootcouncil:GetGroupLeader()
     return nil
 end
 
+--- Returns true if the player is currently in an LFR or matchmade group.
+---@return boolean
+function DesolateLootcouncil:IsLFR()
+    if HasLFGRestrictions and HasLFGRestrictions() then
+        return true
+    end
+    if IsPartyLFG and IsPartyLFG() then
+        return true
+    end
+    if IsInLFGDungeon and IsInLFGDungeon() then
+        return true
+    end
+    if GetInstanceInfo then
+        local instName, instType, difficultyID = GetInstanceInfo()
+        if difficultyID == 7 or difficultyID == 17 then
+            return true
+        end
+    end
+    return false
+end
+
 function DesolateLootcouncil:DetermineLootMaster()
     local myName = UnitName("player")
 
     -- Disable entirely if we are in LFR (Match-made groups)
-    if HasLFGRestrictions() then
+    if self:IsLFR() then
         return nil
     end
 
@@ -1011,6 +1032,7 @@ function DesolateLootcouncil:IsLMAddonUser()
 end
 
 function DesolateLootcouncil:PromptAutopass(isRetry)
+    if self:IsLFR() then return end
     if not self:AmILootMaster() then return end
 
     if not IsInGroup() or self:DoAllGroupMembersHaveAddon() then

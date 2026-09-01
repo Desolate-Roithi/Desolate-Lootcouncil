@@ -78,6 +78,12 @@ function DLC_API:IsLootMaster()
     return (DesolateLootcouncil.AmILootMaster and DesolateLootcouncil:AmILootMaster()) or DesolateLootcouncil.amILM or false
 end
 
+--- Returns true if the player is currently in an LFR or matchmade group.
+---@return boolean
+function DLC_API:IsLFR()
+    return DesolateLootcouncil.IsLFR and DesolateLootcouncil:IsLFR() or false
+end
+
 --- Alias for IsLootMaster.
 ---@return boolean
 function DLC_API:AmILootMaster()
