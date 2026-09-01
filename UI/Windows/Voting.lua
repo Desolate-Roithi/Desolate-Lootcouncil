@@ -549,9 +549,11 @@ function UI_Voting:StyleVotedChangeState(row, theme, guid, currentVote)
 
     row.statusBtn:SetText(L["Change"])
     row.statusBtn:SetEnabled(true)
-    local btnTheme = row.statusBtn.themeBorder or theme.border
+    row.statusBtn.themeBg = theme.buttonBg
+    row.statusBtn.themeBorder = theme.border
+    row.statusBtn.themeHover = theme.buttonHover
     row.statusBtn:SetBackdropColor(unpack(theme.buttonBg))
-    row.statusBtn:SetBackdropBorderColor(unpack(btnTheme))
+    row.statusBtn:SetBackdropBorderColor(unpack(theme.border))
     row.statusBtn:SetScript("OnClick", function()
         DesolateLootcouncil.API:CancelVote(guid)
     end)
@@ -711,7 +713,7 @@ local function StyleRowStatus(self, row, theme, guid, currentVote, isClosed, isE
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     -- Setup reusable status elements to prevent memory leaks
     if not row.statusBtn then
-        row.statusBtn = NativeGUI:CreateButton(row.actionFrame, "", 100, 24, "Pass")
+        row.statusBtn = NativeGUI:CreateButton(row.actionFrame, "", 100, 24)
     end
     row.statusBtn:Hide()
     row.statusBtn:ClearAllPoints()

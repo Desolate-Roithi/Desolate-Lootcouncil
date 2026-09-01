@@ -106,9 +106,15 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     row.actionFrame:SetPoint("RIGHT", row, "RIGHT", -12, 0)
 
     if not row.btnAward then
-        row.btnAward = NativeGUI:CreateButton(row.actionFrame, "", 75, 24, "Bid")
+        row.btnAward = NativeGUI:CreateButton(row.actionFrame, "", 75, 24)
     end
+    local theme = DesolateLootcouncil.API:GetActiveThemeTable()
     row.btnAward:SetText(isLM and L["Award"] or L["View Rolls"])
+    row.btnAward.themeBg = theme.buttonBg
+    row.btnAward.themeBorder = theme.border
+    row.btnAward.themeHover = theme.buttonHover
+    row.btnAward:SetBackdropColor(unpack(theme.buttonBg))
+    row.btnAward:SetBackdropBorderColor(unpack(theme.border))
     row.btnAward:ClearAllPoints()
     row.btnAward:SetPoint("LEFT", 0, 0)
     row.btnAward:SetScript("OnClick", function()

@@ -740,18 +740,10 @@ function UI_NativeGUI:CreateButton(parent, text, width, height, buttonType)
         edgeSize = 1,
     })
 
-    local BUTTON_COLORS = {
-        ["Bid"]     = { border = { 1.0, 0.5, 0.0, 1.0 }, hover = { 0.7, 0.35, 0.0, 0.8 } },
-        ["Roll"]    = { border = { 0.64, 0.21, 0.93, 1.0 }, hover = { 0.45, 0.15, 0.65, 0.8 } },
-        ["Offspec"] = { border = { 0.0, 0.44, 0.87, 1.0 }, hover = { 0.0, 0.3, 0.6, 0.8 } },
-        ["T-Mog"]   = { border = { 0.12, 1.0, 0.0, 1.0 }, hover = { 0.08, 0.7, 0.0, 0.8 } },
-        ["Pass"]    = { border = { 1.0, 1.0, 1.0, 1.0 }, hover = { 0.7, 0.7, 0.7, 0.8 } },
-        ["Note"]    = { border = { 0.6, 0.3, 0.9, 1.0 }, hover = { 0.4, 0.2, 0.6, 0.8 } },
-        ["Stop"]    = { border = { 0.8, 0.2, 0.2, 1.0 }, hover = { 0.5, 0.1, 0.1, 0.9 } },
-    }
-
-    local activeTheme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
-    local custom = BUTTON_COLORS[buttonType]
+    local API = DesolateLootcouncil.API
+    local btnColors = (API and API.GetButtonColors and API:GetButtonColors()) or {}
+    local activeTheme = (API and API.GetActiveThemeTable and API:GetActiveThemeTable()) or { border = { 0.6, 0.3, 0.9, 1.0 }, buttonBg = { 0.1, 0.1, 0.1, 0.9 }, buttonHover = { 0.2, 0.2, 0.2, 0.9 } }
+    local custom = btnColors[buttonType]
     local borderCol = custom and custom.border or activeTheme.border
     local bgCol = activeTheme.buttonBg
     local hoverCol = custom and custom.hover or activeTheme.buttonHover

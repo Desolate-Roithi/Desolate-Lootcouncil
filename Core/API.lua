@@ -258,6 +258,20 @@ function DLC_API:GetActiveTheme()
     return DesolateLootcouncil.db.profile.activeTheme or "Midnight"
 end
 
+--- Returns the active UI theme table with color tokens.
+---@return table
+function DLC_API:GetActiveThemeTable()
+    local theme = UI_Theme()
+    return (theme and theme.GetActiveTheme and theme:GetActiveTheme()) or (theme and theme.GetTheme and theme:GetTheme("Midnight")) or {}
+end
+
+--- Returns the button colors table.
+---@return table
+function DLC_API:GetButtonColors()
+    local theme = UI_Theme()
+    return (theme and theme.GetButtonColors and theme:GetButtonColors()) or (theme and theme.BUTTON_COLORS) or {}
+end
+
 --- Sets the active UI theme and updates open windows.
 ---@param val string
 function DLC_API:SetActiveTheme(val)
