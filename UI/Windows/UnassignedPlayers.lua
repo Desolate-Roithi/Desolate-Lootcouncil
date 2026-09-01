@@ -199,17 +199,7 @@ function UI_UnassignedPlayers:RenderRow(index, uData, mainNames, NativeGUI)
         row.classIcon = classIcon
     end
     local class = uData.class or DesolateLootcouncil.API:GetUnitClass(uData.name)
-    if _G.CLASS_ICON_TCOORDS then
-        local coords = _G.CLASS_ICON_TCOORDS[class]
-        if coords then
-            row.classIcon:SetTexCoord(unpack(coords))
-        else
-            row.classIcon:SetTexCoord(0, 1, 0, 1)
-        end
-    else
-        row.classIcon:SetTexCoord(0, 1, 0, 1)
-    end
-    row.classIcon:Show()
+    NativeGUI:SetClassIcon(row.classIcon, class)
 
     -- Player Name Label
     if not row.lblName then

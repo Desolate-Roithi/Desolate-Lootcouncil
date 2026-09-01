@@ -546,6 +546,20 @@ function UI_NativeGUI:CreateIcon(parent, size, leftOffset)
     return btn
 end
 
+--- Sets the class icon texture coordinates on a Texture widget safely.
+---@param iconTexture Texture
+---@param classFilename string?
+function UI_NativeGUI:SetClassIcon(iconTexture, classFilename)
+    if not iconTexture then return end
+    iconTexture:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
+    if _G.CLASS_ICON_TCOORDS and classFilename and _G.CLASS_ICON_TCOORDS[classFilename] then
+        iconTexture:SetTexCoord(unpack(_G.CLASS_ICON_TCOORDS[classFilename]))
+    else
+        iconTexture:SetTexCoord(0, 1, 0, 1)
+    end
+    iconTexture:Show()
+end
+
 --- Sets up or creates an item icon button on a row with default tooltips.
 ---@param row Frame
 ---@param data table

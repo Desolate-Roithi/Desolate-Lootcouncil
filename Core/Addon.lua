@@ -229,9 +229,9 @@ function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
 
     local session = self.db.profile.session
     if session then
-        self:_RepairItemCache(session)
+        self:RepairItemCache(session)
     end
-    self:_RefreshOpenWindows(session)
+    self:RefreshOpenWindows(session)
 
     local Session = self:GetModule("Session", true)
     if Session and Session.RestoreSession then
@@ -259,7 +259,7 @@ function DesolateLootcouncil:OnEnable()
 
 end
 
-function DesolateLootcouncil:_RepairItemCache(session)
+function DesolateLootcouncil:RepairItemCache(session)
     if not session then return false end
     local repaired = false
     local function repairList(list)
@@ -292,7 +292,7 @@ function DesolateLootcouncil:_RepairItemCache(session)
     return repaired
 end
 
-function DesolateLootcouncil:_RefreshOpenWindows(session)
+function DesolateLootcouncil:RefreshOpenWindows(session)
     if session then
         -- Global auto-refresh for any open frames to pull the updated UI data
         ---@type UI_Loot
@@ -354,9 +354,9 @@ function DesolateLootcouncil:GET_ITEM_INFO_RECEIVED()
 
         local session = self.db and self.db.profile and self.db.profile.session
         if session then
-            self:_RepairItemCache(session)
+            self:RepairItemCache(session)
         end
-        self:_RefreshOpenWindows(session)
+        self:RefreshOpenWindows(session)
 
         self.refreshTimer = nil
     end, 0.5)

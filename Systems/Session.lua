@@ -785,7 +785,7 @@ end
 --- Handles automatic pass roll evaluations.
 ---@param payload table
 ---@param isHeartbeat boolean
-function Session:_ApplyAutopassState(payload, isHeartbeat)
+function Session:ApplyAutopassState(payload, isHeartbeat)
     if payload.autopassActive ~= nil then
         local changed = (DesolateLootcouncil.sessionAutopassActive ~= payload.autopassActive)
         DesolateLootcouncil.sessionAutopassActive = payload.autopassActive
@@ -813,7 +813,7 @@ end
 --- Authenticates and updates the Loot Master identity.
 ---@param payload table
 ---@param sender string
-function Session:_ApplyLMLateJoinerIdentity(payload, sender)
+function Session:ApplyLMLateJoinerIdentity(payload, sender)
     if payload.activeLM and payload.activeLM ~= "" and IsAuthorizedSessionSender(sender) then
         DesolateLootcouncil.activeLootMaster = payload.activeLM
         DesolateLootcouncil.amILM = DesolateLootcouncil:SmartCompare(payload.activeLM, "player")
@@ -839,7 +839,7 @@ end
 ---@param newItems table
 ---@param expiry number
 ---@return number hydratedCount
-function Session:_HydrateSessionItems(newItems, expiry)
+function Session:HydrateSessionItems(newItems, expiry)
     local hydratedCount = 0
     if not newItems then return hydratedCount end
     for _, item in ipairs(newItems) do
@@ -858,8 +858,8 @@ function Session:HandleStartSession(payload, sender)
     local expiry = payload.endTime or (GetServerTime() + duration)
     local isHeartbeat = payload.isHeartbeat == true
 
-    self:_ApplyAutopassState(payload, isHeartbeat)
-    self:_ApplyLMLateJoinerIdentity(payload, sender)
+    self:ApplyAutopassState(payload, isHeartbeat)
+    self:ApplyLMLateJoinerIdentity(payload, sender)
 
     self.clientLootList = self.clientLootList or {}
     self.myLocalVotes = self.myLocalVotes or {}
@@ -899,7 +899,7 @@ function Session:HandleStartSession(payload, sender)
     -- Receiver client does not wipe awarded history on session start (LM side manages lifecycle)
 
     -- Full session start (or late-joiner receiving heartbeat for the first time)
-    local hydratedCount = self:_HydrateSessionItems(newItems, expiry)
+    local hydratedCount = self:HydrateSessionItems(newItems, expiry)
     DesolateLootcouncil:DLC_Log("Added " .. hydratedCount .. " items to the session.")
 
     self:SendMessage("DLC_SESSION_STARTED", self.clientLootList, DesolateLootcouncil:AmIOfficerOrLM())

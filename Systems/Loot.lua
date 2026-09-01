@@ -328,7 +328,7 @@ end
 ---@param itemData table
 ---@param winnerName string
 ---@param voteType string
-function Loot:_BroadcastAward(itemData, winnerName, voteType)
+function Loot:BroadcastAward(itemData, winnerName, voteType)
     local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName)
     local msg = string.format(L["Winner of %s is %s! (%s)"], itemData.link, winnerDisplay, voteType)
 
@@ -357,7 +357,7 @@ end
 ---@param voteType string
 ---@param origIndex number|nil   pre-award priority index (for re-award restoration)
 ---@return boolean isSelf
-function Loot:_RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
+function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
     if not session.awarded then return false end
 
     local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
@@ -398,7 +398,7 @@ end
 ---@param session table
 ---@param itemGUID string
 ---@param removeIndex number
-function Loot:_CleanupAwardedItem(session, itemGUID, removeIndex)
+function Loot:CleanupAwardedItem(session, itemGUID, removeIndex)
     table.remove(session.bidding, removeIndex)
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
     if Session then
@@ -421,7 +421,7 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     if not itemData then return end
 
     -- 1. Announce to raid / whisper winner
-    self:_BroadcastAward(itemData, winnerName, voteType)
+    self:BroadcastAward(itemData, winnerName, voteType)
 
     -- 2. Move priority (Bid only)
     local origIndex
@@ -433,11 +433,11 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     end
 
     -- 3. Record in history and broadcast update
-    self:_RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
+    self:RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
 
     -- 4. Remove from live session
     if removeIndex then
-        self:_CleanupAwardedItem(session, itemGUID, removeIndex)
+        self:CleanupAwardedItem(session, itemGUID, removeIndex)
     end
 
     -- 5. Refresh monitor
@@ -470,7 +470,7 @@ end
 --- keyed to the new GUID — the old key is intentionally abandoned.
 ---@param session table
 ---@param awardedItem table   the history entry being reverted
-function Loot:_RestoreVotesForReaward(session, awardedItem)
+function Loot:RestoreVotesForReaward(session, awardedItem)
     if not awardedItem.votes then return end
     local Session = DesolateLootcouncil:GetModule("Session")
     if not Session then return end
@@ -516,7 +516,7 @@ function Loot:ReawardItem(index)
     end
 
     -- 3. Re-attach the original votes to the new GUID
-    self:_RestoreVotesForReaward(session, awardedItem)
+    self:RestoreVotesForReaward(session, awardedItem)
 
     -- 4. Remove the history entry and log
     table.remove(session.awarded, index)

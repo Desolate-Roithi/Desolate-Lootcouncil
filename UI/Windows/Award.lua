@@ -80,17 +80,7 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         row.classIcon = classIcon
     end
     local class = DesolateLootcouncil.API:GetUnitClass(v.name)
-    if _G.CLASS_ICON_TCOORDS then
-        local coords = _G.CLASS_ICON_TCOORDS[class]
-        if coords then
-            row.classIcon:SetTexCoord(unpack(coords))
-        else
-            row.classIcon:SetTexCoord(0, 1, 0, 1)
-        end
-    else
-        row.classIcon:SetTexCoord(0, 1, 0, 1)
-    end
-    row.classIcon:Show()
+    NativeGUI:SetClassIcon(row.classIcon, class)
 
     -- 2. Player Name
     if not row.lblName then
@@ -222,17 +212,7 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
         row.classIcon = classIcon
     end
     local class = DesolateLootcouncil.API:GetUnitClass(de.name)
-    if _G.CLASS_ICON_TCOORDS then
-        local coords = _G.CLASS_ICON_TCOORDS[class]
-        if coords then
-            row.classIcon:SetTexCoord(unpack(coords))
-        else
-            row.classIcon:SetTexCoord(0, 1, 0, 1)
-        end
-    else
-        row.classIcon:SetTexCoord(0, 1, 0, 1)
-    end
-    row.classIcon:Show()
+    NativeGUI:SetClassIcon(row.classIcon, class)
 
     -- 2. Player Name
     if not row.lblName then
