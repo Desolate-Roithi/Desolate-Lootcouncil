@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.0.0-rc  
-**Last Updated:** 2026-08-31  
+**Latest Version:** v2.0.0  
+**Last Updated:** 2026-09-01  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -48,22 +48,24 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 
 ## Recent Changes
 
-### v2.0.0-rc (2026-08-31)
-* **Comm Target Normalization & Chat Spam Prevention**:
-  * Case-insensitively normalized broadcast channel destinations (`RAID`, `PARTY`, `GUILD`, `INSTANCE_CHAT`) in `Comm:SendComm`, preventing lowercase channel targets from falling through to whisper calls that produced "No player named 'raid'" chat errors.
-  * Sanitized whisper destinations to block empty strings or channel keywords.
-  * Removed aggressive 5-second unrecorded member polling in `Comm:PruneRosterData` that caused repeated broadcast retry loops on non-addon users.
-* **Raid Disband Authority Hardening**:
-  * Fixed `DetermineLootMaster()` top-level fallback when not in a group to respect `decayConfig.currentSessionLM` or `activeLootMaster` before defaulting to player name.
-  * Enforced strict LM authority checks in `HandleRaidDisband()`, ensuring only the actual recorded Loot Master receives the disband close prompt while raiders cleanly close state without popups.
-* **LM Departure Cascade & Request Throttling (2 FPS Fix)**:
-  * Added a 10-second request cooldown for officer pull requests in `SyncHandlers:DLC_HEARTBEAT`, eliminating massive serialization bursts when members depart sequentially.
-  * Debounced full-raid heartbeat syncs in `RecordUnassignedPlayer()` with a 5.0-second coalescing timer.
-* **LM Disconnect & Handover Race Condition Safety (FCFS)**:
-  * Enforced First-Come, First-Served (FCFS) LM claim acceptance in `Session:HandleUpdateConfigured()`, automatically dismissing claim prompts on other officers once an active LM is confirmed.
-* **2.0 Architectural Overhaul & In-Game Test Suite**:
-  * Decoupled domain modules (`Attendance`, `ItemCatalog`, `Trade`, `Priority`, `Roster`).
-  * Built-in native In-Game Test Suite engine (`/dlc test`).
+### v2.0.0 (2026-09-01)
+* **Major 2.0 Architectural Overhaul**:
+  * Decoupled backend architecture into isolated, high-performance domain modules (`Attendance`, `ItemCatalog`, `Trade`, `Priority`, `Roster`, `Session`, `Loot`, `Audit`).
+  * 100% UI decoupling through `DesolateLootcouncil.API` facade with zero direct backend mutations.
+  * Complete Midnight (12.0.7) taint safety, protected-call (`pcall`) mechanics, and zero-combat math protections on Secret types.
+* **UI & Theming Engine**:
+  * Obsidian theme engine featuring Midnight, Fel, Classic, and Minimalist themes with dynamic live multi-window propagation.
+  * Centralized action and vote button palettes with dynamic multi-phase row parity.
+  * Enhanced class icon rendering and responsive scroll frames across all windows.
+* **Raid Communication & Handover Hardening**:
+  * Normalization of broadcast channels and whisper keyword filtering to prevent chat errors.
+  * Rate-limited heartbeat synchronizations and debounced roster broadcasts.
+  * First-Come, First-Served (FCFS) Loot Master claim resolution and clean disband authority.
+* **Full Localization Parity**:
+  * 100% string declaration and German (deDE) localization coverage.
+* **In-Game Test Suite & Verification**:
+  * Native in-game test runner (`/dlc test`) with automated scenario execution and post-test state validation.
+  * 53 comprehensive unit and integration test suites passing at 100%.
 
 ### v1.2.7 (2026-08-31)
 * **Raid Stability & Performance Hotfixes**:
