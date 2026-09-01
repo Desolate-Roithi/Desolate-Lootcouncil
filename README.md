@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.0.2  
+**Latest Version:** v2.0.3  
 **Last Updated:** 2026-09-01  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,19 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.0.3 (2026-09-01)
+* **Disband Gating & Popup Debounce**:
+  * Gated disband prompts on confirmed boss kills ($\ge 1$ boss kill); 0-kill sessions close silently without prompting.
+  * Added single-instance debounce lock (`disbandPopupPending` & tracked `disbandCheckTimer`) preventing rapid `GROUP_ROSTER_UPDATE` storms from creating duplicate popup loops.
+* **Attendance Authority & Instance Boundaries**:
+  * Restricted roster snapshots and session starts strictly to Officers and Loot Masters in Raid instances (`DesolateLootcouncil.API:AmIOfficerOrLM()` and `IsInRaid()`).
+  * Removed roster snapshotting on group join/leave; snapshots only fire on confirmed boss kills (`ENCOUNTER_END` with `success == 1`).
+  * Demoted snapshot chat notifications to silent debug logs.
+* **Comm Hardening & Taint-Free Execution**:
+  * Added offline and raid-membership guards to `DLC_HEARTBEAT` and pull requests.
+  * Dynamically resolved broadcast channels during session teardown to eliminate sub-second "not in group" comm errors.
+  * Verified 100% taint-free FrameXML execution with zero global `_G` mutations.
 
 ### v2.0.2 (2026-09-01)
 * **Audit & Priority Ledger Polish**:

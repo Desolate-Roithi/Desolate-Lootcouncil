@@ -425,6 +425,13 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
     if not data then return end
+    -- Bug 4: If the LM sender is no longer in the raid or is offline, do not send
+    -- any PULL_REQUEST messages. This prevents DDoS-ing recently disconnected LMs
+    -- or players who have left the group.
+    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then
+        DesolateLootcouncil:DLC_Log(string.format("DLC_HEARTBEAT: sender '%s' not in raid or offline — skipping all pull requests.", tostring(sender)))
+        return
+    end
 
     local db = DesolateLootcouncil.db.profile
     local Comm = DesolateLootcouncil:GetModule("Comm", true)
@@ -503,6 +510,8 @@ function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not DesolateLootcouncil:IsOfficer(sender) then return end
+    -- Bug 4: Do not respond to out-of-raid or offline senders.
+    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then return end
 
     local db = DesolateLootcouncil.db.profile
     local payload = {
@@ -568,6 +577,8 @@ function SyncHandlers:HISTORY_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not DesolateLootcouncil:IsOfficer(sender) then return end
+    -- Bug 4: Do not respond to out-of-raid or offline senders.
+    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then return end
 
     local db = DesolateLootcouncil.db.profile
     local payload = {
@@ -610,6 +621,8 @@ function SyncHandlers:ROSTER_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not DesolateLootcouncil:IsOfficer(sender) then return end
+    -- Bug 4: Do not respond to out-of-raid or offline senders.
+    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then return end
 
     local db = DesolateLootcouncil.db.profile
     local mainsCopy = {}
@@ -632,6 +645,8 @@ function SyncHandlers:IM_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not data or not data.listName then return end
+    -- Bug 4: Do not respond to out-of-raid or offline senders.
+    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then return end
 
     local db = DesolateLootcouncil.db.profile
     local listObj = nil
@@ -654,6 +669,8 @@ function SyncHandlers:PRIORITY_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not data or not data.listName then return end
+    -- Bug 4: Do not respond to out-of-raid or offline senders.
+    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then return end
 
     if not DesolateLootcouncil:IsOfficer(sender) then
         DesolateLootcouncil:DLC_Log(string.format("PRIORITY_PULL_REQUEST from non-officer '%s' ignored.", tostring(sender)))
@@ -688,6 +705,8 @@ function SyncHandlers:UNASSIGNED_PULL_REQUEST(data, sender)
     if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not DesolateLootcouncil:IsOfficer(sender) then return end
+    -- Bug 4: Do not respond to out-of-raid or offline senders.
+    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then return end
 
     local db = DesolateLootcouncil.db.profile
     local payload = {

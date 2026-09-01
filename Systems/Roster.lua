@@ -81,6 +81,8 @@ StaticPopupDialogs["DLC_DISBAND_CLOSE_SESSION"] = {
     button2 = L["Keep Active"],
     button3 = L["Review & Apply Decay"],
     OnAccept = function()
+        local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
+        if RosterMod then RosterMod.disbandPopupPending = false end
         local config = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.DecayConfig
         if config and config.enabled then
             local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
@@ -89,12 +91,20 @@ StaticPopupDialogs["DLC_DISBAND_CLOSE_SESSION"] = {
                 return
             end
         end
-        local RosterMod = DesolateLootcouncil:GetModule("Roster")
-        if RosterMod then
-            RosterMod:StopRaidSession(true)
+        local Roster2 = DesolateLootcouncil:GetModule("Roster")
+        if Roster2 then
+            Roster2:StopRaidSession(true)
         end
     end,
+    OnCancel = function()
+        -- Bug 6: "Keep Active" — clear pending flag so disband event can be re-evaluated
+        -- if the player later leaves again.
+        local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
+        if RosterMod then RosterMod.disbandPopupPending = false end
+    end,
     OnAlt = function()
+        local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
+        if RosterMod then RosterMod.disbandPopupPending = false end
         local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
         if Attendance and Attendance.ShowAttendanceWindow then
             Attendance:ShowAttendanceWindow()
@@ -870,6 +880,7 @@ function Roster:PLAYER_LOGIN()
 end
 
 local gruResetTimer = nil
+local disbandCheckTimer = nil  -- Bug 6: tracked so rapid GRU only queues ONE 3s disband check
 
 function Roster:CheckForNewRaidMembers()
     if DesolateLootcouncil:IsLFR() then return end
@@ -939,7 +950,7 @@ local function ResetAutopassSession()
     if IsInRaid() then return end
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if config.sessionActive then return end
-    
+
     if DesolateLootcouncil.sessionAutopassActive or config.sessionAutopassActive then
         DesolateLootcouncil.sessionAutopassActive  = false
         DesolateLootcouncil.sessionAutopassAnswered = false
@@ -949,31 +960,59 @@ local function ResetAutopassSession()
     end
 end
 
-local function HandleRaidDisband()
-    if IsInRaid() then return end
+--- Returns true if bossLogs contains at least one confirmed kill.
+local function HasBossKill(bossLogs)
+    if not bossLogs then return false end
+    for _, b in ipairs(bossLogs) do
+        if b.killed == true then return true end
+    end
+    return false
+end
+
+local function HandleRaidDisband(forceDisband)
+    if IsInRaid() and not forceDisband then return end
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if not config then return end
 
+    -- Bug 6: If popup is already pending, do not show it again.
+    local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
+    if RosterMod and RosterMod.disbandPopupPending then
+        ResetAutopassSession()
+        return
+    end
+
     if config.sessionActive then
         local isLM = false
+        local myName = UnitName("player")
         if config.currentSessionLM and config.currentSessionLM ~= "" then
-            isLM = DesolateLootcouncil:SmartCompare(config.currentSessionLM, "player")
+            isLM = DesolateLootcouncil:SmartCompare(config.currentSessionLM, myName)
         elseif DesolateLootcouncil.db.global and DesolateLootcouncil.db.global.activeRaidLM and DesolateLootcouncil.db.global.activeRaidLM ~= "" then
-            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.db.global.activeRaidLM, "player")
+            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.db.global.activeRaidLM, myName)
         elseif DesolateLootcouncil.activeLootMaster and DesolateLootcouncil.activeLootMaster ~= "" then
-            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.activeLootMaster, "player")
+            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.activeLootMaster, myName)
+        elseif DesolateLootcouncil.amILM then
+            isLM = true
         end
 
         if isLM then
-            -- Prompt LM whether they want to close and save the raid session
-            StaticPopup_Show("DLC_DISBAND_CLOSE_SESSION")
+            -- Bug 1: Only prompt if at least one boss was killed this session.
+            if not HasBossKill(config.bossLogs) then
+                DesolateLootcouncil:DLC_Log("HandleRaidDisband: No boss kills — auto-closing session without prompt.")
+                local Att = DesolateLootcouncil:GetModule("Attendance", true)
+                if Att and Att.StopRaidSession then
+                    Att:StopRaidSession(false)
+                end
+            else
+                -- Bug 6: Set pending flag before showing popup so rapid GRU cannot stack.
+                if RosterMod then RosterMod.disbandPopupPending = true end
+                StaticPopup_Show("DLC_DISBAND_CLOSE_SESSION")
+            end
         else
-            -- Officers & raiders: autoclose session without saving locally (LM syncs saved history when closed)
+            -- Officers & raiders: autoclose session without saving locally
             local Att = DesolateLootcouncil:GetModule("Attendance", true)
             if Att and Att.StopRaidSession then
                 Att:StopRaidSession(false)
             else
-                local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
                 if RosterMod and RosterMod.StopRaidSession then
                     RosterMod:StopRaidSession(false)
                 end
@@ -982,6 +1021,7 @@ local function HandleRaidDisband()
     end
     ResetAutopassSession()
 end
+Roster.HandleRaidDisband = HandleRaidDisband
 
 local function BroadcastAutopassState()
     if not DesolateLootcouncil:AmILootMaster() then return end
@@ -997,8 +1037,16 @@ function Roster:GROUP_ROSTER_UPDATE()
     gruResetTimer = C_Timer.NewTimer(0.5, function()
         gruResetTimer = nil
         if not IsInRaid() then
-            -- Double check after 3 seconds to ensure this isn't a brief loading screen or portal blip
-            C_Timer.After(3.0, HandleRaidDisband)
+            -- Bug 6: Cancel any previously queued disband check before scheduling a new one.
+            -- This ensures only ONE HandleRaidDisband fires per disband event.
+            if disbandCheckTimer then
+                disbandCheckTimer:Cancel()
+                disbandCheckTimer = nil
+            end
+            disbandCheckTimer = C_Timer.NewTimer(3.0, function()
+                disbandCheckTimer = nil
+                HandleRaidDisband()
+            end)
             return
         end
         self:CheckForNewRaidMembers()

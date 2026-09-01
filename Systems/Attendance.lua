@@ -84,6 +84,11 @@ function Attendance:StartRaidSession()
         return
     end
 
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then
+        self:Printf("Only Officers or the Loot Master can start a raid session.")
+        return
+    end
+
     local _, instanceType = GetInstanceInfo()
     local Sim = DesolateLootcouncil:GetModule("Simulation", true)
     local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
@@ -258,7 +263,11 @@ function Attendance:StopRaidSession(saveHistory)
 
             DesolateLootcouncil.API:LogAudit("SESSION_STOP", nil, nil, nil, string.format("Raid session ended (Saved: %d attendees)", count), config.currentSessionID)
 
-            if DesolateLootcouncil:AmILootMaster() and IsInGroup() then
+            -- Bug 5: Use IsInRaid() rather than IsInGroup() here.
+            -- IsInGroup() can still return true for a brief window after the raid
+            -- disbands, causing SYNC_HISTORY to be sent to an already-gone RAID
+            -- channel and producing "not in group" errors sub-second after save.
+            if DesolateLootcouncil:AmILootMaster() and IsInRaid() then
                 local Comm = DesolateLootcouncil:GetModule("Comm", true)
                 if Comm then
                     local payload = {
@@ -299,9 +308,15 @@ function Attendance:StopRaidSession(saveHistory)
     end
 
     db.configTimestamp = GetServerTime()
-    local SessionMod = DesolateLootcouncil:GetModule("Session", true)
-    if SessionMod and SessionMod.SendDLCHeartbeat then
-        SessionMod:SendDLCHeartbeat()
+    -- Bug 5: Only send heartbeat if still in a group.
+    -- SendDLCHeartbeat has an IsInGroup guard internally, but during the disband
+    -- frame-lag window that guard can pass incorrectly. A strict explicit check here
+    -- is the definitive gate.
+    if IsInGroup() then
+        local SessionMod = DesolateLootcouncil:GetModule("Session", true)
+        if SessionMod and SessionMod.SendDLCHeartbeat then
+            SessionMod:SendDLCHeartbeat()
+        end
     end
 
     local UI = DesolateLootcouncil:GetModule("UI", true)
@@ -410,17 +425,24 @@ function Attendance:RegisterAttendance(unitName, isEncounterKill)
 end
 
 --- Takes a snapshot of real and simulated raid group members.
+--- Only Officers or the Loot Master in Raid instances perform attendance tracking.
 ---@param isEncounterKill boolean|nil
 function Attendance:SnapshotRoster(isEncounterKill)
     if DesolateLootcouncil:IsLFR() then return end
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
 
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    local isBypass = simActive or (db and db.debugMode) or DesolateLootcouncil.isTestRunning
+    if not IsInRaid() and not isBypass then return end
+
     local config = db and db.DecayConfig
     if not config or not config.sessionActive then return end
 
     config.lastActivity = time()
 
-    if IsInGroup() then
+    if IsInRaid() then
         local members = GetNumGroupMembers()
         if members > 0 then
             for i = 1, members do
@@ -440,7 +462,8 @@ function Attendance:SnapshotRoster(isEncounterKill)
         end
     end
 
-    self:Printf("Roster Snapshot Taken.")
+    -- Bug 2: Log to DLC_Log only — do NOT print to chat (Printf causes spam on every GRU).
+    DesolateLootcouncil:DLC_Log("Roster Snapshot Taken." .. (isEncounterKill and " (Boss Kill)" or ""))
 end
 
 --- Prints current attendees to chat.
@@ -510,21 +533,32 @@ end
 
 function Attendance:OnZoneChanged()
     if DesolateLootcouncil:IsLFR() then return end
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    local isBypass = (db and db.debugMode) or DesolateLootcouncil.isTestRunning
+    if not IsInRaid() and not isBypass then return end
     if self:IsSessionActive() then
         self:SnapshotRoster(false)
     end
 end
 
 function Attendance:OnGroupRosterUpdate()
-    if DesolateLootcouncil:IsLFR() then return end
-    if self:IsSessionActive() then
-        self:SnapshotRoster(false)
-    end
+    -- Bug 2: GROUP_ROSTER_UPDATE must NOT trigger a roster snapshot.
+    -- Snapshots are only valid after boss kills (ENCOUNTER_END success=1).
+    -- Recording attendance on group-join/leave causes incorrect attendee lists
+    -- and chat spam. This handler is intentionally left as a no-op.
 end
 
 function Attendance:OnEncounterStart(event, encounterID, encounterName, difficultyID, groupSize)
     if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    local isBypass = simActive or (db and db.debugMode) or DesolateLootcouncil.isTestRunning
+    if not IsInRaid() and not isBypass then return end
     if not self:IsSessionActive() then return end
+
     self.pullCounts = self.pullCounts or {}
     self.currentEncounter = encounterID
     self.pullCounts[encounterID] = (self.pullCounts[encounterID] or 0) + 1
@@ -534,12 +568,19 @@ end
 
 function Attendance:OnEncounterEnd(event, encounterID, encounterName, difficultyID, groupSize, success)
     if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    local isBypass = simActive or (db and db.debugMode) or DesolateLootcouncil.isTestRunning
+    if not IsInRaid() and not isBypass then return end
     if not self:IsSessionActive() then return end
+
     local isKill = (success == 1)
     if isKill then
         self:SnapshotRoster(true)
-        local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
         if db and db.DecayConfig and db.DecayConfig.bossLogs then
+            self.pullCounts = self.pullCounts or {}
             table.insert(db.DecayConfig.bossLogs, {
                 encounterID = encounterID,
                 name = encounterName,

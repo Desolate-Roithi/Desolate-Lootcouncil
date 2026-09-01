@@ -343,7 +343,9 @@ function Session:RestoreSession()
         local sessionStarted = (expiry > 300) and (expiry - 300) or expiry
         local isExpiredOver12h = now > (sessionStarted + 43200)
 
-        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player") or (IsInGroup() and SafeIsGroupLeader("player"))
+        -- Bug 1: Do NOT use group-leader fallback — that falsely marks anyone as LM
+        -- after a group disband. Only trust the persisted activeLM identity.
+        local isLM = DesolateLootcouncil:SmartCompare(state.activeLM, "player")
         if isLM then
             DesolateLootcouncil.activeLootMaster = UnitName("player")
             DesolateLootcouncil.amILM = true
@@ -365,10 +367,24 @@ function Session:RestoreSession()
             local inactiveFor1h = decayConfig and decayConfig.lastActivity and (now - decayConfig.lastActivity > 3600)
             local notInGroup = not IsInGroup()
 
-            if isExpiredOver12h or (inactiveFor1h and notInGroup) then
-                -- Store restore context so the module-level popup handler can read it.
+            -- Bug 1: Only prompt LM to close/save if at least one boss was killed.
+            -- Without kills there is nothing worth saving; silently expire the loot session.
+            local hasBossKill = false
+            if decayConfig and decayConfig.bossLogs then
+                for _, b in ipairs(decayConfig.bossLogs) do
+                    if b.killed == true then hasBossKill = true; break end
+                end
+            end
+
+            if (isExpiredOver12h or (inactiveFor1h and notInGroup)) and hasBossKill then
                 self.pendingRestore = { state = state, now = now, expiry = expiry }
                 StaticPopup_Show("DLC_CLOSE_SESSION")
+                return
+            elseif (isExpiredOver12h or (inactiveFor1h and notInGroup)) and not hasBossKill then
+                -- No kills: silently discard the loot session
+                DesolateLootcouncil:DLC_Log("RestoreSession: expired loot session with no boss kills — discarding silently.")
+                wipe(session.activeState)
+                self:SendMessage("DLC_SESSION_STOPPED")
                 return
             end
         end
@@ -598,9 +614,13 @@ function Session:SendStopSession()
         self:SendCommMessage("DLC_Loot", serialized, "WHISPER", UnitName("player"))
     else
         self:SendCommMessage("DLC_Loot", serialized, channel)
-        -- Bug 4: Double-pulse for reliability in busy raids
+        -- Bug 5: Re-evaluate channel INSIDE the closure so that if the group has
+        -- disbanded by the time the timer fires we do not send to a stale "RAID" channel.
         C_Timer.After(0.5, function()
-            self:SendCommMessage("DLC_Loot", serialized, channel)
+            local liveChannel = DesolateLootcouncil:GetBroadcastChannel()
+            if liveChannel then
+                self:SendCommMessage("DLC_Loot", serialized, liveChannel)
+            end
         end)
     end
 

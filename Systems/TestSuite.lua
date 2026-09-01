@@ -945,7 +945,6 @@ function TestSuite:OnInitialize()
         local API = DesolateLootcouncil.API
         local DBMigrator = DesolateLootcouncil.DBMigrator
         local Serializer = DesolateLootcouncil.Serializer
-        local Audit = DesolateLootcouncil:GetModule("Audit", true)
         local db = DesolateLootcouncil.db.profile
 
         -- Part 1: Schema 200 -> 201 Migration & Sanitization
@@ -1085,6 +1084,114 @@ function TestSuite:OnInitialize()
         end)
 
         self:Log("Scenario 7 [Voting Lifecycle, Retraction, Re-award & Monitor Removal] completed successfully.")
+    end)
+
+    -- =======================================================================
+    -- 8. Disband Gating, Snapshot Authority & Comm Boundaries
+    -- =======================================================================
+    self:RegisterScenario("disband_snapshot_comm_boundaries", "8. Disband Gating, Snapshot Authority & Comm Boundaries", "Validates session disband gating on boss kills, attendance snapshot combat exclusivity, officer role permissions, and offline comm guards.", function()
+        local Attendance = DesolateLootcouncil:GetModule("Attendance", true)
+        local Roster = DesolateLootcouncil:GetModule("Roster", true)
+        local Sync = DesolateLootcouncil:GetModule("Sync", true)
+        local db = DesolateLootcouncil.db.profile
+
+        -- Part 1: Empty Disband Auto-Closes Silently (No Boss Kills)
+        self:RunPart(1, 4, "Empty_Disband_Silent_Close", function()
+            db.DecayConfig.sessionActive = true
+            db.DecayConfig.currentSessionLM = UnitName("player")
+            db.DecayConfig.bossLogs = {}
+            DesolateLootcouncil.amILM = true
+            if Roster then Roster.disbandPopupPending = false end
+
+            if Roster and Roster.HandleRaidDisband then
+                Roster.HandleRaidDisband(true)
+            end
+
+            assert(Roster.disbandPopupPending == false, "Empty session with 0 boss kills must NOT flag popup pending")
+            assert(db.DecayConfig.sessionActive == false, "Empty session must be auto-closed silently")
+        end)
+
+        -- Part 2: Disband With Boss Kill Prompts LM
+        self:RunPart(2, 4, "Disband_With_Kill_Prompts_LM", function()
+            db.DecayConfig.sessionActive = true
+            db.DecayConfig.currentSessionLM = UnitName("player")
+            db.DecayConfig.bossLogs = {
+                { encounterID = 1, name = "Test Boss", killed = true, killedTime = time(), pulls = 1 }
+            }
+            DesolateLootcouncil.amILM = true
+            if Roster then Roster.disbandPopupPending = false end
+
+            if Roster and Roster.HandleRaidDisband then
+                Roster.HandleRaidDisband(true)
+            end
+
+            local wasPrompted = Roster and Roster.disbandPopupPending == true
+            if Roster then Roster.disbandPopupPending = false end
+            if StaticPopup_Hide then StaticPopup_Hide("DLC_DISBAND_CLOSE_SESSION") end
+
+            assert(wasPrompted, "Session with >= 1 boss kill MUST flag popup pending for LM on raid disband")
+        end)
+
+        -- Part 3: Snapshot Exclusivity & Role Boundaries
+        self:RunPart(3, 4, "Snapshot_Exclusivity_And_Role_Boundaries", function()
+            db.DecayConfig.sessionActive = true
+            db.DecayConfig.currentAttendees = {}
+            DesolateLootcouncil.amILM = true
+
+            -- Group change should NOT take snapshot
+            if Attendance and Attendance.OnGroupRosterUpdate then
+                Attendance:OnGroupRosterUpdate()
+            end
+            assert(next(db.DecayConfig.currentAttendees) == nil, "Group changes must never generate roster snapshots")
+
+            -- Non-officer cannot take snapshots
+            local origAmIOfficerOrLM = DesolateLootcouncil.AmIOfficerOrLM
+            DesolateLootcouncil.AmIOfficerOrLM = function() return false end
+            if Attendance and Attendance.SnapshotRoster then
+                Attendance:SnapshotRoster(true)
+            end
+            DesolateLootcouncil.AmIOfficerOrLM = origAmIOfficerOrLM
+            assert(next(db.DecayConfig.currentAttendees) == nil, "Non-officers must be blocked from taking snapshots")
+        end)
+
+        -- Part 4: Solo LM Boundary & Offline Comm Protection
+        self:RunPart(4, 4, "Solo_LM_And_Offline_Comm_Protection", function()
+            -- Solo non-LM player should not be promoted
+            db.DecayConfig.sessionActive = true
+            db.DecayConfig.currentSessionLM = "OtherRaidLeader-Realm"
+
+            local lm = DesolateLootcouncil:DetermineLootMaster()
+            if not IsInGroup() then
+                assert(lm == "OtherRaidLeader-Realm", "Solo state must respect last raid session LM")
+            end
+
+            -- Comm pull requests suppressed for offline/out-of-raid senders
+            local pullsSent = 0
+            local Comm = DesolateLootcouncil:GetModule("Comm", true)
+            local origSend = Comm and Comm.SendComm
+            if Comm then
+                Comm.SendComm = function(self, cmd)
+                    if cmd and cmd:find("PULL_REQUEST") then pullsSent = pullsSent + 1 end
+                end
+            end
+
+            local origIsUnitInRaid = DesolateLootcouncil.IsUnitInRaid
+            local origIsUnitOnline = DesolateLootcouncil.IsUnitOnline
+            DesolateLootcouncil.IsUnitInRaid = function(self, name) return false end
+            DesolateLootcouncil.IsUnitOnline = function(self, name) return false end
+
+            if Sync and Sync.HandleMessage then
+                Sync:HandleMessage("DLC_HEARTBEAT", { imTimestamps = { Main = 9999 } }, "OtherRaidLeader-Realm")
+            end
+
+            if Comm and origSend then Comm.SendComm = origSend end
+            DesolateLootcouncil.IsUnitInRaid = origIsUnitInRaid
+            DesolateLootcouncil.IsUnitOnline = origIsUnitOnline
+
+            assert(pullsSent == 0, "PULL_REQUEST must be suppressed when sender is offline or not in raid")
+        end)
+
+        self:Log("Scenario 8 [Disband Gating, Snapshot Authority & Comm Boundaries] completed successfully.")
     end)
 end
 

@@ -400,7 +400,7 @@ function DesolateLootcouncil:IsLFR()
         return true
     end
     if GetInstanceInfo then
-        local instName, instType, difficultyID = GetInstanceInfo()
+        local _, _, difficultyID = GetInstanceInfo()
         if difficultyID == 7 or difficultyID == 17 then
             return true
         end
@@ -417,13 +417,25 @@ function DesolateLootcouncil:DetermineLootMaster()
     end
 
     if not IsInGroup() then
-        -- If an active raid session exists, respect its recorded LM
+        -- Strict solo boundary: Focus exclusively on the last recorded raid session LM
+        -- so players who left a raid session do not falsely promote themselves to LM.
         local decayConfig = self.db and self.db.profile and self.db.profile.DecayConfig
         if decayConfig and decayConfig.sessionActive and decayConfig.currentSessionLM and decayConfig.currentSessionLM ~= "" then
             return decayConfig.currentSessionLM
         end
+        if self.db and self.db.global and self.db.global.activeRaidLM and self.db.global.activeRaidLM ~= "" then
+            return self.db.global.activeRaidLM
+        end
         if self.activeLootMaster and self.activeLootMaster ~= "" then
             return self.activeLootMaster
+        end
+        local session = self.db and self.db.profile and self.db.profile.session
+        if session and session.activeState and session.activeState.activeLM and session.activeState.activeLM ~= "" then
+            return session.activeState.activeLM
+        end
+        local configuredLM = self.db and self.db.profile and self.db.profile.configuredLM
+        if configuredLM and configuredLM ~= "" then
+            return configuredLM
         end
         return myName
     end
