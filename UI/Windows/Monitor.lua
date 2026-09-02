@@ -229,6 +229,29 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     self.scrollContent:SetHeight(topOffset + rowHeight + 10)
 end
 
+local SESSION_MODULES = {
+    "UI_TradeList",
+    "UI_History",
+    "UI_Attendance",
+    "UI_Loot",
+    "UI_Award",
+    "UI_Version",
+    "UI_PriorityOverride"
+}
+
+local function CloseRelatedWindows(self)
+    if self.deFrame then self.deFrame:Hide() end
+    for _, modName in ipairs(SESSION_MODULES) do
+        local mod = DesolateLootcouncil:GetModule(modName, true)
+        if mod then
+            local targetFrame = mod.frame or mod.tradeListFrame or mod.sessionFrame or mod.attendanceFrame or mod.lootFrame or mod.awardFrame or mod.versionFrame or mod.priorityOverrideFrame
+            if targetFrame and targetFrame.Hide then
+                targetFrame:Hide()
+            end
+        end
+    end
+end
+
 function UI_Monitor:ShowMonitorWindow(isRefresh)
     if not DesolateLootcouncil:AmIOfficerOrLM() then
         if self.monitorFrame then self.monitorFrame:Hide() end
@@ -241,26 +264,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         local frame = NativeGUI:CreateWindow("DLCMonitorFrame", L["Session Monitor"], "Monitor")
         frame:HookScript("OnHide", function()
             self.userClosedMonitor = true
-            if self.deFrame then self.deFrame:Hide() end
-
-            local sessionModules = {
-                "UI_TradeList",
-                "UI_History",
-                "UI_Attendance",
-                "UI_Loot",
-                "UI_Award",
-                "UI_Version",
-                "UI_PriorityOverride"
-            }
-            for _, modName in ipairs(sessionModules) do
-                local mod = DesolateLootcouncil:GetModule(modName, true)
-                if mod then
-                    local targetFrame = mod.frame or mod.tradeListFrame or mod.sessionFrame or mod.attendanceFrame or mod.lootFrame or mod.awardFrame or mod.versionFrame or mod.priorityOverrideFrame
-                    if targetFrame and targetFrame.Hide then
-                        targetFrame:Hide()
-                    end
-                end
-            end
+            CloseRelatedWindows(self)
         end)
         frame.OnCollapse = function()
             if self.scrollFrame then self.scrollFrame:Hide() end

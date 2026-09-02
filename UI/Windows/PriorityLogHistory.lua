@@ -377,40 +377,18 @@ function UI_PriorityLogHistory:ShowCopyWindow(text)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.exportFrame then
-        local frame = NativeGUI:CreateWindow("DLCPriorityHistoryExportFrame", L["Audit & Priority Ledger"], "PriorityHistoryExport")
-        self.exportFrame = frame
+        local frame = NativeGUI:CreateCopyFrame(
+            "DLCPriorityHistoryExportFrame",
+            L["Audit & Priority Ledger"],
+            "PriorityHistoryExport",
+            L["Press Ctrl+C to copy the audit ledger export below."],
+            function() self.exportFrame:Hide() end
+        )
         frame:SetSize(720, 480)
-
-        local desc = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -36)
-        desc:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -36)
-        desc:SetJustifyH("LEFT")
-        desc:SetWordWrap(true)
-        desc:SetText(L["Press Ctrl+C to copy the audit ledger export below."])
-        self.exportDesc = desc
-
-        local sf, sc = NativeGUI:CreateScrollFrame(frame, -85, -50)
-        self.exportScrollFrame = sf
-        self.exportScrollContent = sc
-
-        local eb = NativeGUI:CreateReadOnlyCopyBox(sc)
-        eb:SetPoint("TOPLEFT", sc, "TOPLEFT", 6, -6)
-        eb:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
-        eb:SetWidth(sf:GetWidth() - 16)
-        self.exportEditBox = eb
-
-        local btnClose = NativeGUI:CreateButton(frame, L["Close"], 90, 24, "Default")
-        btnClose:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 12)
-        btnClose:SetScript("OnClick", function()
-            self.exportFrame:Hide()
-        end)
+        self.exportFrame = frame
     end
 
-    self.exportEditBox:SetText(text or "")
-    self.exportEditBox:HighlightText()
-    self.exportEditBox:SetFocus()
-
-    self.exportScrollContent:SetHeight(math.max(self.exportEditBox:GetHeight() + 20, 100))
+    self.exportFrame:SetCopyText(text)
     self.exportFrame:Show()
     self.exportFrame:Raise()
 end

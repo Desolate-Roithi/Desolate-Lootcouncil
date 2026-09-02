@@ -265,14 +265,7 @@ function UI_ItemManager:RefreshWindow()
             local numID = tonumber(id) or id
             table.insert(self.sortedIDs, numID)
         end
-        table.sort(self.sortedIDs, function(a, b)
-            local numA = tonumber(a)
-            local numB = tonumber(b)
-            if numA and numB then
-                return numA < numB
-            end
-            return tostring(a) < tostring(b)
-        end)
+        table.sort(self.sortedIDs, DesolateLootcouncil.Table.NumericSort)
     end
 
     self:UpdateScrollList()

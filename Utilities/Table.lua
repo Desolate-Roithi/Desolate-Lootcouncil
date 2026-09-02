@@ -20,4 +20,18 @@ function Table.DeepCopy(orig)
     return copy
 end
 
+--- Comparator for table.sort: numeric ascending if both values can be interpreted as numbers,
+--- lexicographic string comparison otherwise.
+---@param a any
+---@param b any
+---@return boolean
+function Table.NumericSort(a, b)
+    local numA = tonumber(a)
+    local numB = tonumber(b)
+    if numA and numB then
+        return numA < numB
+    end
+    return tostring(a) < tostring(b)
+end
+
 DesolateLootcouncil.Table = Table

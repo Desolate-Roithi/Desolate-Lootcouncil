@@ -420,7 +420,12 @@ function Attendance:RegisterAttendance(unitName, isEncounterKill)
         local hint = not DesolateLootcouncil:SmartCompare(mainName, unitName)
             and string.format("'%s' (resolved from alt '%s') is not in the MainRoster", formattedMain, formattedUnit)
             or string.format("'%s' is not in the MainRoster — use /dlc roster add to add them", formattedUnit)
-        DesolateLootcouncil:DLC_Log("Attendance Rejected: " .. hint, true)
+        -- Demoted to non-forced: per-player rejection detail is surfaced via the Unassigned Players window.
+        DesolateLootcouncil:DLC_Log("Attendance Rejected: " .. hint)
+        -- Queue into the Unassigned Players window so the LM can act via /dlc unassigned.
+        if Roster and Roster.RecordUnassignedPlayer then
+            Roster:RecordUnassignedPlayer(normUnit, "Attendance")
+        end
     end
 end
 
@@ -442,6 +447,15 @@ function Attendance:SnapshotRoster(isEncounterKill)
 
     config.lastActivity = time()
 
+    -- Capture the current unassigned count before processing raids so we can
+    -- detect how many NEW players were added by this snapshot.
+    local unassignedBefore = 0
+    if db and db.unassignedPlayers then
+        for _ in pairs(db.unassignedPlayers) do
+            unassignedBefore = unassignedBefore + 1
+        end
+    end
+
     if IsInRaid() then
         local members = GetNumGroupMembers()
         if members > 0 then
@@ -460,6 +474,20 @@ function Attendance:SnapshotRoster(isEncounterKill)
         for _, name in ipairs(sims) do
             self:RegisterAttendance(name, isEncounterKill)
         end
+    end
+
+    -- Single summary message if new unassigned players were detected this snapshot.
+    -- We deliberately do NOT print per-player messages to avoid chat spam.
+    -- The LM can use /dlc unassigned to review and assign them.
+    local unassignedAfter = 0
+    if db and db.unassignedPlayers then
+        for _ in pairs(db.unassignedPlayers) do
+            unassignedAfter = unassignedAfter + 1
+        end
+    end
+    local newUnassigned = unassignedAfter - unassignedBefore
+    if newUnassigned > 0 then
+        self:Printf("%d player(s) in this raid are not in the roster. Use /dlc unassigned to review.", newUnassigned)
     end
 
     -- Bug 2: Log to DLC_Log only — do NOT print to chat (Printf causes spam on every GRU).

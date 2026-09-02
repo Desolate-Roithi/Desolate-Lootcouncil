@@ -889,6 +889,60 @@ function UI_NativeGUI:CreateReadOnlyCopyBox(parent)
     return eb
 end
 
+--- Creates a titled, scrollable, read-only copy frame with description text and a Close button.
+--- Returns the created frame, editBox, scrollContent, and scrollFrame.
+---@param name string Unique frame name
+---@param titleText string Window title
+---@param windowKey string Layout persistence key
+---@param descText string Description label text
+---@param onClose function|nil Optional close callback (defaults to frame:Hide())
+---@return Frame frame, EditBox eb, Frame sc, ScrollFrame sf
+function UI_NativeGUI:CreateCopyFrame(name, titleText, windowKey, descText, onClose)
+    local frame = self:CreateWindow(name, titleText, windowKey)
+
+    local desc = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -36)
+    desc:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -36)
+    desc:SetJustifyH("LEFT")
+    desc:SetWordWrap(true)
+    desc:SetText(descText or "")
+    frame.desc = desc
+
+    local sf, sc = self:CreateScrollFrame(frame, -85, -50)
+    frame.scrollFrame = sf
+    frame.scrollContent = sc
+
+    local eb = self:CreateReadOnlyCopyBox(sc)
+    eb:SetPoint("TOPLEFT", sc, "TOPLEFT", 6, -6)
+    eb:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
+    eb:SetWidth(sf:GetWidth() - 16)
+    frame.editBox = eb
+
+    local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
+    local btnClose = self:CreateButton(frame, L and L["Close"] or "Close", 90, 24, "Default")
+    btnClose:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 12)
+    btnClose:SetScript("OnClick", function()
+        if onClose then
+            onClose()
+        else
+            frame:Hide()
+        end
+    end)
+    frame.closeButton = btnClose
+
+    frame.SetCopyText = function(_, text)
+        eb.fullText = text or ""
+        eb:SetText(text or "")
+        eb:SetWidth(sf:GetWidth() - 16)
+        local height = math.max(eb:GetHeight() or 0, 60)
+        sc:SetHeight(height + 20)
+        eb:HighlightText()
+        eb:SetFocus()
+    end
+
+    return frame, eb, sc, sf
+end
+
 --- Creates a flat, taint-free dropdown button and selection popup frame.
 ---@param parent Frame  parent frame
 ---@param labelText string  label shown above dropdown

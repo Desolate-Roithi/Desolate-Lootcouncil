@@ -166,12 +166,7 @@ end
 local function RaidHistorySort(a, b)
     if a == "CURRENT" then return true end
     if b == "CURRENT" then return false end
-    local numA = tonumber(a)
-    local numB = tonumber(b)
-    if numA and numB then
-        return numA < numB
-    end
-    return tostring(a) < tostring(b)
+    return DesolateLootcouncil.Table.NumericSort(a, b)
 end
 
 -- ============================================================
@@ -283,97 +278,36 @@ function UI_RaidHistory:ShowExportWindow(exportStr)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.exportFrame then
-        local frame = NativeGUI:CreateWindow("DLCRaidHistoryExportFrame", L["Export Raid Event"], "RaidHistoryExport")
+        local frame = NativeGUI:CreateCopyFrame(
+            "DLCRaidHistoryExportFrame",
+            L["Export Raid Event"],
+            "RaidHistoryExport",
+            L["Press Ctrl+C to copy the export string below. You can import this into any profile via Settings > Profiles > Import to Current Profile."],
+            function() self.exportFrame:Hide() end
+        )
         self.exportFrame = frame
-
-        local desc = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -36)
-        desc:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -36)
-        desc:SetJustifyH("LEFT")
-        desc:SetWordWrap(true)
-        desc:SetText(L["Press Ctrl+C to copy the export string below. You can import this into any profile via Settings > Profiles > Import to Current Profile."])
-        self.exportDesc = desc
-
-        local sf, sc = NativeGUI:CreateScrollFrame(frame, -85, -50)
-        self.exportScrollFrame = sf
-        self.exportScrollContent = sc
-
-        local eb = NativeGUI:CreateReadOnlyCopyBox(sc)
-        eb:SetPoint("TOPLEFT", sc, "TOPLEFT", 6, -6)
-        eb:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
-        eb:SetWidth(sf:GetWidth() - 16)
-        self.exportEditBox = eb
-
-        local btnClose = NativeGUI:CreateButton(frame, L["Close"], 90, 24, "Default")
-        btnClose:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 12)
-        btnClose:SetScript("OnClick", function()
-            frame:Hide()
-        end)
     end
 
     self.exportFrame:Show()
-    self.exportEditBox.fullText = exportStr
-    self.exportEditBox:SetText(exportStr)
-    self.exportEditBox:SetWidth(self.exportScrollFrame:GetWidth() - 16)
-    local height = self.exportEditBox:GetHeight()
-    if height < 60 then height = 60 end
-    self.exportScrollContent:SetHeight(height + 20)
-
-    C_Timer.After(0.05, function()
-        if self.exportEditBox then
-            self.exportEditBox:SetFocus()
-            self.exportEditBox:HighlightText()
-        end
-    end)
+    self.exportFrame:SetCopyText(exportStr)
 end
 
 function UI_RaidHistory:ShowPositionChangesCopyWindow(posChanges)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.posCopyFrame then
-        local frame = NativeGUI:CreateWindow("DLCRaidHistoryPosCopyFrame", L["Position Changes Log"], "RaidHistoryPosCopy")
+        local frame = NativeGUI:CreateCopyFrame(
+            "DLCRaidHistoryPosCopyFrame",
+            L["Position Changes Log"],
+            "RaidHistoryPosCopy",
+            L["Press Ctrl+C to copy all position changes for this session."],
+            function() self.posCopyFrame:Hide() end
+        )
         self.posCopyFrame = frame
-
-        local desc = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -36)
-        desc:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -36)
-        desc:SetJustifyH("LEFT")
-        desc:SetWordWrap(true)
-        desc:SetText(L["Press Ctrl+C to copy all position changes for this session."])
-        self.posCopyDesc = desc
-
-        local sf, sc = NativeGUI:CreateScrollFrame(frame, -85, -50)
-        self.posCopyScrollFrame = sf
-        self.posCopyScrollContent = sc
-
-        local eb = NativeGUI:CreateReadOnlyCopyBox(sc)
-        eb:SetPoint("TOPLEFT", sc, "TOPLEFT", 6, -6)
-        eb:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
-        eb:SetWidth(sf:GetWidth() - 16)
-        self.posCopyEditBox = eb
-
-        local btnClose = NativeGUI:CreateButton(frame, L["Close"], 90, 24, "Default")
-        btnClose:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 12)
-        btnClose:SetScript("OnClick", function()
-            frame:Hide()
-        end)
     end
 
-    local textContent = table.concat(posChanges or {}, "\n")
     self.posCopyFrame:Show()
-    self.posCopyEditBox.fullText = textContent
-    self.posCopyEditBox:SetText(textContent)
-    self.posCopyEditBox:SetWidth(self.posCopyScrollFrame:GetWidth() - 16)
-    local height = self.posCopyEditBox:GetHeight()
-    if height < 60 then height = 60 end
-    self.posCopyScrollContent:SetHeight(height + 20)
-
-    C_Timer.After(0.05, function()
-        if self.posCopyEditBox then
-            self.posCopyEditBox:SetFocus()
-            self.posCopyEditBox:HighlightText()
-        end
-    end)
+    self.posCopyFrame:SetCopyText(table.concat(posChanges or {}, "\n"))
 end
 
 function UI_RaidHistory:ShowTextCopyWindow(title, text)

@@ -207,6 +207,27 @@ local descOpt = {
     order = 0,
 }
 
+local function MakeDomainToggle(label, descText, order, key, mutualExclude)
+    return {
+        type = "toggle",
+        name = label,
+        desc = descText,
+        width = "half",
+        order = order,
+        disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
+        get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection[key] end,
+        set = function(_, val)
+            if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
+            ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
+            ProfileSettings.exportSelection[key] = val
+            if val and mutualExclude then
+                ProfileSettings.exportSelection[mutualExclude] = false
+            end
+            LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+        end,
+    }
+end
+
 local exportOptsGroupOpt = {
     type = "group",
     name = L["Data Domains to Export"],
@@ -234,99 +255,12 @@ local exportOptsGroupOpt = {
                 LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
             end,
         },
-        roster = {
-            type = "toggle",
-            name = L["Roster (Mains & Alts)"],
-            width = "half",
-            order = 2,
-            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
-            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["Roster"] end,
-            set = function(_, val)
-                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
-                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
-                ProfileSettings.exportSelection["Roster"] = val
-                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-            end,
-        },
-        priorityRankings = {
-            type = "toggle",
-            name = L["Priority Lists (with Player Rankings)"],
-            desc = L["Exports list definitions and active player order."],
-            width = "half",
-            order = 3,
-            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
-            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["PriorityRankings"] end,
-            set = function(_, val)
-                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
-                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
-                ProfileSettings.exportSelection["PriorityRankings"] = val
-                if val then
-                    ProfileSettings.exportSelection["PriorityStructure"] = false
-                end
-                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-            end,
-        },
-        priorityStructure = {
-            type = "toggle",
-            name = L["Priority Lists (Empty Structure)"],
-            desc = L["Exports empty list definitions/templates without raider rankings."],
-            width = "half",
-            order = 4,
-            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
-            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["PriorityStructure"] end,
-            set = function(_, val)
-                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
-                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
-                ProfileSettings.exportSelection["PriorityStructure"] = val
-                if val then
-                    ProfileSettings.exportSelection["PriorityRankings"] = false
-                end
-                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-            end,
-        },
-        im = {
-            type = "toggle",
-            name = L["Item Manager (Catalogs)"],
-            desc = L["Exports item assignments and managed priority lists."],
-            width = "half",
-            order = 5,
-            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
-            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["IM"] end,
-            set = function(_, val)
-                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
-                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
-                ProfileSettings.exportSelection["IM"] = val
-                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-            end,
-        },
-        history = {
-            type = "toggle",
-            name = L["Raid Attendance & Award History"],
-            width = "half",
-            order = 6,
-            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
-            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["History"] end,
-            set = function(_, val)
-                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
-                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
-                ProfileSettings.exportSelection["History"] = val
-                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-            end,
-        },
-        config = {
-            type = "toggle",
-            name = L["General Config & Decay Rules"],
-            width = "half",
-            order = 7,
-            disabled = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] end,
-            get = function() return ProfileSettings.exportSelection and ProfileSettings.exportSelection["Config"] end,
-            set = function(_, val)
-                if ProfileSettings.exportSelection and ProfileSettings.exportSelection["All"] then return end
-                ProfileSettings.exportSelection = ProfileSettings.exportSelection or {}
-                ProfileSettings.exportSelection["Config"] = val
-                LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
-            end,
-        },
+        roster = MakeDomainToggle(L["Roster (Mains & Alts)"], nil, 2, "Roster"),
+        priorityRankings = MakeDomainToggle(L["Priority Lists (with Player Rankings)"], L["Exports list definitions and active player order."], 3, "PriorityRankings", "PriorityStructure"),
+        priorityStructure = MakeDomainToggle(L["Priority Lists (Empty Structure)"], L["Exports empty list definitions/templates without raider rankings."], 4, "PriorityStructure", "PriorityRankings"),
+        im = MakeDomainToggle(L["Item Manager (Catalogs)"], L["Exports item assignments and managed priority lists."], 5, "IM"),
+        history = MakeDomainToggle(L["Raid Attendance & Award History"], nil, 6, "History"),
+        config = MakeDomainToggle(L["General Config & Decay Rules"], nil, 7, "Config"),
     }
 }
 

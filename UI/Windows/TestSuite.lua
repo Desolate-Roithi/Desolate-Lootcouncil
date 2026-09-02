@@ -74,6 +74,28 @@ function UI_TestSuite:SetExportPayload(text, label)
     end
 end
 
+local function OpenScenarioWindow(scenarioId)
+    local opener = scenarioId and SCENARIO_WINDOWS[scenarioId]
+    if opener then opener() end
+end
+
+local function OnStepAdvanced(self, scenarioId)
+    self.selectedScenarioId = scenarioId
+    self:RefreshWindow()
+    OpenScenarioWindow(scenarioId)
+end
+
+local function OnStepThroughFinished(self, btnStepThrough)
+    btnStepThrough:SetText("Step-by-Step (Visual)")
+    local UI = DesolateLootcouncil:GetModule("UI", true)
+    if UI and UI.CloseAllWindows then UI:CloseAllWindows() end
+    if self.frame then
+        self.frame:Show()
+        self.frame:Raise()
+    end
+    self:RefreshWindow()
+end
+
 function UI_TestSuite:ShowTestSuiteWindow()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local TestSuite = DesolateLootcouncil:GetModule("TestSuite")
@@ -104,22 +126,8 @@ function UI_TestSuite:ShowTestSuiteWindow()
             else
                 btnStepThrough:SetText("Pause Step-by-Step")
                 TestSuite:StartStepThrough(
-                    function(scenarioId)
-                        self.selectedScenarioId = scenarioId
-                        self:RefreshWindow()
-                        local opener = scenarioId and SCENARIO_WINDOWS[scenarioId]
-                        if opener then opener() end
-                    end,
-                    function()
-                        btnStepThrough:SetText("Step-by-Step (Visual)")
-                        local UI = DesolateLootcouncil:GetModule("UI", true)
-                        if UI and UI.CloseAllWindows then UI:CloseAllWindows() end
-                        if self.frame then
-                            self.frame:Show()
-                            self.frame:Raise()
-                        end
-                        self:RefreshWindow()
-                    end,
+                    function(scenarioId) OnStepAdvanced(self, scenarioId) end,
+                    function() OnStepThroughFinished(self, btnStepThrough) end,
                     2.0
                 )
             end
@@ -129,12 +137,7 @@ function UI_TestSuite:ShowTestSuiteWindow()
         local btnStepNext = NativeGUI:CreateButton(f, "Next Scenario >>", 120, 24, "Roll")
         btnStepNext:SetPoint("LEFT", btnStepThrough, "RIGHT", 6, 0)
         btnStepNext:SetScript("OnClick", function()
-            TestSuite:StepNext(function(scenarioId)
-                self.selectedScenarioId = scenarioId
-                self:RefreshWindow()
-                local opener = scenarioId and SCENARIO_WINDOWS[scenarioId]
-                if opener then opener() end
-            end)
+            TestSuite:StepNext(function(scenarioId) OnStepAdvanced(self, scenarioId) end)
         end)
         self.btnStepNext = btnStepNext
 
