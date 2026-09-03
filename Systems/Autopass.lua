@@ -21,14 +21,24 @@ end
 
 function Autopass:OnEnable()
     self:RegisterEvent("START_LOOT_ROLL", "OnStartLootRoll")
+    self:RegisterEvent("CONFIRM_LOOT_ROLL", "OnConfirmLootRoll")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "SyncAutopassState")
     self:SyncAutopassState()
+end
+
+function Autopass:OnConfirmLootRoll(event, rollID, rollType)
+    if self.autoRolledItems and self.autoRolledItems[rollID] then
+        ConfirmLootRoll(rollID, rollType)
+        if StaticPopup_Hide then
+            StaticPopup_Hide("CONFIRM_LOOT_ROLL")
+        end
+    end
 end
 
 function Autopass:SyncAutopassState()
     local config = DesolateLootcouncil.db.profile.DecayConfig
     if config then
-        if not config.sessionActive then
+        if not IsInRaid() and not (DesolateLootcouncil.IsTestMode and DesolateLootcouncil:IsTestMode()) and not config.sessionActive then
             config.sessionAutopassActive = false
             config.sessionAutopassAnswered = false
         end
@@ -131,9 +141,9 @@ function Autopass:OnStartLootRoll(event, rollID)
 
     local isLM = DesolateLootcouncil:AmILootMaster()
 
-    -- Disable entirely if we are in LFR (Match-made groups)
-    if DesolateLootcouncil:IsLFR() then
-        DebugLog(string.format("Skipped RollID %d: In LFR group.", rollID))
+    -- Disable entirely if we are not in a valid raid group or test mode
+    if not DesolateLootcouncil:IsInRaidOrTest() then
+        DebugLog(string.format("Skipped RollID %d: Not in raid or test group.", rollID))
         return
     end
 
@@ -163,6 +173,11 @@ end
 
 function Autopass:ScanAndAutopassActiveLootRolls()
     DebugLog("Scanning active Blizzard loot roll windows for Autopass...")
+
+    if not DesolateLootcouncil:IsInRaidOrTest() then
+        DebugLog("Skipped scan: Not in raid or test group.")
+        return
+    end
 
     if not GroupLootContainer or not GroupLootContainer.rollFrames then
         DebugLog("Skipped scan: GroupLootContainer not found or has no rollFrames.")

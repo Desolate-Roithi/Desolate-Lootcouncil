@@ -84,6 +84,18 @@ function DLC_API:IsLFR()
     return DesolateLootcouncil.IsLFR and DesolateLootcouncil:IsLFR() or false
 end
 
+--- Returns true if the player is currently in a valid raid group or in active test/simulation mode.
+---@return boolean
+function DLC_API:IsInRaidOrTest()
+    return DesolateLootcouncil.IsInRaidOrTest and DesolateLootcouncil:IsInRaidOrTest() or false
+end
+
+--- Returns true if the simulation engine is actively running with mock players.
+---@return boolean
+function DLC_API:IsSimulationActive()
+    return DesolateLootcouncil.IsSimulationActive and DesolateLootcouncil:IsSimulationActive() or false
+end
+
 --- Alias for IsLootMaster.
 ---@return boolean
 function DLC_API:AmILootMaster()
@@ -111,6 +123,9 @@ end
 --- Returns whether test simulation mode is active.
 ---@return boolean
 function DLC_API:IsTestMode()
+    if DesolateLootcouncil.IsTestMode then
+        return DesolateLootcouncil:IsTestMode()
+    end
     return DesolateLootcouncil.isTestMode or false
 end
 
@@ -850,8 +865,20 @@ end
 ---@param itemLinkOrTable string|table
 ---@param eligiblePlayers string[]?
 function DLC_API:StartSession(itemLinkOrTable, eligiblePlayers)
+    local s = Session()
+    if s and s.StartSession then
+        local tbl = itemLinkOrTable
+        if type(itemLinkOrTable) == "string" then
+            tbl = { { link = itemLinkOrTable, itemID = tonumber(itemLinkOrTable:match("item:(%d+)")) or 0 } }
+        end
+        if type(tbl) == "table" then
+            s:StartSession(tbl)
+        end
+    end
     local v = Voting()
-    if v and v.StartSession then v:StartSession(itemLinkOrTable, eligiblePlayers) end
+    if v and v.StartSession then
+        v:StartSession(itemLinkOrTable, eligiblePlayers)
+    end
 end
 
 --- Ends the currently active voting session.

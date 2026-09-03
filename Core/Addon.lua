@@ -408,6 +408,35 @@ function DesolateLootcouncil:IsLFR()
     return false
 end
 
+--- Returns true if the simulation engine is actively running with mock players.
+---@return boolean
+function DesolateLootcouncil:IsSimulationActive()
+    local Sim = self:GetModule("Simulation", true)
+    if Sim then
+        if Sim.GetRoster and #Sim:GetRoster() > 0 then return true end
+        if Sim.GetCount and Sim:GetCount() > 0 then return true end
+    end
+    return false
+end
+
+--- Returns true if any test runner or simulation is active.
+---@return boolean
+function DesolateLootcouncil:IsTestMode()
+    return (self.isTestRunning == true) or self:IsSimulationActive()
+end
+
+--- Returns true if the player is in an active non-LFR raid group or in test/simulation mode.
+---@return boolean
+function DesolateLootcouncil:IsInRaidOrTest()
+    if self:IsTestMode() then
+        return true
+    end
+    if IsInRaid and IsInRaid() and not self:IsLFR() then
+        return true
+    end
+    return false
+end
+
 function DesolateLootcouncil:DetermineLootMaster()
     local myName = UnitName("player")
 
@@ -984,10 +1013,10 @@ function DesolateLootcouncil:GetEnchantingSkillLevel()
 end
 
 --- Returns the appropriate broadcast channel for the current group state.
---- @return string|nil  "RAID", "PARTY", or nil when not in a group.
+--- Loot Council operations are restricted to raid groups.
+--- @return string|nil  "RAID" when in a valid non-LFR raid, or nil otherwise.
 function DesolateLootcouncil:GetBroadcastChannel()
-    if IsInRaid() then return "RAID" end
-    if IsInGroup() then return "PARTY" end
+    if IsInRaid and IsInRaid() and not self:IsLFR() then return "RAID" end
     return nil
 end
 
@@ -1044,7 +1073,7 @@ function DesolateLootcouncil:IsLMAddonUser()
 end
 
 function DesolateLootcouncil:PromptAutopass(isRetry)
-    if self:IsLFR() then return end
+    if not self:IsInRaidOrTest() then return end
     if not self:AmILootMaster() then return end
 
     if not IsInGroup() or self:DoAllGroupMembersHaveAddon() then

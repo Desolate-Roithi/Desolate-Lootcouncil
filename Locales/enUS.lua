@@ -327,6 +327,7 @@ L["Raid leadership received. Loot Master session restored."] = true
 L["Add all loot from this boss/raid to the import staging area."] = true
 L["Autopass is disabled because not everyone in the raid has the addon."] = true
 L["Autopass is disabled because the following members do not have the addon: %s"] = true
+L["Note: The following members do not have the addon: %s"] = true
 L["Sync Autopass"] = true
 L["Not Prompted"] = true
 L["Enabled"] = true

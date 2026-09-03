@@ -272,8 +272,19 @@ function Roster:PrintCurrentAttendees()
 end
 
 ---------------------------------------------------------------------------
--- ROSTER MANAGEMENT (Migrated from Core)
----------------------------------------------------------------------------
+--- Transmits the full roster to all officers immediately upon any mutation.
+function Roster:SyncRosterToOfficers()
+    if not DesolateLootcouncil:AmILootMaster() then return end
+    if not DesolateLootcouncil:IsInRaidOrTest() then return end
+    local Sync = DesolateLootcouncil:GetModule("Sync", true)
+    if Sync and Sync.ShareDataWithOfficers then
+        Sync:ShareDataWithOfficers("ROSTER")
+    end
+    local Session = DesolateLootcouncil:GetModule("Session", true)
+    if Session and Session.SendDLCHeartbeat then
+        Session:SendDLCHeartbeat()
+    end
+end
 
 function Roster:AddMain(name)
     if not DesolateLootcouncil.db then return end
@@ -314,6 +325,7 @@ function Roster:AddMain(name)
     DesolateLootcouncil.API:LogAudit("ROSTER_ADD_MAIN", nil, normalizedName, nil, "Added main character")
     
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+    self:SyncRosterToOfficers()
     return true
 end
 
@@ -372,6 +384,7 @@ function Roster:SetOfficer(name, flag)
             end
             
             LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            self:SyncRosterToOfficers()
             return
         end
     end
@@ -406,6 +419,7 @@ function Roster:SetOfficer(name, flag)
             end
             
             LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+            self:SyncRosterToOfficers()
         end
     end
 end
@@ -461,6 +475,7 @@ function Roster:AddAlt(altName, mainName)
     DesolateLootcouncil.API:LogAudit("ALT_LINK", nil, normalizedAlt, nil, string.format("Linked to Main %s", normalizedMain))
         
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+    self:SyncRosterToOfficers()
     return true
 end
 
@@ -494,6 +509,7 @@ function Roster:RemovePlayer(name)
         DesolateLootcouncil:DLC_Log("Removed Main: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
         DesolateLootcouncil.API:LogAudit("ROSTER_REMOVE", nil, normalizedName, nil, "Removed main character")
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+        self:SyncRosterToOfficers()
         return
     end
 
@@ -505,6 +521,7 @@ function Roster:RemovePlayer(name)
         DesolateLootcouncil:DLC_Log("Removed Alt: " .. DesolateLootcouncil:GetDisplayName(normalizedName))
         DesolateLootcouncil.API:LogAudit("ALT_UNLINK", nil, normalizedName, nil, "Removed alt character")
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
+        self:SyncRosterToOfficers()
     end
 end
 
@@ -684,6 +701,7 @@ function Roster:DismissUnassignedPlayer(name)
     if Session and Session.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
         Session:SendDLCHeartbeat()
     end
+    self:SyncRosterToOfficers()
 end
 
 ---------------------------------------------------------------------------
@@ -886,57 +904,42 @@ function Roster:CheckForNewRaidMembers()
     if DesolateLootcouncil:IsLFR() then return end
     if not IsInRaid() or not DesolateLootcouncil:AmILootMaster() then return end
     
-    local config = DesolateLootcouncil.db.profile.DecayConfig
-    if not config or not config.sessionActive then return end
-    
-    local profile = DesolateLootcouncil.db.profile
+    local profile = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if not profile then return end
 
     local members = GetNumGroupMembers()
     for i = 1, members do
         local name = GetRaidRosterInfo(i)
         if name then
-            local isAddonUser = false
-            if DesolateLootcouncil.activeAddonUsers then
-                for user in pairs(DesolateLootcouncil.activeAddonUsers) do
-                    if DesolateLootcouncil:SmartCompare(user, name) then
-                        isAddonUser = true
+            local normalizedName = name
+            local score = DesolateLootcouncil:GetScoreName(normalizedName)
+
+            -- Check if already known as Main or Alt
+            local alreadyKnown = false
+            if score and self.scoreMap and self.scoreMap[score] then
+                alreadyKnown = true
+            end
+
+            if not alreadyKnown and profile.playerRoster and profile.playerRoster.alts then
+                for altName in pairs(profile.playerRoster.alts) do
+                    if DesolateLootcouncil:SmartCompare(altName, normalizedName) then
+                        alreadyKnown = true
                         break
                     end
                 end
             end
 
-            if isAddonUser then
-                local normalizedName = name
-                local score = DesolateLootcouncil:GetScoreName(normalizedName)
-
-                -- Check if already known as Main or Alt
-                local alreadyKnown = false
-                if score and self.scoreMap and self.scoreMap[score] then
-                    alreadyKnown = true
-                end
-
-                if not alreadyKnown and profile.playerRoster and profile.playerRoster.alts then
-                    for altName in pairs(profile.playerRoster.alts) do
-                        if DesolateLootcouncil:SmartCompare(altName, normalizedName) then
-                            alreadyKnown = true
-                            break
-                        end
+            if not alreadyKnown and profile.MainRoster then
+                for mainName in pairs(profile.MainRoster) do
+                    if DesolateLootcouncil:SmartCompare(mainName, normalizedName) then
+                        alreadyKnown = true
+                        break
                     end
                 end
+            end
 
-                if not alreadyKnown and profile.MainRoster then
-                    for mainName in pairs(profile.MainRoster) do
-                        if DesolateLootcouncil:SmartCompare(mainName, normalizedName) then
-                            alreadyKnown = true
-                            break
-                        end
-                    end
-                end
-
-                if not alreadyKnown then
-                    self:RecordUnassignedPlayer(normalizedName, "Raid")
-                end
+            if not alreadyKnown then
+                self:RecordUnassignedPlayer(normalizedName, "Raid")
             end
         end
     end
@@ -1091,6 +1094,38 @@ function Roster:ReceiveRosterSync(syncedRoster)
     DesolateLootcouncil:DLC_Log(string.format(
         "Roster Sync received from LM. %d mains applied.", mainCount), true)
 
+    -- Clean unassigned players who are now in MainRoster or alts
+    if db.unassignedPlayers then
+        local unassignedChanged = false
+        for unassignedName in pairs(db.unassignedPlayers) do
+            local matched = false
+            if db.MainRoster then
+                for mainName in pairs(db.MainRoster) do
+                    if DesolateLootcouncil:SmartCompare(mainName, unassignedName) then
+                        matched = true
+                        break
+                    end
+                end
+            end
+            if not matched and db.playerRoster and db.playerRoster.alts then
+                for altName in pairs(db.playerRoster.alts) do
+                    if DesolateLootcouncil:SmartCompare(altName, unassignedName) then
+                        matched = true
+                        break
+                    end
+                end
+            end
+            if matched then
+                db.unassignedPlayers[unassignedName] = nil
+                unassignedChanged = true
+            end
+        end
+        if unassignedChanged then
+            self:SendMessage("DLC_UNASSIGNED_PLAYERS_UPDATED")
+        end
+    end
+
+    self:SendMessage("DLC_ROSTER_UPDATED")
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 

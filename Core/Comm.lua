@@ -47,7 +47,7 @@ function Comm:SendComm(command, data, target)
     else
         -- Smart channel selection
         local channel = DesolateLootcouncil:GetBroadcastChannel()
-        if not channel and IsInGuild and IsInGuild() then
+        if not channel and (upperTarget == "GUILD" or command == "VERSION_REQ") and IsInGuild and IsInGuild() then
             channel = "GUILD"
         end
         if channel then
@@ -68,7 +68,15 @@ function CommHandlers:VERSION_REQ(data, sender)
     if (mySkill or 0) > 0 then
         responseData.enchantingSkill = mySkill
     end
-    self:SendComm("VERSION_RESP", responseData, sender)
+    local channel = DesolateLootcouncil:GetBroadcastChannel()
+    if channel == "RAID" then
+        local jitter = math.random(1, 60) / 100
+        C_Timer.After(jitter, function()
+            self:SendComm("VERSION_RESP", responseData, "RAID")
+        end)
+    else
+        self:SendComm("VERSION_RESP", responseData, sender)
+    end
 
     -- Track sender too if they sent version and skill
     if data and data.version then
@@ -215,6 +223,7 @@ end
 
 
 function Comm:UpdatePlayerInfo(sender, version, skill, autopassActive)
+    if not sender or sender == "" then return end
     self.playerVersions = self.playerVersions or {}
     self.playerEnchantingSkill = self.playerEnchantingSkill or {}
     self.playerAutopassStates = self.playerAutopassStates or {}
@@ -229,10 +238,22 @@ function Comm:UpdatePlayerInfo(sender, version, skill, autopassActive)
         self.playerAutopassStates[sender] = autopassActive
     end
 
-    -- Sync to Global for Debug module
+    local shortName = DesolateLootcouncil:GetDisplayName(sender)
+    if shortName and shortName ~= "" and shortName ~= sender then
+        if version ~= nil then self.playerVersions[shortName] = version end
+        if skill ~= nil then self.playerEnchantingSkill[shortName] = skill end
+        if autopassActive ~= nil then self.playerAutopassStates[shortName] = autopassActive end
+    end
 
+    local score = DesolateLootcouncil:GetScoreName(sender)
+    if score and score ~= "" and score ~= sender and score ~= shortName then
+        if version ~= nil then self.playerVersions[score] = version end
+    end
+
+    -- Sync to Global for Debug module
     if DesolateLootcouncil.activeAddonUsers then
         DesolateLootcouncil.activeAddonUsers[sender] = true
+        if shortName then DesolateLootcouncil.activeAddonUsers[shortName] = true end
     end
     -- Fire AceEvent DLC_VERSION_UPDATE
     self:SendMessage("DLC_VERSION_UPDATE", sender, version)
@@ -292,9 +313,13 @@ function Comm:SeedSelf()
     local myName = UnitName("player")
     if not myName or myName == "Unknown Entity" then return end
     if self.playerVersions[myName] then return end -- already seeded
+    local myFullName = DesolateLootcouncil.GetFullName and DesolateLootcouncil:GetFullName("player")
     local myVersion = DesolateLootcouncil.version or "0.0.0"
     local mySkill = (DesolateLootcouncil.GetEnchantingSkillLevel and DesolateLootcouncil:GetEnchantingSkillLevel()) or 0
     self:UpdatePlayerInfo(myName, myVersion, mySkill)
+    if myFullName and myFullName ~= myName then
+        self:UpdatePlayerInfo(myFullName, myVersion, mySkill)
+    end
     DesolateLootcouncil:DLC_Log("[Conn] Self-seeded " .. myName .. " as version " .. myVersion)
 end
 

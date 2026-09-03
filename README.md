@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.0.3  
-**Last Updated:** 2026-09-01  
+**Latest Version:** v2.0.5  
+**Last Updated:** 2026-09-03  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -47,6 +47,23 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.0.5 (2026-09-03)
+* **Delve & Solo Instance Gating**:
+  * Gated background heartbeats, sync timers, and broadcasts behind `IsInRaidOrTest()`, eliminating "You are not in a group" chat spam in delves and 5-man parties.
+* **Unassigned Players Capture**:
+  * Auto-captures all new raid members not currently on the roster into the review queue immediately upon joining, regardless of addon presence or session state.
+* **Instant Officer Roster Sync**:
+  * Every roster mutation (`AddMain`, `AddAlt`, `RemovePlayer`, `SetOfficer`, `AssignAsMain`, `AssignAsAlt`, `DismissUnassignedPlayer`) immediately broadcasts full updates to all raid officers.
+* **Start Bidding & Loot Inbox Safeguard**:
+  * Fixed `DLC_API:StartSession()` dispatch to `Session:StartSession()`, resolving the unresponsive Start Bidding button.
+  * Added item quality fallback so uncataloged raid drops (Epic boss items) default to `"Rest"` rather than being purged as junk.
+* **Version Check Reliability & Cross-Realm Indexing**:
+  * Added randomized response jitter (10–600ms) and routed responses via `"RAID"` broadcast to eliminate packet loss and server throttle drops during raid-wide version checks.
+  * Normalized version tracking across full realm names, short names, and score names with `SmartCompare` fallback lookup in the Version window.
+* **Autopass Reliability**:
+  * Registered `CONFIRM_LOOT_ROLL` to automatically confirm BoP rolls for the Loot Master.
+  * Preserved active autopass session state across zone and reload transitions.
 
 ### v2.0.3 (2026-09-01)
 * **Disband Gating & Popup Debounce**:

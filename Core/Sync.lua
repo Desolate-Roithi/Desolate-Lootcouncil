@@ -30,7 +30,13 @@ end
 
 function Sync:SendSyncAutopass(isActive, isHeartbeat)
     DesolateLootcouncil.sessionAutopassActive = isActive
-    DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = isActive
+    if DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.DecayConfig then
+        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassActive = isActive
+    end
+    
+    if isHeartbeat and not DesolateLootcouncil:IsInRaidOrTest() then
+        return
+    end
     
     local payload = isActive
     if isHeartbeat then
@@ -38,7 +44,7 @@ function Sync:SendSyncAutopass(isActive, isHeartbeat)
     end
     
     local Comm = DesolateLootcouncil:GetModule("Comm", true)
-    if Comm then
+    if Comm and DesolateLootcouncil:IsInRaidOrTest() then
         Comm:SendComm("SYNC_AUTOPASS", payload)
     end
     
@@ -884,6 +890,9 @@ end
 
 function Sync:SyncItemManagerToRaid(isManual)
     if isManual == nil then isManual = true end
+    if not DesolateLootcouncil:IsInRaidOrTest() then
+        return
+    end
     if not isManual and IsInRaid() and GetNumGroupMembers() < 10 then
         return
     end

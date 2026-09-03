@@ -358,6 +358,7 @@ L["Add all loot from this boss/raid to the import staging area."] = "Füge die g
 L["An active raid session was found.\nWould you like to resume this session or end it?"] = "Eine aktive Schlachtzugssitzung wurde gefunden.\nMöchtest du diese Sitzung fortsetzen oder beenden?"
 L["Autopass is disabled because not everyone in the raid has the addon."] = "Autopass ist deaktiviert, da nicht alle Schlachtzugsmitglieder das Addon installiert haben."
 L["Autopass is disabled because the following members do not have the addon: %s"] = "Autopass ist deaktiviert, da folgende Mitglieder das Addon nicht installiert haben: %s"
+L["Note: The following members do not have the addon: %s"] = "Hinweis: Die folgenden Mitglieder haben das Addon nicht: %s"
 L["Sync Autopass"] = "Autopass synchronisieren"
 L["Not Prompted"] = "Nicht gefragt"
 L["Enabled"] = "Aktiviert"

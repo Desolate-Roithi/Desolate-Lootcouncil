@@ -199,6 +199,7 @@ function Session:OnEnable()
 end
 
 function Session:OnTimerTick()
+    if not DesolateLootcouncil:IsInRaidOrTest() then return end
     -- Approach B: No client polling/batching queues needed!
     -- Session Heartbeat & Full Sync (Late Joiners & Consistency) — LM only
     local now = GetServerTime()
@@ -231,7 +232,7 @@ function Session:OnTimerTick()
 end
 
 function Session:SendDLCHeartbeat()
-    if not IsInGroup() then return end
+    if not DesolateLootcouncil:IsInRaidOrTest() then return end
     local db = DesolateLootcouncil.db.profile
     local officers = {}
     local officerMains = {}
@@ -278,6 +279,7 @@ end
 -- isHeartbeat=true signals receivers NOT to rebuild their full UI if already hydrated,
 -- but closedItems is always included so late-joiners get correct state immediately.
 function Session:SendSessionHeartbeat()
+    if not DesolateLootcouncil:IsInRaidOrTest() then return end
     if not self.sessionPayloadCache then
         local payloadData = {}
         for _, item in ipairs(self.clientLootList or {}) do
@@ -443,12 +445,22 @@ function Session:FilterBiddingLoot(lootTable)
     local itemCount = 0
 
     for _, item in ipairs(lootTable) do
-        if item.category ~= "Junk/Pass" then
+        local cat = item.category
+        if not cat or cat == "" or cat == "Junk/Pass" then
+            local quality = select(3, C_Item.GetItemInfo(item.link))
+            local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
+            if quality and quality >= minQuality then
+                cat = "Rest"
+                item.category = "Rest"
+            end
+        end
+
+        if cat and cat ~= "Junk/Pass" then
             local entry = {
                 link       = item.link,
                 itemID     = item.itemID,
                 texture    = item.texture,
-                category   = item.category,
+                category   = cat,
                 sourceGUID = item.sourceGUID,
                 stackIndex = item.stackIndex,
                 expiry     = endTime,  -- Per-item absolute expiry
@@ -556,7 +568,7 @@ function Session:StartSession(lootTable)
         Priority:NotifyIfPlayersMissing()
     end
 
-    if not lootTable or #lootTable == 0 then
+    if not lootTable or type(lootTable) ~= "table" or #lootTable == 0 then
         DesolateLootcouncil:DLC_Log("No items to distribute!")
         return
     end

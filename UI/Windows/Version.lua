@@ -197,6 +197,14 @@ function UI_Version:UpdateVersionList(isTest)
     for _, entry in ipairs(roster) do
         if not DesolateLootcouncil.API:SmartCompare(entry.name, "player") then
             local ver = playerVersions and playerVersions[entry.name]
+            if not ver and playerVersions then
+                for pName, pVer in pairs(playerVersions) do
+                    if DesolateLootcouncil.API:SmartCompare(entry.name, pName) then
+                        ver = pVer
+                        break
+                    end
+                end
+            end
             entry.version = ver
         end
     end
