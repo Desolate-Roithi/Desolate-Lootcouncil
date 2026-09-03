@@ -676,6 +676,7 @@ function Session:SendCloseItem(itemGUID)
 end
 
 function Session:SendRemoveItem(guid)
+    self.sessionPayloadCache = nil -- Invalidate heartbeat cache immediately
     local payload = { command = "REMOVE_ITEM", data = { guid = guid } }
     local serialized = self:Serialize(payload)
     local channel = DesolateLootcouncil:GetBroadcastChannel()
@@ -907,6 +908,25 @@ function Session:HandleStartSession(payload, sender)
             end
         end
 
+        -- Auto-prune items from clientLootList that are no longer in the LM's active list
+        if payload.data and type(payload.data) == "table" then
+            local lmGuids = {}
+            for _, itm in ipairs(payload.data) do
+                if itm.sourceGUID then lmGuids[itm.sourceGUID] = true end
+                if itm.link then lmGuids[itm.link] = true end
+            end
+
+            for i = #self.clientLootList, 1, -1 do
+                local it = self.clientLootList[i]
+                local g = it.sourceGUID or it.link
+                local matches = (it.sourceGUID and lmGuids[it.sourceGUID]) or (it.link and lmGuids[it.link]) or (g and lmGuids[g])
+                if not matches then
+                    table.remove(self.clientLootList, i)
+                    self:SendMessage("DLC_ITEM_REMOVED", g)
+                end
+            end
+        end
+
         -- Merge active votes from heartbeat — ensures late-joiner Assistants stay synced
         if payload.votes and DesolateLootcouncil:AmIOfficerOrLM() then
             self.sessionVotes = self.sessionVotes or {}
@@ -951,10 +971,10 @@ end
 function Session:HandleRemoveItem(payload)
     local guid = payload.data and payload.data.guid
     if guid and self.clientLootList then
-        for i, item in ipairs(self.clientLootList) do
-            if (item.sourceGUID or item.link) == guid then
+        for i = #self.clientLootList, 1, -1 do
+            local item = self.clientLootList[i]
+            if item.sourceGUID == guid or item.link == guid or (item.sourceGUID or item.link) == guid then
                 table.remove(self.clientLootList, i)
-                break
             end
         end
 

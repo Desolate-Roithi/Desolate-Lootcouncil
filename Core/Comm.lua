@@ -91,8 +91,17 @@ function CommHandlers:VERSION_REQ(data, sender)
         local active = DesolateLootcouncil.sessionAutopassActive or false
         self:SendComm("SYNC_AUTOPASS", { isActive = active, isHeartbeat = true }, sender)
         
-        -- History Bulk Sync for late-joining / reloading officers
+        -- Sync authoritative Item Manager priority lists to the raider
         local db = DesolateLootcouncil.db.profile
+        local lists = {}
+        for _, listObj in ipairs(db.PriorityLists or {}) do
+            if listObj.name and listObj.items then
+                lists[listObj.name] = listObj.items
+            end
+        end
+        self:SendComm("IM_SYNC", { lists = lists, isManual = true }, sender)
+
+        -- History Bulk Sync for late-joining / reloading officers
         if DesolateLootcouncil:IsOfficer(sender) then
             local SessionMod = DesolateLootcouncil:GetModule("Session")
             SessionMod.officerSyncedThisSession = SessionMod.officerSyncedThisSession or {}

@@ -399,11 +399,34 @@ end
 ---@param itemGUID string
 ---@param removeIndex number
 function Loot:CleanupAwardedItem(session, itemGUID, removeIndex)
-    table.remove(session.bidding, removeIndex)
+    if removeIndex and session.bidding then
+        table.remove(session.bidding, removeIndex)
+    elseif session.bidding then
+        for i = #session.bidding, 1, -1 do
+            local item = session.bidding[i]
+            if item.sourceGUID == itemGUID or item.link == itemGUID then
+                table.remove(session.bidding, i)
+            end
+        end
+    end
+
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
     if Session then
         if Session.sessionVotes then Session.sessionVotes[itemGUID] = nil end
         if Session.closedItems then Session.closedItems[itemGUID] = nil end
+
+        -- Purge from clientLootList on the LM so heartbeat doesn't resurrect it
+        if Session.clientLootList then
+            for i = #Session.clientLootList, 1, -1 do
+                local item = Session.clientLootList[i]
+                if item.sourceGUID == itemGUID or item.link == itemGUID then
+                    table.remove(Session.clientLootList, i)
+                end
+            end
+        end
+
+        -- Invalidate session heartbeat payload cache immediately
+        Session.sessionPayloadCache = nil
     end
 end
 
@@ -413,7 +436,7 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
 
     if session and session.bidding then
         for i, item in ipairs(session.bidding) do
-            if item.sourceGUID == itemGUID then
+            if item.sourceGUID == itemGUID or item.link == itemGUID then
                 itemData = item; removeIndex = i; break
             end
         end

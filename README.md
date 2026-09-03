@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.0.6  
+**Latest Version:** v2.0.7  
 **Last Updated:** 2026-09-03  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,18 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.0.7 (2026-09-03)
+* **Instant & Non-Popup Trade Clearing**:
+  * Track dual trade acceptance via `TRADE_ACCEPT_UPDATE` and instantly complete awards on `TRADE_CLOSED`, clearing pending trades even when confirmation popups do not appear.
+  * Added locale-tolerant matching for trade completion messages across all client languages.
+* **Monitor & Voting Window Awarded Item Synchronization**:
+  * Awarding an item immediately purges it from the Loot Master's active client loot list and invalidates the session heartbeat payload cache, preventing awarded items from being resurrected every 30 seconds.
+  * Receiving clients automatically self-heal and prune any items absent from the Loot Master's authoritative heartbeat payload.
+  * Added defensive history filtering across both the Voting window and Bidding Monitor to guarantee awarded items never remain visible.
+* **Priority List Synchronization & Autopass Integrity**:
+  * Preserved strict Autopass abort when items are unassigned (`dbCat == "Junk/Pass"`).
+  * Automatically synchronize the Loot Master's full Item Manager priority lists and item assignments to raiders on connection, version handshakes, and session starts, ensuring raiders accurately identify raid drops.
 
 ### v2.0.6 (2026-09-03)
 * **Version Window Deduplication**:

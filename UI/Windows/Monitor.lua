@@ -369,8 +369,15 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
     end
 
     if items then
-        for i, item in ipairs(items) do
-            self:BuildItemRow(i, item, isLM)
+        local awarded = API:GetAwardedGUIDs()
+        local rowIndex = 0
+        for _, item in ipairs(items) do
+            local guid = item.sourceGUID or item.link
+            local isAwarded = (guid and awarded[guid]) or (item.sourceGUID and awarded[item.sourceGUID]) or (item.link and awarded[item.link])
+            if not isAwarded then
+                rowIndex = rowIndex + 1
+                self:BuildItemRow(rowIndex, item, isLM)
+            end
         end
     end
 

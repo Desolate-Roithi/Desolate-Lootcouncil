@@ -362,7 +362,9 @@ end
 ---@param awardedGUIDs table<string, boolean>  A map of already awarded item GUIDs
 ---@return boolean laidOut  True if the row was successfully processed and laid out
 function UI_Voting:_LayoutVotingRow(index, data, guid, now, awardedGUIDs)
-    if awardedGUIDs[guid] then return false end
+    if awardedGUIDs[guid] or (data.link and awardedGUIDs[data.link]) or (data.sourceGUID and awardedGUIDs[data.sourceGUID]) then
+        return false
+    end
 
     local API            = DesolateLootcouncil.API
     local currentVote    = self.myVotes[guid]
@@ -845,9 +847,8 @@ function UI_Voting:RemoveVotingItem(guid)
     if self.cachedVotingItems then
         for i = #self.cachedVotingItems, 1, -1 do
             local item = self.cachedVotingItems[i]
-            if (item.sourceGUID or item.link) == guid then
+            if item.sourceGUID == guid or item.link == guid or (item.sourceGUID or item.link) == guid then
                 table.remove(self.cachedVotingItems, i)
-                break
             end
         end
     end

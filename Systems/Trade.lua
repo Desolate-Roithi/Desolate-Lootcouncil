@@ -18,6 +18,9 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 function Trade:OnEnable()
     self:RegisterEvent("TRADE_SHOW", "OnTradeShow")
     self:RegisterEvent("UI_INFO_MESSAGE", "OnUIInfo")
+    self:RegisterEvent("CHAT_MSG_SYSTEM", "CHAT_MSG_SYSTEM")
+    self:RegisterEvent("TRADE_ACCEPT_UPDATE", "TRADE_ACCEPT_UPDATE")
+    self:RegisterEvent("TRADE_CLOSED", "TRADE_CLOSED")
     self:RegisterEvent("TRADE_UPDATE", "OnTradeUpdate")
     self:RegisterEvent("TRADE_PLAYER_ITEM_CHANGED", "OnTradeUpdate")
 
@@ -46,9 +49,25 @@ function Trade:OnStaticPopup(name)
     end
 end
 
+local function IsTradeCompleteMessage(msg)
+    if not msg then return false end
+    if msg == ERR_TRADE_COMPLETE then return true end
+    local lower = string.lower(tostring(msg))
+    if lower:find("trade complete") or lower:find("handel abgeschlossen") then
+        return true
+    end
+    return false
+end
+
 function Trade:OnUIInfo(_event, _msgID, msg)
-    if msg == ERR_TRADE_COMPLETE then
+    if IsTradeCompleteMessage(msg) then
         self:HandleTradeSuccess()
+    end
+end
+
+function Trade:TRADE_ACCEPT_UPDATE(_event, playerAccepted, targetAccepted)
+    if tonumber(playerAccepted) == 1 and tonumber(targetAccepted) == 1 then
+        self.tradeAccepted = true
     end
 end
 
@@ -280,11 +299,6 @@ function Trade:StageAllItems(pendingItems, targetName)
     self.currentTrade = {}
     local usedSlots = {}
 
-    -- Register cleanup events unconditionally so currentTrade is always cleared,
-    -- even if all items fail to stage (e.g. not in bags, uncached, wrong bind type).
-    self:RegisterEvent("CHAT_MSG_SYSTEM")
-    self:RegisterEvent("TRADE_CLOSED")
-
     local stagedCount = 0
     for _, award in ipairs(pendingItems) do
         if stagedCount >= 6 then
@@ -329,7 +343,7 @@ function Trade:OnTradeUpdate()
 end
 
 function Trade:CHAT_MSG_SYSTEM(_event, message)
-    if message == ERR_TRADE_COMPLETE then
+    if IsTradeCompleteMessage(message) then
         self:HandleTradeSuccess()
     end
 end
@@ -394,6 +408,10 @@ function Trade:TRADE_CLOSED(...)
         self.tradeTimer = nil
     end
 
+    if self.tradeAccepted then
+        self:HandleTradeSuccess()
+    end
+
     self.clearTimer = C_Timer.After(5.0, function()
         self.clearTimer = nil
         self:ClearPending()
@@ -404,8 +422,7 @@ function Trade:ClearPending()
     self.currentTrade = nil
     self.itemsInTrade = nil
     self.tradeTargetName = nil
-    self:UnregisterEvent("CHAT_MSG_SYSTEM")
-    self:UnregisterEvent("TRADE_CLOSED")
+    self.tradeAccepted = false
 end
 
 --- Manually marks an item as delivered in the session trade list.

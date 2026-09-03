@@ -247,28 +247,37 @@ end
 
 local function OverwriteItemManagerLists(data, logMessage)
     local db = DesolateLootcouncil.db.profile
-    if db.PriorityLists then
-        for listName, items in pairs(data) do
-            for idx, localList in ipairs(db.PriorityLists) do
-                if localList.name == listName then
-                    localList.items = {}
-                    for id, val in pairs(items or {}) do
-                        localList.items[tonumber(id) or id] = val
-                    end
-                    DesolateLootcouncil.API:MarkIMDirty(localList.name)
-                    break
+    db.PriorityLists = db.PriorityLists or {}
+    for listName, items in pairs(data) do
+        local found = false
+        for idx, localList in ipairs(db.PriorityLists) do
+            if localList.name == listName then
+                localList.items = {}
+                for id, val in pairs(items or {}) do
+                    localList.items[tonumber(id) or id] = val
                 end
+                DesolateLootcouncil.API:MarkIMDirty(localList.name)
+                found = true
+                break
             end
         end
-
-        if logMessage then
-            DesolateLootcouncil:Print(logMessage)
+        if not found then
+            local newList = { name = listName, items = {}, players = {} }
+            for id, val in pairs(items or {}) do
+                newList.items[tonumber(id) or id] = val
+            end
+            table.insert(db.PriorityLists, newList)
+            DesolateLootcouncil.API:MarkIMDirty(listName)
         end
+    end
 
-        local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
-        if ItemMgr and ItemMgr.frame and ItemMgr.frame:IsShown() then
-            ItemMgr:RefreshWindow()
-        end
+    if logMessage then
+        DesolateLootcouncil:Print(logMessage)
+    end
+
+    local ItemMgr = DesolateLootcouncil:GetModule("UI_ItemManager")
+    if ItemMgr and ItemMgr.frame and ItemMgr.frame:IsShown() then
+        ItemMgr:RefreshWindow()
     end
 end
 

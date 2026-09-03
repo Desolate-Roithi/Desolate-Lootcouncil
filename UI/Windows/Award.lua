@@ -75,7 +75,8 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
             else
                 voteDesc = VOTE_TEXT[v.type] or "Unknown"
             end
-            DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, v.name, voteDesc)
+            local guid = (itemData and (itemData.sourceGUID or itemData.link)) or ""
+            DesolateLootcouncil.API:AwardItem(guid, v.name, voteDesc)
         end)
     elseif row.btnGive then
         row.btnGive:Hide()
