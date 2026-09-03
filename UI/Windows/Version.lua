@@ -14,7 +14,15 @@ local function SafeGetUnitClass(unit)
     return "WARRIOR"
 end
 
-
+local function SafeAmbiguate(name)
+    if not name or name == "" then return "" end
+    if DesolateLootcouncil and DesolateLootcouncil.Ambiguate then
+        return DesolateLootcouncil:Ambiguate(name)
+    elseif _G.Ambiguate then
+        return _G.Ambiguate(name, "none")
+    end
+    return name
+end
 
 -- Helper functions to keep nesting flat
 local function OnVersionTimerTick()
@@ -148,14 +156,27 @@ function UI_Version:UpdateVersionList(isTest)
     end
 
     local roster = {}
-    local rosterMap = {}
 
     local function AddEntry(name, class, version)
-        if not rosterMap[name] then
-            local entry = { name = name, class = class, version = version }
-            table.insert(roster, entry)
-            rosterMap[name] = entry
+        if not name or name == "" then return end
+
+        for _, entry in ipairs(roster) do
+            if DesolateLootcouncil.API:SmartCompare(entry.name, name) then
+                if not entry.version and version then
+                    entry.version = version
+                end
+                if not entry.class and class then
+                    entry.class = class
+                end
+                if name:find("-") and not entry.name:find("-") then
+                    entry.name = name
+                end
+                return
+            end
         end
+
+        local entry = { name = name, class = class, version = version }
+        table.insert(roster, entry)
     end
 
     AddEntry(UnitName("player"), SafeGetUnitClass("player"), DesolateLootcouncil.API:GetVersion())
@@ -183,11 +204,9 @@ function UI_Version:UpdateVersionList(isTest)
 
     local activeUsers = DesolateLootcouncil.API:GetActiveAddonUsers()
     if activeUsers then
-        for name, _ in pairs(activeUsers) do
-            if not rosterMap[name] then
-                local class = DesolateLootcouncil.API:GetUnitClass(name)
-                AddEntry(name, class, nil)
-            end
+        for name in pairs(activeUsers) do
+            local class = DesolateLootcouncil.API:GetUnitClass(name)
+            AddEntry(name, class, nil)
         end
     end
 
@@ -243,7 +262,11 @@ function UI_Version:UpdateVersionList(isTest)
         self.btnSync:SetEnabled(isLM)
     end
 
-    table.sort(roster, function(a, b) return a.name < b.name end)
+    table.sort(roster, function(a, b)
+        local nameA = SafeAmbiguate(DesolateLootcouncil:GetDisplayName(a.name) or a.name)
+        local nameB = SafeAmbiguate(DesolateLootcouncil:GetDisplayName(b.name) or b.name)
+        return nameA:lower() < nameB:lower()
+    end)
 
     local topOffset = 0
     local rowHeight = 24
@@ -264,7 +287,8 @@ function UI_Version:UpdateVersionList(isTest)
             row.nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.nameText:SetPoint("LEFT", 8, 0)
         end
-        local displayName = DesolateLootcouncil:GetDisplayName(entry.name)
+        local mainName = DesolateLootcouncil:GetDisplayName(entry.name) or entry.name
+        local displayName = SafeAmbiguate(mainName)
         row.nameText:SetText(NativeGUI:FormatClassColor(entry.class, displayName))
         row.nameText:SetTextColor(1, 1, 1)
 

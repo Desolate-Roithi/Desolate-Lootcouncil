@@ -124,6 +124,150 @@ function Priority:GetPriorityList(listNameOrIndex)
     return nil
 end
 
+--- Returns the 1-based priority rank of playerName in a priority list.
+--- Handles alt-to-main resolution, cross-realm comparison, and list fallback heuristics.
+---@param listNameOrIndex string|number|nil
+---@param playerName string
+---@param itemID number|string|nil
+---@return number rank
+function Priority:GetPriorityRank(listNameOrIndex, playerName, itemID)
+    if not DesolateLootcouncil.db or not playerName or playerName == "" then return 999 end
+    local db = DesolateLootcouncil.db.profile
+    if not db or not db.PriorityLists or #db.PriorityLists == 0 then return 999 end
+
+    -- Smart Lookup: Resolve alt to main
+    local RosterSys = DesolateLootcouncil:GetModule("Roster", true)
+    local targetName = (RosterSys and RosterSys:GetMain(playerName)) or playerName
+
+    local targetList = nil
+
+    -- 1. Try to find list by name or index
+    if listNameOrIndex and listNameOrIndex ~= "Rest" and listNameOrIndex ~= "Junk/Pass" then
+        targetList = self:GetPriorityList(listNameOrIndex)
+        if not targetList and type(listNameOrIndex) == "string" then
+            for _, l in ipairs(db.PriorityLists) do
+                if l.name and l.name:lower() == listNameOrIndex:lower() then
+                    targetList = l
+                    break
+                end
+            end
+        end
+    end
+
+    -- 2. If itemID is provided, check if any list explicitly contains this item
+    if not targetList and itemID then
+        local numID = tonumber(itemID)
+        if numID then
+            for _, l in ipairs(db.PriorityLists) do
+                if l.items and l.items[numID] then
+                    targetList = l
+                    break
+                end
+            end
+        end
+    end
+
+    -- 3. If still no list found (e.g. category was "Rest" for general boss loot):
+    -- Check if there is a list named "Rest", "Armor", or "General"
+    if not targetList then
+        for _, l in ipairs(db.PriorityLists) do
+            local lName = l.name and l.name:lower() or ""
+            if lName == "rest" or lName == "armor" or lName == "general" or lName == "main" then
+                targetList = l
+                break
+            end
+        end
+    end
+
+    -- 4. Fallback: Use the primary priority list (db.PriorityLists[1])
+    if not targetList and #db.PriorityLists > 0 then
+        targetList = db.PriorityLists[1]
+    end
+
+    if not targetList or not targetList.players then return 999 end
+
+    -- Find player position in targetList.players
+    for i, pName in ipairs(targetList.players) do
+        if DesolateLootcouncil:SmartCompare(pName, targetName) or DesolateLootcouncil:SmartCompare(pName, playerName) then
+            return i
+        end
+    end
+
+    return 999
+end
+
+--- Alias for API facade
+---@param playerName string
+---@param category string|nil
+---@param itemID number|string|nil
+---@return number rank
+function Priority:GetPlayerRankInList(playerName, category, itemID)
+    return self:GetPriorityRank(category, playerName, itemID)
+end
+
+--- Returns the priority list object that contains the given itemID.
+---@param itemID number|string|nil
+---@return table?
+function Priority:GetListForItem(itemID)
+    if not DesolateLootcouncil.db or not itemID then return nil end
+    local db = DesolateLootcouncil.db.profile
+    if not db or not db.PriorityLists then return nil end
+
+    local numID = tonumber(itemID)
+    if not numID then return nil end
+
+    for _, list in ipairs(db.PriorityLists) do
+        if list.items and list.items[numID] then
+            return list
+        end
+    end
+    return nil
+end
+
+--- Returns the candidate with the highest rank (lowest index) in a list.
+---@param listName string|nil
+---@param candidates string[]
+---@return string? winner, number? rank
+function Priority:GetPriorityHighest(listName, candidates)
+    if type(candidates) == "string" then
+        candidates = { candidates }
+    end
+    if not candidates or type(candidates) ~= "table" or #candidates == 0 then
+        return nil, nil
+    end
+
+    local bestCandidate = nil
+    local bestRank = 999
+
+    for _, cand in ipairs(candidates) do
+        local rank = self:GetPriorityRank(listName, cand)
+        if rank < bestRank then
+            bestRank = rank
+            bestCandidate = cand
+        end
+    end
+
+    return bestCandidate, (bestRank < 999 and bestRank or nil)
+end
+
+--- Returns the candidate with the highest priority for an item ID.
+---@param itemID number|string|nil
+---@param candidateNames string[]|string
+---@return string? winner
+function Priority:GetWinner(itemID, candidateNames)
+    if type(candidateNames) == "string" then
+        candidateNames = { candidateNames }
+    end
+    if not candidateNames or type(candidateNames) ~= "table" or #candidateNames == 0 then
+        return nil
+    end
+
+    local list = self:GetListForItem(itemID)
+    local listName = list and list.name
+    local winner = self:GetPriorityHighest(listName, candidateNames)
+    return winner
+end
+
 function Priority:AddPriorityList(name)
     if not DesolateLootcouncil.db then return end
     local db = DesolateLootcouncil.db.profile

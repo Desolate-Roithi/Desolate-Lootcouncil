@@ -10,6 +10,16 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
 
+local function SafeAmbiguate(name)
+    if not name or name == "" then return "" end
+    if DesolateLootcouncil and DesolateLootcouncil.Ambiguate then
+        return DesolateLootcouncil:Ambiguate(name)
+    elseif _G.Ambiguate then
+        return _G.Ambiguate(name, "none")
+    end
+    return name
+end
+
 
 
 function UI_Award:OnInitialize()
@@ -91,7 +101,8 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         row.lblName = lblName
     end
     local classColor = NativeGUI:GetClassColorHex(class)
-    row.lblName:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(v.name) .. "|r")
+    local displayName = SafeAmbiguate(DesolateLootcouncil:GetDisplayName(v.name))
+    row.lblName:SetText("|c" .. classColor .. displayName .. "|r")
 
     -- 3. Bid Response pill
     if not row.lblResp then
@@ -536,7 +547,7 @@ function UI_Award:ShowAwardWindow(itemData)
             local vNote = (type(voteData) == "table" and voteData.note) or ""
 
             if vType ~= 5 then
-                local rank = API:GetPlayerRankInList(voter, itemData.category)
+                local rank = API:GetPlayerRankInList(voter, itemData.category, itemData.itemID)
                 table.insert(voteList, { name = voter, type = vType, roll = vRoll, rank = rank, note = vNote })
             end
         end

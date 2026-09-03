@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.0.5  
+**Latest Version:** v2.0.6  
 **Last Updated:** 2026-09-03  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,16 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.0.6 (2026-09-03)
+* **Version Window Deduplication**:
+  * Resolved duplicate rows in the Connected / Versions window by enforcing realm-aware `SmartCompare` deduplication on roster insertion and pruning multi-key aliases from `activeAddonUsers`.
+* **Realm Suffix UI Sanitization**:
+  * Display names in the Version and Award windows now strictly strip realm tags for same-realm players while preserving them for cross-realm raiders.
+* **Priority Ranking & Position Resolution**:
+  * Implemented `Priority:GetPriorityRank()`, `GetPlayerRankInList()`, `GetListForItem()`, and `GetPriorityHighest()`.
+  * Bids in the Session Monitor / Award window now accurately reflect the player's current numerical rank (`#1`, `#2`, etc.) in the active priority list instead of displaying as `Unranked`.
+  * Integrated alt-to-main resolution and automatic fallback to primary lists for general boss drops.
 
 ### v2.0.5 (2026-09-03)
 * **Delve & Solo Instance Gating**:

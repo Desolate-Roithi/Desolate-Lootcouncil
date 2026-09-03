@@ -238,7 +238,7 @@ function Comm:UpdatePlayerInfo(sender, version, skill, autopassActive)
         self.playerAutopassStates[sender] = autopassActive
     end
 
-    local shortName = DesolateLootcouncil:GetDisplayName(sender)
+    local shortName = tostring(sender):match("^([^-]+)")
     if shortName and shortName ~= "" and shortName ~= sender then
         if version ~= nil then self.playerVersions[shortName] = version end
         if skill ~= nil then self.playerEnchantingSkill[shortName] = skill end
@@ -253,7 +253,6 @@ function Comm:UpdatePlayerInfo(sender, version, skill, autopassActive)
     -- Sync to Global for Debug module
     if DesolateLootcouncil.activeAddonUsers then
         DesolateLootcouncil.activeAddonUsers[sender] = true
-        if shortName then DesolateLootcouncil.activeAddonUsers[shortName] = true end
     end
     -- Fire AceEvent DLC_VERSION_UPDATE
     self:SendMessage("DLC_VERSION_UPDATE", sender, version)

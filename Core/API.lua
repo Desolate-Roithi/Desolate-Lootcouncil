@@ -372,22 +372,24 @@ function DLC_API:GetPriorityList(nameOrIdx)
 end
 
 --- Returns a player's rank index in the specified list.
----@param listName string
+---@param listName string|number|nil
 ---@param playerName string
+---@param itemID number|string|nil
 ---@return number?
-function DLC_API:GetPriorityRank(listName, playerName)
+function DLC_API:GetPriorityRank(listName, playerName, itemID)
     local p = Priority()
-    return p and p.GetPriorityRank and p:GetPriorityRank(listName, playerName)
+    return p and p.GetPriorityRank and p:GetPriorityRank(listName, playerName, itemID)
 end
 
 --- Returns the 1-based priority rank of playerName in the named list (alias for UI).
 ---@param playerName string
----@param category string
+---@param category string|nil
+---@param itemID number|string|nil
 ---@return number rank
-function DLC_API:GetPlayerRankInList(playerName, category)
+function DLC_API:GetPlayerRankInList(playerName, category, itemID)
     local p = Priority()
-    if p and p.GetPlayerRankInList then return p:GetPlayerRankInList(playerName, category) end
-    return self:GetPriorityRank(category, playerName) or 999
+    if p and p.GetPlayerRankInList then return p:GetPlayerRankInList(playerName, category, itemID) end
+    return self:GetPriorityRank(category, playerName, itemID) or 999
 end
 
 --- Returns the candidate with the highest rank in a list.

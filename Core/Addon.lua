@@ -902,9 +902,9 @@ function DesolateLootcouncil:GetDisplayName(name)
     local Roster = self:GetModule("Roster")
     local main = Roster and Roster:GetMain(name) or name
 
-    local profile = self.db.profile
+    local profile = self.db and self.db.profile
     -- 1. Check if the Main is in the MainRoster (to get the exact casing/format)
-    if profile.MainRoster then
+    if profile and profile.MainRoster then
         for rosterName, _ in pairs(profile.MainRoster) do
             if self:SmartCompare(rosterName, main) then
                 return rosterName
