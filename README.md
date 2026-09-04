@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.1.0  
+**Latest Version:** v2.1.1  
 **Last Updated:** 2026-09-04  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,12 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.1.1 (2026-09-04)
+* **Midnight Secret String Trade Protection**:
+  * Fixed Lua runtime crash (`attempt to compare local 'msg' (a secret string value, while execution tainted by 'Desolate_Lootcouncil')`) occurring when guild members or friends log in or out.
+  * Added `issecretvalue()` and `canaccessvalue()` checks alongside `pcall()` protections in trade completion message inspection (`IsTradeCompleteMessage`).
+  * Gated `CHAT_MSG_SYSTEM` and `UI_INFO_MESSAGE` event handlers to immediately exit when no items are pending trade, eliminating unnecessary system message processing overhead during guild/raid activity.
 
 ### v2.1.0 (2026-09-04)
 * **Item Manager & Loot Window Integration**:

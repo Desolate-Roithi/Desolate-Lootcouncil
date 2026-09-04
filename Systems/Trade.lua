@@ -51,21 +51,32 @@ end
 
 local function IsTradeCompleteMessage(msg)
     if not msg then return false end
-    if msg == ERR_TRADE_COMPLETE then return true end
-    local lower = string.lower(tostring(msg))
-    if lower:find("trade complete") or lower:find("handel abgeschlossen") then
-        return true
+    if type(issecretvalue) == "function" and issecretvalue(msg) then
+        return false
     end
-    return false
+    if type(canaccessvalue) == "function" and not canaccessvalue(msg) then
+        return false
+    end
+
+    local ok, isMatch = pcall(function()
+        if msg == ERR_TRADE_COMPLETE then return true end
+        local lower = string.lower(tostring(msg))
+        if lower:find("trade complete") or lower:find("handel abgeschlossen") then
+            return true
+        end
+        return false
+    end)
+    return ok and isMatch == true
 end
 
-function Trade:OnUIInfo(_event, _msgID, msg)
+function Trade:OnUIInfo(event, msgID, msg)
+    if not self.itemsInTrade and not self.currentTrade then return end
     if IsTradeCompleteMessage(msg) then
         self:HandleTradeSuccess()
     end
 end
 
-function Trade:TRADE_ACCEPT_UPDATE(_event, playerAccepted, targetAccepted)
+function Trade:TRADE_ACCEPT_UPDATE(event, playerAccepted, targetAccepted)
     if tonumber(playerAccepted) == 1 and tonumber(targetAccepted) == 1 then
         self.tradeAccepted = true
     else
@@ -344,7 +355,8 @@ function Trade:OnTradeUpdate()
     self:ScanTradeSlots()
 end
 
-function Trade:CHAT_MSG_SYSTEM(_event, message)
+function Trade:CHAT_MSG_SYSTEM(event, message)
+    if not self.itemsInTrade and not self.currentTrade then return end
     if IsTradeCompleteMessage(message) then
         self:HandleTradeSuccess()
     end
