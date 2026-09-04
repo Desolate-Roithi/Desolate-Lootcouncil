@@ -6,7 +6,6 @@
     <!-- 1. Core -->
     <Script file="Core\Addon.lua"/>
     <Script file="Core\Constants.lua"/>
-    <Script file="Core\DBMigrator.lua"/>
 
     <!-- 2. Utilities -->
     <Script file="Utilities\Logger.lua"/>

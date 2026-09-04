@@ -30,12 +30,15 @@ end
 --- Returns the priority list name an item is assigned to, or "Junk/Pass" if unassigned.
 ---@param itemID number|string
 ---@return string
-function ItemCatalog:GetItemCategory(itemID)
+function ItemCatalog:GetItemCategory(rawItem)
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if not db or not db.PriorityLists then return "Junk/Pass" end
-    if not itemID then return "Junk/Pass" end
+    if not rawItem then return "Junk/Pass" end
 
-    local searchID = tonumber(itemID)
+    local searchID = tonumber(rawItem)
+    if not searchID and type(rawItem) == "string" then
+        searchID = self:GetItemIDFromLink(rawItem)
+    end
     if not searchID then return "Junk/Pass" end
 
     for _, list in ipairs(db.PriorityLists) do
@@ -146,6 +149,11 @@ function ItemCatalog:MarkIMDirty(listName)
     if not listName then return end
     self.dirtyLists = self.dirtyLists or {}
     self.dirtyLists[listName] = true
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if db then
+        db.imTimestamps = db.imTimestamps or {}
+        db.imTimestamps[listName] = GetServerTime()
+    end
 end
 
 --- Checks and clears the dirty flag for an item manager list.

@@ -68,6 +68,8 @@ end
 function Trade:TRADE_ACCEPT_UPDATE(_event, playerAccepted, targetAccepted)
     if tonumber(playerAccepted) == 1 and tonumber(targetAccepted) == 1 then
         self.tradeAccepted = true
+    else
+        self.tradeAccepted = false
     end
 end
 
@@ -99,10 +101,10 @@ local function IsTradeTargetMatch(awardWinner, tradePartnerName)
         return true
     end
 
-    local Roster = DesolateLootcouncil:GetModule("Roster", true)
-    if Roster and Roster.GetMain then
-        local awardMain = Roster:GetMain(awardWinner) or awardWinner
-        local partnerMain = Roster:GetMain(tradePartnerName) or tradePartnerName
+    local API = DesolateLootcouncil.API
+    local awardMain = (API and API.GetMain and API:GetMain(awardWinner)) or awardWinner
+    local partnerMain = (API and API.GetMain and API:GetMain(tradePartnerName)) or tradePartnerName
+    if awardMain and partnerMain then
         if DesolateLootcouncil:SmartCompare(awardMain, partnerMain) then
             return true
         end
@@ -393,12 +395,15 @@ function Trade:HandleTradeSuccess()
         db.historyTimestamp = GetServerTime()
 
         -- refresh the actual trade list window
-        ---@type UI_TradeList
-        local UI = DesolateLootcouncil:GetModule("UI_TradeList") --[[@as UI_TradeList]]
-        if UI and UI.ShowTradeListWindow and DesolateLootcouncil:AmILootMaster() then
-            UI:ShowTradeListWindow()
+        local API = DesolateLootcouncil.API
+        if API and API.ShowTradeListWindow and DesolateLootcouncil:AmILootMaster() then
+            API:ShowTradeListWindow()
         end
         self:SendMessage("DLC_HISTORY_UPDATED")
+
+        if API and API.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+            API:SendDLCHeartbeat()
+        end
     end
 end
 

@@ -331,13 +331,203 @@ function Comm:SeedSelf()
     DesolateLootcouncil:DLC_Log("[Conn] Self-seeded " .. myName .. " as version " .. myVersion)
 end
 
-function Comm:GetActiveUserCount()
-    if not self.playerVersions then return 0 end
-    local count = 0
-    for _ in pairs(self.playerVersions) do
-        count = count + 1
+function Comm:IsPlayerActive(name)
+    if not name then return false end
+    if self.playerVersions and self.playerVersions[name] then return true end
+
+    local shortName = tostring(name):match("^([^-]+)")
+    if shortName and self.playerVersions and self.playerVersions[shortName] then return true end
+
+    if self.lastKnownHasAddon and (self.lastKnownHasAddon[name] or (shortName and self.lastKnownHasAddon[shortName])) then
+        return true
     end
-    return count
+
+    if self.playerVersions then
+        for verName in pairs(self.playerVersions) do
+            if DesolateLootcouncil:SmartCompare(name, verName) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function Comm:IsUnitConnected(unit)
+    if UnitIsConnected then
+        return UnitIsConnected(unit) ~= false
+    end
+    return true
+end
+
+function Comm:GetGroupConnectionStatus()
+    self.lastKnownHasAddon = self.lastKnownHasAddon or {}
+
+    local myName = (GetUnitName and GetUnitName("player", true)) or (UnitName and UnitName("player")) or "Unknown"
+    local myVersion = DesolateLootcouncil.version or "2.1.0"
+    if myName and myName ~= "Unknown" then
+        self.lastKnownHasAddon[myName] = true
+    end
+
+    local total = 1
+    if IsInGroup() then
+        total = GetNumGroupMembers()
+        if total == 0 then total = 1 end
+    end
+
+    local active = 0
+    local missing = {}
+    local outdated = {}
+    local highestVersion = myVersion
+    local members = {}
+
+    local function inspectUnit(unit)
+        if UnitExists and not UnitExists(unit) then return end
+        local name = (GetUnitName and GetUnitName(unit, true)) or (UnitName and UnitName(unit))
+        if not name or name == "" then return end
+
+        local isLocalPlayer = (UnitIsUnit and UnitIsUnit(unit, "player")) or DesolateLootcouncil:SmartCompare(name, "player")
+        local isOnline = self:IsUnitConnected(unit)
+
+        local ver
+        local hasAddon = false
+
+        if isLocalPlayer then
+            hasAddon = true
+            ver = myVersion
+            self.lastKnownHasAddon[name] = true
+        else
+            ver = self.playerVersions and self.playerVersions[name]
+            if not ver and self.playerVersions then
+                local short = name:match("^([^-]+)")
+                if short and self.playerVersions[short] then
+                    ver = self.playerVersions[short]
+                else
+                    for pName, pVer in pairs(self.playerVersions) do
+                        if DesolateLootcouncil:SmartCompare(name, pName) then
+                            ver = pVer
+                            break
+                        end
+                    end
+                end
+            end
+
+            if ver then
+                hasAddon = true
+                self.lastKnownHasAddon[name] = true
+                local short = name:match("^([^-]+)")
+                if short then self.lastKnownHasAddon[short] = true end
+            elseif not isOnline and (self.lastKnownHasAddon[name] or (name:match("^([^-]+)") and self.lastKnownHasAddon[name:match("^([^-]+)")])) then
+                -- Player went offline with addon installed; retain status so temporary disconnect doesn't block raid
+                hasAddon = true
+            end
+        end
+
+        if hasAddon then
+            active = active + 1
+            if ver and AT and AT.CompareSemVer and AT.CompareSemVer(ver, highestVersion) then
+                highestVersion = ver
+            end
+        else
+            table.insert(missing, name)
+        end
+
+        members[name] = {
+            name = name,
+            version = ver,
+            hasAddon = hasAddon,
+            isOnline = isOnline,
+        }
+    end
+
+    if IsInRaid() then
+        for i = 1, total do
+            inspectUnit("raid" .. i)
+        end
+    else
+        inspectUnit("player")
+        if IsInGroup() then
+            for i = 1, (total - 1) do
+                inspectUnit("party" .. i)
+            end
+        end
+    end
+
+    local API = DesolateLootcouncil.API
+    local simRoster = (API and API.GetSimulationRoster and API:GetSimulationRoster()) or {}
+    if #simRoster > 0 then
+        local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+        for _, simName in ipairs(simRoster) do
+            if not members[simName] then
+                local isOnline = true
+                if Sim and Sim.IsOffline and Sim:IsOffline(simName) then
+                    isOnline = false
+                end
+                local ver = (self.playerVersions and self.playerVersions[simName]) or myVersion
+                members[simName] = {
+                    name = simName,
+                    version = ver,
+                    hasAddon = true,
+                    isOnline = isOnline,
+                }
+                active = active + 1
+                total = total + 1
+                if ver and AT and AT.CompareSemVer and AT.CompareSemVer(ver, highestVersion) then
+                    highestVersion = ver
+                end
+            end
+        end
+    end
+
+    if active > total then active = total end
+
+    if AT and AT.CompareSemVer then
+        for _, member in pairs(members) do
+            if member.version and AT.CompareSemVer(highestVersion, member.version) then
+                table.insert(outdated, member.name)
+            end
+        end
+    end
+
+    local allConnected = (active >= total and #missing == 0)
+
+    return {
+        total = total,
+        active = active,
+        allConnected = allConnected,
+        missing = missing,
+        outdated = outdated,
+        highestVersion = highestVersion,
+        members = members
+    }
+end
+
+function Comm:GetActiveUserCount()
+    return self:GetGroupConnectionStatus().active
+end
+
+function Comm:GetPlayerAutopassState(name)
+    if not name or name == "" then return nil end
+    if DesolateLootcouncil:SmartCompare(name, "player") then
+        return DesolateLootcouncil.sessionAutopassActive
+    end
+    self.playerAutopassStates = self.playerAutopassStates or {}
+    if self.playerAutopassStates[name] ~= nil then
+        return self.playerAutopassStates[name]
+    end
+    local short = tostring(name):match("^([^-]+)")
+    if short and self.playerAutopassStates[short] ~= nil then
+        return self.playerAutopassStates[short]
+    end
+    for pName, state in pairs(self.playerAutopassStates) do
+        if DesolateLootcouncil:SmartCompare(name, pName) then
+            return state
+        end
+    end
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    if Sim and Sim.IsSimulated and Sim:IsSimulated(name) then
+        return DesolateLootcouncil.sessionAutopassActive or false
+    end
+    return nil
 end
 
 

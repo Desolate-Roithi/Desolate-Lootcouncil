@@ -236,8 +236,9 @@ end
 
 --- Displays the Audit and Priority Ledger with optional session filtering.
 ---@param sessionID number|string|nil Optional session ID to filter events for a specific raid night
-function UI_PriorityLogHistory:ShowLogWindow(sessionID)
-    if not DesolateLootcouncil:AmIOfficerOrLM() then
+---@param isTestInspection boolean|nil Optional flag to bypass officer role requirement for interactive simulation review
+function UI_PriorityLogHistory:ShowLogWindow(sessionID, isTestInspection)
+    if not (DesolateLootcouncil:AmIOfficerOrLM() or isTestInspection or DesolateLootcouncil.isTestRunning) then
         if self.logFrame then self.logFrame:Hide() end
         return
     end

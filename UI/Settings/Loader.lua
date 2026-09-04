@@ -23,21 +23,23 @@ function SettingsLoader.GetOptions()
         options.args.items = Items:GetItemOptions()
     end
 
+    local isOfficerOrLM = DesolateLootcouncil:AmIOfficerOrLM()
+
     ---@type UI_RosterSettings
     local RosterSettings = DesolateLootcouncil:GetModule("UI_RosterSettings", true)
-    if RosterSettings and RosterSettings.GetOptions then
+    if isOfficerOrLM and RosterSettings and RosterSettings.GetOptions then
         options.args.roster = RosterSettings:GetOptions()
     end
 
     ---@type UI_PrioritySettings
     local Priority = DesolateLootcouncil:GetModule("UI_PrioritySettings", true)
-    if Priority and Priority.GetOptions then
+    if isOfficerOrLM and Priority and Priority.GetOptions then
         options.args.priority = Priority:GetOptions()
     end
 
     ---@type UI_Attendance
     local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
-    if Attendance and Attendance.GetAttendanceOptions then
+    if isOfficerOrLM and Attendance and Attendance.GetAttendanceOptions then
         options.args.attendance = Attendance:GetAttendanceOptions()
     end
 

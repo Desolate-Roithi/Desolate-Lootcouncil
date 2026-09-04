@@ -827,10 +827,6 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
             DesolateLootcouncil.API:CompactRaidHistory()
         end
 
-        if DesolateLootcouncil.DBMigrator and DesolateLootcouncil.DBMigrator.SanitizeProfileDatabase then
-            DesolateLootcouncil.DBMigrator:SanitizeProfileDatabase(p)
-        end
-
         if DesolateLootcouncil.SendMessage then
             DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
         end

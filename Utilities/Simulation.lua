@@ -74,6 +74,10 @@ function Simulation:Remove(name)
     if self.activeSims[name] then
         self.activeSims[name] = nil
         if self.offlineSims then self.offlineSims[name] = nil end
+        local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+        if db and db.MainRoster and db.MainRoster[name] and db.MainRoster[name].rank == "Sim" then
+            db.MainRoster[name] = nil
+        end
         DesolateLootcouncil:DLC_Log("Simulated Player Removed: " .. name, true)
     else
         DesolateLootcouncil:DLC_Log("Simulated Player '" .. name .. "' not found.", true)
@@ -128,6 +132,14 @@ function Simulation:SwapCharacter(oldName, newName, class)
 end
 
 function Simulation:Clear()
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if db and db.MainRoster then
+        for name, data in pairs(db.MainRoster) do
+            if type(data) == "table" and data.rank == "Sim" then
+                db.MainRoster[name] = nil
+            end
+        end
+    end
     self.activeSims = {}
     self.offlineSims = {}
     DesolateLootcouncil:DLC_Log("All simulated players cleared.", true)
@@ -228,26 +240,81 @@ function Simulation:SimulateVote()
 end
 
 --- Starts a live interactive loot distribution test with full voting and monitor integration.
+---@param mode? string Optional role persona ("LM", "Officer", or "Raider")
 ---@return boolean success
-function Simulation:StartInteractiveLootTest()
-    -- 1. Ensure Player has Loot Master role & active identity
-    local myName = (UnitName and UnitName("player")) or "Player"
-    DesolateLootcouncil.amILM = true
-    DesolateLootcouncil.activeLootMaster = myName
+function Simulation:StartInteractiveLootTest(mode)
+    local rawMode = mode or self.simRole or "LM"
+    local lowerMode = string.lower(tostring(rawMode))
+    local selectedRole = "LM"
+    if lowerMode == "officer" then
+        selectedRole = "Officer"
+    elseif lowerMode == "raider" or lowerMode == "player" then
+        selectedRole = "Raider"
+    end
+    self.simRole = selectedRole
 
-    -- 2. Populate standard simulated raiders matching player's realm
+    self:Clear()
+
+    -- 1. Ensure Player or Simulated LM has active identity
+    local myName = (UnitName and UnitName("player")) or "Player"
     local rawRealm = GetRealmName and GetRealmName()
     local realm = (rawRealm and rawRealm ~= "") and rawRealm or "Thrall"
-    local simRoster = self:GetRoster()
-    if #simRoster < 4 then
-        self:Add("Klacku-" .. realm, 0)
-        self:Add("Nonu-" .. realm, 0)
-        self:Add("Roithi-" .. realm, 0)
-        self:Add("Schorsch-" .. realm, 300) -- Primary Disenchanter
-        self:Add("Sydneyfox-" .. realm, 0)
-        self:Add("Vala-" .. realm, 275)    -- Backup Disenchanter
-        self:Add("Laenni-" .. realm, 0)
-        self:Add("Dekayline-" .. realm, 0)
+    local simLM = "Klacku-" .. realm
+
+    if selectedRole == "LM" then
+        DesolateLootcouncil.amILM = true
+        DesolateLootcouncil.amIOfficer = true
+        DesolateLootcouncil.activeLootMaster = myName
+    elseif selectedRole == "Officer" then
+        DesolateLootcouncil.amILM = false
+        DesolateLootcouncil.amIOfficer = true
+        DesolateLootcouncil.activeLootMaster = simLM
+    elseif selectedRole == "Raider" then
+        DesolateLootcouncil.amILM = false
+        DesolateLootcouncil.amIOfficer = false
+        DesolateLootcouncil.activeLootMaster = simLM
+    end
+
+    -- 2. Populate simulated raiders dynamically from priority lists / roster
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    local addedCount = 0
+
+    if db and db.PriorityLists and #db.PriorityLists > 0 and db.PriorityLists[1].players then
+        for idx, pName in ipairs(db.PriorityLists[1].players) do
+            if not DesolateLootcouncil:SmartCompare(pName, myName) then
+                local skill = 0
+                if idx == 4 then skill = 300 elseif idx == 6 then skill = 275 end
+                self:Add(pName, skill)
+                addedCount = addedCount + 1
+            end
+        end
+    end
+
+    if addedCount < 5 then
+        local defaultSims = {
+            { name = "WarriorMain-Realm", skill = 0 },
+            { name = "MageMain-Realm",    skill = 0 },
+            { name = "PriestMain-Realm",  skill = 275 },
+            { name = "RogueMain-Realm",   skill = 0 },
+            { name = "DruidMain-Realm",   skill = 0 },
+            { name = "Klacku-" .. realm,  skill = 0 },
+            { name = "Roithi-" .. realm,  skill = 0 },
+            { name = "Schench-" .. realm, skill = 300 },
+            { name = "Sydneyfox-" .. realm, skill = 0 },
+            { name = "Dekaylite-" .. realm, skill = 0 },
+            { name = "Laetiii-" .. realm,   skill = 0 },
+            { name = "Nxtu-" .. realm,      skill = 0 },
+        }
+        for _, simDef in ipairs(defaultSims) do
+            if not self.activeSims[simDef.name] and not DesolateLootcouncil:SmartCompare(simDef.name, myName) then
+                self:Add(simDef.name, simDef.skill)
+                addedCount = addedCount + 1
+            end
+        end
+    end
+
+    if DesolateLootcouncil.API and DesolateLootcouncil.API.SyncMissingPlayers then
+        DesolateLootcouncil.API:SyncMissingPlayers()
     end
 
     -- 3. Staged test items covering major priority categories
@@ -259,6 +326,9 @@ function Simulation:StartInteractiveLootTest()
         { id = 13335,  cat = "Collectables" },
         { id = 223120, cat = "Recipes" },
     }
+
+    local duration = tonumber(DesolateLootcouncil.db.profile.sessionDuration) or 300
+    local endTime = GetServerTime() + duration
 
     local items = {}
     for i, def in ipairs(testDefs) do
@@ -274,35 +344,142 @@ function Simulation:StartInteractiveLootTest()
             category = def.cat,
             sourceGUID = uniqueID,
             quantity = 1,
+            expiry = endTime,
             isTest = true
         })
     end
 
-    -- 4. Start Live Bidding Session
+    -- 4. Cleanly reset all prior session state to avoid stale votes / test residue
     ---@type Session
     local Session = DesolateLootcouncil:GetModule("Session")
-    if Session and Session.StartSession then
-        Session:StartSession(items)
-        DesolateLootcouncil:DLC_Log("Interactive Live Test Session started with " .. #items .. " items.", true)
+    if Session then
+        local prof = DesolateLootcouncil.db.profile
+        prof.session = prof.session or {}
+        prof.session.bidding = {}
+        prof.session.awarded = {}
+        prof.session.activeState = {}
+        Session.clientLootList = {}
+        Session.sessionVotes = {}
+        Session.closedItems = {}
+        Session.myLocalVotes = {}
+        Session.outboundVotes = {}
+        Session.sessionPayloadCache = nil
+
+        local VotingMod = DesolateLootcouncil:GetModule("UI_Voting", true)
+        if VotingMod and VotingMod.ResetVoting then
+            VotingMod:ResetVoting()
+        end
+
+        if selectedRole == "LM" then
+            if Session.StartSession then
+                Session:StartSession(items)
+                DesolateLootcouncil:DLC_Log("Interactive Live Test Session started as Loot Master with " .. #items .. " items.", true)
+            end
+        else
+            -- Officer / Raider mode: Simulate receiving LOOT_SESSION_START broadcast from simulated LM
+            local activeSimLM = DesolateLootcouncil.activeLootMaster or simLM
+            local payloadData = {}
+            for _, item in ipairs(items) do
+                table.insert(payloadData, {
+                    link       = item.link,
+                    texture    = item.texture,
+                    itemID     = item.itemID,
+                    sourceGUID = item.sourceGUID,
+                    category   = item.category,
+                })
+            end
+
+            local payload = {
+                command        = "LOOT_SESSION_START",
+                data           = payloadData,
+                duration       = duration,
+                endTime        = endTime,
+                autopassActive = DesolateLootcouncil.sessionAutopassActive,
+                activeLM       = activeSimLM,
+            }
+
+            Session:HandleStartSession(payload, activeSimLM)
+            prof.session.bidding = Session.clientLootList
+            Session:SaveSessionState()
+
+            DesolateLootcouncil:DLC_Log(string.format("Interactive Live Test Session started as %s via simulated LM broadcast with %d items.", selectedRole, #items), true)
+        end
     end
 
-    -- 5. Open Interactive Windows
+    -- 5. Open Interactive Windows according to role
     local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
     if Voting and Voting.ShowVotingWindow then
         Voting:ShowVotingWindow(items)
     end
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
-    if Monitor and Monitor.ShowMonitorWindow then
-        Monitor:ShowMonitorWindow()
+    if selectedRole == "LM" or selectedRole == "Officer" then
+        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+        if Monitor and Monitor.ShowMonitorWindow then
+            Monitor:ShowMonitorWindow()
+        end
     end
 
-    -- 6. Open Floating Interactive Test Bar if available
+    -- 6. Open Floating Interactive Test Bar
     local TestBar = DesolateLootcouncil:GetModule("UI_InteractiveTestBar", true)
     if TestBar and TestBar.ShowBar then
-        TestBar:ShowBar()
+        TestBar:ShowBar(selectedRole)
     end
 
     return true
+end
+
+--- Switches the active simulation role on the fly between LM, Officer, and Raider.
+---@param newRole string "LM", "Officer", or "Raider"
+function Simulation:SetSimRole(newRole)
+    local rawMode = newRole or "LM"
+    local lowerMode = string.lower(tostring(rawMode))
+    local selectedRole = "LM"
+    if lowerMode == "officer" then
+        selectedRole = "Officer"
+    elseif lowerMode == "raider" or lowerMode == "player" then
+        selectedRole = "Raider"
+    end
+    self.simRole = selectedRole
+
+    local myName = (UnitName and UnitName("player")) or "Player"
+    local rawRealm = GetRealmName and GetRealmName()
+    local realm = (rawRealm and rawRealm ~= "") and rawRealm or "Thrall"
+    local simLM = "Klacku-" .. realm
+
+    if selectedRole == "LM" then
+        DesolateLootcouncil.amILM = true
+        DesolateLootcouncil.amIOfficer = true
+        DesolateLootcouncil.activeLootMaster = myName
+    elseif selectedRole == "Officer" then
+        DesolateLootcouncil.amILM = false
+        DesolateLootcouncil.amIOfficer = true
+        DesolateLootcouncil.activeLootMaster = simLM
+    elseif selectedRole == "Raider" then
+        DesolateLootcouncil.amILM = false
+        DesolateLootcouncil.amIOfficer = false
+        DesolateLootcouncil.activeLootMaster = simLM
+    end
+
+    local TestBar = DesolateLootcouncil:GetModule("UI_InteractiveTestBar", true)
+    if TestBar and TestBar.UpdateRoleDisplay then
+        TestBar:UpdateRoleDisplay(selectedRole)
+    end
+
+    local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
+    if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() and Voting.ShowVotingWindow then
+        Voting:ShowVotingWindow()
+    end
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() and Monitor.ShowMonitorWindow then
+        Monitor:ShowMonitorWindow(true)
+    end
+
+    DesolateLootcouncil:Print(string.format(L["Interactive simulation role switched to: |cffffd700%s|r."], selectedRole))
+end
+
+--- Returns the active simulation role ("LM", "Officer", or "Raider").
+---@return string
+function Simulation:GetSimRole()
+    return self.simRole or "LM"
 end
 
 --- Simulates realistic raider votes for all active items in the bidding queue.
@@ -325,10 +502,8 @@ function Simulation:SimulateRaiderVotes()
     local castCount = 0
     local voteOptions = { 1, 2, 2, 3, 4, 5 } -- Weighted distribution: Bid, Roll, Roll, OS, TM, Pass
 
-    -- Pre-calculate total group size including simulated entities
-    local totalMembers = GetNumGroupMembers()
-    if totalMembers == 0 then totalMembers = 1 end
-    totalMembers = totalMembers + self:GetCount()
+    -- In simulation, total voters = player (1) + all simulated raiders
+    local totalMembers = 1 + self:GetCount()
 
     for _, item in ipairs(session.bidding) do
         local guid = item.sourceGUID or item.link
@@ -358,7 +533,12 @@ function Simulation:SimulateRaiderVotes()
             local voteCount = 0
             for _ in pairs(Session.sessionVotes[guid]) do voteCount = voteCount + 1 end
             if voteCount >= totalMembers then
-                Session.closedItems[guid] = true
+                if Session.SendCloseItem then
+                    Session:SendCloseItem(guid)
+                else
+                    Session.closedItems[guid] = true
+                    Session:SendMessage("DLC_ITEM_CLOSED", guid)
+                end
             end
         end
     end
@@ -393,7 +573,7 @@ function Simulation:AutoAwardNext()
     local winner = nil
     local bestVote = 99
     for voter, vData in pairs(votes) do
-        local vVal = type(vData) == "table" and vData.vote or tonumber(vData) or 5
+        local vVal = type(vData) == "table" and (vData.type or vData.vote) or tonumber(vData) or 5
         if vVal < bestVote and vVal <= 4 then
             bestVote = vVal
             winner = voter
@@ -420,6 +600,57 @@ function Simulation:AutoAwardNext()
     return itemData, winner
 end
 
+--- Adds sample test items to the loot backlog for inspection and testing.
+---@param itemsList table?
+---@return number addedCount
+function Simulation:AddBacklogTestItems(itemsList)
+    local LootMod = DesolateLootcouncil:GetModule("Loot", true)
+    local prof = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if not prof then return 0 end
+    prof.session = prof.session or {}
+    prof.session.loot = prof.session.loot or {}
+
+    local defs = itemsList or {
+        { id = 217192 },
+        { id = 212398 },
+        { id = 219315 },
+        { id = 219300 },
+    }
+
+    local addedCount = 0
+    for i, def in ipairs(defs) do
+        local uniqueID = "SimBacklog_" .. string.format("%.3f", GetTime()) .. "_" .. math.random(1000, 9999) .. "_" .. i
+        local fetchedLink = (C_Item and C_Item.GetItemInfo and select(2, C_Item.GetItemInfo(def.id)))
+        local link = fetchedLink or string.format("|cffa335ee|Hitem:%d::::::::80:::::|h[Test Item %d]|h|r", def.id, def.id)
+        local texture = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(def.id))
+            or (C_Item and C_Item.GetItemInfoInstant and select(5, C_Item.GetItemInfoInstant(def.id)))
+            or 134400
+
+        if LootMod and LootMod.AddSessionItem then
+            if LootMod:AddSessionItem(link, uniqueID, texture, 1, def.cat, def.id) then
+                addedCount = addedCount + 1
+            end
+        else
+            table.insert(prof.session.loot, {
+                link = link,
+                itemID = def.id,
+                category = def.cat,
+                sourceGUID = uniqueID,
+                stackIndex = 1,
+                texture = texture
+            })
+            addedCount = addedCount + 1
+        end
+    end
+
+    if LootMod then
+        LootMod:SendMessage("DLC_LOOT_WINDOW_UPDATE", prof.session.loot)
+    end
+
+    return addedCount
+end
+
+
 --- Completes any remaining items in the bidding queue, records all awards, and generates verification results.
 ---@return table results
 function Simulation:CompleteAndVerify()
@@ -430,6 +661,9 @@ function Simulation:CompleteAndVerify()
         local _, winner = self:AutoAwardNext()
         if winner then awardedCount = awardedCount + 1 end
     end
+
+    -- Flag keepAuditorOpen so DLC_SESSION_STOPPED does not close the Auditor
+    DesolateLootcouncil.keepAuditorOpen = true
 
     -- Stop test session
     local Session = DesolateLootcouncil:GetModule("Session")
@@ -443,11 +677,25 @@ function Simulation:CompleteAndVerify()
         TestBar:HideBar()
     end
 
-    -- Open Audit Log to view receipts
+    -- Open Audit Log to view receipts (pass true for isTestInspection so it opens even in Raider mode)
     local AuditUI = DesolateLootcouncil:GetModule("UI_PriorityLogHistory", true)
     if AuditUI and AuditUI.ShowLogWindow then
-        AuditUI:ShowLogWindow()
+        AuditUI:ShowLogWindow(nil, true)
+        if AuditUI.logFrame then
+            AuditUI.logFrame:Show()
+            if AuditUI.logFrame.Raise then
+                pcall(function() AuditUI.logFrame:Raise() end)
+            end
+            if not AuditUI.logFrame.keepAuditorHooked then
+                AuditUI.logFrame.keepAuditorHooked = true
+                AuditUI.logFrame:HookScript("OnHide", function()
+                    DesolateLootcouncil.keepAuditorOpen = nil
+                end)
+            end
+        end
     end
+
+    DesolateLootcouncil.keepAuditorOpen = nil
 
     DesolateLootcouncil:Print(string.format(L["Interactive Test Session completed. Total awards: %d."], #session.awarded))
 
@@ -461,6 +709,14 @@ function Simulation:StopInteractiveLootTest()
     local Session = DesolateLootcouncil:GetModule("Session")
     if Session and Session.SendStopSession then
         Session:SendStopSession()
+    end
+    local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
+    if Voting and Voting.ResetVoting then
+        Voting:ResetVoting()
+    end
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.monitorFrame then
+        Monitor.monitorFrame:Hide()
     end
     local TestBar = DesolateLootcouncil:GetModule("UI_InteractiveTestBar", true)
     if TestBar and TestBar.HideBar then

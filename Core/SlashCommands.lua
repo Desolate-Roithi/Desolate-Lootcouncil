@@ -20,16 +20,24 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:OpenConfig()
 
     elseif cmd == "priority" or cmd == "prio" or cmd == "prios" or cmd == "lists" then
-        DesolateLootcouncil:OpenConfig("priority")
+        if DesolateLootcouncil:AmIOfficerOrLM() then
+            DesolateLootcouncil:OpenConfig("priority")
+        else
+            DesolateLootcouncil:Print(L["Only the Loot Master or Officers can view Priority Lists."])
+        end
 
     elseif cmd == "roster" or cmd == "mains" or cmd == "alts" then
-        if not args[2] or args[2] == "" then
-            DesolateLootcouncil:OpenConfig("roster")
-        else
-            local Roster = DesolateLootcouncil:GetModule("Roster", true)
-            if Roster and Roster.HandleSlashCommand then
-                Roster:HandleSlashCommand(table.concat(args, " ", 2))
+        if DesolateLootcouncil:AmIOfficerOrLM() then
+            if not args[2] or args[2] == "" then
+                DesolateLootcouncil:OpenConfig("roster")
+            else
+                local Roster = DesolateLootcouncil:GetModule("Roster", true)
+                if Roster and Roster.HandleSlashCommand then
+                    Roster:HandleSlashCommand(table.concat(args, " ", 2))
+                end
             end
+        else
+            DesolateLootcouncil:Print(L["Only the Loot Master or Officers can view the Roster."])
         end
 
     elseif cmd == "vote" or cmd == "show" or cmd == "bids" then
@@ -185,9 +193,17 @@ function SlashCommands.Handle(input)
                 DesolateLootcouncil:Print(L["Only the Loot Master can allow test items."])
             end
         else
+            local roleMode = "LM"
+            if sub == "officer" or sub == "off" then
+                roleMode = "Officer"
+            elseif sub == "raider" or sub == "player" or sub == "raid" then
+                roleMode = "Raider"
+            elseif sub == "lm" or sub == "lead" or sub == "master" then
+                roleMode = "LM"
+            end
             local Sim = DesolateLootcouncil:GetModule("Simulation", true)
             if Sim and Sim.StartInteractiveLootTest then
-                Sim:StartInteractiveLootTest()
+                Sim:StartInteractiveLootTest(roleMode)
             end
         end
 
@@ -256,7 +272,7 @@ function SlashCommands.Handle(input)
         DesolateLootcouncil:Print("  |cff33ff99/dlc decay|r - Apply position decay for last raid session")
         DesolateLootcouncil:Print("  |cff33ff99/dlc [start|stop]|r - Start or End Raid Session")
         DesolateLootcouncil:Print("|cffffd700Testing & Tools:|r")
-        DesolateLootcouncil:Print("  |cff33ff99/dlc test|r - Start Interactive Live Test Simulation")
+        DesolateLootcouncil:Print("  |cff33ff99/dlc test [lm|officer|raider]|r - Start Interactive Live Test Simulation")
         DesolateLootcouncil:Print("  |cff33ff99/dlc testsuite|r - Open Automated TestSuite Window")
     end
 end

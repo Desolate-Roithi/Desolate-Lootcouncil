@@ -166,12 +166,38 @@ function UI_TestSuite:ShowTestSuiteWindow()
         end)
         self.btnRestoreProfile = btnRestoreProfile
 
+        self.simRole = self.simRole or "LM"
+
         local btnLiveSim = NativeGUI:CreateButton(f, "Live Loot Sim", 105, 24, "Bid")
         btnLiveSim:SetPoint("LEFT", btnRestoreProfile, "RIGHT", 6, 0)
         btnLiveSim:SetScript("OnClick", function()
-            DesolateLootcouncil.API:StartInteractiveLootTest()
+            DesolateLootcouncil.API:StartInteractiveLootTest(self.simRole or "LM")
         end)
         self.btnLiveSim = btnLiveSim
+
+        local btnSimRole = NativeGUI:CreateButton(f, "|cffffd700Role: LM|r", 95, 24, "Default")
+        btnSimRole:SetPoint("LEFT", btnLiveSim, "RIGHT", 6, 0)
+        btnSimRole:SetScript("OnClick", function()
+            if self.simRole == "LM" then
+                self.simRole = "Officer"
+                btnSimRole:SetText("|cff00ffffRole: Officer|r")
+            elseif self.simRole == "Officer" then
+                self.simRole = "Raider"
+                btnSimRole:SetText("|cff00ff00Role: Raider|r")
+            else
+                self.simRole = "LM"
+                btnSimRole:SetText("|cffffd700Role: LM|r")
+            end
+        end)
+        btnSimRole:SetScript("OnEnter", function(btn)
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Simulation Launch Role", 1, 0.82, 0)
+            GameTooltip:AddLine("Click to cycle launch role: LM -> Officer -> Raider.", 1, 1, 1, true)
+            GameTooltip:AddLine("Runs the live simulation from that rank's perspective.", 0.7, 0.7, 0.7, true)
+            GameTooltip:Show()
+        end)
+        btnSimRole:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        self.btnSimRole = btnSimRole
 
         local summaryText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         summaryText:SetPoint("RIGHT", f, "TOPRIGHT", -20, -48)

@@ -17,6 +17,7 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 
 function Autopass:OnInitialize()
     self.autoRolledItems = {}
+    self.pendingAutopassOrders = {}
 end
 
 function Autopass:OnEnable()
@@ -132,6 +133,64 @@ function Autopass:ProcessRoll(rollID)
     end
 end
 
+--- Prunes cached autopass orders older than 30 seconds to prevent table bloat.
+---@param now? number
+function Autopass:PruneStaleOrders(now)
+    if not self.pendingAutopassOrders then return end
+    local currentTime = now or GetTime()
+    for key, order in pairs(self.pendingAutopassOrders) do
+        if not order.time or (currentTime - order.time > 30) then
+            self.pendingAutopassOrders[key] = nil
+        end
+    end
+end
+
+function Autopass:HandleAutopassOrder(payload, sender)
+    if not payload or type(payload) ~= "table" then return end
+    local lm = DesolateLootcouncil:DetermineLootMaster() or DesolateLootcouncil.activeLootMaster
+    if not DesolateLootcouncil:SmartCompare(sender, lm) then return end
+
+    if payload.lmAllConnected ~= nil then
+        DesolateLootcouncil.lmAllConnected = (payload.lmAllConnected == true)
+    end
+
+    self.pendingAutopassOrders = self.pendingAutopassOrders or {}
+    local entryTime = GetTime()
+    self:PruneStaleOrders(entryTime)
+
+    local entry = {
+        action = payload.action or 0,
+        time = entryTime,
+        itemID = payload.itemID,
+        link = payload.link,
+        rollID = payload.rollID
+    }
+    if payload.itemID then self.pendingAutopassOrders[payload.itemID] = entry end
+    if payload.link then self.pendingAutopassOrders[payload.link] = entry end
+    if payload.rollID then self.pendingAutopassOrders[payload.rollID] = entry end
+
+    self.autoRolledItems = self.autoRolledItems or {}
+
+    -- Late Order Override: If the roll is currently open, execute immediately even if backup previously skipped/held
+    if payload.rollID and not self.autoRolledItems[payload.rollID] then
+        DebugLog(string.format("Executing incoming LM Autopass Order for rollID %d (late order override)", payload.rollID))
+        self:DoAutoRoll(payload.rollID, payload.action or 0)
+    elseif GroupLootContainer and GroupLootContainer.rollFrames then
+        for _, frame in pairs(GroupLootContainer.rollFrames) do
+            if frame and frame:IsShown() and frame.rollID and not self.autoRolledItems[frame.rollID] then
+                local link = GetLootRollItemLink(frame.rollID)
+                local itemID = link and C_Item.GetItemInfoInstant(link)
+                if (payload.rollID and frame.rollID == payload.rollID) or
+                   (payload.itemID and itemID == payload.itemID) or
+                   (payload.link and link and link == payload.link) then
+                    DebugLog(string.format("Executing incoming LM Autopass Order for frame rollID %d (late order override)", frame.rollID))
+                    self:DoAutoRoll(frame.rollID, payload.action or 0)
+                end
+            end
+        end
+    end
+end
+
 function Autopass:OnStartLootRoll(event, rollID)
     local db = DesolateLootcouncil.db.profile
     if not db.enableAutoLoot and not DesolateLootcouncil.sessionAutopassActive then
@@ -147,28 +206,104 @@ function Autopass:OnStartLootRoll(event, rollID)
         return
     end
 
-    -- Security Check: Loot Master must have the addon. Protects PUG players from passing.
-    if not isLM and not DesolateLootcouncil:IsLMAddonUser() then
-        DebugLog(string.format("Skipped RollID %d: Loot Master is not using the addon.", rollID))
+    self.autoRolledItems = self.autoRolledItems or {}
+    if self.autoRolledItems[rollID] then
+        DebugLog(string.format("Skipped RollID %d: Already auto-rolled.", rollID))
         return
     end
 
+    local link = GetLootRollItemLink(rollID)
+    local Loot = DesolateLootcouncil:GetModule("Loot", true)
+    local itemID = link and (C_Item.GetItemInfoInstant(link) or (Loot and Loot.GetItemIDFromLink and Loot:GetItemIDFromLink(link)))
+    local ItemCatalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    local dbCat = (ItemCatalog and ItemCatalog.GetItemCategory and ItemCatalog:GetItemCategory(itemID or link)) or (Loot and itemID and Loot.GetItemCategory and Loot:GetItemCategory(itemID)) or "Junk/Pass"
+
+    -- 1. Check if we already received an authoritative LM Autopass Order for this item (network latency caching)
+    self.pendingAutopassOrders = self.pendingAutopassOrders or {}
+    self:PruneStaleOrders()
+    local pending = (itemID and self.pendingAutopassOrders[itemID]) or (link and self.pendingAutopassOrders[link]) or self.pendingAutopassOrders[rollID]
+    if pending and (GetTime() - (pending.time or 0) < 10) then
+        DebugLog(string.format("Executing cached LM Autopass Order for %s (rollID %d)", tostring(link), rollID))
+        self:DoAutoRoll(rollID, pending.action or 0)
+        return
+    end
+
+    -- 2. If Loot Master: evaluate conditions, autoroll Need/Greed, and broadcast order
     if isLM then
-        C_Timer.After(1.0, function()
-            local Sync = DesolateLootcouncil:GetModule("Sync", true)
-            if Sync and DesolateLootcouncil.sessionAutopassActive ~= nil then
-                Sync:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive)
+        local status = DesolateLootcouncil.API and DesolateLootcouncil.API.GetGroupConnectionStatus and DesolateLootcouncil.API:GetGroupConnectionStatus()
+        if not status or not status.allConnected then
+            DebugLog(string.format("LM skipped autopass for rollID %d: Group not 100%% connected (%d/%d active).", rollID, status and status.active or 0, status and status.total or 0))
+            return
+        end
+
+        if dbCat == "Junk/Pass" then
+            DebugLog(string.format("LM skipped autopass for %s (rollID %d): Item is Junk/Pass.", tostring(link), rollID))
+            return
+        end
+
+        -- Broadcast AUTOPASS_ORDER package directly to raid channel
+        local Session = DesolateLootcouncil:GetModule("Session", true)
+        if Session and Session.SendCommMessage then
+            local payload = {
+                command = "AUTOPASS_ORDER",
+                rollID = rollID,
+                itemID = itemID,
+                link = link,
+                category = dbCat,
+                action = 0,
+                lmAllConnected = true,
+            }
+            local serialized = Session:Serialize(payload)
+            local channel = DesolateLootcouncil:GetBroadcastChannel() or "RAID"
+            Session:SendCommMessage("DLC_Loot", serialized, channel)
+            DebugLog(string.format("LM broadcast AUTOPASS_ORDER for %s to channel %s", tostring(link), channel))
+        end
+
+        -- LM autorolls Need/Greed for itself to collect the loot
+        local rollType = self:DetermineRollAction(rollID, dbCat)
+        if rollType then
+            DebugLog(string.format("LM executing autoroll for %s (rollID %d, rollType %d)", tostring(link), rollID, rollType))
+            self:DoAutoRoll(rollID, rollType)
+        end
+        return
+    end
+
+    -- 3. If Raider: wait brief grace period (0.8s) for LM's order. If order hasn't arrived, evaluate backup.
+    C_Timer.After(0.8, function()
+        if self.autoRolledItems[rollID] then return end
+
+        -- Check if order arrived during grace period
+        local order = (itemID and self.pendingAutopassOrders[itemID]) or (link and self.pendingAutopassOrders[link]) or self.pendingAutopassOrders[rollID]
+        if order and (GetTime() - (order.time or 0) < 10) then
+            DebugLog(string.format("Executing newly arrived LM order for %s (rollID %d)", tostring(link), rollID))
+            self:DoAutoRoll(rollID, order.action or 0)
+            return
+        end
+
+        -- Raider Backup Check: verify LM connection status from heartbeat and local IM catalog
+        local lmAllConn = DesolateLootcouncil.lmAllConnected
+        if lmAllConn == nil then
+            if DesolateLootcouncil.sessionAutopassActive and DesolateLootcouncil:IsLMAddonUser() then
+                lmAllConn = true
+            else
+                lmAllConn = DesolateLootcouncil:DoAllGroupMembersHaveAddon()
             end
-        end)
-    end
+        end
 
-    -- Security Check: Explicit true required. Protects PUG players from passing accidentally.
-    if not DesolateLootcouncil.sessionAutopassActive then 
-        DebugLog(string.format("Skipped RollID %d: sessionAutopassActive is false/disabled by LM.", rollID))
-        return 
-    end
+        if not lmAllConn then
+            DebugLog(string.format("Raider backup skipped rollID %d: Group not reported all connected.", rollID))
+            return
+        end
 
-    self:ProcessRoll(rollID)
+        local cat = (Loot and itemID and Loot:GetItemCategory(itemID)) or "Junk/Pass"
+        if cat == "Junk/Pass" then
+            DebugLog(string.format("Raider backup skipped rollID %d: Item is Junk/Pass in local IM.", rollID))
+            return
+        end
+
+        DebugLog(string.format("Raider backup executing autopass for %s (rollID %d)", tostring(link), rollID))
+        self:DoAutoRoll(rollID, 0)
+    end)
 end
 
 function Autopass:ScanAndAutopassActiveLootRolls()

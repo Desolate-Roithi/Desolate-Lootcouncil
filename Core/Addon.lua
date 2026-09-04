@@ -98,6 +98,7 @@ local defaults = {
         auditTimestamp     = 0,
         positions          = {},        -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
         activeTheme        = "Midnight", -- Default UI Theme (Midnight Void)
+        schemaVersion      = 200,        -- Canonical v200 schema
         dbCreatedAt        = 0,         -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
     }
 }
@@ -188,10 +189,10 @@ function DesolateLootcouncil:OnInitialize()
     self:RegisterChatCommand("dlc", function(input) self.SlashCommands.Handle(input) end)
     self:RegisterChatCommand("dl", function(input) self.SlashCommands.Handle(input) end)
 
-    -- 8. Welcome Message & 2.0 DB Sanitization
+    -- 8. Welcome Message
     if not self.db.profile.positions then self.db.profile.positions = {} end
-    if self.DBMigrator and self.DBMigrator.SanitizeProfileDatabase then
-        self.DBMigrator:SanitizeProfileDatabase(self.db.profile)
+    if not self.db.profile.schemaVersion or self.db.profile.schemaVersion < 200 then
+        self.db.profile.schemaVersion = 200
     end
     if self.API and self.API.CompactRaidHistory then
         self.API:CompactRaidHistory()
@@ -206,9 +207,8 @@ function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
     if not self.db.profile.positions then
         self.db.profile.positions = {}
     end
-
-    if self.DBMigrator and self.DBMigrator.SanitizeProfileDatabase then
-        self.DBMigrator:SanitizeProfileDatabase(self.db.profile)
+    if not self.db.profile.schemaVersion or self.db.profile.schemaVersion < 200 then
+        self.db.profile.schemaVersion = 200
     end
 
     if self.API and self.API.CompactRaidHistory then
@@ -641,6 +641,12 @@ end
 function DesolateLootcouncil:IsOfficer(name)
     local targetName = name or UnitName("player")
     if not targetName or targetName == "" then return false end
+
+    local Sim = self:GetModule("Simulation", true)
+    if Sim and Sim.simRole == "Raider" and self:SmartCompare(targetName, "player") then
+        return false
+    end
+
     if self:SmartCompare(targetName, "player") and self.amILM then return true end
 
     local db = self.db and self.db.profile
@@ -716,8 +722,14 @@ function DesolateLootcouncil:CheckProfileAutoSwitch(incomingRosterHash)
 end
 
 function DesolateLootcouncil:AmIOfficerOrLM()
+    local Sim = self:GetModule("Simulation", true)
+    if Sim and Sim.simRole then
+        if Sim.simRole == "Raider" then return false end
+        if Sim.simRole == "Officer" or Sim.simRole == "LM" then return true end
+    end
+
     -- Tier 1: Solo mode — player is always LM when not in any group.
-    if self.amILM then return true end
+    if self.amILM or self.amIOfficer then return true end
 
     -- Tier 2: In a group — LM identity must be resolved and the LM must be present.
     -- If no LM is synced yet (e.g. joining raid before version check handshake),
@@ -746,9 +758,13 @@ end
 
 function DesolateLootcouncil:GetActiveUserCount()
     ---@type Comm
-    local Comm = self:GetModule("Comm") --[[@as Comm]]
+    local Comm = self:GetModule("Comm", true)
     if Comm and Comm.GetActiveUserCount then return Comm:GetActiveUserCount() end
-    return 0
+    if not IsInGroup() then return 1 end
+    local total = GetNumGroupMembers()
+    if total == 0 then return 1 end
+    local missing = (self.GetMissingAddonMembers and self:GetMissingAddonMembers()) or {}
+    return math.max(1, math.min(total, total - #missing))
 end
 
 function DesolateLootcouncil:OpenConfig(initialTab)
@@ -949,6 +965,19 @@ end
 function DesolateLootcouncil:SmartCompare(n1, n2)
     if not n1 or not n2 then return false end
     if n1 == n2 then return true end
+
+    -- Normalize "player" unit token to player's actual name
+    if n1 == "player" then
+        if UnitIsUnit and UnitIsUnit(n2, "player") then return true end
+        n1 = UnitName("player")
+    end
+    if n2 == "player" then
+        if UnitIsUnit and UnitIsUnit(n1, "player") then return true end
+        n2 = UnitName("player")
+    end
+    if not n1 or not n2 then return false end
+    if n1 == n2 then return true end
+
     local s1 = self:GetScoreName(n1)
     local s2 = self:GetScoreName(n2)
     if s1 and s2 and s1 == s2 then return true end
@@ -1021,40 +1050,19 @@ function DesolateLootcouncil:GetBroadcastChannel()
 end
 
 function DesolateLootcouncil:GetMissingAddonMembers()
-    if not IsInGroup() then return {} end
-
-    -- Check if simulation is active
-    local Sim = self:GetModule("Simulation", true)
-    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
-    if simActive then return {} end
-
-    local prefix = IsInRaid() and "raid" or "party"
-    local count = GetNumGroupMembers()
     local Comm = self:GetModule("Comm", true)
-    local playerVersions = (Comm and Comm.playerVersions) or {}
-
-    local missing = {}
-    for i = 1, count do
-        local name = GetUnitName(prefix .. i, true)
-        if name then
-            local found = false
-            for verName in pairs(playerVersions) do
-                if self:SmartCompare(name, verName) then
-                    found = true
-                    break
-                end
-            end
-            if not found and not self:SmartCompare(name, "player") then
-                table.insert(missing, self:GetDisplayName(name) or name)
-            end
-        end
+    if Comm and Comm.GetGroupConnectionStatus then
+        return Comm:GetGroupConnectionStatus().missing
     end
-    return missing
+    return {}
 end
 
 function DesolateLootcouncil:DoAllGroupMembersHaveAddon()
-    local missing = self:GetMissingAddonMembers()
-    return #missing == 0
+    local Comm = self:GetModule("Comm", true)
+    if Comm and Comm.GetGroupConnectionStatus then
+        return Comm:GetGroupConnectionStatus().allConnected
+    end
+    return true
 end
 
 function DesolateLootcouncil:IsLMAddonUser()

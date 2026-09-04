@@ -19,7 +19,11 @@ local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeig
     end
     row.btnReaward:ClearAllPoints()
     row.btnReaward:SetPoint("RIGHT", -8, 0)
-    row.btnReaward:Show()
+    if DesolateLootcouncil:AmILootMaster() then
+        row.btnReaward:Show()
+    else
+        row.btnReaward:Hide()
+    end
     row.btnReaward:SetScript("OnClick", function()
         DesolateLootcouncil.API:ReawardItem(itemIndex)
     end)

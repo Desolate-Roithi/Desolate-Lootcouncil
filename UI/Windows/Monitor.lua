@@ -465,6 +465,12 @@ function UI_Monitor:OnEnable()
     self:RegisterMessage("DLC_SESSION_RESTORED", "OnSessionRestored")
     self:RegisterMessage("DLC_ITEM_REMOVED", "OnItemRemoved")
     self:RegisterMessage("DLC_ITEM_REOPENED", "OnItemReopened")
+    self:RegisterMessage("DLC_ITEM_CLOSED", function()
+        self:ShowMonitorWindow(true)
+    end)
+    self:RegisterMessage("DLC_HISTORY_UPDATED", function()
+        self:ShowMonitorWindow(true)
+    end)
 end
 
 function UI_Monitor:OnSessionStarted(eventName, cleanList, isLM)
@@ -477,7 +483,9 @@ function UI_Monitor:OnSessionStopped()
     if self.monitorFrame then self.monitorFrame:Hide() end
     if self.deFrame then self.deFrame:Hide() end
     local UI = DesolateLootcouncil:GetModule("UI", true)
-    if UI and UI.CloseAllWindows then
+    if UI and UI.CloseSessionWindows then
+        UI:CloseSessionWindows()
+    elseif UI and UI.CloseAllWindows then
         UI:CloseAllWindows()
     end
 end

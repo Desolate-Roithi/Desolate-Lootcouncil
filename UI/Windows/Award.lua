@@ -209,7 +209,8 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
         row.btnGive:Show()
         row.btnGive:SetScript("OnClick", function()
             self.awardFrame:Hide()
-            DesolateLootcouncil.API:AwardItem(itemData.sourceGUID, de.name, "Disenchant")
+            local guid = (itemData and (itemData.sourceGUID or itemData.link)) or ""
+            DesolateLootcouncil.API:AwardItem(guid, de.name, "Disenchant")
         end)
     elseif row.btnGive then
         row.btnGive:Hide()

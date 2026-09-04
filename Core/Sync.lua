@@ -468,6 +468,10 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
         DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
     end
 
+    if data.lmAllConnected ~= nil then
+        DesolateLootcouncil.lmAllConnected = (data.lmAllConnected == true)
+    end
+
     -- All raiders pull Item Manager updates so autopass and bidding lists match LM
     if data.imTimestamps and Comm then
         db.imTimestamps = db.imTimestamps or {}
@@ -821,6 +825,133 @@ function SyncHandlers:HISTORY_BULK_SYNC(data, sender)
     end
 end
 
+function SyncHandlers:OFFICER_AWARD_SYNC(data, sender)
+    if not (IsInGroup() or DesolateLootcouncil:IsInRaidOrTest()) then return end
+    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    local currentLM = DesolateLootcouncil:DetermineLootMaster() or DesolateLootcouncil.activeLootMaster
+    if not DesolateLootcouncil:SmartCompare(sender, currentLM) then return end
+    if not data or not data.entry then return end
+
+    local entry = data.entry
+    local db = DesolateLootcouncil.db.profile
+    db.session = db.session or {}
+    db.session.awarded = db.session.awarded or {}
+
+    local isDup = false
+    for _, existing in ipairs(db.session.awarded) do
+        if existing.link == entry.link and existing.timestamp == entry.timestamp then
+            isDup = true
+            break
+        end
+    end
+    if not isDup then
+        table.insert(db.session.awarded, entry)
+    end
+
+    -- Prune from officer client loot list and live bidding
+    local Session = DesolateLootcouncil:GetModule("Session", true)
+    if Session and Session.clientLootList then
+        for i = #Session.clientLootList, 1, -1 do
+            local it = Session.clientLootList[i]
+            if (entry.fullItemData and it.sourceGUID == entry.fullItemData.sourceGUID) or
+               it.link == entry.link or
+               (entry.itemID and it.itemID == entry.itemID) then
+                table.remove(Session.clientLootList, i)
+            end
+        end
+    end
+    if db.session.bidding then
+        for i = #db.session.bidding, 1, -1 do
+            local it = db.session.bidding[i]
+            if (entry.fullItemData and it.sourceGUID == entry.fullItemData.sourceGUID) or
+               it.link == entry.link or
+               (entry.itemID and it.itemID == entry.itemID) then
+                table.remove(db.session.bidding, i)
+            end
+        end
+    end
+
+    if Session then
+        Session.sessionPayloadCache = nil
+        Session:SendMessage("DLC_HISTORY_UPDATED", entry)
+        Session:SendMessage("DLC_ITEM_REMOVED", entry.fullItemData and entry.fullItemData.sourceGUID or entry.link)
+    end
+
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.ShowMonitorWindow then
+        Monitor:ShowMonitorWindow(true)
+    end
+end
+
+function SyncHandlers:OFFICER_REOPEN_SYNC(data, sender)
+    if not (IsInGroup() or DesolateLootcouncil:IsInRaidOrTest()) then return end
+    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    local currentLM = DesolateLootcouncil:DetermineLootMaster() or DesolateLootcouncil.activeLootMaster
+    if not DesolateLootcouncil:SmartCompare(sender, currentLM) then return end
+    if not data then return end
+
+    local db = DesolateLootcouncil.db.profile
+    db.session = db.session or {}
+    local restoredItem = data.itemData
+    if db.session.awarded then
+        for i = #db.session.awarded, 1, -1 do
+            local item = db.session.awarded[i]
+            if (data.link and item.link == data.link) or
+               (data.timestamp and item.timestamp == data.timestamp) or
+               (data.itemID and item.itemID == data.itemID) then
+                local removed = table.remove(db.session.awarded, i)
+                if not restoredItem then
+                    restoredItem = (removed and (removed.fullItemData or removed)) or item
+                end
+                break
+            end
+        end
+    end
+
+    if restoredItem then
+        db.session.bidding = db.session.bidding or {}
+        local alreadyInBidding = false
+        for _, bItem in ipairs(db.session.bidding) do
+            if (bItem.sourceGUID and restoredItem.sourceGUID and bItem.sourceGUID == restoredItem.sourceGUID) or
+               (bItem.link and restoredItem.link and bItem.link == restoredItem.link) then
+                alreadyInBidding = true
+                break
+            end
+        end
+        if not alreadyInBidding then
+            table.insert(db.session.bidding, restoredItem)
+        end
+    end
+
+    local Session = DesolateLootcouncil:GetModule("Session", true)
+    if Session then
+        Session.sessionPayloadCache = nil
+        if restoredItem and Session.clientLootList then
+            local inClientList = false
+            for _, cItem in ipairs(Session.clientLootList) do
+                if (cItem.sourceGUID and restoredItem.sourceGUID and cItem.sourceGUID == restoredItem.sourceGUID) or
+                   (cItem.link and restoredItem.link and cItem.link == restoredItem.link) then
+                    inClientList = true
+                    break
+                end
+            end
+            if not inClientList then
+                table.insert(Session.clientLootList, restoredItem)
+            end
+        end
+        if restoredItem and restoredItem.sourceGUID then
+            Session.closedItems = Session.closedItems or {}
+            Session.closedItems[restoredItem.sourceGUID] = true
+        end
+        Session:SendMessage("DLC_HISTORY_UPDATED")
+    end
+
+    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
+    if Monitor and Monitor.ShowMonitorWindow then
+        Monitor:ShowMonitorWindow(true)
+    end
+end
+
 function SyncHandlers:LURA_TEST_START(data, sender)
     local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
     if Lura and Lura.ActivateGlobalTestMode then Lura:ActivateGlobalTestMode() end
@@ -921,4 +1052,6 @@ end
 function Sync:AutoSyncItemManager()
     self:SyncItemManagerToRaid(false)
 end
+
+Sync.SyncHandlers = SyncHandlers
 

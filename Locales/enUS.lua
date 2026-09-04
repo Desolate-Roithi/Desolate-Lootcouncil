@@ -567,4 +567,32 @@ L["Only the Loot Master can view the Loot Window."] = true
 L["Only the Loot Master can view the Trade List."] = true
 L["Only the Loot Master or Officers can modify priority lists."] = true
 L["Only the Loot Master or Officers can view the Monitor."] = true
+L["Only the Loot Master or Officers can view Priority Lists."] = true
+L["Only the Loot Master or Officers can view the Roster."] = true
+
+-- Interactive Simulation Controller Roles & Verification
+L["Simulation Role Persona"] = true
+L["Click to cycle through roles: LM -> Officer -> Raider."] = true
+L["Tests interface visibility, permissions, and vote workflows for each rank."] = true
+L["Interactive simulation role switched to: |cffffd700%s|r."] = true
+L["Active Simulation [Role: Loot Master] - Full session control and awarding authority."] = true
+L["Active Simulation [Role: Council Officer] - Review bids, monitor votes, council parity."] = true
+L["Active Simulation [Role: Raider] - Cast personal votes and submit item roll/pass choices."] = true
+L["Concludes the session, records all remaining awards, and keeps the Audit Ledger open for review."] = true
+L["LM Auto-Award"] = true
+L["Restricted: Raiders cannot access the Council Monitor."] = true
+L["The Session Monitor is restricted to Loot Masters and Council Officers."] = true
+L["Toggle Council Session Monitor window."] = true
+
+-- Version light & Connection Status
+L["All group members connected."] = true
+L["Missing Addon (%d):"] = true
+
+-- Simulation Backlog Staging
+L["Add Items"] = true
+L["Add Backlog Items"] = true
+L["Added %d items to the loot backlog and opened the Loot window."] = true
+L["Stages sample drops into the Loot Master backlog and opens the distribution window to test connection status and Start Bidding."] = true
+L["Switches active persona to Loot Master if needed."] = true
+
 

@@ -174,6 +174,11 @@ end
 -- ============================================================
 
 function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
+    if not DesolateLootcouncil:AmIOfficerOrLM() then
+        if self.frame then self.frame:Hide() end
+        return
+    end
+
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.frame then
@@ -259,7 +264,13 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
     end
 
     self.sessionDrop:SetValue(self.selectedIndex)
-    self.btnDelete:SetEnabled(self.selectedIndex ~= nil and self.selectedIndex ~= "CURRENT")
+    local isLM = DesolateLootcouncil:AmILootMaster()
+    if isLM then
+        self.btnDelete:Show()
+        self.btnDelete:SetEnabled(self.selectedIndex ~= nil and self.selectedIndex ~= "CURRENT")
+    else
+        self.btnDelete:Hide()
+    end
     self.btnExport:SetEnabled(self.selectedIndex ~= nil)
 
     self:Refresh()

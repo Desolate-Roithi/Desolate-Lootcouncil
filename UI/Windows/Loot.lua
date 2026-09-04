@@ -18,12 +18,30 @@ end
 
 local function OnConnectionTooltipEnter(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-    local active = DesolateLootcouncil:GetActiveUserCount()
     local total = GetNumGroupMembers()
-    if total == 0 then
-        total = 1; active = 1
+    if total == 0 then total = 1 end
+
+    local simCount = DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationCount and DesolateLootcouncil.API:GetSimulationCount() or 0
+    if simCount > 0 then
+        total = total + simCount
     end
+
+    local active = DesolateLootcouncil:GetActiveUserCount()
+    if active > total then active = total end
+
     GameTooltip:AddLine(string.format(L["Addon Connection: [%d] / [%d]"], active, total), 1, 1, 1)
+
+    local missing = (DesolateLootcouncil.GetMissingAddonMembers and DesolateLootcouncil:GetMissingAddonMembers()) or {}
+    if #missing > 0 then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(string.format("|cffff4444" .. L["Missing Addon (%d):"] .. "|r", #missing), 1, 0.5, 0.5)
+        for _, name in ipairs(missing) do
+            local disp = DesolateLootcouncil:GetDisplayName(name) or name
+            GameTooltip:AddLine("  • " .. disp, 0.9, 0.7, 0.7)
+        end
+    elseif active >= total then
+        GameTooltip:AddLine("|cff00ff00" .. L["All group members connected."] .. "|r", 0.5, 1, 0.5)
+    end
     GameTooltip:Show()
 end
 
@@ -32,7 +50,7 @@ local function OnConnectionTooltipLeave()
 end
 
 local function OnRefreshConnectionsClicked()
-    local success = DesolateLootcouncil.API:PingVersionCheck()
+    local success = DesolateLootcouncil.API:SendVersionCheck()
     if success then
         DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
         UI_Loot.refreshBtn:SetEnabled(false)
@@ -52,36 +70,75 @@ local function OnTimerTick()
     end
 
     -- Update indicator light
-    local activeC = DesolateLootcouncil:GetActiveUserCount()
-    local totalC = GetNumGroupMembers()
-    if totalC == 0 then totalC = 1 end
+    local status = DesolateLootcouncil.API and DesolateLootcouncil.API.GetGroupConnectionStatus and DesolateLootcouncil.API:GetGroupConnectionStatus()
+    local ra, ga, ba = 1, 0, 0 -- Red: missing addon
 
-    local simCount = DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationCount and DesolateLootcouncil.API:GetSimulationCount() or 0
-    if simCount > 0 then
-        totalC = totalC + simCount
-    end
+    local hasOutdated = (status and status.outdated and #status.outdated > 0)
 
-    local ra, ga, ba = 1, 0, 0 -- Red: at least one player missing addon
-    if activeC >= totalC then
-        -- 100% have the addon, check versions
-        local playerVersions = DesolateLootcouncil.API:GetPlayerVersions()
-        local localVer = DesolateLootcouncil.version
-        local highestVerStr = localVer or "1.0.0"
+    local playerVersions = DesolateLootcouncil.API and DesolateLootcouncil.API.GetPlayerVersions and DesolateLootcouncil.API:GetPlayerVersions()
+    if playerVersions then
+        local rosterVersions = {}
+        local myName = UnitName("player")
+        local myVer = DesolateLootcouncil.version or "1.0.0"
+        if myName then
+            rosterVersions[myName] = playerVersions[myName] or myVer
+        end
 
-        for _, ver in pairs(playerVersions) do
-            if ver and AT.CompareSemVer(ver, highestVerStr) then
-                highestVerStr = ver
+        if IsInRaid() then
+            local members = GetNumGroupMembers()
+            if members and members > 0 then
+                for i = 1, members do
+                    local name = GetRaidRosterInfo(i)
+                    if name and playerVersions[name] then
+                        rosterVersions[name] = playerVersions[name]
+                    end
+                end
+            end
+        elseif IsInGroup() then
+            local members = GetNumGroupMembers()
+            if members > 0 then
+                for i = 1, members - 1 do
+                    local unit = "party" .. i
+                    if UnitExists(unit) then
+                        local name = UnitName(unit)
+                        if name and playerVersions[name] then
+                            rosterVersions[name] = playerVersions[name]
+                        end
+                    end
+                end
             end
         end
 
-        local hasOutdated = false
-        for _, ver in pairs(playerVersions) do
-            if ver and AT.CompareSemVer(highestVerStr, ver) then
+        local sims = DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationRoster and DesolateLootcouncil.API:GetSimulationRoster()
+        if sims then
+            for _, name in ipairs(sims) do
+                if playerVersions[name] then
+                    rosterVersions[name] = playerVersions[name]
+                end
+            end
+        end
+
+        local highestVerStr = (status and status.highestVersion) or myVer
+        for _, ver in pairs(rosterVersions) do
+            if ver and AT and AT.CompareSemVer and AT.CompareSemVer(ver, highestVerStr) then
+                highestVerStr = ver
+            end
+        end
+        for _, ver in pairs(rosterVersions) do
+            if ver and AT and AT.CompareSemVer and AT.CompareSemVer(highestVerStr, ver) then
                 hasOutdated = true
                 break
             end
         end
+    end
 
+    local activeC = DesolateLootcouncil.GetActiveUserCount and DesolateLootcouncil:GetActiveUserCount() or (status and status.active or 1)
+    local totalC = GetNumGroupMembers()
+    if totalC == 0 then totalC = 1 end
+    local simCount = (DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationCount and DesolateLootcouncil.API:GetSimulationCount()) or 0
+    if simCount > 0 then totalC = totalC + simCount end
+
+    if activeC >= totalC then
         if hasOutdated then
             ra, ga, ba = 1, 1, 0 -- Yellow: some are out of date
         else
@@ -116,6 +173,7 @@ end
 
 local function OnCategoryCallback(data, listIndexMap, value)
     data.category = value
+    data.manualCategory = true
     local idx = listIndexMap[value]
     if idx then
         DesolateLootcouncil.API:SetItemCategory(data.itemID, idx)
@@ -278,7 +336,16 @@ function UI_Loot:ShowLootWindow(lootTable)
         row.catDrop:SetPoint("RIGHT", row.removeBtn, "LEFT", -6, 7) -- Y offset compensates for dropdown container label layout
         row.catDrop:Show()
 
-        local savedCat = DesolateLootcouncil.API:GetItemCategory(data.itemID) or data.category or "Junk/Pass"
+        local savedCat = data.category
+        if not data.manualCategory then
+            local dbCat = DesolateLootcouncil.API:GetItemCategory(data.itemID)
+            if dbCat and dbCat ~= "Junk/Pass" then
+                savedCat = dbCat
+            else
+                savedCat = "Junk/Pass"
+            end
+        end
+        savedCat = savedCat or "Junk/Pass"
         data.category = savedCat
         row.catDrop:SetValue(savedCat)
 

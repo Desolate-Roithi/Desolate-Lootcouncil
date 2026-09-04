@@ -85,7 +85,7 @@ local VOTE_REMINDER_THRESHOLDS = { 240, 180, 120, 60, 30 }
 ---@param now number  The current absolute server timestamp
 ---@return number|nil lowestThreshold  The crossed reminder threshold, if any
 ---@return boolean shouldAddPending  True if the player hasn't voted and a threshold was crossed
-function UI_Voting:_ProcessMilestoneItem(item, now)
+function UI_Voting:ProcessMilestoneItem(item, now)
     local API = DesolateLootcouncil.API
     local guid = item.sourceGUID or item.link
     local isClosed = API:IsItemClosed(guid)
@@ -154,7 +154,7 @@ function UI_Voting:StartMilestoneChecker()
         local lowestThreshold = nil -- most urgent threshold crossed
 
         for _, item in ipairs(items) do
-            local threshold, shouldAdd = self:_ProcessMilestoneItem(item, now)
+            local threshold, shouldAdd = self:ProcessMilestoneItem(item, now)
             if shouldAdd and threshold then
                 lowestThreshold = (not lowestThreshold or threshold < lowestThreshold) and threshold or lowestThreshold
                 table.insert(pendingItems, item)
@@ -286,8 +286,8 @@ end
 
 function UI_Voting:CancelAllTimers()
     if self.expirationTimers then
-        for _, t in ipairs(self.expirationTimers) do
-            if t then t:Cancel() end
+        for _, t in pairs(self.expirationTimers) do
+            if t and t.Cancel then t:Cancel() end
         end
     end
     self.expirationTimers = {}
@@ -319,6 +319,12 @@ function UI_Voting:ResetVoting()
     self.myNotes = {}
     self.noteExpanded = {}
     self.cachedVotingItems = {}
+    self.timerLabels = {}
+    if self.votingTicker then
+        self.votingTicker:Cancel()
+        self.votingTicker = nil
+    end
+    self:CancelAllTimers()
     if self.votingFrame then self.votingFrame:Hide() end
     if self.rowPool then
         for _, r in ipairs(self.rowPool) do r:Hide() end
@@ -331,10 +337,20 @@ local function SetupVotingTicker(self, API)
         local now = GetServerTime()
         for guid, info in pairs(self.timerLabels) do
             if info.fontString then
-                local remaining = (info.expiry or 0) - now
-                local isClosed  = API:IsItemClosed(guid)
-                local txt       = (isClosed or remaining <= 0) and ("|cffff0000" .. L["Closed"] .. "|r") or
-                FormatTime(remaining)
+                local isClosed = API:IsItemClosed(guid)
+                local txt
+                if isClosed then
+                    txt = "|cffff0000" .. L["Closed"] .. "|r"
+                elseif info.expiry and info.expiry > 0 then
+                    local remaining = info.expiry - now
+                    if remaining <= 0 then
+                        txt = "|cffff0000" .. L["Closed"] .. "|r"
+                    else
+                        txt = FormatTime(remaining)
+                    end
+                else
+                    txt = ""
+                end
                 info.fontString:SetText(txt)
             end
         end
@@ -361,7 +377,7 @@ end
 ---@param now number  The current absolute server timestamp
 ---@param awardedGUIDs table<string, boolean>  A map of already awarded item GUIDs
 ---@return boolean laidOut  True if the row was successfully processed and laid out
-function UI_Voting:_LayoutVotingRow(index, data, guid, now, awardedGUIDs)
+function UI_Voting:LayoutVotingRow(index, data, guid, now, awardedGUIDs)
     if awardedGUIDs[guid] or (data.link and awardedGUIDs[data.link]) or (data.sourceGUID and awardedGUIDs[data.sourceGUID]) then
         return false
     end
@@ -381,11 +397,21 @@ function UI_Voting:_LayoutVotingRow(index, data, guid, now, awardedGUIDs)
         currentVote = self.myVotes[guid] or { type = 5, note = "", roll = 100 }
     end
 
+    if (isClosed or isExpired) and self.expirationTimers[guid] then
+        if self.expirationTimers[guid].Cancel then
+            self.expirationTimers[guid]:Cancel()
+        end
+        self.expirationTimers[guid] = nil
+    end
+
     if not isClosed and not isExpired and expiry > 0 and remaining > 0 then
-        local t = C_Timer.NewTimer(remaining, function()
-            self:ShowVotingWindow(nil, true)
-        end)
-        table.insert(self.expirationTimers, t)
+        if not self.expirationTimers[guid] then
+            local t = C_Timer.NewTimer(remaining, function()
+                self.expirationTimers[guid] = nil
+                self:ShowVotingWindow(nil, true)
+            end)
+            self.expirationTimers[guid] = t
+        end
     end
 
     self:CreateItemRow(
@@ -472,7 +498,7 @@ function UI_Voting:ShowVotingWindow(lootTable, isRefresh)
     for i = #items, 1, -1 do
         local data = items[i]
         local guid = data.sourceGUID or data.link
-        if self:_LayoutVotingRow(rowCount + 1, data, guid, now, awardedGUIDs) then
+        if self:LayoutVotingRow(rowCount + 1, data, guid, now, awardedGUIDs) then
             rowCount = rowCount + 1
         end
     end
@@ -883,9 +909,23 @@ function UI_Voting:OnItemReopened(eventName, guid, newExpiry)
         end
     end
 
+    local itemFound = false
     if self.cachedVotingItems then
         for _, item in ipairs(self.cachedVotingItems) do
             if (item.sourceGUID or item.link) == guid then
+                if newExpiry then item.expiry = newExpiry end
+                itemFound = true
+                break
+            end
+        end
+    end
+
+    if not itemFound then
+        local sourceList = (API and API.GetBiddingList and API:GetBiddingList()) or {}
+        for _, item in ipairs(sourceList) do
+            if (item.sourceGUID or item.link) == guid then
+                self.cachedVotingItems = self.cachedVotingItems or {}
+                table.insert(self.cachedVotingItems, item)
                 if newExpiry then item.expiry = newExpiry end
                 break
             end

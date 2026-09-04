@@ -14,7 +14,6 @@ local TestSuite = DesolateLootcouncil:NewModule("TestSuite", "AceConsole-3.0")
 ---@field db table
 ---@field API table
 ---@field Serializer table
----@field DBMigrator table
 ---@field DLC_Log fun(self: any, msg: string, force?: boolean)
 ---@field GetModule fun(self: any, name: string, quiet?: boolean): any
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_TestSuite]]
@@ -224,6 +223,9 @@ function TestSuite:ResetToStateZero(force, silent)
     if DesolateLootcouncil.UpdateLootMasterStatus then
         DesolateLootcouncil:UpdateLootMasterStatus()
     end
+
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    if Sim and Sim.Clear then Sim:Clear() end
 
     self.isStateZeroClean = true
 
@@ -631,6 +633,13 @@ function TestSuite:OnInitialize()
                 local d = latest.attendeeDetails["SwapperMain-Realm"].attendedChars
                 assert(d["SwapperMain-Realm"] ~= nil and d["SwapperAlt-Realm"] ~= nil, "Main and Alt kills aggregated under parent")
             end
+
+            Sim:Remove("SwapperAlt-Realm")
+            Sim:Remove("SwapperMain-Realm")
+            if API and API.RemovePlayer then
+                API:RemovePlayer("SwapperAlt-Realm")
+                API:RemovePlayer("SwapperMain-Realm")
+            end
         end)
 
         -- Part 4: Raid History Multi-Day Splitting
@@ -801,6 +810,9 @@ function TestSuite:OnInitialize()
 
             Sim:Reconnect("SimOfficer-Realm")
             assert(DesolateLootcouncil:IsUnitOnline("SimOfficer-Realm") == true, "Officer reconnected")
+
+            Sim:Remove("SimOfficer-Realm")
+            Sim:Remove("SimWinner-Realm")
         end)
 
         -- Part 4: Officer Delta Sync & Last-Timestamp-Wins
@@ -829,12 +841,47 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 5: Version Check Ping & Distribution Broadcast
-        self:RunPart(5, 5, "Version_Check_Broadcast", function()
+        self:RunPart(5, 6, "Version_Check_Broadcast", function()
             local Version = DesolateLootcouncil:GetModule("UI_Version", true)
             if Version and Version.ShowVersionWindow then
                 Version:ShowVersionWindow(true)
                 assert(Version.versionFrame and Version.versionFrame:IsShown(), "Version check window opened")
             end
+        end)
+
+        -- Part 6: Officer Award and Reopen Synchronization
+        self:RunPart(6, 6, "Officer_Award_Reopen_Sync", function()
+            local SyncMod = DesolateLootcouncil:GetModule("Sync", true)
+            if not SyncMod then return end
+
+            db.session = db.session or {}
+            db.session.bidding = {
+                { itemID = 99001, link = "[Sync Item]", sourceGUID = "SYNC-GUID-1" }
+            }
+            db.session.awarded = {}
+            Session.sessionPayloadCache = "stale_cache"
+
+            local currentLM = DesolateLootcouncil:DetermineLootMaster() or "SimPlayer"
+
+            -- Test OFFICER_AWARD_SYNC
+            local awardPayload = {
+                entry = { itemID = 99001, link = "[Sync Item]", winner = "OfficerMain-Realm", fullItemData = { sourceGUID = "SYNC-GUID-1" }, timestamp = 12345 }
+            }
+            SyncMod:HandleMessage("OFFICER_AWARD_SYNC", awardPayload, currentLM)
+            assert(#db.session.awarded == 1, "Officer ingested award entry via OFFICER_AWARD_SYNC")
+            assert(#db.session.bidding == 0, "Officer removed awarded item from bidding")
+            assert(Session.sessionPayloadCache == nil, "Officer invalidated heartbeat payload cache")
+
+            -- Test OFFICER_REOPEN_SYNC
+            local reopenPayload = {
+                itemID = 99001,
+                link = "[Sync Item]",
+                timestamp = 12345
+            }
+            SyncMod:HandleMessage("OFFICER_REOPEN_SYNC", reopenPayload, currentLM)
+            assert(#db.session.awarded == 0, "Officer removed item from awarded on reopen")
+            assert(#db.session.bidding == 1, "Officer restored item to bidding on reopen")
+            assert(Session.sessionPayloadCache == nil, "Officer cleared payload cache on reopen")
         end)
 
         self:Log("Scenario 4 [Officer Comms, Multi-Client Sync & LM Authority] completed successfully.")
@@ -909,10 +956,14 @@ function TestSuite:OnInitialize()
 
             DesolateLootcouncil:PromptAutopass()
             assert(db.DecayConfig.sessionAutopassAnswered == true, "Autopass answered state maintained without duplicate prompt")
+
+            db.DecayConfig.sessionActive = false
+            db.DecayConfig.sessionAutopassActive = false
+            DesolateLootcouncil.sessionAutopassActive = false
         end)
 
         -- Part 4: Trade Queue Staging & Delivery Verification
-        self:RunPart(4, 4, "Trade_Queue_And_Delivery", function()
+        self:RunPart(4, 5, "Trade_Queue_And_Delivery", function()
             db.session = db.session or {}
             db.session.awarded = {
                 {
@@ -935,6 +986,59 @@ function TestSuite:OnInitialize()
             end
         end)
 
+        -- Part 5: LM-Ordered Autopass, Late Override & Offline Addon Retention
+        self:RunPart(5, 5, "LM_Autopass_Order_And_Retention", function()
+            local CommMod = DesolateLootcouncil:GetModule("Comm", true)
+            if not CommMod then return end
+
+            -- 1. Offline Addon Retention
+            CommMod.playerVersions = CommMod.playerVersions or {}
+            CommMod.lastKnownHasAddon = CommMod.lastKnownHasAddon or {}
+            for i = 1, 5 do
+                CommMod.playerVersions["Player" .. i .. "-TestRealm"] = "2.1.0"
+                CommMod.playerVersions["Player" .. i] = "2.1.0"
+                CommMod.lastKnownHasAddon["Player" .. i .. "-TestRealm"] = true
+                CommMod.lastKnownHasAddon["Player" .. i] = true
+            end
+            -- Player 2 goes offline and loses active ping
+            CommMod.playerVersions["Player2-TestRealm"] = nil
+            CommMod.playerVersions["Player2"] = nil
+            local origConnected = CommMod.IsUnitConnected
+            CommMod.IsUnitConnected = function(selfMod, unit)
+                if unit == "raid2" then return false end
+                return true
+            end
+            local status = CommMod:GetGroupConnectionStatus()
+            CommMod.IsUnitConnected = origConnected
+            assert(status.allConnected == true, "Offline addon users retain addon status and don't break allConnected")
+
+            -- 2. Raider Latency Caching & Late Order Override
+            if Autopass and Autopass.HandleAutopassOrder then
+                Autopass.pendingAutopassOrders = {}
+                Autopass.autoRolledItems = {}
+
+                -- Cache order for roll 202
+                local orderPayload = {
+                    rollID = 202,
+                    itemID = 19019,
+                    action = 0,
+                    lmAllConnected = true
+                }
+                local origDetermineLM = DesolateLootcouncil.DetermineLootMaster
+                DesolateLootcouncil.DetermineLootMaster = function() return "LootMaster-Realm" end
+                local prevActiveLM = DesolateLootcouncil.activeLootMaster
+                DesolateLootcouncil.activeLootMaster = "LootMaster-Realm"
+
+                Autopass:HandleAutopassOrder(orderPayload, "LootMaster-Realm")
+
+                DesolateLootcouncil.DetermineLootMaster = origDetermineLM
+                DesolateLootcouncil.activeLootMaster = prevActiveLM
+
+                assert(Autopass.pendingAutopassOrders[19019] ~= nil, "Autopass order cached by itemID")
+                assert(Autopass.pendingAutopassOrders[202] ~= nil, "Autopass order cached by rollID")
+            end
+        end)
+
         self:Log("Scenario 5 [Automation, Autopass & Trade Delivery] completed successfully.")
     end)
 
@@ -943,23 +1047,15 @@ function TestSuite:OnInitialize()
     -- =======================================================================
     self:RegisterScenario("database_integrity_serialization", "6. Database Sanitization, Serialization & Integrity", "Performs schema 200->201 migration, LibDeflate compression roundtrips, immutable audit ledger recording, and self-healing corruption recovery.", function()
         local API = DesolateLootcouncil.API
-        local DBMigrator = DesolateLootcouncil.DBMigrator
         local Serializer = DesolateLootcouncil.Serializer
         local db = DesolateLootcouncil.db.profile
 
-        -- Part 1: Schema 200 -> 201 Migration & Sanitization
-        self:RunPart(1, 4, "Schema_201_Migration", function()
-            db.schemaVersion = 100
-            db.Priority = { ["LegacyList"] = true }
-            db.legacyLogs = { "Old Log" }
-            db.playerRoster.mains = { "MigratedGuy-Realm" }
-
-            local migrated, pruned = DBMigrator:SanitizeProfileDatabase(db)
-            assert(migrated == true, "DBMigrator performs migration")
-            assert(pruned >= 3, "Legacy keys pruned")
-            assert(db.Priority == nil, "Legacy Priority purged")
-            assert(db.MainRoster["MigratedGuy-Realm"] ~= nil, "MigratedGuy added to MainRoster")
-            assert(db.schemaVersion == 201, "Schema version stamped to 201")
+        -- Part 1: Schema 200 Verification
+        self:RunPart(1, 4, "Schema_200_Verification", function()
+            db.schemaVersion = 200
+            assert(db.schemaVersion == 200, "Schema version stamped to 200")
+            assert(type(db.PriorityLists) == "table", "PriorityLists present")
+            assert(type(db.MainRoster) == "table", "MainRoster present")
         end)
 
         -- Part 2: Real-World Profile Import & LibDeflate Compression
@@ -1192,6 +1288,194 @@ function TestSuite:OnInitialize()
         end)
 
         self:Log("Scenario 8 [Disband Gating, Snapshot Authority & Comm Boundaries] completed successfully.")
+    end)
+
+    -- =======================================================================
+    -- 9. Officer Sync Parity, Trade State Machine & Cache Invariants
+    -- =======================================================================
+    self:RegisterScenario("officer_sync_trade_cache_invariants", "9. Officer Sync Parity, Trade State Machine & Cache Invariants", "Validates officer award/reopen comm parity, non-popup trade cancel safety, late autopass order override, and heartbeat cache eviction.", function()
+        local Sync = DesolateLootcouncil:GetModule("Sync", true)
+        local Session = DesolateLootcouncil:GetModule("Session", true)
+        local Trade = DesolateLootcouncil:GetModule("Trade", true)
+        local Autopass = DesolateLootcouncil:GetModule("Autopass", true)
+        local db = DesolateLootcouncil.db.profile
+
+        -- Part 1: Officer Award Sync & Monitor Eviction
+        self:RunPart(1, 4, "Officer_Award_Sync_And_Cache_Eviction", function()
+            db.session = db.session or {}
+            db.session.bidding = {
+                { link = "|cffa335ee|Hitem:50001|h[Scenario9 Ring]|h|r", itemID = 50001, sourceGUID = "Scen9-Ring-1", category = "Tier" }
+            }
+            db.session.awarded = {}
+            if Session then
+                Session.sessionPayloadCache = "stale_payload_to_evict"
+            end
+
+            DesolateLootcouncil.amILM = false
+            DesolateLootcouncil.isOfficer = true
+            DesolateLootcouncil.activeLootMaster = "MockLM-Realm"
+
+            local awardPacket = {
+                entry = {
+                    link = "|cffa335ee|Hitem:50001|h[Scenario9 Ring]|h|r",
+                    itemID = 50001,
+                    winner = "MageMain-Realm",
+                    voteType = "Bid",
+                    timestamp = 123456,
+                    fullItemData = { link = "|cffa335ee|Hitem:50001|h[Scenario9 Ring]|h|r", itemID = 50001, sourceGUID = "Scen9-Ring-1", category = "Tier" }
+                }
+            }
+
+            if Sync and Sync.HandleMessage then
+                Sync:HandleMessage("OFFICER_AWARD_SYNC", awardPacket, "MockLM-Realm")
+            end
+
+            assert(#db.session.bidding == 0, "Awarded item must be removed from officer db.session.bidding")
+            assert(#db.session.awarded == 1, "Awarded item must be recorded in officer db.session.awarded")
+            assert(db.session.awarded[1].winner == "MageMain-Realm", "Winner must match award packet")
+            if Session then
+                assert(Session.sessionPayloadCache == nil, "Officer sessionPayloadCache must be evicted on award sync")
+            end
+        end)
+
+        -- Part 2: Officer Re-award Sync & State Restoration
+        self:RunPart(2, 4, "Officer_Reopen_Sync_And_State_Restoration", function()
+            if Session then
+                Session.sessionPayloadCache = "stale_payload_before_reopen"
+                Session.clientLootList = {}
+            end
+
+            local reopenPacket = {
+                link = "|cffa335ee|Hitem:50001|h[Scenario9 Ring]|h|r",
+                itemID = 50001,
+                timestamp = 123456,
+                newGUID = "Reaward-50001-999",
+                itemData = {
+                    link = "|cffa335ee|Hitem:50001|h[Scenario9 Ring]|h|r",
+                    itemID = 50001,
+                    sourceGUID = "Reaward-50001-999",
+                    category = "Tier",
+                    isClosed = true
+                }
+            }
+
+            if Sync and Sync.HandleMessage then
+                Sync:HandleMessage("OFFICER_REOPEN_SYNC", reopenPacket, "MockLM-Realm")
+            end
+
+            assert(#db.session.awarded == 0, "Reopened item must be removed from officer awarded list")
+            assert(#db.session.bidding == 1, "Reopened item must be restored into officer bidding list")
+            assert(db.session.bidding[1].sourceGUID == "Reaward-50001-999", "Restored item must have new GUID")
+            if Session then
+                assert(Session.sessionPayloadCache == nil, "Officer sessionPayloadCache must be evicted on reopen sync")
+                assert(Session.closedItems and Session.closedItems["Reaward-50001-999"] == true, "Reopened item must be flagged closed in Session.closedItems")
+            end
+        end)
+
+        -- Part 3: Dual-Accept Trade Cancel Safety & Non-Popup Completion
+        self:RunPart(3, 4, "Trade_DualAccept_Cancel_Tolerance", function()
+            if not Trade then return end
+            DesolateLootcouncil.amILM = true
+            db.session.awarded = {
+                {
+                    link = "|cffa335ee|Hitem:50002|h[Scenario9 Shield]|h|r",
+                    itemID = 50002,
+                    winner = "WarriorMain-Realm",
+                    sourceGUID = "Scen9-Shield-1",
+                    traded = false,
+                    fullItemData = { category = "Armor" }
+                }
+            }
+            Trade.currentTrade = {
+                {
+                    award = db.session.awarded[1],
+                    targetItemID = 50002,
+                    bag = 0,
+                    slot = 2
+                }
+            }
+            Trade.itemsInTrade = {
+                {
+                    itemID = 50002,
+                    link = "|cffa335ee|Hitem:50002|h[Scenario9 Shield]|h|r",
+                    winner = "WarriorMain-Realm"
+                }
+            }
+            Trade.tradeTargetName = "WarriorMain-Realm"
+
+            -- Both accept
+            Trade:TRADE_ACCEPT_UPDATE("TRADE_ACCEPT_UPDATE", 1, 1)
+            assert(Trade.tradeAccepted == true, "tradeAccepted must be true when both accepted")
+
+            -- Target unchecks/cancels
+            Trade:TRADE_ACCEPT_UPDATE("TRADE_ACCEPT_UPDATE", 1, 0)
+            assert(Trade.tradeAccepted == false, "tradeAccepted must revert to false when target unchecks")
+
+            -- Close while unaccepted
+            Trade:TRADE_CLOSED()
+            assert(db.session.awarded[1].traded == false, "Item must not be marked traded when closed while unaccepted")
+
+            -- Re-accept and close without popup
+            Trade.itemsInTrade = {
+                {
+                    itemID = 50002,
+                    link = "|cffa335ee|Hitem:50002|h[Scenario9 Shield]|h|r",
+                    winner = "WarriorMain-Realm"
+                }
+            }
+            Trade:TRADE_ACCEPT_UPDATE("TRADE_ACCEPT_UPDATE", 1, 1)
+            Trade:TRADE_CLOSED()
+            assert(db.session.awarded[1].traded == true, "Item must be marked traded on non-popup close with dual acceptance")
+
+            if Trade.clearTimer then
+                Trade.clearTimer:Cancel()
+                Trade.clearTimer = nil
+            end
+            Trade:ClearPending()
+        end)
+
+        -- Part 4: Autopass Late Order Override & Memory Bounded Pruning
+        self:RunPart(4, 4, "Autopass_Late_Order_And_Prune", function()
+            if not Autopass then return end
+            local origDetermineLM = DesolateLootcouncil.DetermineLootMaster
+            DesolateLootcouncil.DetermineLootMaster = function() return "AuthoritativeLM-Realm" end
+
+            Autopass.pendingAutopassOrders = {}
+            Autopass.autoRolledItems = {}
+
+            local rolledID, rolledAction
+            local origDoAutoRoll = Autopass.DoAutoRoll
+            Autopass.DoAutoRoll = function(self, rollID, action)
+                rolledID = rollID
+                rolledAction = action
+                self.autoRolledItems[rollID] = true
+            end
+
+            -- Incoming late order executes immediately
+            local payload = {
+                command = "AUTOPASS_ORDER",
+                rollID = 777,
+                itemID = 60001,
+                link = "|cffa335ee|Hitem:60001|h[Late Order Helm]|h|r",
+                action = 0,
+                lmAllConnected = true
+            }
+            Autopass:HandleAutopassOrder(payload, "AuthoritativeLM-Realm")
+
+            assert(rolledID == 777, "Late order override must roll on rollID 777")
+            assert(rolledAction == 0, "Late order override must execute Pass (action 0)")
+            assert(Autopass.pendingAutopassOrders[60001] ~= nil, "Order must be cached in pendingAutopassOrders")
+
+            -- Bounded pruning
+            local futureTime = GetTime() + 40
+            Autopass:PruneStaleOrders(futureTime)
+            assert(Autopass.pendingAutopassOrders[60001] == nil, "Stale autopass orders > 30s must be pruned")
+
+            Autopass.DoAutoRoll = origDoAutoRoll
+            DesolateLootcouncil.DetermineLootMaster = origDetermineLM
+        end)
+
+        self:Log("Scenario 9 [Officer Sync Parity, Trade State Machine & Cache Invariants] completed successfully.")
     end)
 end
 

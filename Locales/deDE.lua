@@ -598,4 +598,32 @@ L["Only the Loot Master can view the Loot Window."] = "Nur der Plündermeister k
 L["Only the Loot Master can view the Trade List."] = "Nur der Plündermeister kann die Handelsliste anzeigen."
 L["Only the Loot Master or Officers can modify priority lists."] = "Nur der Plündermeister oder Offiziere können Prioritätslisten ändern."
 L["Only the Loot Master or Officers can view the Monitor."] = "Nur der Plündermeister oder Offiziere können den Monitor anzeigen."
+L["Only the Loot Master or Officers can view Priority Lists."] = "Nur der Plündermeister oder Offiziere können Prioritätslisten anzeigen."
+L["Only the Loot Master or Officers can view the Roster."] = "Nur der Plündermeister oder Offiziere können den Kader anzeigen."
+
+-- Interactive Simulation Controller Roles & Verification
+L["Simulation Role Persona"] = "Simulations-Rollenpersona"
+L["Click to cycle through roles: LM -> Officer -> Raider."] = "Klicken, um durch Rollen zu wechseln: PL -> Offizier -> Raider."
+L["Tests interface visibility, permissions, and vote workflows for each rank."] = "Testet Oberflächensichtbarkeit, Berechtigungen und Abstimmungsabläufe für jeden Rang."
+L["Interactive simulation role switched to: |cffffd700%s|r."] = "Interaktive Simulationsrolle gewechselt zu: |cffffd700%s|r."
+L["Active Simulation [Role: Loot Master] - Full session control and awarding authority."] = "Aktive Simulation [Rolle: Plündermeister] - Volle Sitzungssteuerung und Vergabeautorität."
+L["Active Simulation [Role: Council Officer] - Review bids, monitor votes, council parity."] = "Aktive Simulation [Rolle: Rats-Offizier] - Gebote prüfen, Stimmen überwachen, Rats-Parität."
+L["Active Simulation [Role: Raider] - Cast personal votes and submit item roll/pass choices."] = "Aktive Simulation [Rolle: Raider] - Eigene Stimmen abgeben und Bedarf/Passen wählen."
+L["Concludes the session, records all remaining awards, and keeps the Audit Ledger open for review."] = "Schließt die Sitzung ab, zeichnet alle verbleibenden Vergaben auf und hält das Audit-Protokoll zur Überprüfung geöffnet."
+L["LM Auto-Award"] = "PL Auto-Vergabe"
+L["Restricted: Raiders cannot access the Council Monitor."] = "Eingeschränkt: Raider haben keinen Zugriff auf den Rats-Monitor."
+L["The Session Monitor is restricted to Loot Masters and Council Officers."] = "Der Sitzungs-Monitor ist auf den Plündermeister und Rats-Offiziere beschränkt."
+L["Toggle Council Session Monitor window."] = "Rats-Sitzungsmonitor umschalten."
+
+-- Version light & Connection Status
+L["All group members connected."] = "Alle Gruppenmitglieder verbunden."
+L["Missing Addon (%d):"] = "Fehlendes Addon (%d):"
+
+-- Simulation Backlog Staging
+L["Add Items"] = "Gegenstände hinzufügen"
+L["Add Backlog Items"] = "Backlog-Gegenstände hinzufügen"
+L["Added %d items to the loot backlog and opened the Loot window."] = "%d Gegenstände zum Beute-Backlog hinzugefügt und das Beutefenster geöffnet."
+L["Stages sample drops into the Loot Master backlog and opens the distribution window to test connection status and Start Bidding."] = "Fügt Beispielbeute zum Plündermeister-Backlog hinzu und öffnet das Verteilungsfenster zum Testen des Verbindungsstatus und des Start-Bidding-Buttons."
+L["Switches active persona to Loot Master if needed."] = "Wechselt bei Bedarf die aktive Persona zum Plündermeister."
+
 

@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.0.7  
-**Last Updated:** 2026-09-03  
+**Latest Version:** v2.1.0  
+**Last Updated:** 2026-09-04  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -47,6 +47,21 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.1.0 (2026-09-04)
+* **Item Manager & Loot Window Integration**:
+  * Unassigned items strictly default to `"Junk/Pass"`.
+  * Items set to `"Junk/Pass"` are automatically excluded from the bidding session when "Start Bidding" is clicked, preventing trash/filler drops from starting voting sessions.
+  * Real-time dropdown selection in the Loot Master window instantly persists category overrides directly into Item Manager priority lists.
+* **Attendance, Status LED & Version Check Reliability**:
+  * Unified connection status indicator and Version Check window to strictly track the combined attendance roster (Player + Group + Active Sims).
+  * Addon user cache now preserves disconnected/offline raiders until reconnected, maintaining consistent connection counts.
+  * Fixed Refresh / Ping button state machine in the Version window, eliminating stuck "Pinging..." states and accurately handling cooldown timers.
+  * Restored In-Game Test Suite Step 4 version check fixtures in the live game client.
+* **Interactive Loot Simulation & Test Suite Enhancements**:
+  * Added `Add Items` action button directly to `UI_InteractiveTestBar` to stage realistic test drops into the loot backlog and open the Loot Master window for rapid UI verification.
+  * Introduced dynamic role cycling (`LM` -> `Officer` -> `Raider`) directly on the Test Suite window and Interactive Test Bar to test workflows and permissions from any rank's perspective.
+  * Hardened delta synchronization and officer handover logic against race conditions and stale timestamps.
 
 ### v2.0.7 (2026-09-03)
 * **Instant & Non-Popup Trade Clearing**:

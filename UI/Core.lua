@@ -43,7 +43,7 @@ function UI:OnEnable()
     end)
 
     self:RegisterMessage("DLC_SESSION_STOPPED", function()
-        self:CloseAllWindows()
+        self:CloseSessionWindows()
     end)
 
     -- Register Blizzard Settings Panel Category
@@ -170,6 +170,46 @@ function UI:RemoveVotingItem(guid)
     if V then V:RemoveVotingItem(guid) end
 end
 
+function UI:CloseSessionWindows()
+    local sessionWindowModules = {
+        "UI_Monitor",
+        "UI_Voting",
+        "UI_Loot",
+        "UI_Award",
+        "UI_Attendance",
+        "UI_TradeList",
+        "UI_History",
+        "UI_Version",
+        "UI_PriorityOverride"
+    }
+
+    for _, modName in ipairs(sessionWindowModules) do
+        local mod = DesolateLootcouncil:GetModule(modName, true)
+        if mod then
+            if mod.Close then
+                pcall(function() mod:Close() end)
+            end
+            if mod.Hide then
+                pcall(function() mod:Hide() end)
+            end
+            local frameProps = {
+                "frame", "mainFrame", "window", "monitorFrame", "votingFrame",
+                "lootFrame", "awardFrame", "attendanceFrame", "historyFrame", "sessionFrame",
+                "tradeListFrame", "versionFrame", "overrideFrame", "priorityOverrideFrame", "deFrame"
+            }
+            for _, prop in ipairs(frameProps) do
+                if mod[prop] and type(mod[prop]) == "table" and mod[prop].Hide then
+                    pcall(function() mod[prop]:Hide() end)
+                end
+            end
+        end
+    end
+
+    if StaticPopup_Hide then
+        pcall(function() StaticPopup_Hide("DLC_DISBAND_CLOSE_SESSION") end)
+    end
+end
+
 function UI:CloseAllWindows()
     local windowModules = {
         "UI_Monitor",
@@ -189,23 +229,25 @@ function UI:CloseAllWindows()
     }
 
     for _, modName in ipairs(windowModules) do
-        local mod = DesolateLootcouncil:GetModule(modName, true)
-        if mod then
-            if mod.Close then
-                pcall(function() mod:Close() end)
-            end
-            if mod.Hide then
-                pcall(function() mod:Hide() end)
-            end
-            local frameProps = {
-                "frame", "mainFrame", "window", "monitorFrame", "votingFrame",
-                "lootFrame", "awardFrame", "attendanceFrame", "historyFrame", "sessionFrame",
-                "tradeListFrame", "versionFrame", "overrideFrame", "priorityOverrideFrame",
-                "itemManagerFrame", "settingsFrame", "logFrame", "deFrame", "exportFrame"
-            }
-            for _, prop in ipairs(frameProps) do
-                if mod[prop] and type(mod[prop]) == "table" and mod[prop].Hide then
-                    pcall(function() mod[prop]:Hide() end)
+        if not (DesolateLootcouncil.keepAuditorOpen and modName == "UI_PriorityLogHistory") then
+            local mod = DesolateLootcouncil:GetModule(modName, true)
+            if mod then
+                if mod.Close then
+                    pcall(function() mod:Close() end)
+                end
+                if mod.Hide then
+                    pcall(function() mod:Hide() end)
+                end
+                local frameProps = {
+                    "frame", "mainFrame", "window", "monitorFrame", "votingFrame",
+                    "lootFrame", "awardFrame", "attendanceFrame", "historyFrame", "sessionFrame",
+                    "tradeListFrame", "versionFrame", "overrideFrame", "priorityOverrideFrame",
+                    "itemManagerFrame", "settingsFrame", "logFrame", "deFrame", "exportFrame"
+                }
+                for _, prop in ipairs(frameProps) do
+                    if mod[prop] and type(mod[prop]) == "table" and mod[prop].Hide then
+                        pcall(function() mod[prop]:Hide() end)
+                    end
                 end
             end
         end

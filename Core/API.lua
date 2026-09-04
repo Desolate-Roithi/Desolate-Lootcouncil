@@ -23,6 +23,9 @@ local function Loot() return DesolateLootcouncil:GetModule("Loot", true) end
 local function Comm() return DesolateLootcouncil:GetModule("Comm", true) end
 local function Sync() return DesolateLootcouncil:GetModule("Sync", true) end
 local function UI_Theme() return DesolateLootcouncil:GetModule("UI_Theme", true) end
+local function UI_Monitor() return DesolateLootcouncil:GetModule("UI_Monitor", true) end
+local function UI_Voting() return DesolateLootcouncil:GetModule("UI_Voting", true) end
+local function UI_TradeList() return DesolateLootcouncil:GetModule("UI_TradeList", true) end
 local function Session() return DesolateLootcouncil:GetModule("Session", true) end
 local function Trade() return DesolateLootcouncil:GetModule("Trade", true) end
 local function Simulation() return DesolateLootcouncil:GetModule("Simulation", true) end
@@ -96,11 +99,6 @@ function DLC_API:IsSimulationActive()
     return DesolateLootcouncil.IsSimulationActive and DesolateLootcouncil:IsSimulationActive() or false
 end
 
---- Alias for IsLootMaster.
----@return boolean
-function DLC_API:AmILootMaster()
-    return self:IsLootMaster()
-end
 
 --- Returns the configured name of the Loot Master.
 ---@return string
@@ -146,6 +144,33 @@ end
 function DLC_API:GetSimulationCount()
     local sim = Simulation()
     return (sim and sim.GetCount and sim:GetCount()) or 0
+end
+
+--- Returns the active simulated players roster list.
+---@return table
+function DLC_API:GetSimulationRoster()
+    local sim = Simulation()
+    if sim and sim.GetRoster then
+        return sim:GetRoster()
+    end
+    if sim and sim.activeSims then
+        local r = {}
+        for name in pairs(sim.activeSims) do table.insert(r, name) end
+        return r
+    end
+    if sim and sim.GetCount and sim:GetCount() > 0 then
+        local pv = self.GetPlayerVersions and self:GetPlayerVersions()
+        if pv then
+            local r = {}
+            for name in pairs(pv) do
+                if name:match("^Sim%d+") or name:match("SIM") then
+                    table.insert(r, name)
+                end
+            end
+            if #r > 0 then return r end
+        end
+    end
+    return {}
 end
 
 --- Returns true if a named player is a test simulated entity.
@@ -312,12 +337,6 @@ function DLC_API:GetPriorityLists()
     return (p and p.GetPriorityLists and p:GetPriorityLists()) or (DesolateLootcouncil.db and DesolateLootcouncil.db.profile.PriorityLists) or (DesolateLootcouncil.db and DesolateLootcouncil.db.profile.Priority) or {}
 end
 
---- Returns the database profile table used by Priority.
----@return table
-function DLC_API:GetPriorityDB()
-    return DesolateLootcouncil.db and DesolateLootcouncil.db.profile or {}
-end
-
 --- Returns an ordered array of priority list names.
 ---@return string[]
 function DLC_API:GetPriorityListNames()
@@ -332,13 +351,6 @@ function DLC_API:GetLocalizedListName(listName)
     if not listName or listName == "" then return "" end
     local p = Priority()
     return (p and p.GetLocalizedListName and p:GetLocalizedListName(listName)) or listName
-end
-
---- Returns the active priority list object.
----@return table
-function DLC_API:GetActivePriorityList()
-    local p = Priority()
-    return (p and p.GetActivePriorityList and p:GetActivePriorityList()) or {}
 end
 
 --- Returns a specific priority list by name or index.
@@ -371,17 +383,7 @@ function DLC_API:GetPriorityList(nameOrIdx)
     return nil
 end
 
---- Returns a player's rank index in the specified list.
----@param listName string|number|nil
----@param playerName string
----@param itemID number|string|nil
----@return number?
-function DLC_API:GetPriorityRank(listName, playerName, itemID)
-    local p = Priority()
-    return p and p.GetPriorityRank and p:GetPriorityRank(listName, playerName, itemID)
-end
-
---- Returns the 1-based priority rank of playerName in the named list (alias for UI).
+--- Returns the 1-based priority rank of playerName in the named list.
 ---@param playerName string
 ---@param category string|nil
 ---@param itemID number|string|nil
@@ -389,7 +391,7 @@ end
 function DLC_API:GetPlayerRankInList(playerName, category, itemID)
     local p = Priority()
     if p and p.GetPlayerRankInList then return p:GetPlayerRankInList(playerName, category, itemID) end
-    return self:GetPriorityRank(category, playerName, itemID) or 999
+    return (p and p.GetPriorityRank and p:GetPriorityRank(category, playerName, itemID)) or 999
 end
 
 --- Returns the candidate with the highest rank in a list.
@@ -454,25 +456,10 @@ end
 --- Moves a player to the bottom of a priority list.
 ---@param listName string
 ---@param player string
+---@return number? origIndex
 function DLC_API:MovePlayerToBottom(listName, player)
     local p = Priority()
-    if p and p.MovePlayerToBottom then p:MovePlayerToBottom(listName, player) end
-end
-
---- Adds a player to the end of a priority list.
----@param listName string
----@param player string
-function DLC_API:AddPlayerToPriority(listName, player)
-    local p = Priority()
-    if p and p.AddPlayerToPriority then p:AddPlayerToPriority(listName, player) end
-end
-
---- Removes a player from a priority list.
----@param listName string
----@param player string
-function DLC_API:RemovePlayerFromPriority(listName, player)
-    local p = Priority()
-    if p and p.RemovePlayerFromPriority then p:RemovePlayerFromPriority(listName, player) end
+    return p and p.MovePlayerToBottom and p:MovePlayerToBottom(listName, player)
 end
 
 --- Adds a new empty priority list.
@@ -524,7 +511,6 @@ function DLC_API:LogAudit(action, actor, player, listName, details, sessionID)
     end
     return nil
 end
-DLC_API.LogAuditEvent = DLC_API.LogAudit
 
 --- Returns filtered audit log entries.
 ---@param sessionID number|string|nil
@@ -558,19 +544,37 @@ function DLC_API:BroadcastHistorySync()
 end
 
 --- Starts the interactive live loot simulation.
+---@param mode? string Optional role persona ("LM", "Officer", or "Raider")
 ---@return boolean
-function DLC_API:StartInteractiveLootTest()
+function DLC_API:StartInteractiveLootTest(mode)
     local sim = Simulation()
-    return (sim and sim.StartInteractiveLootTest and sim:StartInteractiveLootTest()) or false
+    return (sim and sim.StartInteractiveLootTest and sim:StartInteractiveLootTest(mode)) or false
 end
 
---- Returns the priority history audit log lines (Backward compatibility).
----@return table[]
-function DLC_API:GetPriorityLog()
-    local a = Audit()
-    if a and a.GetLog then return a:GetLog(nil, "PRIO") end
-    return DesolateLootcouncil.db.profile.AuditLog or DesolateLootcouncil.db.profile.PriorityLog or {}
+--- Sets the active role persona during an interactive live loot simulation.
+---@param role string "LM", "Officer", or "Raider"
+function DLC_API:SetInteractiveSimRole(role)
+    local sim = Simulation()
+    if sim and sim.SetSimRole then
+        sim:SetSimRole(role)
+    end
 end
+
+--- Returns the active role persona during an interactive live loot simulation.
+---@return string
+function DLC_API:GetInteractiveSimRole()
+    local sim = Simulation()
+    return (sim and sim.GetSimRole and sim:GetSimRole()) or "LM"
+end
+
+--- Adds sample test items to the loot backlog during simulation.
+---@param itemsList table?
+---@return number addedCount
+function DLC_API:AddSimulationBacklogItems(itemsList)
+    local sim = Simulation()
+    return (sim and sim.AddBacklogTestItems and sim:AddBacklogTestItems(itemsList)) or 0
+end
+
 
 --- Marks a Priority list as modified by updating its timestamp.
 ---@param listName string
@@ -661,67 +665,14 @@ end
 --- Returns the table containing all Item Manager lists.
 ---@return table
 function DLC_API:GetIMLists()
-    local im = ItemManager()
-    return (im and im.GetIMLists and im:GetIMLists()) or (DesolateLootcouncil.db and DesolateLootcouncil.db.profile.ItemManager) or {}
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    return (db and (db.PriorityLists or db.ItemManager)) or {}
 end
 
 --- Returns the database profile table used by Item Manager.
 ---@return table
 function DLC_API:GetItemManagerDB()
     return DesolateLootcouncil.db and DesolateLootcouncil.db.profile or {}
-end
-
---- Returns the active Item Manager list table.
----@return table
-function DLC_API:GetActiveIMList()
-    local im = ItemManager()
-    return (im and im.GetActiveIMList and im:GetActiveIMList()) or {}
-end
-
---- Returns an Item Manager list by name.
----@param name string
----@return table?
-function DLC_API:GetIMList(name)
-    local im = ItemManager()
-    return im and im.GetIMList and im:GetIMList(name)
-end
-
---- Adds an item ID to the specified Item Manager list.
----@param listName string
----@param itemID number
-function DLC_API:AddItemToIMList(listName, itemID)
-    local im = ItemManager()
-    if im and im.AddItemToIMList then im:AddItemToIMList(listName, itemID) end
-end
-
---- Removes an item ID from the specified Item Manager list.
----@param listName string
----@param itemID number
-function DLC_API:RemoveItemFromIMList(listName, itemID)
-    local im = ItemManager()
-    if im and im.RemoveItemFromIMList then im:RemoveItemFromIMList(listName, itemID) end
-end
-
---- Adds a new empty Item Manager list.
----@param name string
-function DLC_API:AddIMList(name)
-    local im = ItemManager()
-    if im and im.AddIMList then im:AddIMList(name) end
-end
-
---- Renames an Item Manager list by index.
----@param idx number
----@param name string
-function DLC_API:RenameIMList(idx, name)
-    local im = ItemManager()
-    if im and im.RenameIMList then im:RenameIMList(idx, name) end
-end
-
---- Removes an Item Manager list by index.
----@param idx number
-function DLC_API:RemoveIMList(idx)
-    local im = ItemManager()
-    if im and im.RemoveIMList then im:RemoveIMList(idx) end
 end
 
 --- Marks an Item Manager list as modified by updating its timestamp.
@@ -733,23 +684,31 @@ function DLC_API:MarkIMDirty(listName)
     db.imTimestamps[listName] = GetServerTime()
 end
 
---- Returns the priority list name associated with an item ID.
----@param itemID number
----@return string?
-function DLC_API:GetItemPriorityList(itemID)
-    local im = ItemManager()
-    return im and im.GetItemPriorityList and im:GetItemPriorityList(itemID)
-end
-
---- Returns the category name for an itemID (alias for GetItemPriorityList).
----@param itemID number
----@return string?
+--- Returns the category name for an itemID.
+---@param itemID number|string
+---@return string
 function DLC_API:GetItemCategory(itemID)
     local cat = ItemCatalog()
     if cat and cat.GetItemCategory then return cat:GetItemCategory(itemID) end
     local im = ItemManager()
     if im and im.GetItemCategory then return im:GetItemCategory(itemID) end
-    return self:GetItemPriorityList(itemID)
+    return "Junk/Pass"
+end
+
+--- Categorizes an item based on configured lists or fallback heuristics.
+---@param itemLink string
+---@param fallbackQuality number?
+---@return string category
+function DLC_API:CategorizeItem(itemLink, fallbackQuality)
+    local cat = ItemCatalog()
+    if cat and cat.CategorizeItem then
+        return cat:CategorizeItem(itemLink, fallbackQuality)
+    end
+    local loot = Loot()
+    if loot and loot.CategorizeItem then
+        return loot:CategorizeItem(itemLink, fallbackQuality)
+    end
+    return "Junk/Pass"
 end
 
 --- Assigns an itemID to a priority list by index.
@@ -796,16 +755,14 @@ end
 ---@param rawLink string
 ---@param listIndex number|string
 function DLC_API:AddManagedItem(rawLink, listIndex)
+    local cat = ItemCatalog()
+    if cat and cat.AddItemToList then
+        cat:AddItemToList(rawLink, tonumber(listIndex) or 1)
+        return
+    end
     local im = ItemManager()
     if im and im.AddManagedItem then
         im:AddManagedItem(rawLink, listIndex)
-    elseif im and im.AddItemToIMList then
-        local lists = self:GetIMLists()
-        local targetList = type(listIndex) == "number" and lists[listIndex] or self:GetIMList(listIndex)
-        if targetList and targetList.name then
-            local itemID = tonumber(rawLink) or (type(rawLink) == "string" and tonumber(rawLink:match("item:(%d+)")))
-            if itemID then im:AddItemToIMList(targetList.name, itemID) end
-        end
     end
 end
 
@@ -824,22 +781,6 @@ function DLC_API:AddManagedItemBatch(items)
     end
 end
 
---- Returns packaged Item Manager data for synchronization.
----@param isManual boolean?
----@return table|nil
-function DLC_API:_GetItemManagerSyncData(isManual)
-    if not isManual and IsInRaid() and GetNumGroupMembers() < 10 then
-        return nil
-    end
-    local db = DesolateLootcouncil.db.profile
-    if not db.PriorityLists then return nil end
-    local syncData = {}
-    for _, list in ipairs(db.PriorityLists) do
-        syncData[list.name] = list.items
-    end
-    return syncData
-end
-
 --- Manually broadcasts Item Manager lists to the raid group.
 function DLC_API:SyncItemManagerToRaid()
     local s = Sync()
@@ -855,13 +796,6 @@ end
 -- ===========================================================================
 -- 4. VOTING & SESSION SURFACE
 -- ===========================================================================
-
---- Returns the active voting session structure.
----@return table?
-function DLC_API:GetActiveSession()
-    local v = Voting()
-    return v and v.GetActiveSession and v:GetActiveSession()
-end
 
 --- Starts a new voting session for an item or loot table.
 ---@param itemLinkOrTable string|table
@@ -883,12 +817,6 @@ function DLC_API:StartSession(itemLinkOrTable, eligiblePlayers)
     end
 end
 
---- Ends the currently active voting session.
-function DLC_API:EndSession()
-    local v = Voting()
-    if v and v.EndSession then v:EndSession() end
-end
-
 --- Stops the currently active loot session.
 function DLC_API:StopSession()
     local s = Session()
@@ -896,8 +824,6 @@ function DLC_API:StopSession()
         s:SendStopSession()
     elseif DesolateLootcouncil.StopSession then
         DesolateLootcouncil:StopSession()
-    else
-        self:EndSession()
     end
 end
 
@@ -976,9 +902,7 @@ end
 ---@return boolean
 function DLC_API:IsSessionActive()
     local s = Session()
-    if s and s.IsActive then return s:IsActive() end
-    local v = Voting()
-    return (v and v.GetActiveSession and v:GetActiveSession() ~= nil) or false
+    return (s and s.IsActive and s:IsActive()) or false
 end
 
 --- Returns true if a raid attendance session is currently active.
@@ -986,56 +910,6 @@ end
 function DLC_API:IsRaidSessionActive()
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     return (db and db.DecayConfig and db.DecayConfig.sessionActive == true) or false
-end
-
---- Returns the item link for the active session.
----@return string?
-function DLC_API:GetSessionItem()
-    local v = Voting()
-    return v and v.GetSessionItem and v:GetSessionItem()
-end
-
---- Alias for GetSessionItem.
----@return string?
-function DLC_API:GetActiveSessionItem()
-    return self:GetSessionItem()
-end
-
---- Returns the number of seconds remaining on the session timer.
----@return number seconds
-function DLC_API:GetSessionTimeRemaining()
-    local s = Session()
-    return (s and s.GetTimeRemaining and s:GetTimeRemaining()) or 0
-end
-
---- Returns the candidate players for the active session.
----@return string[]
-function DLC_API:GetSessionCandidates()
-    local v = Voting()
-    return (v and v.GetSessionCandidates and v:GetSessionCandidates()) or {}
-end
-
---- Returns the votes table for the active session.
----@return table
-function DLC_API:GetVotes()
-    local v = Voting()
-    return (v and v.GetVotes and v:GetVotes()) or {}
-end
-
---- Alias for GetVotes.
----@return table
-function DLC_API:GetSessionVotes()
-    return self:GetVotes()
-end
-
---- Casts a vote for a candidate in the active session.
----@param voter string
----@param candidate string
----@param voteType string
----@param notes string?
-function DLC_API:CastVote(voter, candidate, voteType, notes)
-    local v = Voting()
-    if v and v.CastVote then v:CastVote(voter, candidate, voteType, notes) end
 end
 
 --- Sends a vote for a specific item.
@@ -1094,36 +968,6 @@ function DLC_API:GetLocalVotes(guid)
     return (v and v.GetLocalVotes and v:GetLocalVotes(guid)) or {}
 end
 
---- Returns vote count and details for a candidate.
----@param candidate string
----@return table?
-function DLC_API:GetCandidateVoteInfo(candidate)
-    local v = Voting()
-    return v and v.GetCandidateVoteInfo and v:GetCandidateVoteInfo(candidate)
-end
-
---- Returns true if the voter has cast a vote in the current session.
----@param voter string
----@return boolean
-function DLC_API:HasVoted(voter)
-    local v = Voting()
-    return (v and v.HasVoted and v:HasVoted(voter)) or false
-end
-
---- Checks if all council members have submitted votes.
----@return boolean
-function DLC_API:HaveAllCouncilMembersVoted()
-    local s = Session()
-    return (s and s.AllVoted and s:AllVoted()) or false
-end
-
---- Returns the list of council members eligible to vote.
----@return string[]
-function DLC_API:GetCouncilMembers()
-    local v = Voting()
-    return (v and v.GetCouncilMembers and v:GetCouncilMembers()) or {}
-end
-
 --- Returns the canonical item list for the current client role.
 ---@return table items
 function DLC_API:GetBiddingList()
@@ -1157,22 +1001,15 @@ function DLC_API:GetAwardedGUIDs()
     return result
 end
 
---- Returns a structured view-model for all votes on a single item.
+--- Returns structured vote summary view-model for an item.
 ---@param guid string
 ---@return table?
-function DLC_API:GetSessionItemVotes(guid)
+function DLC_API:GetVoteSummary(guid)
     local s = Session()
     if not s or not s.sessionVotes then return nil end
     local votes = s.sessionVotes[guid]
     local closed = s.closedItems and s.closedItems[guid]
     return { guid = guid, isClosed = closed or false, votes = votes or {}, voteCount = votes and #votes or 0 }
-end
-
---- Returns vote summary view-model for an item (alias for GetSessionItemVotes).
----@param guid string
----@return table?
-function DLC_API:GetVoteSummary(guid)
-    return self:GetSessionItemVotes(guid)
 end
 
 
@@ -1221,44 +1058,6 @@ function DLC_API:AwardItem(item, winner, reason, extraInfo)
     if l and l.AwardItem then l:AwardItem(item, winner, reason, extraInfo) end
 end
 
---- Returns the full award history.
----@return table
-function DLC_API:GetAwardHistory()
-    local l = Loot()
-    return (l and l.GetAwardHistory and l:GetAwardHistory()) or {}
-end
-
---- Returns award history filtered by criteria.
----@param filter table?
----@return table
-function DLC_API:GetLootHistory(filter)
-    local l = Loot()
-    if l and l.GetHistory then return l:GetHistory(filter) end
-    return self:GetAwardHistory()
-end
-
---- Clears the award history log.
-function DLC_API:ClearAwardHistory()
-    local l = Loot()
-    if l and l.ClearAwardHistory then l:ClearAwardHistory() end
-end
-
---- Returns the N most recent awards.
----@param limit number
----@return table
-function DLC_API:GetRecentAwards(limit)
-    local l = Loot()
-    return (l and l.GetRecentAwards and l:GetRecentAwards(limit)) or {}
-end
-
---- Returns all awards won by a specific player.
----@param playerName string
----@return table
-function DLC_API:GetPlayerAwards(playerName)
-    local l = Loot()
-    return (l and l.GetPlayerAwards and l:GetPlayerAwards(playerName)) or {}
-end
-
 --- Clears the backlog of loot items pending distribution.
 function DLC_API:ClearLootBacklog()
     local l = Loot()
@@ -1284,19 +1083,13 @@ end
 
 --- Adds a manual item to the LM's loot backlog.
 ---@param rawLink string
-function DLC_API:AddManualLootItem(rawLink)
+function DLC_API:AddManualItem(rawLink)
     local l = Loot()
     if l and l.AddManualItem then
         l:AddManualItem(rawLink)
     elseif DesolateLootcouncil.AddManualLootItem then
         DesolateLootcouncil:AddManualLootItem(rawLink)
     end
-end
-
---- Alias for AddManualLootItem.
----@param rawLink string
-function DLC_API:AddManualItem(rawLink)
-    self:AddManualLootItem(rawLink)
 end
 
 --- Marks an item as traded.
@@ -1410,13 +1203,6 @@ end
 function DLC_API:GetMain(altName)
     local r = Roster()
     return r and r.GetMain and r:GetMain(altName)
-end
-
---- Alias for GetMain.
----@param altName string
----@return string?
-function DLC_API:GetMainForAlt(altName)
-    return self:GetMain(altName)
 end
 
 --- Returns all alts linked to a main character.
@@ -1682,8 +1468,10 @@ end
 --- Applies or skips decay for the last tracked raid session.
 ---@param skip boolean?
 function DLC_API:ApplyDecayForLastSession(skip)
-    local a = Attendance()
-    if a and a.ApplyDecayForLastSession then a:ApplyDecayForLastSession(skip) end
+    local r = Roster()
+    if r and r.ApplyDecayForLastSession then
+        return r:ApplyDecayForLastSession(skip)
+    end
 end
 
 --- Records decay application metadata for the session.
@@ -1718,14 +1506,6 @@ function DLC_API:SendVersionCheck()
     return (c and c.SendVersionCheck and c:SendVersionCheck()) or false
 end
 
---- Pings a manual version check request.
----@return boolean success
-function DLC_API:PingVersionCheck()
-    local c = Comm()
-    if c and c.PingVersionCheck then return c:PingVersionCheck() end
-    return self:SendVersionCheck()
-end
-
 --- Returns cooldown seconds remaining before next version ping.
 ---@return number seconds
 function DLC_API:GetVersionCheckCooldown()
@@ -1755,6 +1535,24 @@ function DLC_API:GetActiveUserCount()
     return (c and c.GetActiveUserCount and c:GetActiveUserCount()) or 0
 end
 
+--- Returns comprehensive connection status for all group units.
+---@return table
+function DLC_API:GetGroupConnectionStatus()
+    local c = Comm()
+    if c and c.GetGroupConnectionStatus then
+        return c:GetGroupConnectionStatus()
+    end
+    return {
+        total = 1,
+        active = 1,
+        allConnected = true,
+        missing = {},
+        outdated = {},
+        highestVersion = DesolateLootcouncil.version or "2.1.0",
+        members = {}
+    }
+end
+
 --- Returns connection status info for all known addon users.
 ---@return table
 function DLC_API:GetConnectionStatuses()
@@ -1773,6 +1571,17 @@ end
 function DLC_API:SeedSelf()
     local c = Comm()
     if c and c.SeedSelf then c:SeedSelf() end
+end
+
+--- Dispatches a communication packet across the DLC comm channel.
+---@param command string
+---@param data table
+---@param target? string
+function DLC_API:SendComm(command, data, target)
+    local c = Comm()
+    if c and c.SendComm then
+        c:SendComm(command, data, target)
+    end
 end
 
 --- Compares two character names for equality.
@@ -1850,7 +1659,7 @@ end
 ---@param val number
 function DLC_API:SetMinLootQuality(val)
     if DesolateLootcouncil.db and DesolateLootcouncil.db.profile then
-        DesolateLootcouncil.db.profile.minLootQuality = val
+        DesolateLootcouncil.db.profile.minLootQuality = tonumber(val) or 3
         DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
     end
 end
@@ -1966,6 +1775,74 @@ function DLC_API:ResetWindowLayout()
     if p and p.ResetPositions then
         p:ResetPositions()
         DesolateLootcouncil:Print(L["All window positions have been reset."])
+    end
+end
+
+--- Opens and refreshes the Monitor window.
+---@param force boolean?
+function DLC_API:ShowMonitorWindow(force)
+    local m = UI_Monitor()
+    if m and m.ShowMonitorWindow then
+        m:ShowMonitorWindow(force)
+    end
+end
+
+--- Opens and refreshes the Voting window.
+---@param items table?
+---@param keepIndex boolean?
+function DLC_API:ShowVotingWindow(items, keepIndex)
+    local v = UI_Voting()
+    if v and v.ShowVotingWindow then
+        v:ShowVotingWindow(items, keepIndex)
+    end
+end
+
+--- Removes an item from the voting window.
+---@param guid string
+function DLC_API:RemoveVotingItem(guid)
+    local v = UI_Voting()
+    if v and v.RemoveVotingItem then
+        v:RemoveVotingItem(guid)
+    end
+end
+
+--- Clears local vote states and reopens an item in the voting UI.
+---@param guid string
+---@param newExpiry number?
+function DLC_API:ReopenVotingItem(guid, newExpiry)
+    local v = UI_Voting()
+    if v then
+        if v.myVotes then v.myVotes[guid] = nil end
+        if v.myNotes then v.myNotes[guid] = nil end
+        if v.noteExpanded then v.noteExpanded[guid] = nil end
+        if v.cachedVotingItems then
+            for _, item in ipairs(v.cachedVotingItems) do
+                if (item.sourceGUID or item.link) == guid then
+                    if newExpiry then item.expiry = newExpiry end
+                    break
+                end
+            end
+        end
+        if v.announcedMilestones then
+            v.announcedMilestones[guid] = nil
+        end
+    end
+end
+
+--- Opens and refreshes the Trade List window.
+---@param refreshOnly boolean?
+function DLC_API:ShowTradeListWindow(refreshOnly)
+    local t = UI_TradeList()
+    if t and t.ShowTradeListWindow then
+        t:ShowTradeListWindow(refreshOnly)
+    end
+end
+
+--- Triggers an immediate DLC heartbeat broadcast across the group comm channel.
+function DLC_API:SendDLCHeartbeat()
+    local s = Session()
+    if s and s.SendDLCHeartbeat then
+        s:SendDLCHeartbeat()
     end
 end
 

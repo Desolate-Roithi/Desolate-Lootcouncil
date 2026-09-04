@@ -332,23 +332,36 @@ end
 ---@param winnerName string
 ---@param voteType string
 function Loot:BroadcastAward(itemData, winnerName, voteType)
-    local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName)
-    local msg = string.format(L["Winner of %s is %s! (%s)"], itemData.link, winnerDisplay, voteType)
+    if not itemData then return end
+    local itemLink = itemData.link or (itemData.itemID and select(2, C_Item.GetItemInfo(itemData.itemID))) or "Unknown Item"
+    local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName) or winnerName or "Unknown"
+    local voteDesc = voteType or "Award"
+    local msg = string.format(L["Winner of %s is %s! (%s)"], itemLink, winnerDisplay, voteDesc)
+
+    local sendFunc = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+    local canRaidWarning = SafeIsGroupLeader("player") or (UnitIsGroupAssistant and UnitIsGroupAssistant("player"))
 
     if IsInRaid() then
-        if SafeIsGroupLeader("player") or UnitIsGroupAssistant("player") then
-            C_ChatInfo.SendChatMessage(msg, "RAID_WARNING")
-        else
-            C_ChatInfo.SendChatMessage(msg, "RAID")
+        if canRaidWarning and sendFunc then
+            local ok = pcall(sendFunc, msg, "RAID_WARNING")
+            if not ok then
+                pcall(sendFunc, msg, "RAID")
+            end
+        elseif sendFunc then
+            pcall(sendFunc, msg, "RAID")
+        end
+    elseif IsInGroup() then
+        if sendFunc then
+            pcall(sendFunc, msg, "PARTY")
         end
     else
-        DesolateLootcouncil:DLC_Log(msg)
+        DesolateLootcouncil:Print(msg)
     end
 
     local isSelf = DesolateLootcouncil:SmartCompare(winnerName, "player")
-    if not isSelf and DesolateLootcouncil:IsUnitOnline(winnerName) then
-        C_ChatInfo.SendChatMessage(string.format(L["You have been awarded %s! Trade me."], itemData.link), "WHISPER", nil,
-            winnerName)
+    if not isSelf and DesolateLootcouncil:IsUnitOnline(winnerName) and sendFunc then
+        local whisperMsg = string.format(L["You have been awarded %s! Trade me."], itemLink)
+        pcall(sendFunc, whisperMsg, "WHISPER", nil, winnerName)
     end
 end
 
@@ -387,6 +400,11 @@ function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, ori
 
     if Session and Session.SendHistoryUpdate then Session:SendHistoryUpdate(entry) end
 
+    local API = DesolateLootcouncil.API
+    if API and API.SendComm then
+        API:SendComm("OFFICER_AWARD_SYNC", { entry = entry })
+    end
+
     self:SendMessage("DLC_HISTORY_UPDATED", entry)
 
     if Session and Session.SendRemoveItem then Session:SendRemoveItem(itemGUID) end
@@ -399,12 +417,12 @@ end
 ---@param itemGUID string
 ---@param removeIndex number
 function Loot:CleanupAwardedItem(session, itemGUID, removeIndex)
-    if removeIndex and session.bidding then
+    if removeIndex and session.bidding and session.bidding[removeIndex] then
         table.remove(session.bidding, removeIndex)
     elseif session.bidding then
         for i = #session.bidding, 1, -1 do
             local item = session.bidding[i]
-            if item.sourceGUID == itemGUID or item.link == itemGUID then
+            if item.sourceGUID == itemGUID or item.link == itemGUID or (item.sourceGUID and itemGUID and tostring(item.sourceGUID) == tostring(itemGUID)) or (item.itemID and itemGUID and tostring(item.itemID) == tostring(itemGUID)) then
                 table.remove(session.bidding, i)
             end
         end
@@ -419,7 +437,7 @@ function Loot:CleanupAwardedItem(session, itemGUID, removeIndex)
         if Session.clientLootList then
             for i = #Session.clientLootList, 1, -1 do
                 local item = Session.clientLootList[i]
-                if item.sourceGUID == itemGUID or item.link == itemGUID then
+                if item.sourceGUID == itemGUID or item.link == itemGUID or (item.sourceGUID and itemGUID and tostring(item.sourceGUID) == tostring(itemGUID)) or (item.itemID and itemGUID and tostring(item.itemID) == tostring(itemGUID)) then
                     table.remove(Session.clientLootList, i)
                 end
             end
@@ -434,13 +452,45 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     local session = DesolateLootcouncil.db.profile.session
     local itemData, removeIndex
 
-    if session and session.bidding then
+    if type(itemGUID) == "table" then
+        itemData = itemGUID
+        itemGUID = itemData.sourceGUID or itemData.link
+    end
+
+    if not itemData and session and session.bidding then
         for i, item in ipairs(session.bidding) do
-            if item.sourceGUID == itemGUID or item.link == itemGUID then
+            if (itemGUID and item.sourceGUID and item.sourceGUID == itemGUID)
+                or (itemGUID and item.link and (item.link == itemGUID or item.link:find(itemGUID, 1, true) or itemGUID:find(item.link, 1, true)))
+                or (item.itemID and itemGUID and (tostring(item.itemID) == tostring(itemGUID) or tostring(itemGUID):find("item:" .. tostring(item.itemID)))) then
                 itemData = item; removeIndex = i; break
             end
         end
     end
+
+    if not itemData then
+        local Session = DesolateLootcouncil:GetModule("Session", true)
+        if Session and Session.clientLootList then
+            for i, item in ipairs(Session.clientLootList) do
+                if (itemGUID and item.sourceGUID and item.sourceGUID == itemGUID)
+                    or (itemGUID and item.link and (item.link == itemGUID or item.link:find(itemGUID, 1, true) or itemGUID:find(item.link, 1, true)))
+                    or (item.itemID and itemGUID and (tostring(item.itemID) == tostring(itemGUID) or tostring(itemGUID):find("item:" .. tostring(item.itemID)))) then
+                    itemData = item; break
+                end
+            end
+        end
+    end
+
+    if not itemData and itemGUID then
+        local link = type(itemGUID) == "string" and itemGUID or nil
+        local itemID = (link and tonumber(link:match("item:(%d+)"))) or tonumber(itemGUID) or 0
+        itemData = {
+            link = link,
+            itemID = itemID,
+            sourceGUID = type(itemGUID) == "string" and itemGUID or nil,
+            category = self:GetItemCategory(itemID) or "Junk/Pass",
+        }
+    end
+
     if not itemData then return end
 
     -- 1. Announce to raid / whisper winner
@@ -449,9 +499,9 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     -- 2. Move priority (Bid only)
     local origIndex
     if voteType == "Bid" or voteType == "1" then
-        local Priority = DesolateLootcouncil:GetModule("Priority") --[[@as Priority]]
-        if Priority and Priority.MovePlayerToBottom then
-            origIndex = Priority:MovePlayerToBottom(itemData.category, winnerName)
+        local API = DesolateLootcouncil.API
+        if API and API.MovePlayerToBottom then
+            origIndex = API:MovePlayerToBottom(itemData.category, winnerName)
         end
     end
 
@@ -459,18 +509,15 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     self:RecordAward(session, itemData, itemGUID, winnerName, voteType, origIndex)
 
     -- 4. Remove from live session
-    if removeIndex then
-        self:CleanupAwardedItem(session, itemGUID, removeIndex)
-    end
+    self:CleanupAwardedItem(session, itemGUID, removeIndex)
 
     -- 5. Refresh monitor
-    local UI = DesolateLootcouncil:GetModule("UI_Monitor")
-    if UI then UI:ShowMonitorWindow() end
+    local API = DesolateLootcouncil.API
+    if API and API.ShowMonitorWindow then API:ShowMonitorWindow() end
 
     -- 6. Refresh Voting
-    local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-    if Voting and Voting.RemoveVotingItem then
-        Voting:RemoveVotingItem(itemGUID)
+    if API and API.RemoveVotingItem then
+        API:RemoveVotingItem(itemGUID)
     end
 
     local db = DesolateLootcouncil.db
@@ -538,18 +585,29 @@ function Loot:ReawardItem(index)
 
     -- 4. Remove the history entry and log
     table.remove(session.awarded, index)
+    local newItem = session.bidding[#session.bidding]
+    local API = DesolateLootcouncil.API
+    if API and API.SendComm then
+        API:SendComm("OFFICER_REOPEN_SYNC", {
+            link = awardedItem.link,
+            itemID = awardedItem.itemID,
+            timestamp = awardedItem.timestamp,
+            itemData = newItem,
+            newGUID = newGUID
+        })
+    end
     DesolateLootcouncil:DLC_Log(string.format(L["Re-awarded item: %s"], (awardedItem.link or "???")))
 
     DesolateLootcouncil.API:LogAudit("REAWARD", nil, awardedItem.winner, awardedItem.fullItemData and awardedItem.fullItemData.category, string.format("Re-awarded %s (Winner restored)", tostring(awardedItem.link or awardedItem.itemID)))
 
     -- 5. Broadcast the restored item so assistants see it in their Monitor
-    local newItem = session.bidding[#session.bidding]
     local Session = DesolateLootcouncil:GetModule("Session")
     if Session then
         Session.clientLootList = Session.clientLootList or {}
         table.insert(Session.clientLootList, newItem)
         if not Session.closedItems then Session.closedItems = {} end
         Session.closedItems[newGUID] = true
+        Session.sessionPayloadCache = nil -- Invalidate heartbeat payload cache
         if Session.SaveSessionState then
             Session:SaveSessionState()
         end
@@ -581,8 +639,8 @@ function Loot:ReawardItem(index)
     self:SendMessage("DLC_HISTORY_UPDATED")
     self:SendMessage("DLC_SESSION_STARTED", session.bidding, DesolateLootcouncil:AmIOfficerOrLM())
 
-    local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)
-    if Monitor and Monitor.ShowMonitorWindow then Monitor:ShowMonitorWindow(true) end
+    local API = DesolateLootcouncil.API
+    if API and API.ShowMonitorWindow then API:ShowMonitorWindow(true) end
 
     DesolateLootcouncil:Print(L["Item reverted to monitor window."])
 
@@ -611,9 +669,9 @@ function Loot:AddTestItems()
 end
 
 function Loot:ScanDisenchanters()
-    local Comm = DesolateLootcouncil:GetModule("Comm")
-    if Comm and Comm.SendVersionCheck then
-        Comm:SendVersionCheck()
+    local API = DesolateLootcouncil.API
+    if API and API.SendVersionCheck then
+        API:SendVersionCheck()
         DesolateLootcouncil:DLC_Log(L["Triggered disenchanter scan via version check."])
     end
 end

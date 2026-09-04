@@ -37,21 +37,26 @@ local function OnVersionTimerTick()
     end
 end
 
-local function OnVersionRefreshClicked(isTest)
+local function OnVersionRefreshClicked()
     local ok = DesolateLootcouncil.API:SendVersionCheck()
-    if not ok then return end
+    if not ok then
+        OnVersionTimerTick()
+        return
+    end
 
     UI_Version.btnRefresh:SetEnabled(false)
     UI_Version.btnRefresh:SetText(L["Pinging..."])
     
     C_Timer.After(1.5, function()
-        if UI_Version.versionFrame then
-            UI_Version:UpdateVersionList(isTest)
+        if UI_Version.versionFrame and UI_Version.versionFrame:IsShown() then
+            UI_Version:UpdateVersionList()
+            OnVersionTimerTick()
         end
     end)
 end
 
 local function OnVersionFrameHide()
+    UI_Version.isTestMode = nil
     if UI_Version.refreshTimer then
         UI_Version:CancelTimer(UI_Version.refreshTimer)
         UI_Version.refreshTimer = nil
@@ -59,6 +64,7 @@ local function OnVersionFrameHide()
 end
 
 function UI_Version:ShowVersionWindow(isTest)
+    self.isTestMode = (isTest == true)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     if not self.versionFrame then
@@ -94,10 +100,7 @@ function UI_Version:ShowVersionWindow(isTest)
         frame:HookScript("OnSizeChanged", LayoutFooterButtons)
         LayoutFooterButtons()
 
-        -- Repeating timer to handle button state and countdown text
-        self.refreshTimer = self:ScheduleRepeatingTimer(OnVersionTimerTick, 1)
-
-        btnRefresh:SetScript("OnClick", function() OnVersionRefreshClicked(isTest) end)
+        btnRefresh:SetScript("OnClick", function() OnVersionRefreshClicked() end)
         btnSync:SetScript("OnClick", function()
             if not DesolateLootcouncil.sessionAutopassAnswered then
                 DesolateLootcouncil:PromptAutopass()
@@ -111,6 +114,10 @@ function UI_Version:ShowVersionWindow(isTest)
     end
 
     self.versionFrame:Show()
+    if not self.refreshTimer then
+        self.refreshTimer = self:ScheduleRepeatingTimer(OnVersionTimerTick, 1)
+        OnVersionTimerTick()
+    end
     self:UpdateVersionList(isTest)
 end
 
@@ -124,6 +131,10 @@ end
 
 function UI_Version:UpdateVersionList(isTest)
     if not self.versionFrame then return end
+    if isTest ~= nil then
+        self.isTestMode = (isTest == true)
+    end
+    local testActive = (self.isTestMode == true) or (DesolateLootcouncil.isTestRunning == true)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
 
     NativeGUI:ResetRowPool(self.rowPool)
@@ -182,10 +193,13 @@ function UI_Version:UpdateVersionList(isTest)
     AddEntry(UnitName("player"), SafeGetUnitClass("player"), DesolateLootcouncil.API:GetVersion())
 
     if IsInRaid() then
-        for i = 1, 40 do
-            local name, _, _, _, _, fileName = GetRaidRosterInfo(i)
-            if name then
-                AddEntry(name, fileName, nil)
+        local members = GetNumGroupMembers()
+        if members and members > 0 then
+            for i = 1, members do
+                local name, _, _, _, _, fileName = GetRaidRosterInfo(i)
+                if name then
+                    AddEntry(name, fileName, nil)
+                end
             end
         end
     elseif IsInGroup() then
@@ -202,10 +216,11 @@ function UI_Version:UpdateVersionList(isTest)
         end
     end
 
-    local activeUsers = DesolateLootcouncil.API:GetActiveAddonUsers()
-    if activeUsers then
-        for name in pairs(activeUsers) do
-            local class = DesolateLootcouncil.API:GetUnitClass(name)
+    -- 3. Combined Simulation Roster (matches Attendance:SnapshotRoster)
+    local sims = DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationRoster and DesolateLootcouncil.API:GetSimulationRoster()
+    if sims then
+        for _, name in ipairs(sims) do
+            local class = (DesolateLootcouncil.API and DesolateLootcouncil.API.GetUnitClass and DesolateLootcouncil.API:GetUnitClass(name)) or "WARRIOR"
             AddEntry(name, class, nil)
         end
     end
@@ -214,7 +229,10 @@ function UI_Version:UpdateVersionList(isTest)
     local highestVerStr = "0.0.0"
     
     for _, entry in ipairs(roster) do
-        if not DesolateLootcouncil.API:SmartCompare(entry.name, "player") then
+        local isLocalPlayer = (UnitIsUnit and UnitIsUnit(entry.name, "player")) or DesolateLootcouncil.API:SmartCompare(entry.name, "player")
+        if isLocalPlayer then
+            entry.version = DesolateLootcouncil.API:GetVersion()
+        else
             local ver = playerVersions and playerVersions[entry.name]
             if not ver and playerVersions then
                 for pName, pVer in pairs(playerVersions) do
@@ -224,11 +242,14 @@ function UI_Version:UpdateVersionList(isTest)
                     end
                 end
             end
-            entry.version = ver
+            if ver then
+                entry.version = ver
+            end
         end
     end
 
-    if isTest then
+    -- Synthetic test dummies ONLY when explicitly in automated test suite and NOT in live simulation
+    if testActive and not (DesolateLootcouncil.IsSimulationActive and DesolateLootcouncil:IsSimulationActive()) then
         AddEntry("OutdatedPlayer", "WARRIOR", "0.0.1")
         AddEntry("MissingPlayer", "MAGE", nil)
         AddEntry("FuturePlayer", "ROGUE", "9.9.9")
@@ -321,6 +342,10 @@ function UI_Version:UpdateVersionList(isTest)
         topOffset = topOffset + rowHeight + 4
     end
 
+    for i = #roster + 1, #self.rowPool do
+        self.rowPool[i]:Hide()
+    end
+
     self.scrollContent:SetHeight(topOffset + 10)
 end
 
@@ -333,4 +358,5 @@ end
 if _G.DLC_TEST_MODE then
     UI_Version.ParseSemVer = AT.ParseSemVer
     UI_Version.CompareSemVer = AT.CompareSemVer
+    UI_Version.OnVersionTimerTick = OnVersionTimerTick
 end

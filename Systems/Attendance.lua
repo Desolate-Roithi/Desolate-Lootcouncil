@@ -268,14 +268,13 @@ function Attendance:StopRaidSession(saveHistory)
             -- disbands, causing SYNC_HISTORY to be sent to an already-gone RAID
             -- channel and producing "not in group" errors sub-second after save.
             if DesolateLootcouncil:AmILootMaster() and IsInRaid() then
-                local Comm = DesolateLootcouncil:GetModule("Comm", true)
-                if Comm then
+                if API and API.SendComm then
                     local payload = {
                         AttendanceHistory = db.AttendanceHistory or {},
                         awarded = db.session and db.session.awarded or {},
                         historyTimestamp = db.historyTimestamp or 0
                     }
-                    Comm:SendComm("SYNC_HISTORY", payload)
+                    API:SendComm("SYNC_HISTORY", payload)
                 end
             end
         else

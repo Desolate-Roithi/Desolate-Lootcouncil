@@ -123,9 +123,12 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     row.linkLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-function UI_TradeList:ShowTradeListWindow()
+function UI_TradeList:ShowTradeListWindow(refreshOnly)
     if not DesolateLootcouncil.API:IsLootMaster() then
         if self.tradeListFrame then self.tradeListFrame:Hide() end
+        return
+    end
+    if refreshOnly and (not self.tradeListFrame or not self.tradeListFrame:IsShown()) then
         return
     end
 

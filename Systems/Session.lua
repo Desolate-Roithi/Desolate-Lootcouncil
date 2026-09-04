@@ -165,24 +165,26 @@ function Session:OnEnable()
         button2 = L["Skip"],
         button3 = L["Review First"],
         OnAccept = function()
+            local API = DesolateLootcouncil.API
+            if API and API.ApplyDecayForLastSession then
+                API:ApplyDecayForLastSession(false)
+            end
             local RosterSys = DesolateLootcouncil:GetModule("Roster")
-            if RosterSys and RosterSys.ApplyDecayForLastSession then
-                RosterSys:ApplyDecayForLastSession()
-                if RosterSys.pendingStartRaidSession then
-                    RosterSys.pendingStartRaidSession = nil
-                    RosterSys:StartRaidSession()
-                end
+            if RosterSys and RosterSys.pendingStartRaidSession then
+                RosterSys.pendingStartRaidSession = nil
+                RosterSys:StartRaidSession()
             end
         end,
         OnCancel = function(_, _, reason)
             if reason == "clicked" then
+                local API = DesolateLootcouncil.API
+                if API and API.ApplyDecayForLastSession then
+                    API:ApplyDecayForLastSession(true)
+                end
                 local RosterSys = DesolateLootcouncil:GetModule("Roster")
-                if RosterSys and RosterSys.ApplyDecayForLastSession then
-                    RosterSys:ApplyDecayForLastSession(true)
-                    if RosterSys.pendingStartRaidSession then
-                        RosterSys.pendingStartRaidSession = nil
-                        RosterSys:StartRaidSession()
-                    end
+                if RosterSys and RosterSys.pendingStartRaidSession then
+                    RosterSys.pendingStartRaidSession = nil
+                    RosterSys:StartRaidSession()
                 end
             end
         end,
@@ -253,6 +255,8 @@ function Session:SendDLCHeartbeat()
         end
     end
     local rosterHash = DesolateLootcouncil.CalculateRosterHash and DesolateLootcouncil:CalculateRosterHash(db.MainRoster) or "00000000"
+    local status = DesolateLootcouncil.API and DesolateLootcouncil.API.GetGroupConnectionStatus and DesolateLootcouncil.API:GetGroupConnectionStatus()
+    local lmAllConnected = status and (status.allConnected == true) or false
     local payload = {
         imTimestamps = db.imTimestamps or {},
         priorityTimestamps = db.priorityTimestamps or {},
@@ -262,6 +266,7 @@ function Session:SendDLCHeartbeat()
         rosterTimestamp = db.rosterTimestamp or 0,
         unassignedTimestamp = db.unassignedTimestamp or 0,
         rosterHash = rosterHash,
+        lmAllConnected = lmAllConnected,
     }
     local Comm = DesolateLootcouncil:GetModule("Comm")
     if Comm then
@@ -446,12 +451,15 @@ function Session:FilterBiddingLoot(lootTable)
 
     for _, item in ipairs(lootTable) do
         local cat = item.category
-        if not cat or cat == "" or cat == "Junk/Pass" then
+        if not cat or cat == "" then
             local quality = select(3, C_Item.GetItemInfo(item.link))
-            local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
+            local minQuality = tonumber(DesolateLootcouncil.db.profile.minLootQuality) or 3
             if quality and quality >= minQuality then
                 cat = "Rest"
                 item.category = "Rest"
+            else
+                cat = "Junk/Pass"
+                item.category = "Junk/Pass"
             end
         end
 
@@ -543,6 +551,8 @@ end
 
 function Session:StartSession(lootTable)
     if not DesolateLootcouncil:AmILootMaster() then return end
+    self.sessionPayloadCache = nil
+    DesolateLootcouncil.keepAuditorOpen = nil
 
     local RosterSys = DesolateLootcouncil:GetModule("Roster")
     if RosterSys and RosterSys.HasPendingDecay and RosterSys:HasPendingDecay() then
@@ -639,6 +649,8 @@ function Session:SendStopSession()
     -- 2. Local Cleanup (LM Side)
     self.sessionVotes        = {}
     self.closedItems         = {}
+    self.myLocalVotes        = {}
+    self.outboundVotes       = {}
     self.clientLootList      = {} -- B9: Clear so heartbeat timer stops on dead session
     self.sessionPayloadCache = nil
     -- Clear the Bidding storage so Monitor empties
@@ -752,21 +764,19 @@ function Session:RemoveSessionItem(guid)
 
     -- 6. Refresh Monitor
     self:SendMessage("DLC_ITEM_REMOVED", guid)
-    local MonitorUI = DesolateLootcouncil:GetModule("UI_Monitor", true)
-    if MonitorUI and MonitorUI.monitorFrame and MonitorUI.monitorFrame:IsShown() then
-        MonitorUI:ShowMonitorWindow(true)
+    local API = DesolateLootcouncil.API
+    if API and API.ShowMonitorWindow then
+        API:ShowMonitorWindow(true)
     end
 
     -- 7. Refresh Voting (if open)
-    local VotingUI = DesolateLootcouncil:GetModule("UI_Voting", true)
-    if VotingUI and VotingUI.votingFrame and VotingUI.votingFrame:IsShown() then
-        VotingUI:ShowVotingWindow(nil, true)
+    if API and API.ShowVotingWindow then
+        API:ShowVotingWindow(nil, true)
     end
 
     -- 8. Refresh Trade List (if open)
-    local TradeListUI = DesolateLootcouncil:GetModule("UI_TradeList", true)
-    if TradeListUI and TradeListUI.tradeListFrame and TradeListUI.tradeListFrame:IsShown() then
-        TradeListUI:ShowTradeListWindow()
+    if API and API.ShowTradeListWindow then
+        API:ShowTradeListWindow(true)
     end
 
     DesolateLootcouncil:DLC_Log("Removed item from session and pending trades.")
@@ -938,10 +948,9 @@ function Session:HandleStartSession(payload, sender)
             end
         end
         if DesolateLootcouncil:AmIOfficerOrLM() then
-            ---@type UI_Monitor
-            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-            if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                Monitor:ShowMonitorWindow(true)
+            local API = DesolateLootcouncil.API
+            if API and API.ShowMonitorWindow then
+                API:ShowMonitorWindow(true)
             end
         end
         self:SaveSessionState()
@@ -1040,22 +1049,9 @@ function Session:HandleReopenItem(payload)
             end
         end
 
-        local Voting = DesolateLootcouncil:GetModule("UI_Voting", true)
-        if Voting then
-            if Voting.myVotes then Voting.myVotes[guid] = nil end
-            if Voting.myNotes then Voting.myNotes[guid] = nil end
-            if Voting.noteExpanded then Voting.noteExpanded[guid] = nil end
-            if Voting.cachedVotingItems then
-                for _, item in ipairs(Voting.cachedVotingItems) do
-                    if (item.sourceGUID or item.link) == guid then
-                        if newExpiry then item.expiry = newExpiry end
-                        break
-                    end
-                end
-            end
-            if Voting.announcedMilestones then
-                Voting.announcedMilestones[guid] = nil
-            end
+        local API = DesolateLootcouncil.API
+        if API and API.ReopenVotingItem then
+            API:ReopenVotingItem(guid, newExpiry)
         end
 
         self.sessionPayloadCache = nil -- Invalidate heartbeat cache so new expiry/closed state is broadcast
@@ -1093,8 +1089,8 @@ function Session:HandleHistoryUpdate(payload)
 end
 
 function Session:HandleVote(payload, sender)
-    -- Both LM and Assists track the incoming votes directly from the broadcast
-    if DesolateLootcouncil:AmIOfficerOrLM() then
+    -- Both LM and Assists track incoming votes; in simulation mode, track for all roles to simulate LM processing
+    if DesolateLootcouncil:AmIOfficerOrLM() or DesolateLootcouncil:IsSimulationActive() then
         local data = payload.data
         if not data or not data.guid then return end
 
@@ -1117,17 +1113,19 @@ function Session:HandleVote(payload, sender)
             local serverRoll = data.roll or math.random(1, 100)
             self.sessionVotes[data.guid][sender] = { type = data.vote, roll = serverRoll, note = data.note or "" }
 
-            -- Only the actual LM is allowed to trigger auto-closes
-            if DesolateLootcouncil:AmILootMaster() then
+            -- Only the actual LM is allowed to trigger auto-closes (in simulation, emulate LM behavior)
+            if DesolateLootcouncil:AmILootMaster() or DesolateLootcouncil:IsSimulationActive() then
                 local voteCount = 0
                 for _ in pairs(self.sessionVotes[data.guid]) do voteCount = voteCount + 1 end
 
-                local totalMembers = GetNumGroupMembers()
-                if totalMembers == 0 then totalMembers = 1 end
-
-                ---@type Simulation
-                local Sim = DesolateLootcouncil:GetModule("Simulation")
-                if Sim then totalMembers = totalMembers + Sim:GetCount() end
+                local totalMembers
+                if DesolateLootcouncil:IsSimulationActive() then
+                    local Sim = DesolateLootcouncil:GetModule("Simulation")
+                    totalMembers = 1 + (Sim and Sim:GetCount() or 0)
+                else
+                    totalMembers = GetNumGroupMembers()
+                    if totalMembers == 0 then totalMembers = 1 end
+                end
 
                 if voteCount >= totalMembers then
                     self:SendCloseItem(data.guid)
@@ -1138,10 +1136,9 @@ function Session:HandleVote(payload, sender)
         self:SaveSessionState()
 
         -- Auto-update Monitor for tracking (Assist or LM)
-        ---@type UI_Monitor
-        local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-        if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-            Monitor:ShowMonitorWindow(true)
+        local API = DesolateLootcouncil.API
+        if API and API.ShowMonitorWindow then
+            API:ShowMonitorWindow(true)
         end
         self.sessionPayloadCache = nil -- Invalidate heartbeat cache; item list changed
     end
@@ -1177,18 +1174,16 @@ function Session:HandleSyncVotes(payload)
 
         -- Update UI if open
         if DesolateLootcouncil:AmIOfficerOrLM() then
-            ---@type UI_Monitor
-            local Monitor = DesolateLootcouncil:GetModule("UI_Monitor")
-            if Monitor and Monitor.monitorFrame and Monitor.monitorFrame:IsShown() then
-                Monitor:ShowMonitorWindow(true)
+            local API = DesolateLootcouncil.API
+            if API and API.ShowMonitorWindow then
+                API:ShowMonitorWindow(true)
             end
         end
 
         -- PROBLEM 13: Refresh Voting UI to clear "Syncing..." status
-        ---@type UI_Voting
-        local Voting = DesolateLootcouncil:GetModule("UI_Voting")
-        if Voting and Voting.votingFrame and Voting.votingFrame:IsShown() then
-            Voting:ShowVotingWindow(nil, true)
+        local API = DesolateLootcouncil.API
+        if API and API.ShowVotingWindow then
+            API:ShowVotingWindow(nil, true)
         end
     end
 end
@@ -1274,6 +1269,11 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
         self:HandleHistoryUpdate(payload)
     elseif payload.command == "SYNC_LM" then
         self:HandleSyncLM(payload, sender)
+    elseif payload.command == "AUTOPASS_ORDER" then
+        local Autopass = DesolateLootcouncil:GetModule("Autopass", true)
+        if Autopass and Autopass.HandleAutopassOrder then
+            Autopass:HandleAutopassOrder(payload, sender)
+        end
     end
 end
 
@@ -1341,7 +1341,10 @@ function Session:EndSession()
     self.clientLootList      = {}
     self.sessionVotes        = {}
     self.closedItems         = {}
+    self.myLocalVotes        = {}
+    self.outboundVotes       = {}
     self.sessionPayloadCache = nil -- B10: Invalidate cache; session is dead
+    wipe(DesolateLootcouncil.db.profile.session.bidding)
     wipe(DesolateLootcouncil.db.profile.session.activeState)
 
     self:SendMessage("DLC_SESSION_STOPPED")
