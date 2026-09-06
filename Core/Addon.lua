@@ -240,6 +240,10 @@ function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
 
     self:UpdateLootMasterStatus()
 
+    if self.SendMessage then
+        self:SendMessage("DLC_HISTORY_UPDATED")
+    end
+
     self:DLC_Log(string.format("Profile changed: Roster and Session states rehydrated."))
 end
 
@@ -335,13 +339,23 @@ function DesolateLootcouncil:RefreshOpenWindows(session)
     ---@type UI_RaidHistory
     local RaidHistUI = self:GetModule("UI_RaidHistory", true)
     if RaidHistUI and RaidHistUI.frame and RaidHistUI.frame:IsShown() then
-        RaidHistUI:RefreshHistoryWindow()
+        if RaidHistUI.RefreshHistoryWindow then
+            RaidHistUI:RefreshHistoryWindow()
+        elseif RaidHistUI.Refresh then
+            RaidHistUI:Refresh()
+        end
     end
 
     ---@type UI_ItemManager
     local ItemMgr = self:GetModule("UI_ItemManager") --[[@as UI_ItemManager]]
     if ItemMgr and ItemMgr.frame and ItemMgr.frame:IsShown() then
         ItemMgr:RefreshWindow()
+    end
+
+    ---@type UI_Settings
+    local SettingsUI = self:GetModule("UI_Settings", true)
+    if SettingsUI and SettingsUI.settingsFrame and SettingsUI.settingsFrame:IsShown() then
+        SettingsUI:RenderTabs()
     end
 end
 

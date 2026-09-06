@@ -398,6 +398,20 @@ function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, ori
 
     DesolateLootcouncil.API:LogAudit("AWARD", nil, winnerName, itemData.category, string.format("Awarded %s (%s)", tostring(itemData.link or itemData.itemID), tostring(voteType)))
 
+    -- Assign currentSessionLM upon first loot distribution if session is active and unassigned
+    local decayConfig = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.DecayConfig
+    if decayConfig and decayConfig.sessionActive and (not decayConfig.currentSessionLM or decayConfig.currentSessionLM == "") then
+        local activeLM = DesolateLootcouncil:DetermineLootMaster() or UnitName("player")
+        decayConfig.currentSessionLM = activeLM
+        if DesolateLootcouncil.db.global then
+            DesolateLootcouncil.db.global.activeRaidLM = activeLM
+        end
+        local Sync = DesolateLootcouncil:GetModule("Sync", true)
+        if Sync and Sync.ShareDataWithOfficers then
+            Sync:ShareDataWithOfficers("CONFIG")
+        end
+    end
+
     if Session and Session.SendHistoryUpdate then Session:SendHistoryUpdate(entry) end
 
     local API = DesolateLootcouncil.API

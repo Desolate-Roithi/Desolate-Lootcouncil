@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class UI_Settings : AceModule
-local UI_Settings = DesolateLootcouncil:NewModule("UI_Settings")
+local UI_Settings = DesolateLootcouncil:NewModule("UI_Settings", "AceEvent-3.0")
 
 ---@type DesolateLootcouncil
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
@@ -18,6 +18,14 @@ StaticPopupDialogs["DLC_SETTINGS_CONFIRM"] = {
     hideOnEscape = true,
     preferredIndex = 3,
 }
+
+function UI_Settings:OnEnable()
+    self:RegisterMessage("DLC_HISTORY_UPDATED", function()
+        if self.settingsFrame and self.settingsFrame:IsShown() then
+            self:RenderTabs()
+        end
+    end)
+end
 
 function UI_Settings:ShowSettingsWindow(initialTab)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
@@ -273,10 +281,14 @@ local function RenderColumnItem(parent, argInfo, NativeGUI, itemL, topOffset, of
             stepper:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset)
             return 36
         else
-            local dropContainer, _ = NativeGUI:CreateDropdown(parent, d.name, itemW, values, currentVal, function(itemKey)
+            local dropSort = d.sorting
+            local dropContainer, dropBtn = NativeGUI:CreateDropdown(parent, d.name, itemW, values, currentVal, function(itemKey)
                 if d.set then d.set(info, itemKey) end
                 C_Timer.After(0.05, function() sidebarModule:RenderTabs() end)
-            end)
+            end, dropSort)
+            if dropBtn then
+                -- dropBtn exists
+            end
             dropContainer:SetPoint("TOPLEFT", parent, "TOPLEFT", itemL, -topOffset)
             return 42
         end

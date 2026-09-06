@@ -24,6 +24,20 @@ local function SafeGetUnitClass(unit)
     return (ok and classFilename) or "WARRIOR"
 end
 
+function Attendance:CleanRaiderStaleSession()
+    if DesolateLootcouncil.API:IsKnownRosterRaider() or not DesolateLootcouncil.API:AmIOfficerOrLM() then
+        local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+        if db and db.DecayConfig and db.DecayConfig.sessionActive then
+            db.DecayConfig.sessionActive = false
+            db.DecayConfig.currentSessionID = nil
+            db.DecayConfig.currentSessionLM = nil
+            db.DecayConfig.currentAttendees = {}
+            db.DecayConfig.attendeeDetails = {}
+            db.DecayConfig.bossLogs = {}
+        end
+    end
+end
+
 function Attendance:OnInitialize()
     self.pullCounts = {}
     self.currentEncounter = nil
@@ -31,6 +45,7 @@ function Attendance:OnInitialize()
     self:RegisterEvent("ENCOUNTER_START", "OnEncounterStart")
     self:RegisterEvent("ENCOUNTER_END", "OnEncounterEnd")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "OnGroupRosterUpdate")
+    self:CleanRaiderStaleSession()
     DesolateLootcouncil:DLC_Log(L["Systems/Attendance Loaded"])
 end
 
@@ -105,7 +120,7 @@ function Attendance:StartRaidSession()
 
     config.sessionActive = true
     config.currentSessionID = time()
-    config.currentSessionLM = UnitName("player")
+    config.currentSessionLM = nil -- Assigned only upon loot distribution or handover
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.bossLogs = {}
@@ -116,7 +131,7 @@ function Attendance:StartRaidSession()
         globalDb.activeRaidProfile = DesolateLootcouncil.db:GetCurrentProfile()
         globalDb.activeRaidSessionID = config.currentSessionID
         globalDb.activeRaidLastActivity = config.lastActivity
-        globalDb.activeRaidLM = UnitName("player")
+        globalDb.activeRaidLM = ""
     end
 
     local session = DesolateLootcouncil.db.profile.session
@@ -147,7 +162,8 @@ end
 
 --- Stops the current tracking session and optionally commits it to AttendanceHistory.
 ---@param saveHistory boolean|nil
-function Attendance:StopRaidSession(saveHistory)
+---@param isAutoCloseOfficer boolean|nil
+function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if not db or not db.DecayConfig or not db.DecayConfig.sessionActive then
         self:Printf("No active session to stop.")
@@ -160,6 +176,11 @@ function Attendance:StopRaidSession(saveHistory)
         if isOfficerOrLM then
             if not db.AttendanceHistory then db.AttendanceHistory = {} end
 
+            local decayVal = self.decayAppliedForSession or (not config.enabled and -1 or nil)
+            if isAutoCloseOfficer then
+                decayVal = nil
+            end
+
             local entry = {
                 date            = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
                 zone            = GetRealZoneText() or "Unknown",
@@ -168,9 +189,12 @@ function Attendance:StopRaidSession(saveHistory)
                 attendeeDetails = {},
                 bossLogs        = {},
                 awarded         = {},
-                decayApplied    = self.decayAppliedForSession or (not config.enabled and -1 or nil),
+                decayApplied    = decayVal,
                 decayPenalty    = self.decayPenaltyForSession or (config.defaultPenalty or 1),
-                decayAbsent     = self.decayAbsentForSession and DesolateLootcouncil.Table.DeepCopy(self.decayAbsentForSession) or nil
+                decayAbsent     = not isAutoCloseOfficer and self.decayAbsentForSession and DesolateLootcouncil.Table.DeepCopy(self.decayAbsentForSession) or nil,
+                decayMissing    = (isAutoCloseOfficer == true) and true or nil,
+                autoClosed      = (isAutoCloseOfficer == true) and true or nil,
+                sessionLM       = config.currentSessionLM or nil,
             }
             self.decayAppliedForSession = nil
             self.decayPenaltyForSession = nil
@@ -347,8 +371,7 @@ function Attendance:GetUnitClass(unitName)
         end
     end
 
-    local Roster = DesolateLootcouncil:GetModule("Roster", true)
-    local main = (Roster and Roster.GetMain and Roster:GetMain(unitName)) or unitName
+    local main = DesolateLootcouncil.API:GetMain(unitName) or unitName
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if db and db.MainRoster then
         for mName, rData in pairs(db.MainRoster) do
@@ -371,8 +394,7 @@ function Attendance:RegisterAttendance(unitName, isEncounterKill)
     if not config or not config.sessionActive or not unitName or unitName == "" then return end
 
     local normUnit = DesolateLootcouncil:NormalizeName(unitName)
-    local Roster = DesolateLootcouncil:GetModule("Roster", true)
-    local mainName = (Roster and Roster.GetMain and Roster:GetMain(normUnit)) or (Roster and Roster.GetMain and Roster:GetMain(unitName)) or normUnit
+    local mainName = DesolateLootcouncil.API:GetMain(normUnit) or DesolateLootcouncil.API:GetMain(unitName) or normUnit
     mainName = DesolateLootcouncil:NormalizeName(mainName)
 
     if db.MainRoster and (db.MainRoster[mainName] or db.MainRoster[normUnit] or db.MainRoster[unitName]) then
@@ -422,9 +444,7 @@ function Attendance:RegisterAttendance(unitName, isEncounterKill)
         -- Demoted to non-forced: per-player rejection detail is surfaced via the Unassigned Players window.
         DesolateLootcouncil:DLC_Log("Attendance Rejected: " .. hint)
         -- Queue into the Unassigned Players window so the LM can act via /dlc unassigned.
-        if Roster and Roster.RecordUnassignedPlayer then
-            Roster:RecordUnassignedPlayer(normUnit, "Attendance")
-        end
+        DesolateLootcouncil.API:RecordUnassignedPlayer(normUnit, "Attendance")
     end
 end
 

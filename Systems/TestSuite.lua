@@ -1192,7 +1192,7 @@ function TestSuite:OnInitialize()
         local db = DesolateLootcouncil.db.profile
 
         -- Part 1: Empty Disband Auto-Closes Silently (No Boss Kills)
-        self:RunPart(1, 4, "Empty_Disband_Silent_Close", function()
+        self:RunPart(1, 6, "Empty_Disband_Silent_Close", function()
             db.DecayConfig.sessionActive = true
             db.DecayConfig.currentSessionLM = UnitName("player")
             db.DecayConfig.bossLogs = {}
@@ -1208,7 +1208,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 2: Disband With Boss Kill Prompts LM
-        self:RunPart(2, 4, "Disband_With_Kill_Prompts_LM", function()
+        self:RunPart(2, 6, "Disband_With_Kill_Prompts_LM", function()
             db.DecayConfig.sessionActive = true
             db.DecayConfig.currentSessionLM = UnitName("player")
             db.DecayConfig.bossLogs = {
@@ -1229,7 +1229,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 3: Snapshot Exclusivity & Role Boundaries
-        self:RunPart(3, 4, "Snapshot_Exclusivity_And_Role_Boundaries", function()
+        self:RunPart(3, 6, "Snapshot_Exclusivity_And_Role_Boundaries", function()
             db.DecayConfig.sessionActive = true
             db.DecayConfig.currentAttendees = {}
             DesolateLootcouncil.amILM = true
@@ -1251,7 +1251,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 4: Solo LM Boundary & Offline Comm Protection
-        self:RunPart(4, 4, "Solo_LM_And_Offline_Comm_Protection", function()
+        self:RunPart(4, 6, "Solo_LM_And_Offline_Comm_Protection", function()
             -- Solo non-LM player should not be promoted
             db.DecayConfig.sessionActive = true
             db.DecayConfig.currentSessionLM = "OtherRaidLeader-Realm"
@@ -1285,6 +1285,53 @@ function TestSuite:OnInitialize()
             DesolateLootcouncil.IsUnitOnline = origIsUnitOnline
 
             assert(pullsSent == 0, "PULL_REQUEST must be suppressed when sender is offline or not in raid")
+        end)
+
+        -- Part 5: Raider Disband Zero-Popup & Silent Session Purge
+        self:RunPart(5, 6, "Raider_Disband_Zero_Popup_And_Silent_Purge", function()
+            local myName = UnitName("player")
+            db.DecayConfig.sessionActive = true
+            db.DecayConfig.currentSessionLM = "OtherRaidLeader-Realm"
+            db.DecayConfig.bossLogs = { { name = "Boss 1", killed = true } }
+            DesolateLootcouncil.amILM = false
+            DesolateLootcouncil.amIOfficer = false
+            if Roster then Roster.disbandPopupPending = false end
+
+            -- Simulate raider in guild roster with isOfficer = false
+            local origRoster = db.MainRoster
+            db.MainRoster = { [myName] = { isOfficer = false } }
+
+            if Roster and Roster.HandleRaidDisband then
+                Roster.HandleRaidDisband(true)
+            end
+
+            assert(Roster.disbandPopupPending == false, "Raider must NEVER receive disband popup on group exit")
+            assert(db.DecayConfig.sessionActive == false, "Raider session must be purged to false")
+            db.MainRoster = origRoster
+        end)
+
+        -- Part 6: Solo LM Authority & Empty Roster Settings Invariant
+        self:RunPart(6, 6, "Solo_LM_And_Empty_Roster_Settings_Authority", function()
+            local origRoster = db.MainRoster
+            local origAmILM = DesolateLootcouncil.amILM
+            local origAmIOfficer = DesolateLootcouncil.amIOfficer
+
+            -- Sub-case 6a: Fresh install / empty roster while solo
+            db.MainRoster = {}
+            DesolateLootcouncil.amILM = true
+            DesolateLootcouncil.amIOfficer = false
+            assert(DesolateLootcouncil:AmIOfficerOrLM() == true, "Solo player with empty roster must have AmIOfficerOrLM() == true")
+            assert(DesolateLootcouncil.API:IsKnownRosterRaider() == false, "Empty roster must return false for IsKnownRosterRaider")
+
+            -- Sub-case 6b: Player in roster without isOfficer flag while solo
+            local myName = UnitName("player")
+            db.MainRoster = { [myName] = { isOfficer = false } }
+            assert(DesolateLootcouncil:AmIOfficerOrLM() == true, "Solo player must maintain AmIOfficerOrLM == true even if unflagged in roster")
+            assert(DesolateLootcouncil.API:IsKnownRosterRaider() == true, "IsKnownRosterRaider returns true for unflagged roster entry")
+
+            db.MainRoster = origRoster
+            DesolateLootcouncil.amILM = origAmILM
+            DesolateLootcouncil.amIOfficer = origAmIOfficer
         end)
 
         self:Log("Scenario 8 [Disband Gating, Snapshot Authority & Comm Boundaries] completed successfully.")

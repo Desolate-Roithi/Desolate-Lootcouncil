@@ -985,40 +985,38 @@ local function HandleRaidDisband(forceDisband)
     end
 
     if config.sessionActive then
-        local isLM = false
         local myName = UnitName("player")
-        if config.currentSessionLM and config.currentSessionLM ~= "" then
-            isLM = DesolateLootcouncil:SmartCompare(config.currentSessionLM, myName)
-        elseif DesolateLootcouncil.db.global and DesolateLootcouncil.db.global.activeRaidLM and DesolateLootcouncil.db.global.activeRaidLM ~= "" then
-            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.db.global.activeRaidLM, myName)
-        elseif DesolateLootcouncil.activeLootMaster and DesolateLootcouncil.activeLootMaster ~= "" then
-            isLM = DesolateLootcouncil:SmartCompare(DesolateLootcouncil.activeLootMaster, myName)
-        elseif DesolateLootcouncil.amILM then
-            isLM = true
+        local isLM = config.currentSessionLM and config.currentSessionLM ~= "" and DesolateLootcouncil:SmartCompare(config.currentSessionLM, myName)
+
+        -- If the player is a known non-officer in the guild roster, they cannot be the session LM
+        if isLM and DesolateLootcouncil.API:IsKnownRosterRaider(myName) then
+            isLM = false
         end
 
         if isLM then
-            -- Bug 1: Only prompt if at least one boss was killed this session.
+            -- 1. Assigned LM: Only prompt if at least one boss was killed this session
             if not HasBossKill(config.bossLogs) then
                 DesolateLootcouncil:DLC_Log("HandleRaidDisband: No boss kills — auto-closing session without prompt.")
-                local Att = DesolateLootcouncil:GetModule("Attendance", true)
-                if Att and Att.StopRaidSession then
-                    Att:StopRaidSession(false)
-                end
+                DesolateLootcouncil.API:StopRaidSession(false)
             else
-                -- Bug 6: Set pending flag before showing popup so rapid GRU cannot stack.
+                -- Bug 6: Set pending flag before showing popup so rapid GRU cannot stack
                 if RosterMod then RosterMod.disbandPopupPending = true end
                 StaticPopup_Show("DLC_DISBAND_CLOSE_SESSION")
             end
         else
-            -- Officers & raiders: autoclose session without saving locally
-            local Att = DesolateLootcouncil:GetModule("Attendance", true)
-            if Att and Att.StopRaidSession then
-                Att:StopRaidSession(false)
+            -- 2. Local player is NOT the assigned LM (or no LM assigned)
+            if not config.currentSessionLM or config.currentSessionLM == "" then
+                -- No LM assigned: Session was never actively used for loot distribution
+                DesolateLootcouncil:DLC_Log("HandleRaidDisband: No LM assigned to session — auto-closing without prompt.")
+                DesolateLootcouncil.API:StopRaidSession(false)
+            elseif DesolateLootcouncil:AmIOfficerOrLM() then
+                -- Officers who had synced session from LM:
+                -- Autoclose saving history with decay missing so it can be manually applied or updated by LM
+                DesolateLootcouncil:DLC_Log("HandleRaidDisband: Officer synced session — auto-closing with decay missing.")
+                DesolateLootcouncil.API:StopRaidSession(true, true)
             else
-                if RosterMod and RosterMod.StopRaidSession then
-                    RosterMod:StopRaidSession(false)
-                end
+                -- Raiders: Silently purge session state, zero popup
+                DesolateLootcouncil.API:CleanRaiderStaleSession()
             end
         end
     end

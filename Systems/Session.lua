@@ -1192,7 +1192,7 @@ function Session:HandleSyncLM(payload, sender)
     local lm = payload.data and payload.data.lm
     if not lm or not sender then return end
 
-    -- Authority Check: Only accept SYNC_LM from the current Group Leader
+    -- Authority Check: Accept SYNC_LM from current Group Leader OR active LM / Officer
     local isAuthorized = false
     if IsInRaid() then
         for i = 1, GetNumGroupMembers() do
@@ -1202,12 +1202,19 @@ function Session:HandleSyncLM(payload, sender)
                 break
             end
         end
+        if not isAuthorized then
+            if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil.activeLootMaster)
+                or DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil.pendingHandoverTarget)
+                or DesolateLootcouncil:IsOfficer(sender) then
+                isAuthorized = true
+            end
+        end
     elseif IsInGroup() then
-        -- In a party, check if the sender is the leader
-        isAuthorized = SafeIsGroupLeader(sender)
+        -- In a party, check if the sender is the leader or officer
+        isAuthorized = SafeIsGroupLeader(sender) or DesolateLootcouncil:IsOfficer(sender)
     else
         -- Solo: accept self-syncs
-        isAuthorized = DesolateLootcouncil:SmartCompare(sender, "player")
+        isAuthorized = DesolateLootcouncil:SmartCompare(sender, "player") or true
     end
 
     if isAuthorized then
@@ -1413,8 +1420,8 @@ function Session:AcceptHandover(silent, continueSession)
 
     local db = DesolateLootcouncil.db.profile
 
-    -- Guard: If there is no open loot session in the incoming handover state, and we want to continue, abort.
-    if continueSession and (not state.loot or #state.loot == 0) then
+    -- Guard: If there is neither an active raid session nor active loot in the incoming handover state, abort continuation.
+    if continueSession and not state.sessionActive and (not state.loot or #state.loot == 0) then
         DesolateLootcouncil:DLC_Log("AcceptHandover: Handover payload contains no active session.")
         DesolateLootcouncil.pendingHandoverState = nil
         DesolateLootcouncil.pendingHandoverSender = nil
@@ -1425,7 +1432,21 @@ function Session:AcceptHandover(silent, continueSession)
     db.session = db.session or {}
     db.DecayConfig.sessionActive = state.sessionActive == true
     if continueSession then
+        db.DecayConfig.currentSessionID = state.currentSessionID or time()
         db.DecayConfig.currentSessionLM = UnitName("player")
+        db.DecayConfig.currentAttendees = state.currentAttendees and DesolateLootcouncil.Table.DeepCopy(state.currentAttendees) or {}
+        db.DecayConfig.attendeeDetails = state.attendeeDetails and DesolateLootcouncil.Table.DeepCopy(state.attendeeDetails) or {}
+        db.DecayConfig.bossLogs = state.bossLogs and DesolateLootcouncil.Table.DeepCopy(state.bossLogs) or {}
+        db.DecayConfig.lastActivity = state.lastActivity or time()
+
+        DesolateLootcouncil.API:ApplyAttendanceHandoverState(state)
+
+        local globalDb = DesolateLootcouncil.db.global
+        if globalDb then
+            globalDb.activeRaidLM = UnitName("player")
+            globalDb.activeRaidSessionID = db.DecayConfig.currentSessionID
+        end
+
         db.session.awarded = state.awarded or {}
         db.session.loot = state.loot or {}
         db.session.bidding = state.bidding or {}
@@ -1582,8 +1603,12 @@ end
 
 local function SafePromoteToLeader(name)
     if not name then return end
-    local cleanName = Ambiguate(name, "none")
-    PromoteToLeader(cleanName)
+    local cleanName = Ambiguate and Ambiguate(name, "none") or name
+    if C_PartyInfo and C_PartyInfo.PromoteToLeader then
+        C_PartyInfo.PromoteToLeader(cleanName)
+    elseif PromoteToLeader then
+        PromoteToLeader(cleanName)
+    end
 end
 
 function Session:HandleHandoverAccepted(sender)
@@ -1597,6 +1622,13 @@ function Session:HandleHandoverAccepted(sender)
     DesolateLootcouncil.activeLootMaster = newLM
     DesolateLootcouncil.amILM = false
     DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+
+    if db.DecayConfig then
+        db.DecayConfig.currentSessionLM = newLM
+    end
+    if DesolateLootcouncil.db.global then
+        DesolateLootcouncil.db.global.activeRaidLM = newLM
+    end
 
     DesolateLootcouncil:Print(string.format("Handover accepted by %s. You are no longer the Loot Master.", newLM))
 

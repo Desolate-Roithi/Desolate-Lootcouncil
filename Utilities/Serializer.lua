@@ -388,24 +388,36 @@ end
 ---@param importStringRaw string
 ---@return string|nil
 function Serializer:DecodePayload(importStringRaw)
-    if not importStringRaw or importStringRaw == "" then return nil end
-    local cleanStr = importStringRaw:gsub("^%s+", ""):gsub("%s+$", "")
+    if not importStringRaw or importStringRaw == "" then
+        return nil, "Import Error: String is empty."
+    end
     local LibDeflate = LibStub and LibStub:GetLibrary("LibDeflate", true)
-
-    if cleanStr:sub(1, 6) == "!DLC1:" and LibDeflate then
-        local payloadStr = cleanStr:sub(7):gsub("%s+", "")
-        local decodedBytes = LibDeflate:DecodeForPrint(payloadStr)
-        if decodedBytes then
-            local decompressed = LibDeflate:DecompressDeflate(decodedBytes)
-            if decompressed then
-                return decompressed
-            end
-        end
-        return nil
+    if not LibDeflate then
+        return nil, "Import Error: LibDeflate library not found."
     end
 
-    -- Strict 2.0 Policy: Uncompressed/v1 legacy export strings are no longer supported
-    return nil
+    local dlcStart = importStringRaw:find("!DLC1:")
+    if not dlcStart then
+        return nil, "Import Error: Missing !DLC1: header."
+    end
+
+    local rawPayload = importStringRaw:sub(dlcStart + 6)
+    local payloadStr = rawPayload:match("([%a%d%(%)]+)")
+    if not payloadStr or payloadStr == "" then
+        return nil, "Import Error: No payload data found after !DLC1: header."
+    end
+
+    local decodedBytes = LibDeflate:DecodeForPrint(payloadStr)
+    if not decodedBytes then
+        return nil, "Import Error: DecodeForPrint failed (invalid characters in payload)."
+    end
+
+    local decompressed = LibDeflate:DecompressDeflate(decodedBytes)
+    if not decompressed then
+        return nil, "Import Error: DecompressDeflate failed (corrupted or truncated payload)."
+    end
+
+    return decompressed
 end
 
 -- ---------------------------------------------------------------------------
@@ -631,14 +643,14 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
         end
     end
 
-    local decoded = self:DecodePayload(importStringRaw)
+    local decoded, decodeErr = self:DecodePayload(importStringRaw)
     if not decoded then
-        return false, "Import Error: Invalid string format / Decode failed."
+        return false, decodeErr or "Import Error: Invalid string format / Decode failed."
     end
 
     local success, data = DesolateLootcouncil:Deserialize(decoded)
     if not success or type(data) ~= "table" then
-        return false, "Import Error: Invalid string format / Decode failed."
+        return false, "Import Error: Deserialization failed: " .. tostring(data)
     end
 
     if not importToCurrent then
@@ -784,36 +796,62 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
         if data.History.AttendanceHistory then
             local incomingAttendance = DeepCopy(data.History.AttendanceHistory)
             local cleanedIncomingAttendance = {}
-            for _, att in ipairs(incomingAttendance) do
+            for attIdx, att in ipairs(incomingAttendance) do
                 local splitEntries = self:SplitMultiDateAttendanceEntry(att, DeepCopy)
-                for _, sEntry in ipairs(splitEntries) do
+                for entryIdx, sEntry in ipairs(splitEntries) do
                     table.insert(cleanedIncomingAttendance, sEntry)
                 end
             end
 
             if importToCurrent and p.AttendanceHistory then
-                for _, newAtt in ipairs(cleanedIncomingAttendance) do
-                    local found = false
-                    for idx, existing in ipairs(p.AttendanceHistory) do
+                local incomingDates = {}
+                for inIdx, newAtt in ipairs(cleanedIncomingAttendance) do
+                    local dateKey = newAtt.date and newAtt.date:sub(1, 10)
+                    if dateKey and dateKey ~= "" then
+                        incomingDates[dateKey] = true
+                    end
+                end
+
+                local preservedAttendance = {}
+                for exIdx, existing in ipairs(p.AttendanceHistory) do
+                    local dateKey = existing.date and existing.date:sub(1, 10)
+                    local matchesIncoming = false
+                    if dateKey and incomingDates[dateKey] then
+                        matchesIncoming = true
+                    end
+                    for inIdx, newAtt in ipairs(cleanedIncomingAttendance) do
                         if existing.sessionID and newAtt.sessionID and existing.sessionID == newAtt.sessionID then
-                            p.AttendanceHistory[idx] = newAtt
-                            found = true
+                            matchesIncoming = true
                             break
                         end
                     end
-                    if not found then
-                        table.insert(p.AttendanceHistory, newAtt)
+                    if not matchesIncoming then
+                        table.insert(preservedAttendance, existing)
                     end
                 end
+
+                for inIdx, newAtt in ipairs(cleanedIncomingAttendance) do
+                    table.insert(preservedAttendance, newAtt)
+                end
+                p.AttendanceHistory = preservedAttendance
             else
                 p.AttendanceHistory = cleanedIncomingAttendance
+            end
+
+            if p.AttendanceHistory and #p.AttendanceHistory > 1 then
+                table.sort(p.AttendanceHistory, function(a, b)
+                    local sA = tostring(a and (a.date or a.sessionID) or "")
+                    local sB = tostring(b and (b.date or b.sessionID) or "")
+                    return sA > sB
+                end)
             end
         end
 
         if data.History.AuditLog then
-            if importToCurrent and p.AuditLog then
-                for _, logEntry in ipairs(data.History.AuditLog) do
-                    table.insert(p.AuditLog, DeepCopy(logEntry))
+            if data.SingleRaidEvent and importToCurrent then
+                if not p.AuditLog then p.AuditLog = {} end
+                for index, entry in ipairs(data.History.AuditLog) do
+                    table.insert(p.AuditLog, DeepCopy(entry))
                 end
             else
                 p.AuditLog = DeepCopy(data.History.AuditLog)

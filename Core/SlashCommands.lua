@@ -161,9 +161,22 @@ function SlashCommands.Handle(input)
 
     elseif cmd == "decay" or cmd == "applydecay" then
         if DesolateLootcouncil:AmIOfficerOrLM() then
-            local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
-            if Attendance and Attendance.ShowAttendanceWindow then
-                Attendance:ShowAttendanceWindow()
+            local sub = args[2] and string.lower(args[2])
+            if sub == "apply" or sub == "now" or sub == "confirm" then
+                local Roster = DesolateLootcouncil:GetModule("Roster", true)
+                if Roster and Roster.ApplyDecayForLastSession then
+                    Roster:ApplyDecayForLastSession(false)
+                end
+            elseif sub == "skip" then
+                local Roster = DesolateLootcouncil:GetModule("Roster", true)
+                if Roster and Roster.ApplyDecayForLastSession then
+                    Roster:ApplyDecayForLastSession(true)
+                end
+            else
+                local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
+                if Attendance and Attendance.ShowAttendanceWindow then
+                    Attendance:ShowAttendanceWindow()
+                end
             end
         else
             DesolateLootcouncil:Print(L["Only the Loot Master or Officers can modify priority lists."])

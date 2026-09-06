@@ -152,14 +152,15 @@ function Sync:SendLMHandoverOffer(targetOfficer)
         return
     end
     local db = DesolateLootcouncil.db.profile
-    local Session = DesolateLootcouncil:GetModule("Session")
+    local sessionState = DesolateLootcouncil.API:GetSessionHandoverState()
+    local attState = DesolateLootcouncil.API:GetAttendanceHandoverState()
     local state = {
         awarded = db.session and db.session.awarded or {},
         loot = db.session and db.session.loot or {},
         bidding = db.session and db.session.bidding or {},
-        votes = Session and Session.sessionVotes or {},
-        closed = Session and Session.closedItems or {},
-        expiry = Session and Session.sessionExpiry or 0,
+        votes = sessionState.votes or {},
+        closed = sessionState.closed or {},
+        expiry = sessionState.expiry or 0,
         rosterTimestamp = db.rosterTimestamp or 0,
         priorityTimestamps = db.priorityTimestamps or {},
         imTimestamps = db.imTimestamps or {},
@@ -167,6 +168,15 @@ function Sync:SendLMHandoverOffer(targetOfficer)
         historyTimestamp = db.historyTimestamp or 0,
         configuredLM = targetOfficer,
         sessionActive = db.DecayConfig and db.DecayConfig.sessionActive or false,
+        currentSessionID = db.DecayConfig and db.DecayConfig.currentSessionID,
+        currentSessionLM = db.DecayConfig and db.DecayConfig.currentSessionLM,
+        currentAttendees = db.DecayConfig and db.DecayConfig.currentAttendees and DesolateLootcouncil.Table.DeepCopy(db.DecayConfig.currentAttendees) or {},
+        attendeeDetails = db.DecayConfig and db.DecayConfig.attendeeDetails and DesolateLootcouncil.Table.DeepCopy(db.DecayConfig.attendeeDetails) or {},
+        bossLogs = db.DecayConfig and db.DecayConfig.bossLogs and DesolateLootcouncil.Table.DeepCopy(db.DecayConfig.bossLogs) or {},
+        lastActivity = db.DecayConfig and db.DecayConfig.lastActivity or 0,
+        decayAppliedForSession = attState.decayAppliedForSession,
+        decayPenaltyForSession = attState.decayPenaltyForSession,
+        decayAbsentForSession = attState.decayAbsentForSession and DesolateLootcouncil.Table.DeepCopy(attState.decayAbsentForSession) or nil,
         sessionAutopassActive = DesolateLootcouncil.sessionAutopassActive or false,
         sessionAutopassAnswered = DesolateLootcouncil.sessionAutopassAnswered or false
     }
@@ -622,16 +632,23 @@ function SyncHandlers:SYNC_HISTORY(data, sender)
     local incomingTs = data.historyTimestamp or 0
     local localTs = db.historyTimestamp or 0
 
-    if incomingTs > localTs then
+    local hasMissingDecay = false
+    if db.AttendanceHistory then
+        for _, entry in ipairs(db.AttendanceHistory) do
+            if entry.decayMissing then
+                hasMissingDecay = true
+                break
+            end
+        end
+    end
+
+    if incomingTs > localTs or (hasMissingDecay and incomingTs >= localTs) then
         db.AttendanceHistory = data.AttendanceHistory or {}
         db.session = db.session or {}
         db.session.awarded = data.awarded or {}
         db.historyTimestamp = incomingTs
         
-        local Session = DesolateLootcouncil:GetModule("Session")
-        if Session then
-            Session:SendMessage("DLC_HISTORY_UPDATED")
-        end
+        DesolateLootcouncil.API:NotifyHistoryUpdated()
         DesolateLootcouncil:DLC_Log(string.format("Synced attendance history database with Loot Master %s.", DesolateLootcouncil:GetDisplayName(sender)))
     end
 end

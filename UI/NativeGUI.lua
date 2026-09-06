@@ -335,14 +335,55 @@ local function PopulateDropdownMenu(container, menu, btn, currentList, callback,
     menu:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
     menu:SetWidth(btn:GetWidth())
 
-    for _, r in ipairs(itemRows) do r:Hide() end
+    for rowIdx, r in ipairs(itemRows) do r:Hide() end
 
     local keys = {}
-    for k in pairs(currentList) do table.insert(keys, k) end
-    if customSort then
+    local customOrder = nil
+
+    if type(customSort) == "function" then
+        local ok, res = pcall(customSort, currentList)
+        if ok and type(res) == "table" then
+            customOrder = res
+        end
+    elseif type(customSort) == "table" then
+        customOrder = customSort
+    end
+
+    if customOrder then
+        for orderIdx, k in ipairs(customOrder) do
+            if currentList[k] ~= nil then
+                table.insert(keys, k)
+            end
+        end
+        for k in pairs(currentList) do
+            local exists = false
+            for keyIdx, existingKey in ipairs(keys) do
+                if existingKey == k then
+                    exists = true
+                    break
+                end
+            end
+            if not exists then
+                table.insert(keys, k)
+            end
+        end
+    elseif type(customSort) == "function" then
+        for k in pairs(currentList) do table.insert(keys, k) end
         table.sort(keys, function(a, b) return customSort(a, b, currentList) end)
     else
-        table.sort(keys, function(a, b) return tostring(currentList[a]) < tostring(currentList[b]) end)
+        for k in pairs(currentList) do table.insert(keys, k) end
+        table.sort(keys, function(a, b)
+            local strA = tostring(currentList[a] or "")
+            local strB = tostring(currentList[b] or "")
+            local dateA = strA:match("(%d%d%d%d%-%d%d%-%d%d%s+%d%d:%d%d:%d%d)") or strA:match("(%d%d%d%d%-%d%d%-%d%d)")
+            local dateB = strB:match("(%d%d%d%d%-%d%d%-%d%d%s+%d%d:%d%d:%d%d)") or strB:match("(%d%d%d%d%-%d%d%-%d%d)")
+            if a == "CURRENT" then return true end
+            if b == "CURRENT" then return false end
+            if dateA and dateB then
+                if dateA ~= dateB then return dateA > dateB end
+            end
+            return strA < strB
+        end)
     end
 
     local rowHeight = 20
@@ -1025,6 +1066,7 @@ function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValu
     clickDetector:EnableMouse(true)
     clickDetector:SetScript("OnMouseDown", HideMenu)
 
+    container.customSort = customSort
     container.SetValue = function(_, val)
         currentValue = val
         fs:SetText(GetDisplayValue(val))
@@ -1035,6 +1077,7 @@ function UI_NativeGUI:CreateDropdown(parent, labelText, width, list, defaultValu
     end
     container.SetSort = function(_, newSort)
         customSort = newSort
+        container.customSort = newSort
     end
     container.GetValue = function()
         return currentValue

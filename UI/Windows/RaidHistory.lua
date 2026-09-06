@@ -166,6 +166,16 @@ end
 local function RaidHistorySort(a, b)
     if a == "CURRENT" then return true end
     if b == "CURRENT" then return false end
+    local hist = DesolateLootcouncil.API:GetAttendanceHistory()
+    local entryA = hist and hist[a]
+    local entryB = hist and hist[b]
+    if entryA and entryB then
+        local dateA = tostring(entryA.date or entryA.sessionID or "")
+        local dateB = tostring(entryB.date or entryB.sessionID or "")
+        if dateA ~= dateB then
+            return dateA > dateB
+        end
+    end
     return DesolateLootcouncil.Table.NumericSort(a, b)
 end
 
@@ -232,6 +242,12 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
 
     self.frame:Show()
 
+    self:UpdateSessionDropdown(preselect)
+end
+
+function UI_RaidHistory:UpdateSessionDropdown(preselect)
+    if not self.frame or not self.sessionDrop then return end
+
     -- Build dropdown list
     local API    = DesolateLootcouncil.API
     local config = API:GetAttendanceConfig()
@@ -240,12 +256,14 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
     local dropList = {}
     if config.sessionActive then
         local cnt = 0
-        for _ in pairs(config.currentAttendees) do cnt = cnt + 1 end
+        for attendeeKey in pairs(config.currentAttendees) do cnt = cnt + 1 end
         dropList["CURRENT"] = string.format("|cff00ff00[ACTIVE]|r %s (%d)", date("%Y-%m-%d"), cnt)
     end
     for i, entry in ipairs(hist) do
         local cnt = 0
-        if entry.attendees then for _ in pairs(entry.attendees) do cnt = cnt + 1 end end
+        if entry.attendees then
+            for attendeeKey in pairs(entry.attendees) do cnt = cnt + 1 end
+        end
         dropList[i] = string.format("%s - %s (%d)", entry.date or "?", entry.zone or "Unknown", cnt)
     end
 
@@ -259,7 +277,16 @@ function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
         if config.sessionActive then
             self.selectedIndex = "CURRENT"
         elseif #hist > 0 then
-            self.selectedIndex = 1
+            local latestIdx = 1
+            local latestDate = ""
+            for i, entry in ipairs(hist) do
+                local d = tostring(entry.date or entry.sessionID or "")
+                if d > latestDate then
+                    latestDate = d
+                    latestIdx = i
+                end
+            end
+            self.selectedIndex = latestIdx
         end
     end
 
@@ -1066,10 +1093,18 @@ function UI_RaidHistory:Refresh()
     sc:SetHeight(layoutState.yOffset)
 end
 
+function UI_RaidHistory:RefreshHistoryWindow(preselect)
+    if self.sessionDrop then
+        self:UpdateSessionDropdown(preselect)
+    else
+        self:Refresh()
+    end
+end
+
 function UI_RaidHistory:OnEnable()
     self:RegisterMessage("DLC_HISTORY_UPDATED", function()
         if self.frame and self.frame:IsShown() then
-            self:Refresh()
+            self:RefreshHistoryWindow()
         end
     end)
 end

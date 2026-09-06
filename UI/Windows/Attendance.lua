@@ -494,21 +494,89 @@ function UI_Attendance:GetRaidHistoryOptions(config)
 
                 if config.sessionActive then
                     local activeCount = 0
-                    for _ in pairs(config.currentAttendees) do activeCount = activeCount + 1 end
+                    for attendeeKey in pairs(config.currentAttendees) do activeCount = activeCount + 1 end
                     list["CURRENT"] = string.format("  |cff00ff00[ACTIVE]|r %s (%d Players)", date("%Y-%m-%d"), activeCount)
                 end
 
                 for i, entry in ipairs(history) do
                     local count = 0
                     if entry.attendees then
-                        for _ in pairs(entry.attendees) do count = count + 1 end
+                        for attendeeKey in pairs(entry.attendees) do count = count + 1 end
                     end
-                    list[i] = string.format("[%d] %s - %s (%d Players)", i, entry.date or "N/A", entry.zone or "Unknown", count)
+                    list[i] = string.format("%s - %s (%d Players)", entry.date or "N/A", entry.zone or "Unknown", count)
                 end
                 return list
             end,
-            get = function() return self.selectedHistoryIndex end,
-            set = function(_, val) self.selectedHistoryIndex = val end,
+            sorting = function()
+                local history = DesolateLootcouncil.API:GetAttendanceHistory()
+                local order = {}
+
+                if config.sessionActive then
+                    table.insert(order, "CURRENT")
+                end
+
+                local histIndices = {}
+                for i = 1, #history do
+                    table.insert(histIndices, i)
+                end
+
+                table.sort(histIndices, function(a, b)
+                    local entryA = history[a]
+                    local entryB = history[b]
+                    if entryA and entryB then
+                        local dateA = tostring(entryA.date or entryA.sessionID or "")
+                        local dateB = tostring(entryB.date or entryB.sessionID or "")
+                        if dateA ~= dateB then
+                            return dateA > dateB
+                        end
+                    end
+                    return a > b
+                end)
+
+                for sortIdx, idx in ipairs(histIndices) do
+                    table.insert(order, idx)
+                end
+
+                return order
+            end,
+            get = function()
+                if self.selectedHistoryIndex ~= nil then
+                    if self.selectedHistoryIndex == "CURRENT" then
+                        if config.sessionActive then
+                            return "CURRENT"
+                        end
+                    else
+                        local history = DesolateLootcouncil.API:GetAttendanceHistory()
+                        if history and history[self.selectedHistoryIndex] then
+                            return self.selectedHistoryIndex
+                        end
+                    end
+                end
+
+                if config.sessionActive then
+                    self.selectedHistoryIndex = "CURRENT"
+                    return "CURRENT"
+                end
+
+                local history = DesolateLootcouncil.API:GetAttendanceHistory()
+                if history and #history > 0 then
+                    local latestIdx = 1
+                    local latestDate = ""
+                    for i, entry in ipairs(history) do
+                        local d = tostring(entry.date or entry.sessionID or "")
+                        if d > latestDate then
+                            latestDate = d
+                            latestIdx = i
+                        end
+                    end
+                    self.selectedHistoryIndex = latestIdx
+                    return latestIdx
+                end
+
+                self.selectedHistoryIndex = nil
+                return nil
+            end,
+            set = function(info, val) self.selectedHistoryIndex = val end,
             width = "double",
         },
         viewBtn = {

@@ -1304,6 +1304,14 @@ function DLC_API:DismissUnassignedPlayer(name)
     if r and r.DismissUnassignedPlayer then r:DismissUnassignedPlayer(name) end
 end
 
+--- Records an unassigned player into the staging review queue.
+---@param name string
+---@param source string?
+function DLC_API:RecordUnassignedPlayer(name, source)
+    local r = Roster()
+    if r and r.RecordUnassignedPlayer then r:RecordUnassignedPlayer(name, source) end
+end
+
 
 --- Formats a character name for clean UI display:
 --- Strips the realm tag if the character is on the local player's realm,
@@ -1453,9 +1461,102 @@ end
 
 --- Stops the current raid tracking session.
 ---@param saveHistory boolean?
-function DLC_API:StopRaidSession(saveHistory)
+---@param isAutoCloseOfficer boolean?
+function DLC_API:StopRaidSession(saveHistory, isAutoCloseOfficer)
     local a = Attendance()
-    if a and a.StopRaidSession then a:StopRaidSession(saveHistory) end
+    if a and a.StopRaidSession then a:StopRaidSession(saveHistory, isAutoCloseOfficer) end
+end
+
+--- Returns true if the specified unit (or local player) is registered in the guild roster as a non-officer raider.
+--- NOTE: Strictly used for popup suppression on group disband and stale session cleanup.
+--- NEVER use this function for permission checks, settings/options access, or configuration editing.
+---@param name string?
+---@return boolean
+function DLC_API:IsKnownRosterRaider(name)
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if not db or not db.MainRoster or not next(db.MainRoster) then return false end
+    local targetName = name or UnitName("player")
+    if not targetName or targetName == "" then return false end
+    local main = self:GetMain(targetName) or targetName
+    local mainScore = DesolateLootcouncil:GetScoreName(main)
+    local targetScore = DesolateLootcouncil:GetScoreName(targetName)
+    for rName, data in pairs(db.MainRoster) do
+        local rScore = DesolateLootcouncil:GetScoreName(rName)
+        if rScore == mainScore or rScore == targetScore then
+            return type(data) == "table" and not data.isOfficer
+        end
+    end
+    return false
+end
+
+--- Purges stale raid attendance session state for non-officer raiders.
+function DLC_API:CleanRaiderStaleSession()
+    local a = Attendance()
+    if a and a.CleanRaiderStaleSession then
+        a:CleanRaiderStaleSession()
+    elseif self:IsKnownRosterRaider() or not self:AmIOfficerOrLM() then
+        local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+        if db and db.DecayConfig and db.DecayConfig.sessionActive then
+            db.DecayConfig.sessionActive = false
+            db.DecayConfig.currentSessionID = nil
+            db.DecayConfig.currentSessionLM = nil
+            db.DecayConfig.currentAttendees = {}
+            db.DecayConfig.attendeeDetails = {}
+            db.DecayConfig.bossLogs = {}
+        end
+    end
+end
+
+--- Returns attendance decay state flags for session handover.
+---@return table
+function DLC_API:GetAttendanceHandoverState()
+    local a = Attendance()
+    if not a then return {} end
+    return {
+        decayAppliedForSession = a.decayAppliedForSession,
+        decayPenaltyForSession = a.decayPenaltyForSession,
+        decayAbsentForSession = a.decayAbsentForSession,
+    }
+end
+
+--- Applies attendance decay state during session handover.
+---@param state table
+function DLC_API:ApplyAttendanceHandoverState(state)
+    if not state or type(state) ~= "table" then return end
+    local a = Attendance()
+    if a then
+        a.decayAppliedForSession = state.decayAppliedForSession
+        a.decayPenaltyForSession = state.decayPenaltyForSession
+        a.decayAbsentForSession = state.decayAbsentForSession and DesolateLootcouncil.Table.DeepCopy(state.decayAbsentForSession) or nil
+    end
+end
+
+--- Returns active session voting and expiry state for session handover.
+---@return table
+function DLC_API:GetSessionHandoverState()
+    local s = Session()
+    if not s then
+        return {
+            votes = {},
+            closed = {},
+            expiry = 0,
+        }
+    end
+    return {
+        votes = s.sessionVotes or {},
+        closed = s.closedItems or {},
+        expiry = s.sessionExpiry or 0,
+    }
+end
+
+--- Dispatches DLC_HISTORY_UPDATED message to registered listeners.
+function DLC_API:NotifyHistoryUpdated()
+    local s = Session()
+    if s and s.SendMessage then
+        s:SendMessage("DLC_HISTORY_UPDATED")
+    elseif DesolateLootcouncil and DesolateLootcouncil.SendMessage then
+        DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
+    end
 end
 
 --- Returns true if there is an unapplied decay session pending.

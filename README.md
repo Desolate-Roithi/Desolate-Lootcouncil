@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.1.1  
-**Last Updated:** 2026-09-04  
+**Latest Version:** v2.1.2  
+**Last Updated:** 2026-09-06  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -47,6 +47,16 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.1.2 (2026-09-06)
+* **Ledger Overwrite vs. Append on Import**:
+  * Fixed an issue where importing a full profile or overriding an existing profile appended audit ledger entries instead of replacing them. Full profile imports now cleanly replace the ledger while preserving merge functionality for single raid event imports.
+* **Audit Ledger Virtual Scrolling**:
+  * Implemented lazy loading and recycled row pooling in the Priority Log History window (`UI_PriorityLogHistory`), preventing UI frame lag when navigating large audit ledgers.
+* **Raid History Multi-Date Session Split & Normalization**:
+  * Enhanced attendance history import normalization to properly partition legacy combined multi-date sessions into distinct chronological raid night entries.
+* **Live History & Window Synchronization**:
+  * Ensured active raid history and audit windows immediately reflect imported profiles and profile changes without requiring window close/reopen cycles.
 
 ### v2.1.1 (2026-09-04)
 * **Midnight Secret String Trade Protection**:

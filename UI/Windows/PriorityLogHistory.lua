@@ -8,7 +8,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local ACTION_CATEGORIES = {
     ALL = {
         label = L["All Events"],
-        match = function(_act) return true end
+        match = function(act) return true end
     },
     AWARDS = {
         label = L["Loot Awards"],
@@ -209,28 +209,64 @@ function UI_PriorityLogHistory:RefreshView()
         end
     end
 
-    local count = 0
-    local topOffset = 0
-    local rowHeight = 24
+    self.filteredEntries = filteredEntries
+    self:UpdateScrollList()
+end
 
-    for _, entry in ipairs(filteredEntries) do
-        count = count + 1
-        local row = NativeGUI:AcquireRow(self.rowPool, count, self.scrollContent, false)
-        RenderAuditRow(self, entry, row, topOffset, rowHeight, NativeGUI)
-        topOffset = topOffset + rowHeight + 2
-    end
+--- Updates the visible rows in the virtual scroll pool (lazy loading) to prevent client frame lag.
+function UI_PriorityLogHistory:UpdateScrollList()
+    if not self.logFrame or not self.logFrame:IsShown() then return end
 
-    self.scrollContent:SetHeight(math.max(topOffset + 20, 60))
+    local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
+    local filteredEntries = self.filteredEntries or {}
+    local totalEntries = #filteredEntries
 
-    if count == 0 then
+    if totalEntries == 0 then
+        NativeGUI:ResetRowPool(self.rowPool)
         if not self.emptyLabel then
             self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             self.emptyLabel:SetPoint("CENTER", self.scrollFrame, "CENTER", 0, 0)
         end
         self.emptyLabel:SetText(L["No history logs found."])
         self.emptyLabel:Show()
-    else
-        if self.emptyLabel then self.emptyLabel:Hide() end
+        self.scrollContent:SetHeight(40)
+        return
+    end
+
+    if self.emptyLabel then self.emptyLabel:Hide() end
+
+    local rowHeight = 24
+    local rowSpacing = 2
+    local rowStride = rowHeight + rowSpacing
+    local viewHeight = (self.scrollFrame and self.scrollFrame:GetHeight()) or 380
+    if viewHeight <= 0 then viewHeight = 380 end
+    local maxVisible = math.ceil(viewHeight / rowStride) + 2
+
+    local scrollContent = self.scrollContent
+    local scrollFrame = self.scrollFrame
+
+    local totalHeight = totalEntries * rowStride - rowSpacing + 10
+    scrollContent:SetHeight(math.max(viewHeight, totalHeight))
+
+    local offset = (scrollFrame and scrollFrame.GetVerticalScroll and scrollFrame:GetVerticalScroll()) or 0
+    local startIndex = math.floor(offset / rowStride) + 1
+    if startIndex < 1 then startIndex = 1 end
+    local endIndex = startIndex + maxVisible - 1
+    if endIndex > totalEntries then endIndex = totalEntries end
+
+    -- Hide all rows in pool first, only position and show visible range
+    for poolIdx, row in ipairs(self.rowPool) do
+        row:Hide()
+    end
+
+    local count = 0
+    for i = startIndex, endIndex do
+        count = count + 1
+        local entry = filteredEntries[i]
+        local row = NativeGUI:AcquireRow(self.rowPool, count, scrollContent, false)
+        local topOffset = (i - 1) * rowStride
+        RenderAuditRow(self, entry, row, topOffset, rowHeight, NativeGUI)
+        row:Show()
     end
 end
 
@@ -359,6 +395,14 @@ function UI_PriorityLogHistory:ShowLogWindow(sessionID, isTestInspection)
         local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(frame, -80, -14)
         self.scrollFrame = scrollFrame
         self.scrollContent = scrollContent
+
+        local scrollbar = _G[scrollFrame:GetName() and (scrollFrame:GetName() .. "ScrollBar") or ""]
+        local function OnScroll() self:UpdateScrollList() end
+        if scrollbar then
+            scrollbar:HookScript("OnValueChanged", OnScroll)
+        end
+        scrollFrame:HookScript("OnMouseWheel", OnScroll)
+        scrollFrame:HookScript("OnSizeChanged", OnScroll)
     end
 
     if self.logFrame.title then
