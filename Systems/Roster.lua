@@ -369,6 +369,7 @@ function Roster:SetOfficer(name, flag)
         if DesolateLootcouncil:SmartCompare(existingName, normalizedName) then
             data.isOfficer = flag == true
             devDB.rosterTimestamp = GetServerTime()
+            DesolateLootcouncil.API:LogAudit("OFFICER_FLAG", nil, existingName, nil, flag and "Promoted to Officer" or "Demoted from Officer")
             
             -- Refresh local player officer cache if it is us
             if DesolateLootcouncil:SmartCompare(existingName, "player") then
@@ -404,6 +405,7 @@ function Roster:SetOfficer(name, flag)
         if not isAlt then
             devDB.MainRoster[normalizedName] = { addedAt = GetServerTime(), isOfficer = true }
             devDB.rosterTimestamp = GetServerTime()
+            DesolateLootcouncil.API:LogAudit("OFFICER_FLAG", nil, normalizedName, nil, "Added new main and promoted to Officer")
             
             -- Refresh local player officer cache if it is us
             if DesolateLootcouncil:SmartCompare(normalizedName, "player") then

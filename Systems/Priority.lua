@@ -2,7 +2,7 @@ local _, AT = ...
 if AT.abortLoad then return end
 
 ---@class Priority : AceModule, AceConsole-3.0, AceTimer-3.0
----@field LogPriorityChange fun(self: Priority, msg: string)
+---@field LogPriorityChange fun(self: Priority, msg: string, player?: string, listName?: string)
 ---@field GetReversionIndex fun(self: Priority, listName: string, origIndex: number, timestamp: number): number
 ---@field RestorePlayerPosition fun(self: Priority, listName: string, playerName: string, index: number)
 ---@field MovePlayerToBottom fun(self: Priority, listName: string, playerName: string): number|nil
@@ -295,7 +295,7 @@ function Priority:AddPriorityList(name)
     DesolateLootcouncil.API:MarkPriorityDirty(name)
     local msg = string.format(L["Added new Priority List: %s"], name)
     DesolateLootcouncil:DLC_Log(msg)
-    self:LogPriorityChange(msg)
+    self:LogPriorityChange(msg, nil, name)
     LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
 end
 
@@ -307,7 +307,7 @@ function Priority:RemovePriorityList(index)
         DesolateLootcouncil.API:MarkPriorityDirty(removed.name)
         local msg = string.format(L["Removed Priority List: %s"], removed.name)
         DesolateLootcouncil:DLC_Log(msg)
-        self:LogPriorityChange(msg)
+        self:LogPriorityChange(msg, nil, removed.name)
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
@@ -322,13 +322,13 @@ function Priority:RenamePriorityList(index, newName)
         if oldName then DesolateLootcouncil.API:MarkPriorityDirty(oldName) end
         local msg = string.format(L["Renamed list to: %s"], newName)
         DesolateLootcouncil:DLC_Log(msg)
-        self:LogPriorityChange(msg)
+        self:LogPriorityChange(msg, nil, newName)
         LibStub("AceConfigRegistry-3.0"):NotifyChange("DesolateLootcouncil")
     end
 end
 
-function Priority:LogPriorityChange(msg)
-    DesolateLootcouncil.API:LogAudit("PRIO_CHANGE", nil, nil, nil, msg)
+function Priority:LogPriorityChange(msg, player, listName)
+    DesolateLootcouncil.API:LogAudit("PRIO_CHANGE", nil, player, listName, msg)
 end
 
 function Priority:ShuffleLists()
@@ -436,19 +436,19 @@ function Priority:SyncMissingPlayers()
             return tostring(a.name) < tostring(b.name)
         end)
 
-        for _, player in ipairs(missing) do
+        for missingIdx, player in ipairs(missing) do
             table.insert(currentList, player.name)
             addedCount = addedCount + 1
             listChanged = true
             self:LogPriorityChange(string.format("Synced %s to bottom of %s list.",
-                DesolateLootcouncil:GetDisplayName(player.name), listObj.name))
+                DesolateLootcouncil:GetDisplayName(player.name), listObj.name), player.name, listObj.name)
         end
 
         -- 2. Remove Stale (Check against db.MainRoster directly to ensure Alts are removed)
         for i = #currentList, 1, -1 do
             local pName = currentList[i]
             local isMain = false
-            for mName, _ in pairs(db.MainRoster) do
+            for mName in pairs(db.MainRoster) do
                 if DesolateLootcouncil:SmartCompare(mName, pName) then
                     isMain = true
                     break
@@ -460,7 +460,7 @@ function Priority:SyncMissingPlayers()
                 removedCount = removedCount + 1
                 listChanged = true
                 self:LogPriorityChange(string.format("Removed %s from %s list (Not a Main).",
-                    Ambiguate(pName, "none"), listObj.name))
+                    Ambiguate(pName, "none"), listObj.name), pName, listObj.name)
             end
         end
 

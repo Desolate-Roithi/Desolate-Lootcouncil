@@ -396,10 +396,12 @@ function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, ori
     }
     table.insert(session.awarded, entry)
 
-    DesolateLootcouncil.API:LogAudit("AWARD", nil, winnerName, itemData.category, string.format("Awarded %s (%s)", tostring(itemData.link or itemData.itemID), tostring(voteType)))
+    local decayConfig = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.DecayConfig
+    local awardCategory = itemData.category or (self.GetItemCategory and self:GetItemCategory(itemData.itemID)) or (self.CategorizeItem and self:CategorizeItem(itemData.link, 4))
+    local activeSID = (decayConfig and decayConfig.currentSessionID) or (DesolateLootcouncil.db and DesolateLootcouncil.db.global and DesolateLootcouncil.db.global.activeRaidSessionID) or (session and session.sessionID)
+    DesolateLootcouncil.API:LogAudit("AWARD", nil, winnerName, awardCategory, string.format("Awarded %s (%s)", tostring(itemData.link or itemData.itemID), tostring(voteType)), activeSID)
 
     -- Assign currentSessionLM upon first loot distribution if session is active and unassigned
-    local decayConfig = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.DecayConfig
     if decayConfig and decayConfig.sessionActive and (not decayConfig.currentSessionLM or decayConfig.currentSessionLM == "") then
         local activeLM = DesolateLootcouncil:DetermineLootMaster() or UnitName("player")
         decayConfig.currentSessionLM = activeLM

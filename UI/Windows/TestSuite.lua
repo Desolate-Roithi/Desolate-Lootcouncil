@@ -79,10 +79,23 @@ local function OpenScenarioWindow(scenarioId)
     if opener then opener() end
 end
 
-local function OnStepAdvanced(self, scenarioId)
+local function OnStepAdvanced(self, scenarioId, ok, err, partIdx, totalParts, partTitle, isScenDone)
     self.selectedScenarioId = scenarioId
     self:RefreshWindow()
     OpenScenarioWindow(scenarioId)
+
+    local TestSuite = DesolateLootcouncil:GetModule("TestSuite", true)
+    if TestSuite and TestSuite.lastExportString and #TestSuite.lastExportString > 0 then
+        local label
+        if partIdx and totalParts and partTitle then
+            label = string.format("|cffffd700Step Checkpoint [Part %d/%d: %s] (Ctrl+C to copy):|r", partIdx, totalParts, partTitle)
+        elseif isScenDone then
+            label = string.format("|cffffd700Scenario [%s] Final State (Ctrl+C to copy):|r", tostring(scenarioId))
+        else
+            label = "|cffffd700Step Checkpoint (Ctrl+C to copy):|r"
+        end
+        self:SetExportPayload(TestSuite.lastExportString, label)
+    end
 end
 
 local function OnStepThroughFinished(self, btnStepThrough)
@@ -126,25 +139,33 @@ function UI_TestSuite:ShowTestSuiteWindow()
             else
                 btnStepThrough:SetText("Pause Step-by-Step")
                 TestSuite:StartStepThrough(
-                    function(scenarioId) OnStepAdvanced(self, scenarioId) end,
+                    function(scenarioId, ok, err, partIdx, totalParts, partTitle, isScenDone)
+                        OnStepAdvanced(self, scenarioId, ok, err, partIdx, totalParts, partTitle, isScenDone)
+                    end,
                     function() OnStepThroughFinished(self, btnStepThrough) end,
-                    2.0
+                    1.2
                 )
             end
         end)
         self.btnStepThrough = btnStepThrough
 
-        local btnStepNext = NativeGUI:CreateButton(f, "Next Scenario >>", 120, 24, "Roll")
+        local btnStepNext = NativeGUI:CreateButton(f, "Next Step >>", 120, 24, "Roll")
         btnStepNext:SetPoint("LEFT", btnStepThrough, "RIGHT", 6, 0)
         btnStepNext:SetScript("OnClick", function()
-            TestSuite:StepNext(function(scenarioId) OnStepAdvanced(self, scenarioId) end)
+            TestSuite:StepNext(function(scenarioId, ok, err, partIdx, totalParts, partTitle, isScenDone)
+                OnStepAdvanced(self, scenarioId, ok, err, partIdx, totalParts, partTitle, isScenDone)
+            end)
         end)
         self.btnStepNext = btnStepNext
 
         local btnReset0 = NativeGUI:CreateButton(f, "Reset State 0", 105, 24, "Stop")
         btnReset0:SetPoint("LEFT", btnStepNext, "RIGHT", 6, 0)
         btnReset0:SetScript("OnClick", function()
-            local _, raw = TestSuite:ResetToStateZero()
+            TestSuite:StopStepThrough()
+            TestSuite.activeCoroutine = nil
+            TestSuite.activeScenarioId = nil
+            TestSuite.activePartInfo = nil
+            local _, raw = TestSuite:ResetToStateZero(true)
             self.selectedScenarioId = "roster_priority_lifecycle"
             self:RefreshWindow()
             self:SetExportPayload(raw or "", "|cffffd700Loaded: [State 0 Baseline] (Ctrl+C to copy):|r")
@@ -399,9 +420,14 @@ function UI_TestSuite:RefreshWindow()
         local activeTheme = DesolateLootcouncil:GetModule("UI_Theme"):GetActiveTheme()
         NativeGUI:StyleRowBackdrop(row, activeTheme, isSelected)
 
-        row.title:SetText(scenario.name)
+        if scenario.activePart then
+            row.title:SetText(string.format("%s |cff00ffff[Part %d/%d: %s]|r", scenario.name, scenario.activePart.index, scenario.activePart.total, scenario.activePart.title))
+            row.statusLbl:SetText("|cff00ffffSTEPPING|r")
+        else
+            row.title:SetText(scenario.name)
+            row.statusLbl:SetText(STATUS_COLORS[scenario.status] or scenario.status)
+        end
         row.desc:SetText(scenario.description)
-        row.statusLbl:SetText(STATUS_COLORS[scenario.status] or scenario.status)
         row.btnRun:SetScript("OnClick", function()
             self.selectedScenarioId = id
             TestSuite:RunScenario(id)
@@ -429,17 +455,21 @@ function UI_TestSuite:RefreshWindow()
     local selectedResult = selectedId and TestSuite.scenarioResults and TestSuite.scenarioResults[selectedId]
 
     if selectedScenario then
-        local durStr = (selectedResult and selectedResult.duration) and string.format(" (%.3fs)", selectedResult.duration) or ""
-        self.statusHeader:SetText(string.format("%s%s", STATUS_COLORS[selectedScenario.status] or selectedScenario.status, durStr))
+        if selectedScenario.activePart then
+            self.statusHeader:SetText(string.format("|cff00ffffSTEPPING [Part %d/%d: %s]|r", selectedScenario.activePart.index, selectedScenario.activePart.total, selectedScenario.activePart.title))
+        else
+            local durStr = (selectedResult and selectedResult.duration) and string.format(" (%.3fs)", selectedResult.duration) or ""
+            self.statusHeader:SetText(string.format("%s%s", STATUS_COLORS[selectedScenario.status] or selectedScenario.status, durStr))
+        end
 
         local logLines = {}
         if selectedResult and selectedResult.logs and #selectedResult.logs > 0 then
-            for _, l in ipairs(selectedResult.logs) do
-                table.insert(logLines, l)
+            for logIndex, logLine in ipairs(selectedResult.logs) do
+                table.insert(logLines, logLine)
             end
         elseif TestSuite.lastTestLogs and #TestSuite.lastTestLogs > 0 then
-            for _, l in ipairs(TestSuite.lastTestLogs) do
-                table.insert(logLines, l)
+            for logIndex, logLine in ipairs(TestSuite.lastTestLogs) do
+                table.insert(logLines, logLine)
             end
         else
             table.insert(logLines, string.format("Scenario [%s] ready. Click 'Run' to execute.", selectedScenario.name))

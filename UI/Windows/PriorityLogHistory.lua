@@ -12,7 +12,7 @@ local ACTION_CATEGORIES = {
     },
     AWARDS = {
         label = L["Loot Awards"],
-        match = function(act) return act == "AWARD" or act == "REAWARD" or act == "TRADE" end
+        match = function(act) return act == "AWARD" or act == "REAWARD" or act == "TRADE" or act == "LOOT_REMOVE" end
     },
     MANUAL = {
         label = L["Priority Shifts"],
@@ -24,12 +24,12 @@ local ACTION_CATEGORIES = {
     },
     DECAY = {
         label = L["Decay Penalties"],
-        match = function(act) return act == "DECAY" or act == "PRIORITY_DECAY" end
+        match = function(act) return act == "DECAY" or act == "PRIORITY_DECAY" or act == "DECAY_APPLIED" end
     },
     ROSTER = {
         label = L["Roster Changes"],
         match = function(act)
-            return type(act) == "string" and (act:find("ROSTER_", 1, true) ~= nil or act:find("ALT_", 1, true) ~= nil)
+            return type(act) == "string" and (act:find("ROSTER_", 1, true) ~= nil or act:find("ALT_", 1, true) ~= nil or act:find("OFFICER_", 1, true) ~= nil)
         end
     },
     SESSION = {
@@ -51,15 +51,19 @@ local function GetActionBadgeText(act)
         return "|cffa335ee[REAWARD]|r"
     elseif act == "TRADE" then
         return "|cff00ff96[TRADE]|r"
+    elseif act == "LOOT_REMOVE" then
+        return "|cffff3333[DISCARD]|r"
     elseif act == "DECAY" or act == "PRIORITY_DECAY" then
         return "|cffff4444[DECAY]|r"
+    elseif act == "DECAY_APPLIED" then
+        return "|cffff6600[DECAY_ALL]|r"
     elseif act == "TO_BOTTOM" or act == "PRIORITY_MOVE_BOTTOM" then
         return "|cffffaa00[BOTTOM]|r"
     elseif act == "RESTORE" or act == "PRIORITY_RESTORE" then
         return "|cff00ff00[RESTORE]|r"
     elseif act == "PRIO_REORDER" or act == "PRIO_CHANGE" or act == "PRIO_MOVE" or act == "POSITION_CHANGE" or act == "PRIORITY_MANUAL_MOVE" then
         return "|cffffff00[MOVE]|r"
-    elseif type(act) == "string" and (act:find("ROSTER_", 1, true) or act:find("ALT_", 1, true)) then
+    elseif type(act) == "string" and (act:find("ROSTER_", 1, true) or act:find("ALT_", 1, true) or act:find("OFFICER_", 1, true)) then
         return "|cff0070dd[ROSTER]|r"
     elseif type(act) == "string" and act:find("SESSION_", 1, true) then
         return "|cff1eff00[SESSION]|r"
@@ -173,6 +177,9 @@ function UI_PriorityLogHistory:RefreshView()
     if self.sessionDropdown and self.sessionDropdown.SetList then
         local sessionItems = GetSessionDropdownItems()
         self.sessionDropdown:SetList(sessionItems)
+        if self.currentSessionID == "ALL" then
+            self.currentSessionID = nil
+        end
         if self.currentSessionID and not sessionItems[self.currentSessionID] then
             self.currentSessionID = nil
             self.sessionDropdown:SetValue("ALL")
@@ -180,7 +187,8 @@ function UI_PriorityLogHistory:RefreshView()
     end
 
     local API = DesolateLootcouncil.API
-    local allEntries = API and API.GetAuditLog and API:GetAuditLog(self.currentSessionID) or {}
+    local activeSessionID = (self.currentSessionID ~= "ALL" and self.currentSessionID ~= "") and self.currentSessionID or nil
+    local allEntries = API and API.GetAuditLog and API:GetAuditLog(activeSessionID) or {}
 
     local categoryFilter = self.selectedCategory or "ALL"
     local categoryDef = ACTION_CATEGORIES[categoryFilter] or ACTION_CATEGORIES.ALL
@@ -309,7 +317,7 @@ function UI_PriorityLogHistory:ShowLogWindow(sessionID, isTestInspection)
             SESSION = L["Raid Sessions"],
             CATALOG = L["Catalog Changes"]
         }
-        local catContainer, _ = NativeGUI:CreateDropdown(
+        local catContainer = NativeGUI:CreateDropdown(
             controlBar,
             "",
             135,
@@ -325,14 +333,18 @@ function UI_PriorityLogHistory:ShowLogWindow(sessionID, isTestInspection)
 
         -- 2. Session Filter Dropdown
         local sessionItems = GetSessionDropdownItems()
-        local sessContainer, _ = NativeGUI:CreateDropdown(
+        local sessContainer = NativeGUI:CreateDropdown(
             controlBar,
             "",
             145,
             sessionItems,
             self.currentSessionID or "ALL",
             function(key)
-                self.currentSessionID = (key == "ALL" and nil) or key
+                if key == "ALL" or not key or key == "" then
+                    self.currentSessionID = nil
+                else
+                    self.currentSessionID = tostring(key)
+                end
                 self:RefreshView()
             end
         )

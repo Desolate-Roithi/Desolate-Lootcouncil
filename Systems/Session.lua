@@ -721,6 +721,7 @@ function Session:SendHistoryUpdate(entry)
 end
 
 function Session:RemoveSessionItem(guid)
+    local removedItem = nil
     -- 1. Tell clients to REMOVE the item (not just close)
     self:SendRemoveItem(guid)
     self.sessionPayloadCache = nil -- Invalidate heartbeat cache; item list changed
@@ -731,6 +732,7 @@ function Session:RemoveSessionItem(guid)
         for i = #session.bidding, 1, -1 do
             local item = session.bidding[i]
             if (item.sourceGUID or item.link) == guid then
+                removedItem = removedItem or item
                 table.remove(session.bidding, i)
             end
         end
@@ -741,6 +743,7 @@ function Session:RemoveSessionItem(guid)
         for i = #self.clientLootList, 1, -1 do
             local item = self.clientLootList[i]
             if (item.sourceGUID or item.link) == guid then
+                removedItem = removedItem or item
                 table.remove(self.clientLootList, i)
             end
         end
@@ -757,9 +760,15 @@ function Session:RemoveSessionItem(guid)
         for i = #session.awarded, 1, -1 do
             local item = session.awarded[i]
             if (item.sourceGUID or item.link) == guid then
+                removedItem = removedItem or item
                 table.remove(session.awarded, i)
             end
         end
+    end
+
+    if removedItem and DesolateLootcouncil.API and DesolateLootcouncil.API.LogAudit then
+        local itemIdentifier = removedItem.link or removedItem.name or tostring(removedItem.itemID or guid)
+        DesolateLootcouncil.API:LogAudit("LOOT_REMOVE", nil, nil, removedItem.category, string.format("Removed %s from bidding session", itemIdentifier))
     end
 
     -- 6. Refresh Monitor

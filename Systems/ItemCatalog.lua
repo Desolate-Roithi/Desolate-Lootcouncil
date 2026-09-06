@@ -98,15 +98,20 @@ function ItemCatalog:UnassignItem(itemID)
     local searchID = tonumber(itemID)
     if not searchID then return end
 
-    for _, list in ipairs(db.PriorityLists) do
+    local unassignedFrom = nil
+    for listIndex, list in ipairs(db.PriorityLists) do
         if list.items then
-            for storedID, _ in pairs(list.items) do
+            for storedID, storedFlag in pairs(list.items) do
                 if tonumber(storedID) == searchID then
                     list.items[storedID] = nil
+                    unassignedFrom = list.name
                     self:MarkIMDirty(list.name)
                 end
             end
         end
+    end
+    if unassignedFrom then
+        DesolateLootcouncil.API:LogAudit("CATALOG_OVERRIDE", nil, nil, unassignedFrom, string.format("Unassigned Item %d from %s", searchID, unassignedFrom))
     end
     DesolateLootcouncil:DLC_Log(L["Item unassigned from all priority lists."])
 end

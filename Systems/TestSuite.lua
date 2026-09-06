@@ -228,6 +228,11 @@ function TestSuite:ResetToStateZero(force, silent)
     if Sim and Sim.Clear then Sim:Clear() end
 
     self.isStateZeroClean = true
+    if not DesolateLootcouncil.isTestRunning then
+        self.activeCoroutine = nil
+        self.activeScenarioId = nil
+        self.activePartInfo = nil
+    end
 
     if success then
         if not silent then
@@ -333,6 +338,15 @@ function TestSuite:RunPart(partIndex, totalParts, partTitle, fn)
     local ok, issues = self:VerifyPostTestIntegrity()
     if not ok then
         error(string.format("Integrity breach after Part %d [%s]: %s", partIndex, totalParts, table.concat(issues, "; ")))
+    end
+
+    if self.stepMode == "PART" then
+        self.activePartInfo = {
+            index = partIndex,
+            total = totalParts,
+            title = partTitle
+        }
+        coroutine.yield("PART_DONE", partIndex, totalParts, partTitle)
     end
 end
 
@@ -1530,6 +1544,7 @@ end
 ---@param id string
 ---@return boolean, string?
 function TestSuite:RunScenario(id)
+    self.stepMode = "BATCH"
     local scenario = self.scenarios[id]
     if not scenario then return false, "Unknown scenario: " .. tostring(id) end
 
@@ -1539,6 +1554,7 @@ function TestSuite:RunScenario(id)
     DesolateLootcouncil.isTestRunning = true
 
     scenario.status = "RUNNING"
+    scenario.activePart = nil
     self.lastTestLogs = {}
     self.currentStepExports = {}
     self.scenarioResults = self.scenarioResults or {}
@@ -1625,8 +1641,8 @@ function TestSuite:RunAllScenarios()
     self:Log("=== Starting Batch Execution of All Test Scenarios ===")
     DesolateLootcouncil.isTestRunning = true
 
-    for _, id in ipairs(self.scenarioOrder) do
-        local ok, _ = self:RunScenario(id)
+    for scenIndex, id in ipairs(self.scenarioOrder) do
+        local ok = self:RunScenario(id)
         if ok then
             passed = passed + 1
         else
@@ -1641,61 +1657,238 @@ function TestSuite:RunAllScenarios()
     return passed, failed
 end
 
---- Advances single scenario execution from current pointer.
----@param onStepDone fun(scenarioId: string, ok: boolean, err: string?)?
+--- Cleans up the test execution state and closes test windows.
+function TestSuite:CleanTestEnvironment()
+    DesolateLootcouncil.isTestRunning = false
+    local UI = DesolateLootcouncil:GetModule("UI", true)
+    if UI and UI.CloseAllWindows then
+        UI:CloseAllWindows()
+    end
+end
+
+--- Finalizes a step-through scenario after all parts completed.
+---@param scenario table
+---@param onStepDone fun(scenarioId: string, ok: boolean, err: string?, partIdx: number?, totalParts: number?, partTitle: string?, isScenarioDone: boolean?)?
+function TestSuite:FinalizeScenarioStep(scenario, onStepDone)
+    self:CaptureStepExport("PostRun_FinalState")
+    local integrityOk, issues = self:VerifyPostTestIntegrity()
+    local passed = integrityOk
+    local errorMsg = nil
+
+    if integrityOk then
+        scenario.status = "PASS"
+        scenario.errorMsg = nil
+        self:Log(string.format("Scenario [%s] PASSED all steps.", scenario.id))
+    else
+        scenario.status = "FAIL"
+        errorMsg = "Post-Test Integrity Failed: " .. table.concat(issues, "; ")
+        scenario.errorMsg = errorMsg
+        self:Log(string.format("Scenario [%s] FAILED post-test integrity: %s", scenario.id, errorMsg))
+    end
+
+    scenario.activePart = nil
+    self.scenarioResults[scenario.id] = {
+        status = scenario.status,
+        duration = 0,
+        errorMsg = scenario.errorMsg,
+        logs = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(self.lastTestLogs)) or self.lastTestLogs,
+        stepExports = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(self.currentStepExports)) or self.currentStepExports,
+        exportString = self.lastExportString or ""
+    }
+
+    self:CleanTestEnvironment()
+    self.activeCoroutine = nil
+    self.activeScenarioId = nil
+    self.activePartInfo = nil
+
+    if onStepDone then
+        onStepDone(scenario.id, passed, errorMsg, nil, nil, nil, true)
+    end
+end
+
+--- Advances single step execution (runs the next Part of the active scenario, or starts the next scenario).
+---@param onStepDone fun(scenarioId: string, ok: boolean, err: string?, partIdx: number?, totalParts: number?, partTitle: string?, isScenarioDone: boolean?)?
 ---@return boolean, string?
 function TestSuite:StepNext(onStepDone)
+    self.stepMode = "PART"
+
+    if self.activeCoroutine and coroutine.status(self.activeCoroutine) == "suspended" then
+        local scenario = self.scenarios[self.activeScenarioId]
+        local resumeOk, actionOrErr, partIdx, totalParts, partTitle = coroutine.resume(self.activeCoroutine)
+
+        if not resumeOk then
+            self:CaptureStepExport("Part_FailState")
+            scenario.status = "FAIL"
+            scenario.errorMsg = tostring(actionOrErr)
+            self:Log(string.format("Scenario [%s] FAILED at Part %d: %s", scenario.id, (self.activePartInfo and self.activePartInfo.index or 0), scenario.errorMsg))
+            self.scenarioResults[scenario.id] = {
+                status = "FAIL",
+                duration = 0,
+                errorMsg = scenario.errorMsg,
+                logs = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(self.lastTestLogs)) or self.lastTestLogs,
+                stepExports = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(self.currentStepExports)) or self.currentStepExports,
+                exportString = self.lastExportString or ""
+            }
+            local failedId = scenario.id
+            local failErr = scenario.errorMsg
+            self:CleanTestEnvironment()
+            self.activeCoroutine = nil
+            self.activeScenarioId = nil
+            self.activePartInfo = nil
+            if onStepDone then
+                onStepDone(failedId, false, failErr, nil, nil, nil, true)
+            end
+            return false, failErr
+        end
+
+        local currentStatus = coroutine.status(self.activeCoroutine)
+        if currentStatus == "suspended" and actionOrErr == "PART_DONE" then
+            scenario.activePart = {
+                index = partIdx,
+                total = totalParts,
+                title = partTitle
+            }
+            if onStepDone then
+                onStepDone(scenario.id, true, nil, partIdx, totalParts, partTitle, false)
+            end
+            return true, nil
+        elseif currentStatus == "dead" then
+            self:FinalizeScenarioStep(scenario, onStepDone)
+            return scenario.status == "PASS", scenario.errorMsg
+        end
+
+        return true, nil
+    end
+
+    -- No active coroutine: advance pointer to next scenario
     self.stepPointer = (self.stepPointer or 0) + 1
     if self.stepPointer > #self.scenarioOrder then
         self.stepPointer = 1
     end
 
-    local id = self.scenarioOrder[self.stepPointer]
-    local ok, err = self:RunScenario(id)
-    if onStepDone then
-        onStepDone(id, ok, err)
+    local scenarioId = self.scenarioOrder[self.stepPointer]
+    local scenario = self.scenarios[scenarioId]
+    if not scenario then
+        return false, "Unknown scenario at index: " .. tostring(self.stepPointer)
     end
-    return ok, err
+
+    DesolateLootcouncil.isTestRunning = true
+    scenario.status = "RUNNING"
+    scenario.errorMsg = nil
+    scenario.activePart = nil
+    self.lastTestLogs = {}
+    self.currentStepExports = {}
+    self.scenarioResults = self.scenarioResults or {}
+    self.activeScenarioId = scenarioId
+
+    self:Log(string.format("--- Step-Through Scenario [%s]: %s ---", scenario.id, scenario.name))
+    self:ResetToStateZero(true)
+
+    self.activeCoroutine = coroutine.create(scenario.run)
+    local resumeOk, actionOrErr, partIdx, totalParts, partTitle = coroutine.resume(self.activeCoroutine)
+
+    if not resumeOk then
+        self:CaptureStepExport("Part_FailState")
+        scenario.status = "FAIL"
+        scenario.errorMsg = tostring(actionOrErr)
+        self:Log(string.format("Scenario [%s] FAILED at Part %d: %s", scenario.id, (self.activePartInfo and self.activePartInfo.index or 0), scenario.errorMsg))
+        self.scenarioResults[scenario.id] = {
+            status = "FAIL",
+            duration = 0,
+            errorMsg = scenario.errorMsg,
+            logs = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(self.lastTestLogs)) or self.lastTestLogs,
+            stepExports = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(self.currentStepExports)) or self.currentStepExports,
+            exportString = self.lastExportString or ""
+        }
+        local failedId = scenario.id
+        local failErr = scenario.errorMsg
+        self:CleanTestEnvironment()
+        self.activeCoroutine = nil
+        self.activeScenarioId = nil
+        self.activePartInfo = nil
+        if onStepDone then
+            onStepDone(failedId, false, failErr, nil, nil, nil, true)
+        end
+        return false, failErr
+    end
+
+    local currentStatus = coroutine.status(self.activeCoroutine)
+    if currentStatus == "suspended" and actionOrErr == "PART_DONE" then
+        scenario.activePart = {
+            index = partIdx,
+            total = totalParts,
+            title = partTitle
+        }
+        if onStepDone then
+            onStepDone(scenario.id, true, nil, partIdx, totalParts, partTitle, false)
+        end
+        return true, nil
+    elseif currentStatus == "dead" then
+        self:FinalizeScenarioStep(scenario, onStepDone)
+        return scenario.status == "PASS", scenario.errorMsg
+    end
+
+    return true, nil
 end
 
---- Starts sequential visual step-through execution with visual pacing.
----@param onStepDone fun(scenarioId: string, ok: boolean, err: string?)?
+--- Starts sequential step-through execution with visual pacing, executing each part consecutively.
+---@param onStepDone fun(scenarioId: string, ok: boolean, err: string?, partIdx: number?, totalParts: number?, partTitle: string?, isScenarioDone: boolean?)?
 ---@param onAllDone fun(passed: number, failed: number)?
 ---@param delay number?
 function TestSuite:StartStepThrough(onStepDone, onAllDone, delay)
     self.isStepping = true
     self.stepPointer = 0
-    local stepDelay = delay or 1.5
+    self.activeCoroutine = nil
+    self.activeScenarioId = nil
+    self.activePartInfo = nil
+    local stepDelay = delay or 1.2
 
-    local function runNext()
+    local function runNextStep()
         if not self.isStepping then return end
-        self.stepPointer = (self.stepPointer or 0) + 1
-        if self.stepPointer > #self.scenarioOrder then
+
+        local isStart = (self.stepPointer == 0 and not self.activeCoroutine)
+        if isStart and #self.scenarioOrder == 0 then
             self.isStepping = false
-            local passed, failed = 0, 0
-            for _, id in ipairs(self.scenarioOrder) do
-                if self.scenarios[id] and self.scenarios[id].status == "PASS" then
-                    passed = passed + 1
-                else
-                    failed = failed + 1
-                end
-            end
-            local UI = DesolateLootcouncil:GetModule("UI", true)
-            if UI and UI.CloseAllWindows then UI:CloseAllWindows() end
-            if onAllDone then onAllDone(passed, failed) end
             return
         end
 
-        local id = self.scenarioOrder[self.stepPointer]
-        local ok, err = self:RunScenario(id)
-        if onStepDone then onStepDone(id, ok, err) end
+        self:StepNext(function(scenarioId, ok, err, partIdx, totalParts, partTitle, isScenarioDone)
+            if onStepDone then
+                onStepDone(scenarioId, ok, err, partIdx, totalParts, partTitle, isScenarioDone)
+            end
 
-        if self.isStepping then
-            C_Timer.After(stepDelay, runNext)
-        end
+            if not self.isStepping then return end
+
+            if isScenarioDone and self.stepPointer >= #self.scenarioOrder then
+                self.isStepping = false
+                local passed = 0
+                local failed = 0
+                for scenIndex, id in ipairs(self.scenarioOrder) do
+                    local scen = self.scenarios[id]
+                    if scen and scen.status == "PASS" then
+                        passed = passed + 1
+                    else
+                        failed = failed + 1
+                    end
+                end
+                self:CleanTestEnvironment()
+                if onAllDone then
+                    onAllDone(passed, failed)
+                end
+                return
+            end
+
+            if self.isStepping then
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(stepDelay, runNextStep)
+                else
+                    runNextStep()
+                end
+            end
+        end)
     end
 
-    runNext()
+    runNextStep()
 end
 
 --- Pauses/stops active visual step-through runner.

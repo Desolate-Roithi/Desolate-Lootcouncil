@@ -285,6 +285,20 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
             db.historyTimestamp = GetServerTime()
             db.rosterTimestamp = GetServerTime()
 
+            -- Ensure all awards recorded during this session have their AuditLog entries linked to currentSessionID
+            if db.AuditLog and entry.awarded then
+                local sidStr = tostring(config.currentSessionID)
+                for awardIndex, awItem in ipairs(entry.awarded) do
+                    for logIndex, logEntry in ipairs(db.AuditLog) do
+                        if (logEntry.act == "AWARD" or logEntry.act == "REAWARD") and not logEntry.sID then
+                            if logEntry.p == awItem.winner and logEntry.det and awItem.itemID and string.find(logEntry.det, tostring(awItem.itemID)) then
+                                logEntry.sID = sidStr
+                            end
+                        end
+                    end
+                end
+            end
+
             DesolateLootcouncil.API:LogAudit("SESSION_STOP", nil, nil, nil, string.format("Raid session ended (Saved: %d attendees)", count), config.currentSessionID)
 
             -- Bug 5: Use IsInRaid() rather than IsInGroup() here.
@@ -555,6 +569,20 @@ function Attendance:DeleteAttendanceHistoryEntry(index)
     local numIdx = tonumber(index)
     if not numIdx or not db.AttendanceHistory or not db.AttendanceHistory[numIdx] then
         return false
+    end
+
+    local deletedEntry = db.AttendanceHistory[numIdx]
+    if DesolateLootcouncil.API and DesolateLootcouncil.API.LogAudit then
+        local sessionLabel = tostring(deletedEntry.date or deletedEntry.sessionID or numIdx)
+        local zoneLabel = tostring(deletedEntry.zone or "")
+        DesolateLootcouncil.API:LogAudit(
+            "SESSION_DELETE",
+            nil,
+            nil,
+            nil,
+            string.format("Deleted raid session (%s%s)", sessionLabel, zoneLabel ~= "" and (", " .. zoneLabel) or ""),
+            deletedEntry.sessionID
+        )
     end
 
     table.remove(db.AttendanceHistory, numIdx)

@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.1.2  
+**Latest Version:** v2.1.3  
 **Last Updated:** 2026-09-06  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,25 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.1.3 (2026-09-06)
+* **Audit Ledger Exhaustiveness & Gap Coverage**:
+  * Added audit logging (`[DISCARD]`) when unawarded items are evicted or discarded from active bidding sessions.
+  * Added audit logging (`[SESSION]`) when attendance history raid sessions are deleted.
+  * Added audit logging (`[ROSTER]`) when main characters are promoted to or demoted from Officer.
+  * Added audit logging (`[CATALOG]`) when item priority list overrides are cleared / unassigned.
+  * Fixed missing player names and list names in priority roster synchronization and list management events (`AddPriorityList`, `RemovePriorityList`, `RenamePriorityList`, `SyncMissingPlayers`).
+  * Ensured non-bid awards (Free Roll, Transmog, Off-Spec) explicitly retain active session IDs and catalog categories.
+  * Added date-prefix session fallback to `Audit:GetLog` so entries recorded before session IDs were finalized are never dropped.
+* **Ledger "All Sessions" Filter Resolution & Defensive Handling**:
+  * Resolved an issue where selecting "All Sessions" in the Priority Log History dropdown returned no entries due to a Lua ternary trap (`and nil`).
+  * Added automatic query sanitization in `Audit:GetLog` and `Audit:ExportLog` ensuring `"ALL"` or empty session filters cleanly return all ledger records.
+  * Added action category filter and badge support for `LOOT_REMOVE`, `DECAY_APPLIED`, and `OFFICER_FLAG`.
+* **In-Game Test Suite Step-by-Step Execution**:
+  * Updated the Test Suite window (`UI_TestSuite`) to execute individual steps one by one during step-by-step test runs instead of jumping through entire scenarios at once.
+* **Automated Anti-Pattern & Rebuilder Validation**:
+  * Added automated pre-test audit (`anti_pattern_audit.py`) blocking Lua ternary traps (`and nil`) and underscore-prefixed variable violations across the codebase.
+  * Added pre-flight schema, hyperlink, and foreign-key validation to `DLC_ProfileRebuilder.lua`.
 
 ### v2.1.2 (2026-09-06)
 * **Ledger Overwrite vs. Append on Import**:

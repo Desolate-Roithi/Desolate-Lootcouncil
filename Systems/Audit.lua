@@ -83,16 +83,28 @@ function Audit:GetLog(sessionID, actionFilter)
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if not db or not db.AuditLog then return {} end
 
-    local sIDStr = sessionID and tostring(sessionID)
-    local actStr = actionFilter and string.upper(tostring(actionFilter))
+    local sIDStr = (sessionID and sessionID ~= "" and sessionID ~= "ALL") and tostring(sessionID) or nil
+    local actStr = (actionFilter and actionFilter ~= "" and actionFilter ~= "ALL") and string.upper(tostring(actionFilter)) or nil
 
     if not sIDStr and not actStr then
         return db.AuditLog
     end
 
+    local sessionDatePrefix = nil
+    if sIDStr and db.AttendanceHistory then
+        for sessIndex, sess in ipairs(db.AttendanceHistory) do
+            if tostring(sess.sessionID) == sIDStr and sess.date then
+                sessionDatePrefix = sess.date:sub(1, 10)
+                break
+            end
+        end
+    end
+
     local filtered = {}
-    for _, entry in ipairs(db.AuditLog) do
-        local matchSession = (not sIDStr) or (entry.sID and tostring(entry.sID) == sIDStr)
+    for logIndex, entry in ipairs(db.AuditLog) do
+        local matchSession = (not sIDStr)
+            or (entry.sID and tostring(entry.sID) == sIDStr)
+            or (sessionDatePrefix and not entry.sID and entry.d and entry.d:sub(1, 10) == sessionDatePrefix)
         local matchAction  = (not actStr)  or (entry.act and string.upper(tostring(entry.act)) == actStr)
         if matchSession and matchAction then
             table.insert(filtered, entry)
@@ -105,15 +117,16 @@ end
 ---@param sessionID string|number|nil
 ---@return string
 function Audit:ExportLog(sessionID)
-    local logEntries = self:GetLog(sessionID)
+    local sIDStr = (sessionID and sessionID ~= "" and sessionID ~= "ALL") and tostring(sessionID) or nil
+    local logEntries = self:GetLog(sIDStr)
     if not logEntries or #logEntries == 0 then
         return L["No audit log entries recorded."]
     end
 
     local lines = {}
     table.insert(lines, "=== Desolate LootCouncil Audit Ledger ===")
-    if sessionID then
-        table.insert(lines, string.format("Session Filter: %s", tostring(sessionID)))
+    if sIDStr then
+        table.insert(lines, string.format("Session Filter: %s", sIDStr))
     end
     table.insert(lines, string.format("Generated: %s", date("%Y-%m-%d %H:%M:%S", time())))
     table.insert(lines, "--------------------------------------------------")
