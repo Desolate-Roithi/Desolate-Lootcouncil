@@ -442,8 +442,8 @@ function Serializer:ExportSingleRaidHistoryEvent(indexOrSession)
     if type(indexOrSession) == "table" then
         entry = DeepCopy(indexOrSession)
     elseif indexOrSession == "CURRENT" then
-        local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
-        local config = (RosterMod and RosterMod.GetAttendanceConfig and RosterMod:GetAttendanceConfig()) or (p and p.DecayConfig) or {}
+        local API = DesolateLootcouncil.API
+        local config = (API and API.GetAttendanceConfig and API:GetAttendanceConfig()) or (p and p.DecayConfig) or {}
         local session = p.session or {}
         local attendees = {}
         if config.currentAttendees then
@@ -474,8 +474,8 @@ function Serializer:ExportSingleRaidHistoryEvent(indexOrSession)
 
     local cleanedEntry = self:CleanAttendanceEntry(entry, DeepCopy)
     local posKey = cleanedEntry.sessionID and tostring(cleanedEntry.sessionID)
-    local Audit = DesolateLootcouncil:GetModule("Audit", true)
-    local sessionAudit = (Audit and Audit.GetLog and Audit:GetLog(posKey)) or nil
+    local API = DesolateLootcouncil.API
+    local sessionAudit = (API and API.GetAuditLog and API:GetAuditLog(posKey)) or nil
 
     local data = {
         SingleRaidEvent = true,
@@ -676,8 +676,8 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
         if data.config.enableAutoTrade ~= nil then p.enableAutoTrade = data.config.enableAutoTrade end
         if data.config.activeTheme ~= nil then
             p.activeTheme = data.config.activeTheme
-            local Theme = DesolateLootcouncil:GetModule("UI_Theme", true)
-            if Theme and Theme.SetTheme then Theme:SetTheme(p.activeTheme) end
+            local API = DesolateLootcouncil.API
+            if API and API.SetTheme then API:SetTheme(p.activeTheme) end
         end
         if data.config.DecayConfig then
             p.DecayConfig = DeepCopy(data.config.DecayConfig)
@@ -691,10 +691,10 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
         p.playerRoster = DeepCopy(data.Roster.playerRoster or { alts = {}, decay = {} })
         p.rosterTimestamp = GetServerTime()
 
-        local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
-        if RosterMod then
-            if RosterMod.SanitizeMainsAndAlts then RosterMod:SanitizeMainsAndAlts() end
-            if RosterMod.UpdateScoreMap then RosterMod:UpdateScoreMap() end
+        local API = DesolateLootcouncil.API
+        if API then
+            if API.SanitizeMainsAndAlts then API:SanitizeMainsAndAlts() end
+            if API.UpdateScoreMap then API:UpdateScoreMap() end
         end
         if DesolateLootcouncil.SendMessage then
             DesolateLootcouncil:SendMessage("DLC_ROSTER_UPDATED")

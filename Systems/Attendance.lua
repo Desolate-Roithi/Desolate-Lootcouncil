@@ -105,8 +105,7 @@ function Attendance:StartRaidSession()
     end
 
     local _, instanceType = GetInstanceInfo()
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    local simActive = DesolateLootcouncil.API and DesolateLootcouncil.API:IsSimulationActive()
 
     if instanceType ~= "raid" and not simActive and not db.debugMode then
         self:Printf("Sessions can only be started in Raid instances.")
@@ -470,8 +469,7 @@ function Attendance:SnapshotRoster(isEncounterKill)
     if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
 
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    local simActive = DesolateLootcouncil.API and DesolateLootcouncil.API:IsSimulationActive()
     local isBypass = simActive or (db and db.debugMode) or DesolateLootcouncil.isTestRunning
     if not IsInRaid() and not isBypass then return end
 
@@ -501,9 +499,9 @@ function Attendance:SnapshotRoster(isEncounterKill)
         end
     end
 
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    if Sim and Sim.GetRoster then
-        local sims = Sim:GetRoster()
+    local API = DesolateLootcouncil.API
+    local sims = API and API.GetSimulationRoster and API:GetSimulationRoster()
+    if sims then
         for _, name in ipairs(sims) do
             self:RegisterAttendance(name, isEncounterKill)
         end
@@ -628,8 +626,7 @@ function Attendance:OnEncounterStart(event, encounterID, encounterName, difficul
     if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
     if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    local simActive = DesolateLootcouncil.API and DesolateLootcouncil.API:IsSimulationActive()
     local isBypass = simActive or (db and db.debugMode) or DesolateLootcouncil.isTestRunning
     if not IsInRaid() and not isBypass then return end
     if not self:IsSessionActive() then return end
@@ -645,8 +642,7 @@ function Attendance:OnEncounterEnd(event, encounterID, encounterName, difficulty
     if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
     if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    local simActive = DesolateLootcouncil.API and DesolateLootcouncil.API:IsSimulationActive()
     local isBypass = simActive or (db and db.debugMode) or DesolateLootcouncil.isTestRunning
     if not IsInRaid() and not isBypass then return end
     if not self:IsSessionActive() then return end

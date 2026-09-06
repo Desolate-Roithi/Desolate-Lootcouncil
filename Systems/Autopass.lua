@@ -102,18 +102,18 @@ function Autopass:ProcessRoll(rollID)
         return
     end
 
-    -- Hoist a single GetModule call — used for both ID fallback and category lookup.
-    local Loot = DesolateLootcouncil:GetModule("Loot")
-    local itemID = C_Item.GetItemInfoInstant(link)
+    local API = DesolateLootcouncil.API
+    local itemID = (API and API.GetItemIDFromLink and API:GetItemIDFromLink(link)) or C_Item.GetItemInfoInstant(link)
     if not itemID then
-        itemID = Loot and Loot:GetItemIDFromLink(link)
+        local parsed = link:match("item:(%d+)")
+        itemID = parsed and tonumber(parsed) or nil
     end
     if not itemID then 
         DebugLog(string.format("Skipped %s (RollID %d): Could not extract itemID.", link, rollID))
         return 
     end
 
-    local dbCat = Loot and Loot:GetItemCategory(itemID) or "Junk/Pass"
+    local dbCat = (API and API.GetItemCategory and API:GetItemCategory(itemID)) or "Junk/Pass"
     -- If not officially registered in Item Manager, explicitly ignore it for Autopass
     if dbCat == "Junk/Pass" then 
         DebugLog(string.format("Skipped %s (RollID %d): Item category is 'Junk/Pass' / not managed in Item Manager.", link, rollID))

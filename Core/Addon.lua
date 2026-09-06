@@ -222,9 +222,8 @@ function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
     self.sessionAutopassActive   = self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionAutopassActive or false
     self.sessionAutopassAnswered = self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionAutopassAnswered or false
 
-    local Roster                 = self:GetModule("Roster", true)
-    if Roster and Roster.UpdateScoreMap then
-        Roster:UpdateScoreMap()
+    if self.API and self.API.UpdateScoreMap then
+        self.API:UpdateScoreMap()
     end
 
     local session = self.db.profile.session
@@ -558,14 +557,12 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
         local wasLeader = self.lastLeader and self:SmartCompare(self.lastLeader, "player")
         local isNowLeader = self:SmartCompare(leader, "player")
         if wasLeader and not isNowLeader then
-            local Session = self:GetModule("Session", true)
-            local hasActiveSession = Session and Session.clientLootList and #Session.clientLootList > 0
+            local hasActiveSession = self.API and self.API:IsSessionActive()
             if self.amILM and hasActiveSession then
-                local SyncMod = self:GetModule("Sync", true)
-                if SyncMod then
-                    self:DLC_Log(string.format("Leadership passed to %s. Initiating automatic Loot Master handover.",
-                        leader))
-                    SyncMod:SendLMHandoverOffer(leader)
+                self:DLC_Log(string.format("Leadership passed to %s. Initiating automatic Loot Master handover.",
+                    leader))
+                if self.API and self.API.SendLMHandoverOffer then
+                    self.API:SendLMHandoverOffer(leader)
                 end
             end
         end
@@ -639,11 +636,9 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     -- Raiders also call this on GROUP_ROSTER_UPDATE — only the actual LM executes the send
     -- because SendSyncLM is a no-op when not in a channel (solo) and the channel is RAID.
     if IsInGroup() then
-        ---@type Session
-        local Session = self:GetModule("Session") --[[@as Session]]
         local amILeader = self:SmartCompare(self:GetGroupLeader(), "player")
-        if (self.amILM or amILeader) and Session and Session.SendSyncLM then
-            Session:SendSyncLM(targetLM)
+        if (self.amILM or amILeader) and self.API and self.API.SendSyncLM then
+            self.API:SendSyncLM(targetLM)
         end
     end
 end
@@ -765,15 +760,15 @@ end
 -- --- Version Logic ---
 
 function DesolateLootcouncil:SendVersionCheck()
-    ---@type Comm
-    local Comm = self:GetModule("Comm") --[[@as Comm]]
-    if Comm and Comm.SendVersionCheck then Comm:SendVersionCheck() end
+    if self.API and self.API.SendVersionCheck then
+        self.API:SendVersionCheck()
+    end
 end
 
 function DesolateLootcouncil:GetActiveUserCount()
-    ---@type Comm
-    local Comm = self:GetModule("Comm", true)
-    if Comm and Comm.GetActiveUserCount then return Comm:GetActiveUserCount() end
+    if self.API and self.API.GetActiveUserCount then
+        return self.API:GetActiveUserCount()
+    end
     if not IsInGroup() then return 1 end
     local total = GetNumGroupMembers()
     if total == 0 then return 1 end
@@ -929,8 +924,7 @@ end
 ---@return string|nil
 function DesolateLootcouncil:GetDisplayName(name)
     if not name or name == "" then return nil end
-    local Roster = self:GetModule("Roster")
-    local main = Roster and Roster:GetMain(name) or name
+    local main = (self.API and self.API.GetMain and self.API:GetMain(name)) or name
 
     local profile = self.db and self.db.profile
     -- 1. Check if the Main is in the MainRoster (to get the exact casing/format)
@@ -1064,17 +1058,17 @@ function DesolateLootcouncil:GetBroadcastChannel()
 end
 
 function DesolateLootcouncil:GetMissingAddonMembers()
-    local Comm = self:GetModule("Comm", true)
-    if Comm and Comm.GetGroupConnectionStatus then
-        return Comm:GetGroupConnectionStatus().missing
+    if self.API and self.API.GetGroupConnectionStatus then
+        local status = self.API:GetGroupConnectionStatus()
+        return status and status.missing or {}
     end
     return {}
 end
 
 function DesolateLootcouncil:DoAllGroupMembersHaveAddon()
-    local Comm = self:GetModule("Comm", true)
-    if Comm and Comm.GetGroupConnectionStatus then
-        return Comm:GetGroupConnectionStatus().allConnected
+    if self.API and self.API.GetGroupConnectionStatus then
+        local status = self.API:GetGroupConnectionStatus()
+        return status and status.allConnected ~= false
     end
     return true
 end
@@ -1107,9 +1101,8 @@ function DesolateLootcouncil:PromptAutopass(isRetry)
     end
 
     if not isRetry then
-        local Comm = self:GetModule("Comm", true)
-        if Comm and Comm.SendVersionCheck then
-            Comm:SendVersionCheck()
+        if self.API and self.API.SendVersionCheck then
+            self.API:SendVersionCheck()
         end
         C_Timer.After(2.0, function()
             self:PromptAutopass(true)
@@ -1120,9 +1113,8 @@ function DesolateLootcouncil:PromptAutopass(isRetry)
     local missing = self:GetMissingAddonMembers()
     local missingStr = table.concat(missing, ", ")
     self:Print(string.format(L["Autopass is disabled because the following members do not have the addon: %s"], missingStr))
-    local Sync = self:GetModule("Sync", true)
-    if Sync and Sync.SendSyncAutopass then
-        Sync:SendSyncAutopass(false)
+    if self.API and self.API.SendSyncAutopass then
+        self.API:SendSyncAutopass(false)
     end
     self.sessionAutopassAnswered = true
     if self.db and self.db.profile and self.db.profile.DecayConfig then

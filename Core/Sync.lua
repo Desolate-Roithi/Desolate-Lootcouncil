@@ -147,7 +147,9 @@ function Sync:ShareDataWithOfficers(dataType, payload)
 end
 
 function Sync:SendLMHandoverOffer(targetOfficer)
-    if not targetOfficer or targetOfficer == "" or not DesolateLootcouncil:IsUnitInRaid(targetOfficer) or not DesolateLootcouncil:IsUnitOnline(targetOfficer) then
+    local inRaid = not DesolateLootcouncil.IsUnitInRaid or DesolateLootcouncil:IsUnitInRaid(targetOfficer)
+    local online = not DesolateLootcouncil.IsUnitOnline or DesolateLootcouncil:IsUnitOnline(targetOfficer)
+    if not targetOfficer or targetOfficer == "" or not inRaid or not online then
         DesolateLootcouncil:Print(string.format("Cannot hand over: %s is no longer in the group or online.", tostring(targetOfficer)))
         return
     end

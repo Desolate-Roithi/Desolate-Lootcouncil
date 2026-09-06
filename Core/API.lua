@@ -30,6 +30,8 @@ local function Session() return DesolateLootcouncil:GetModule("Session", true) e
 local function Trade() return DesolateLootcouncil:GetModule("Trade", true) end
 local function Simulation() return DesolateLootcouncil:GetModule("Simulation", true) end
 local function Audit() return DesolateLootcouncil:GetModule("Audit", true) end
+local function TestSuite() return DesolateLootcouncil:GetModule("TestSuite", true) end
+local function Debug() return DesolateLootcouncil:GetModule("Debug", true) end
 local function Serializer() return DesolateLootcouncil.Serializer end
 local function Persistence() return DesolateLootcouncil.Persistence end
 
@@ -684,6 +686,17 @@ function DLC_API:MarkIMDirty(listName)
     db.imTimestamps[listName] = GetServerTime()
 end
 
+--- Extracts an itemID from an item link or string.
+---@param link string
+---@return number?
+function DLC_API:GetItemIDFromLink(link)
+    if not link or link == "" then return nil end
+    local id = C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(link)
+    if id then return id end
+    local parsed = link:match("item:(%d+)")
+    return parsed and tonumber(parsed) or nil
+end
+
 --- Returns the category name for an itemID.
 ---@param itemID number|string
 ---@return string
@@ -902,7 +915,24 @@ end
 ---@return boolean
 function DLC_API:IsSessionActive()
     local s = Session()
-    return (s and s.IsActive and s:IsActive()) or false
+    if s then
+        if s.IsActive then return s:IsActive() end
+        if s.clientLootList and #s.clientLootList > 0 then return true end
+    end
+    local profile = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if profile and profile.session and profile.session.bidding and #profile.session.bidding > 0 then
+        return true
+    end
+    return false
+end
+
+--- Broadcasts the active Loot Master identity to the group.
+---@param targetLM string?
+function DLC_API:SendSyncLM(targetLM)
+    local s = Session()
+    if s and s.SendSyncLM then
+        s:SendSyncLM(targetLM)
+    end
 end
 
 --- Returns true if a raid attendance session is currently active.
@@ -1616,9 +1646,15 @@ end
 
 --- Broadcasts the autopass state to other clients.
 ---@param active boolean
-function DLC_API:SendSyncAutopass(active)
-    local c = Comm()
-    if c and c.SendSyncAutopass then c:SendSyncAutopass(active) end
+---@param isHeartbeat boolean?
+function DLC_API:SendSyncAutopass(active, isHeartbeat)
+    local s = Sync()
+    if s and s.SendSyncAutopass then
+        s:SendSyncAutopass(active, isHeartbeat)
+    else
+        local c = Comm()
+        if c and c.SendSyncAutopass then c:SendSyncAutopass(active) end
+    end
 end
 
 --- Returns the known autopass state for a player.
@@ -1724,8 +1760,13 @@ end
 --- Sends an LM handover offer to a target officer.
 ---@param targetOfficer string
 function DLC_API:SendLMHandoverOffer(targetOfficer)
-    local c = Comm()
-    if c and c.SendLMHandoverOffer then c:SendLMHandoverOffer(targetOfficer) end
+    local s = Sync()
+    if s and s.SendLMHandoverOffer then
+        s:SendLMHandoverOffer(targetOfficer)
+    else
+        local c = Comm()
+        if c and c.SendLMHandoverOffer then c:SendLMHandoverOffer(targetOfficer) end
+    end
 end
 
 -- ===========================================================================
@@ -2009,5 +2050,127 @@ function DLC_API:ImportProfileData(importStringRaw, importName, importToCurrent)
     end
     return false, "Serializer module not found."
 end
+
+-- ===========================================================================
+-- 10. TESTSUITE, ROSTER & SIMULATION BACKEND FACADE
+-- ===========================================================================
+
+--- Returns the backend TestSuite system module.
+---@return any
+function DLC_API:GetTestSuite()
+    return TestSuite()
+end
+
+--- Ensures the sandbox profile is active for test runs.
+function DLC_API:EnsureSandboxProfile()
+    local ts = TestSuite()
+    if ts and ts.EnsureSandboxProfile then
+        ts:EnsureSandboxProfile()
+    end
+end
+
+--- Restores the user's previous live profile after testing.
+function DLC_API:RestoreTestProfile()
+    local ts = TestSuite()
+    if ts and ts.RestoreOriginalProfile then
+        ts:RestoreOriginalProfile()
+    end
+end
+
+--- Runs an individual step of a test suite scenario.
+---@param scenarioId string
+---@param stepIndex number
+---@param callback fun(ok: boolean, err: string?, isDone: boolean)?
+function DLC_API:RunTestStep(scenarioId, stepIndex, callback)
+    local ts = TestSuite()
+    if ts and ts.RunStep then
+        ts:RunStep(scenarioId, stepIndex, callback)
+    end
+end
+
+--- Sanitizes Main and Alt tables to remove corrupt, duplicate, or stale keys.
+function DLC_API:SanitizeMainsAndAlts()
+    local r = Roster()
+    if r and r.SanitizeMainsAndAlts then
+        r:SanitizeMainsAndAlts()
+    end
+end
+
+--- Rebuilds the fast name-to-class and score lookup map.
+function DLC_API:UpdateScoreMap()
+    local r = Roster()
+    if r and r.UpdateScoreMap then
+        r:UpdateScoreMap()
+    end
+end
+
+--- Handles CLI slash command arguments targeted at the Roster subsystem.
+---@param argStr string
+function DLC_API:HandleRosterSlashCommand(argStr)
+    local r = Roster()
+    if r and r.HandleSlashCommand then
+        r:HandleSlashCommand(argStr)
+    end
+end
+
+--- Toggles interactive raid simulation mode.
+---@param count number?
+function DLC_API:ToggleSimulation(count)
+    local sim = Simulation()
+    if sim and sim.ToggleSimulation then
+        sim:ToggleSimulation(count)
+    end
+end
+
+--- Simulates a loot drop from the Loot subsystem.
+---@param target string?
+function DLC_API:SimulateItemDrop(target)
+    local l = Loot()
+    if l and l.SimulateItemDrop then
+        l:SimulateItemDrop(target)
+    end
+end
+
+--- Simulates a chat loot message from the Loot subsystem.
+---@param msg string
+function DLC_API:SimulateChatLoot(msg)
+    local l = Loot()
+    if l and l.OnChatLootSim then
+        l:OnChatLootSim(msg)
+    end
+end
+
+--- Adds canned test items to the loot queue.
+function DLC_API:AddTestItems()
+    local l = Loot()
+    if l and l.AddTestItems then
+        l:AddTestItems()
+    end
+end
+
+--- Dispatches simulation slash command arguments.
+---@param argStr string
+function DLC_API:HandleSimulationSlashCommand(argStr)
+    local sim = Simulation()
+    if sim and sim.HandleSlashCommand then
+        sim:HandleSlashCommand(argStr)
+    end
+end
+
+--- Dispatches CLI debug commands (status, verbose, dump).
+---@param cmd string
+function DLC_API:HandleDebugSlashCommand(cmd)
+    local d = Debug()
+    if not d then return end
+    if cmd == "status" and d.ShowStatus then
+        d:ShowStatus()
+    elseif cmd == "verbose" and d.ToggleVerbose then
+        d:ToggleVerbose()
+    elseif cmd == "dump" and d.DumpKeys then
+        d:DumpKeys()
+    end
+end
+
+
 
 

@@ -84,7 +84,8 @@ local function OnStepAdvanced(self, scenarioId, ok, err, partIdx, totalParts, pa
     self:RefreshWindow()
     OpenScenarioWindow(scenarioId)
 
-    local TestSuite = DesolateLootcouncil:GetModule("TestSuite", true)
+    local API = DesolateLootcouncil.API
+    local TestSuite = API and API.GetTestSuite and API:GetTestSuite()
     if TestSuite and TestSuite.lastExportString and #TestSuite.lastExportString > 0 then
         local label
         if partIdx and totalParts and partTitle then
@@ -111,10 +112,15 @@ end
 
 function UI_TestSuite:ShowTestSuiteWindow()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
-    local TestSuite = DesolateLootcouncil:GetModule("TestSuite")
+    local API = DesolateLootcouncil.API
+    local TestSuite = API and API.GetTestSuite and API:GetTestSuite()
     if not NativeGUI or not TestSuite then return end
 
-    TestSuite:EnsureSandboxProfile()
+    if API and API.EnsureSandboxProfile then
+        API:EnsureSandboxProfile()
+    else
+        TestSuite:EnsureSandboxProfile()
+    end
 
     if not self.frame then
         local f = NativeGUI:CreateWindow("DLCTestSuiteFrame", "DLC In-Game Test Suite (2.0)", 960, 640, "TestSuite")
@@ -355,7 +361,8 @@ end
 function UI_TestSuite:RefreshWindow()
     if not self.frame or not self.frame:IsShown() then return end
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
-    local TestSuite = DesolateLootcouncil:GetModule("TestSuite")
+    local API = DesolateLootcouncil.API
+    local TestSuite = API and API.GetTestSuite and API:GetTestSuite()
     if not NativeGUI or not TestSuite then return end
 
     local passedCount = 0

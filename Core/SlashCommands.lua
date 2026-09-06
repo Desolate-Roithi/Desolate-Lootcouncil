@@ -31,9 +31,8 @@ function SlashCommands.Handle(input)
             if not args[2] or args[2] == "" then
                 DesolateLootcouncil:OpenConfig("roster")
             else
-                local Roster = DesolateLootcouncil:GetModule("Roster", true)
-                if Roster and Roster.HandleSlashCommand then
-                    Roster:HandleSlashCommand(table.concat(args, " ", 2))
+                if DesolateLootcouncil.API and DesolateLootcouncil.API.HandleRosterSlashCommand then
+                    DesolateLootcouncil.API:HandleRosterSlashCommand(table.concat(args, " ", 2))
                 end
             end
         else
@@ -41,9 +40,8 @@ function SlashCommands.Handle(input)
         end
 
     elseif cmd == "vote" or cmd == "show" or cmd == "bids" then
-        local SessionInfo = DesolateLootcouncil:GetModule("Session", true)
-        local isLM = DesolateLootcouncil:AmILootMaster()
-        local items = (isLM and DesolateLootcouncil.db.profile.session.bidding) or (SessionInfo and SessionInfo.clientLootList)
+        local API = DesolateLootcouncil.API
+        local items = API and API:GetBiddingList()
         if items and #items > 0 then
             local UI = DesolateLootcouncil:GetModule("UI", true)
             if UI and UI.ShowVotingWindow then UI:ShowVotingWindow(items) end
@@ -153,9 +151,8 @@ function SlashCommands.Handle(input)
                 DesolateLootcouncil:Print(L["Only the Loot Master can stop a raid session."])
             end
         else
-            local Roster = DesolateLootcouncil:GetModule("Roster", true)
-            if Roster and Roster.HandleSlashCommand then
-                Roster:HandleSlashCommand(table.concat(args, " ", 2))
+            if DesolateLootcouncil.API and DesolateLootcouncil.API.HandleRosterSlashCommand then
+                DesolateLootcouncil.API:HandleRosterSlashCommand(table.concat(args, " ", 2))
             end
         end
 
@@ -163,14 +160,12 @@ function SlashCommands.Handle(input)
         if DesolateLootcouncil:AmIOfficerOrLM() then
             local sub = args[2] and string.lower(args[2])
             if sub == "apply" or sub == "now" or sub == "confirm" then
-                local Roster = DesolateLootcouncil:GetModule("Roster", true)
-                if Roster and Roster.ApplyDecayForLastSession then
-                    Roster:ApplyDecayForLastSession(false)
+                if DesolateLootcouncil.API and DesolateLootcouncil.API.ApplyDecayForLastSession then
+                    DesolateLootcouncil.API:ApplyDecayForLastSession(false)
                 end
             elseif sub == "skip" then
-                local Roster = DesolateLootcouncil:GetModule("Roster", true)
-                if Roster and Roster.ApplyDecayForLastSession then
-                    Roster:ApplyDecayForLastSession(true)
+                if DesolateLootcouncil.API and DesolateLootcouncil.API.ApplyDecayForLastSession then
+                    DesolateLootcouncil.API:ApplyDecayForLastSession(true)
                 end
             else
                 local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
@@ -186,8 +181,9 @@ function SlashCommands.Handle(input)
         if DesolateLootcouncil:AmILootMaster() then
             local arg = args[2]
             if arg then
-                local Loot = DesolateLootcouncil:GetModule("Loot", true)
-                if Loot and Loot.AddManualItem then Loot:AddManualItem(arg) end
+                if DesolateLootcouncil.API and DesolateLootcouncil.API.AddManualItem then
+                    DesolateLootcouncil.API:AddManualItem(arg)
+                end
             else
                 DesolateLootcouncil:Print("Usage: /dlc add [ItemLink]")
             end
@@ -200,8 +196,9 @@ function SlashCommands.Handle(input)
         local sub = args[2] and string.lower(args[2])
         if sub == "auto" or sub == "quick" then
             if DesolateLootcouncil:AmILootMaster() then
-                local Loot = DesolateLootcouncil:GetModule("Loot", true)
-                if Loot and Loot.AddTestItems then Loot:AddTestItems() end
+                if DesolateLootcouncil.API and DesolateLootcouncil.API.AddTestItems then
+                    DesolateLootcouncil.API:AddTestItems()
+                end
             else
                 DesolateLootcouncil:Print(L["Only the Loot Master can allow test items."])
             end
@@ -214,16 +211,14 @@ function SlashCommands.Handle(input)
             elseif sub == "lm" or sub == "lead" or sub == "master" then
                 roleMode = "LM"
             end
-            local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-            if Sim and Sim.StartInteractiveLootTest then
-                Sim:StartInteractiveLootTest(roleMode)
+            if DesolateLootcouncil.API and DesolateLootcouncil.API.StartInteractiveLootTest then
+                DesolateLootcouncil.API:StartInteractiveLootTest(roleMode)
             end
         end
 
     elseif cmd == "sim" or cmd == "simulate" then
-        local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-        if Sim and Sim.HandleSlashCommand then
-            Sim:HandleSlashCommand(table.concat(args, " ", 2))
+        if DesolateLootcouncil.API and DesolateLootcouncil.API.HandleSimulationSlashCommand then
+            DesolateLootcouncil.API:HandleSimulationSlashCommand(table.concat(args, " ", 2))
         end
 
     elseif cmd == "testsuite" or cmd == "suite" or cmd == "dev" then
@@ -248,15 +243,8 @@ function SlashCommands.Handle(input)
         end
 
     elseif cmd == "status" or cmd == "verbose" or cmd == "dump" then
-        local Debug = DesolateLootcouncil:GetModule("Debug", true)
-        if Debug then
-            if cmd == "status" and Debug.ShowStatus then
-                Debug:ShowStatus()
-            elseif cmd == "verbose" and Debug.ToggleVerbose then
-                Debug:ToggleVerbose()
-            elseif cmd == "dump" and Debug.DumpKeys then
-                Debug:DumpKeys()
-            end
+        if DesolateLootcouncil.API and DesolateLootcouncil.API.HandleDebugSlashCommand then
+            DesolateLootcouncil.API:HandleDebugSlashCommand(cmd)
         end
 
     elseif cmd == "reset" or cmd == "resetpositions" then
