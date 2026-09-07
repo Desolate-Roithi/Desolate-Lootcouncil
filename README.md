@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.1.3  
-**Last Updated:** 2026-09-06  
+**Latest Version:** v2.2.0  
+**Last Updated:** 2026-09-07  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -47,6 +47,32 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.2.0 (2026-09-07)
+* **New Feature: Native Minimap Button & Quick Launcher**:
+  * Added a lightweight, zero-dependency Minimap Button featuring custom void crown & gavel artwork.
+  * Drag and drop freely with smooth 360-degree orbital repositioning around circular or square minimaps (saved per profile).
+  * **Role-Aware Left-Click**: Raiders instantly open the Loot Voting window (`/dlc vote`); Loot Masters and Officers simultaneously launch both the Loot Voting window (`/dlc vote`) and the Session Monitor (`/dlc monitor`).
+  * **Right-Click**: Opens the addon configuration panel (`/dlc config`).
+  * **Configurable**: Easily enable or disable the minimap button anytime in *Settings > General > Appearance & Themes*.
+* **Multi-Drop & Duplicate Token Isolation**:
+  * Fixed an issue where awarding one duplicate item (such as 1 of 5 identical tier tokens) caused all remaining duplicates to vanish from both the Session Monitor and the Loot Voting windows.
+  * Every drop is now strictly distinguished and tracked by unique item GUID throughout the entire voting, awarding, and auto-trading lifecycle.
+* **Manual Award & Hyperlink Integrity**:
+  * Resolved an issue where manual item awards with long item links (containing item bonuses, sockets, or upgrade tiers) suffered string truncation, preventing item cache repairs.
+  * Item cache engine now properly validates and recovers hyperlinks and placeholder question-mark icons.
+* **Attendance Tracking & Monotonic Session Timestamps**:
+  * Enforced strictly monotonic session IDs and secondary tie-breakers when starting and concluding raid sessions, preventing sorting collisions in raid history when sessions are toggled rapidly.
+  * Prevented rogue local raid session starts when non-LM council officers enter a raid instance.
+  * Ensured main characters are reliably credited for raid attendance during mid-session alt swaps.
+* **Live Simulation & Interactive Testing Suite**:
+  * Expanded the interactive test bar (`UI_InteractiveTestBar`) to 955px to prevent button clipping and overflow.
+  * Added "3x Tokens" test button to quickly stage multi-token drops and test duplicate handling in live simulations.
+  * Suppressed pending decay review popups when launching the live loot simulation following test runs.
+* **Architecture, Boundaries & Performance**:
+  * Encapsulated all subsystem queries behind the centralized `DesolateLootcouncil.API` Data Abstraction Layer.
+  * 100% complete localization across English (enUS) and German (deDE).
+  * Zero-lint status with 0 errors and 0 warnings across the entire codebase.
 
 ### v2.1.3 (2026-09-06)
 * **Audit Ledger Exhaustiveness & Gap Coverage**:
