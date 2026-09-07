@@ -1011,7 +1011,7 @@ local function HandleRaidDisband(forceDisband)
                 -- No LM assigned: Session was never actively used for loot distribution
                 DesolateLootcouncil:DLC_Log("HandleRaidDisband: No LM assigned to session — auto-closing without prompt.")
                 DesolateLootcouncil.API:StopRaidSession(false)
-            elseif DesolateLootcouncil:AmIOfficerOrLM() then
+            elseif DesolateLootcouncil:AmIOfficerOrLM() and not DesolateLootcouncil.API:IsKnownRosterRaider(myName) then
                 -- Officers who had synced session from LM:
                 -- Autoclose saving history with decay missing so it can be manually applied or updated by LM
                 DesolateLootcouncil:DLC_Log("HandleRaidDisband: Officer synced session — auto-closing with decay missing.")

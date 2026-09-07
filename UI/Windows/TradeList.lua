@@ -41,7 +41,11 @@ end
 function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     local function ShowTip()
         GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
-        GameTooltip:SetHyperlink(item.link)
+        if item.link and string.find(item.link, "|Hitem:") then
+            GameTooltip:SetHyperlink(item.link)
+        elseif item.itemID and GameTooltip.SetItemByID then
+            GameTooltip:SetItemByID(item.itemID)
+        end
         GameTooltip:Show()
     end
 
@@ -88,7 +92,11 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     if not row.iconBtn then
         row.iconBtn = NativeGUI:CreateIcon(row, 24, 8)
     end
-    row.iconBtn.texture:SetTexture(item.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+    local iconTex = item.texture
+    if (not iconTex or iconTex == "Interface\\Icons\\INV_Misc_QuestionMark") and item.itemID and C_Item.GetItemIconByID then
+        iconTex = C_Item.GetItemIconByID(item.itemID)
+    end
+    row.iconBtn.texture:SetTexture(iconTex or "Interface\\Icons\\INV_Misc_QuestionMark")
     row.iconBtn:Show()
     row.iconBtn:SetScript("OnClick", ShowTip)
     row.iconBtn:SetScript("OnEnter", ShowTip)
@@ -116,7 +124,15 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     row.linkLabel:ClearAllPoints()
     row.linkLabel:SetPoint("LEFT", row.iconBtn, "RIGHT", 8, 0)
     row.linkLabel:SetPoint("RIGHT", row.winnerLabel, "LEFT", -10, 0)
-    row.linkLabel.text:SetText(item.link)
+
+    local displayLink = item.link
+    if item.itemID then
+        local ok, _, properLink = pcall(C_Item.GetItemInfo, item.itemID)
+        if ok and properLink then
+            displayLink = properLink
+        end
+    end
+    row.linkLabel.text:SetText(displayLink or item.link or "Unknown Item")
     row.linkLabel:Show()
     row.linkLabel:SetScript("OnClick", ShowTip)
     row.linkLabel:SetScript("OnEnter", ShowTip)

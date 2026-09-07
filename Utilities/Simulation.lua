@@ -36,8 +36,17 @@ function Simulation:OnEnable()
     DesolateLootcouncil:DLC_Log("Utilities/Simulation Loaded")
 end
 
+local function IsRaidLocked()
+    return IsInRaid and IsInRaid() and not (DesolateLootcouncil.IsLFR and DesolateLootcouncil:IsLFR())
+end
+
 function Simulation:Add(name, enchantingSkill)
     if not name or name == "" then return end
+    if IsRaidLocked() then
+        local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil", true)
+        DesolateLootcouncil:Print(L and L["Simulation cannot be used while in a raid group."] or "Simulation cannot be used while in a raid group.")
+        return
+    end
 
     if self.activeSims[name] then
         DesolateLootcouncil:DLC_Log("Simulated Player '" .. name .. "' is already active.", true)
@@ -146,16 +155,19 @@ function Simulation:Clear()
 end
 
 function Simulation:GetCount()
+    if IsRaidLocked() then return 0 end
     local count = 0
     for _ in pairs(self.activeSims) do count = count + 1 end
     return count
 end
 
 function Simulation:IsSimulated(unitName)
+    if IsRaidLocked() then return false end
     return self.activeSims[unitName] == true
 end
 
 function Simulation:GetRoster()
+    if IsRaidLocked() then return {} end
     local list = {}
     for name, _ in pairs(self.activeSims) do
         table.insert(list, name)
@@ -164,6 +176,7 @@ function Simulation:GetRoster()
 end
 
 function Simulation:GetPendingVoters(guid, votedPlayers)
+    if IsRaidLocked() then return nil end
     -- If the caller already resolved voted scores, use that directly.
     -- Otherwise fall back to reading Session.sessionVotes ourselves.
     local votedScores = votedPlayers
@@ -213,6 +226,8 @@ function Simulation:CreateSimulatedVotePayload(item, roll)
 end
 
 function Simulation:SimulateVote()
+    if IsRaidLocked() then return end
+
     ---@type Session
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
     if not Session then return end
@@ -243,6 +258,12 @@ end
 ---@param mode? string Optional role persona ("LM", "Officer", or "Raider")
 ---@return boolean success
 function Simulation:StartInteractiveLootTest(mode)
+    if IsRaidLocked() then
+        local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil", true)
+        DesolateLootcouncil:Print(L and L["Simulation cannot be used while in a raid group."] or "Simulation cannot be used while in a raid group.")
+        return false
+    end
+
     local rawMode = mode or self.simRole or "LM"
     local lowerMode = string.lower(tostring(rawMode))
     local selectedRole = "LM"
@@ -430,6 +451,12 @@ end
 --- Switches the active simulation role on the fly between LM, Officer, and Raider.
 ---@param newRole string "LM", "Officer", or "Raider"
 function Simulation:SetSimRole(newRole)
+    if IsRaidLocked() then
+        local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil", true)
+        DesolateLootcouncil:Print(L and L["Simulation cannot be used while in a raid group."] or "Simulation cannot be used while in a raid group.")
+        return
+    end
+
     local rawMode = newRole or "LM"
     local lowerMode = string.lower(tostring(rawMode))
     local selectedRole = "LM"
@@ -485,6 +512,8 @@ end
 --- Simulates realistic raider votes for all active items in the bidding queue.
 ---@return number castCount
 function Simulation:SimulateRaiderVotes()
+    if IsRaidLocked() then return 0 end
+
     ---@type Session
     local Session = DesolateLootcouncil:GetModule("Session")
     if not Session then return 0 end
@@ -561,6 +590,8 @@ end
 --- Automatically awards the next item in the bidding queue to its top eligible bidder.
 ---@return table|nil awardedItem, string|nil winnerName
 function Simulation:AutoAwardNext()
+    if IsRaidLocked() then return nil, nil end
+
     local session = DesolateLootcouncil.db.profile.session
     if not session or not session.bidding or #session.bidding == 0 then return nil, nil end
 
@@ -604,6 +635,8 @@ end
 ---@param itemsList table?
 ---@return number addedCount
 function Simulation:AddBacklogTestItems(itemsList)
+    if IsRaidLocked() then return 0 end
+
     local LootMod = DesolateLootcouncil:GetModule("Loot", true)
     local prof = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if not prof then return 0 end
@@ -729,6 +762,12 @@ end
 function Simulation:HandleSlashCommand(input)
     local args = { strsplit(" ", input) }
     local cmd = args[1]
+
+    if IsRaidLocked() and cmd ~= "list" and cmd ~= "clear" then
+        local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil", true)
+        DesolateLootcouncil:Print(L and L["Simulation cannot be used while in a raid group."] or "Simulation cannot be used while in a raid group.")
+        return
+    end
 
     if cmd == "add" then
         if args[2] then self:Add(args[2], args[3]) end

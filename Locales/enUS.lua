@@ -164,6 +164,7 @@ L["No pending trades."] = true
 L["Desolate Loot Council - Versions"] = true
 L["Highest Found Version: %s"] = true
 L["Not Installed / Missing"] = true
+L["Installed"] = true
 L["%s (Current)"] = true
 L["%s (Outdated)"] = true
 L["Refresh / Ping"] = true
@@ -594,5 +595,6 @@ L["Add Backlog Items"] = true
 L["Added %d items to the loot backlog and opened the Loot window."] = true
 L["Stages sample drops into the Loot Master backlog and opens the distribution window to test connection status and Start Bidding."] = true
 L["Switches active persona to Loot Master if needed."] = true
+L["Simulation cannot be used while in a raid group."] = true
 
 

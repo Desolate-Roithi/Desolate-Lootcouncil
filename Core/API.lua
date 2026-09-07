@@ -67,14 +67,7 @@ end
 ---@param name string?
 ---@return boolean
 function DLC_API:IsOfficer(name)
-    if not name or name == "" then
-        return DesolateLootcouncil:IsOfficer()
-    end
-    local r = Roster()
-    if r and r.IsOfficer then return r:IsOfficer(name) end
-    local main = self:GetMain(name) or name
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    return (db and db.MainRoster and db.MainRoster[main] and db.MainRoster[main].isOfficer) or false
+    return DesolateLootcouncil:IsOfficer(name)
 end
 
 --- Returns true if the local player is currently the active Loot Master.
@@ -144,6 +137,7 @@ end
 --- Returns the number of simulated player instances currently active.
 ---@return number
 function DLC_API:GetSimulationCount()
+    if IsInRaid and IsInRaid() and not self:IsLFR() then return 0 end
     local sim = Simulation()
     return (sim and sim.GetCount and sim:GetCount()) or 0
 end
@@ -151,6 +145,7 @@ end
 --- Returns the active simulated players roster list.
 ---@return table
 function DLC_API:GetSimulationRoster()
+    if IsInRaid and IsInRaid() and not self:IsLFR() then return {} end
     local sim = Simulation()
     if sim and sim.GetRoster then
         return sim:GetRoster()
@@ -179,6 +174,7 @@ end
 ---@param name string
 ---@return boolean
 function DLC_API:IsSimulatedPlayer(name)
+    if IsInRaid and IsInRaid() and not self:IsLFR() then return false end
     local sim = Simulation()
     return (sim and sim.IsSimulatedPlayer and sim:IsSimulatedPlayer(name)) or false
 end
@@ -188,6 +184,7 @@ end
 ---@param votedPlayers table
 ---@return table|nil
 function DLC_API:GetPendingSimVoters(guid, votedPlayers)
+    if IsInRaid and IsInRaid() and not self:IsLFR() then return nil end
     local sim = Simulation()
     return sim and sim.GetPendingVoters and sim:GetPendingVoters(guid, votedPlayers)
 end
@@ -1524,7 +1521,7 @@ function DLC_API:CleanRaiderStaleSession()
     local a = Attendance()
     if a and a.CleanRaiderStaleSession then
         a:CleanRaiderStaleSession()
-    elseif self:IsKnownRosterRaider() or not self:AmIOfficerOrLM() then
+    elseif self:IsKnownRosterRaider() or not DesolateLootcouncil:AmIOfficerOrLM() then
         local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
         if db and db.DecayConfig and db.DecayConfig.sessionActive then
             db.DecayConfig.sessionActive = false

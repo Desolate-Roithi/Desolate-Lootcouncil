@@ -25,7 +25,8 @@ local function SafeGetUnitClass(unit)
 end
 
 function Attendance:CleanRaiderStaleSession()
-    if DesolateLootcouncil.API:IsKnownRosterRaider() or not DesolateLootcouncil.API:AmIOfficerOrLM() then
+    local isKnownRaider = DesolateLootcouncil.API and DesolateLootcouncil.API.IsKnownRosterRaider and DesolateLootcouncil.API:IsKnownRosterRaider()
+    if isKnownRaider or not DesolateLootcouncil:AmIOfficerOrLM() then
         local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
         if db and db.DecayConfig and db.DecayConfig.sessionActive then
             db.DecayConfig.sessionActive = false
@@ -180,10 +181,11 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
                 decayVal = nil
             end
 
+            local fallbackSessionID = config.currentSessionID or time()
             local entry = {
-                date            = date("%Y-%m-%d %H:%M:%S", config.currentSessionID),
+                date            = date("%Y-%m-%d %H:%M:%S", fallbackSessionID),
                 zone            = GetRealZoneText() or "Unknown",
-                sessionID       = config.currentSessionID,
+                sessionID       = fallbackSessionID,
                 attendees       = {},
                 attendeeDetails = {},
                 bossLogs        = {},

@@ -220,6 +220,10 @@ function TestSuite:ResetToStateZero(force, silent)
     end
     DesolateLootcouncil.amILM = true
     DesolateLootcouncil.activeLootMaster = normPlayer
+    if DesolateLootcouncil.db and DesolateLootcouncil.db.global then
+        DesolateLootcouncil.db.global.activeRaidLM = normPlayer
+        DesolateLootcouncil.db.global.activeRaidSessionID = nil
+    end
     if DesolateLootcouncil.UpdateLootMasterStatus then
         DesolateLootcouncil:UpdateLootMasterStatus()
     end

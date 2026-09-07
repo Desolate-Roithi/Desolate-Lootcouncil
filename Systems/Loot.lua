@@ -163,16 +163,29 @@ function Loot:OnStartLootRoll(event, rollID)
     if not DesolateLootcouncil:AmILootMaster() then return end
 
     local link = GetLootRollItemLink(rollID)
-    if not link then return end
+    if not link then
+        -- If link is not yet cached on initial event frame, retry briefly after 0.15s
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.15, function()
+                if not self.sessionItems then return end
+                local retryLink = GetLootRollItemLink(rollID)
+                if retryLink then
+                    self:OnStartLootRoll(event, rollID)
+                end
+            end)
+        end
+        return
+    end
 
     local itemID = self:GetItemIDFromLink(link)
     if not itemID then return end
 
     local texture, _, count, quality = GetLootRollItemInfo(rollID)
-    local category = self:CategorizeItem(link, quality)
+    local effectiveQuality = quality or (select(3, C_Item.GetItemInfo(link))) or 0
+    local category = self:CategorizeItem(link, effectiveQuality)
     local minQuality = DesolateLootcouncil.db.profile.minLootQuality or 3
 
-    if quality >= minQuality or category ~= "Junk/Pass" then
+    if effectiveQuality >= minQuality or category ~= "Junk/Pass" then
         local guid = "BlizRoll-" .. itemID .. "-" .. rollID
         if self:AddSessionItem(link, guid, texture, count or 1, category, itemID) then
             DesolateLootcouncil:DLC_Log(string.format(L["AUTO-ADDED from roll: %s"], link))
@@ -201,8 +214,8 @@ function Loot:OnLootMessage(event, msg)
 
     local matched = false
     for _, p in ipairs(lootPatterns) do
-        -- Escape magic characters and convert %s to a wildcard match
-        local cleanPattern = p:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%%s", ".+")
+        -- Escape magic characters and convert %s to wildcard match and %d to digits match
+        local cleanPattern = p:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%%s", ".+"):gsub("%%%%d", "%%d+")
         if string.find(msg, cleanPattern) then
             matched = true
             break
@@ -222,7 +235,7 @@ function Loot:OnLootMessage(event, msg)
                     local session = DesolateLootcouncil.db.profile.session
                     local foundClaim = false
 
-                    -- Check session.loot
+                    -- Check session.loot for an unclaimed roll entry of this item
                     if session.loot then
                         for _, entry in ipairs(session.loot) do
                             if entry.itemID == itemID and not entry.msgClaimed then
@@ -237,7 +250,7 @@ function Loot:OnLootMessage(event, msg)
                         end
                     end
 
-                    -- Check session.bidding
+                    -- Check session.bidding for an unclaimed roll entry of this item
                     if not foundClaim and session.bidding then
                         for _, entry in ipairs(session.bidding) do
                             if entry.itemID == itemID and not entry.msgClaimed then
@@ -252,26 +265,12 @@ function Loot:OnLootMessage(event, msg)
                         end
                     end
 
-                    -- Check session.awarded
-                    if not foundClaim and session.awarded then
-                        for _, entry in ipairs(session.awarded) do
-                            if entry.itemID == itemID and not entry.msgClaimed then
-                                local guid = entry.sourceGUID or ""
-                                if string.find(guid, "^BlizRoll%-") or string.find(guid, "^Creature%-") or string.find(guid, "^Vehicle%-") or string.find(guid, "^Manual%-") or string.find(guid, "^Reaward%-") then
-                                    entry.msgClaimed = true
-                                    foundClaim = true
-                                    DesolateLootcouncil:DLC_Log(string.format("Loot message matched and claimed backlog item (awarded): %s (GUID: %s)", link, guid))
-                                    break
-                                end
-                            end
-                        end
-                    end
-
                     if foundClaim then
                         return
                     end
 
-                    local guid = "LootMsg-" .. itemID .. "-" .. GetServerTime()
+                    self.lootMsgCounter = (self.lootMsgCounter or 0) + 1
+                    local guid = string.format("LootMsg-%d-%d-%d", itemID, GetServerTime(), self.lootMsgCounter)
                     if self:AddSessionItem(link, guid, nil, 1, category, itemID) then
                         DesolateLootcouncil:DLC_Log(string.format(L["AUTO-ADDED from self-loot: %s"], link))
                         self:SendMessage("DLC_LOOT_WINDOW_UPDATE", DesolateLootcouncil.db.profile.session.loot)
@@ -305,14 +304,64 @@ function Loot:AddManualItem(rawLink)
     local itemID = self:GetItemIDFromLink(rawLink) or (C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(rawLink))
     if not itemID then return end
 
+    local properLink, fetchedTexture
+    local ok, _, linkStr, _, _, _, _, _, _, _, tex = pcall(C_Item.GetItemInfo, rawLink)
+    if ok and linkStr then
+        properLink = linkStr
+        fetchedTexture = tex
+    else
+        local okID, _, linkFromID, _, _, _, _, _, _, _, texID = pcall(C_Item.GetItemInfo, itemID)
+        if okID and linkFromID then
+            properLink = linkFromID
+            fetchedTexture = texID
+        end
+    end
+
+    local texture = fetchedTexture or (itemID and C_Item.GetItemIconByID and C_Item.GetItemIconByID(itemID)) or 134400
+    local finalLink = properLink or (string.find(rawLink, "|Hitem:") and string.find(rawLink, "|h|r") and rawLink) or nil
+    if not finalLink and itemID then
+        finalLink = string.format("item:%d", itemID)
+    end
+
     local category = self:GetItemCategory(itemID)
     if not category or category == "Junk/Pass" then
-        category = self:CategorizeItem(rawLink, 4) or "Tier"
+        category = self:CategorizeItem(finalLink or rawLink, 4) or "Tier"
     end
     local guid = "Manual-" .. itemID .. "-" .. string.format("%.3f_%d", GetTime(), math.random(1000, 9999))
-    self:AddSessionItem(rawLink, guid, nil, 1, category, itemID)
+    self:AddSessionItem(finalLink or rawLink, guid, texture, 1, category, itemID)
     local session = DesolateLootcouncil.db.profile.session
     self:SendMessage("DLC_LOOT_WINDOW_UPDATE", session.loot)
+
+    -- If item was not yet cached in client memory, register callback to update link and texture once loaded
+    if not properLink and itemID and Item and Item.CreateFromItemID then
+        local itemObj = Item:CreateFromItemID(itemID)
+        if itemObj and not itemObj:IsItemEmpty() then
+            itemObj:ContinueOnItemLoad(function()
+                local okLoad, _, loadedLink, _, _, _, _, _, _, _, loadedTexture = pcall(C_Item.GetItemInfo, itemID)
+                if okLoad and loadedLink and self.sessionItems and self.sessionItems[guid] then
+                    local s = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session
+                    if s and s.loot then
+                        for _, itm in ipairs(s.loot) do
+                            if itm.sourceGUID == guid then
+                                itm.link = loadedLink
+                                if loadedTexture then itm.texture = loadedTexture end
+                                break
+                            end
+                        end
+                    end
+                    if s and s.bidding then
+                        for _, itm in ipairs(s.bidding) do
+                            if itm.sourceGUID == guid then
+                                itm.link = loadedLink
+                                if loadedTexture then itm.texture = loadedTexture end
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
 end
 
 function Loot:ClearLootBacklog()
@@ -333,7 +382,32 @@ end
 ---@param voteType string
 function Loot:BroadcastAward(itemData, winnerName, voteType)
     if not itemData then return end
-    local itemLink = itemData.link or (itemData.itemID and select(2, C_Item.GetItemInfo(itemData.itemID))) or "Unknown Item"
+    local itemID = itemData.itemID or (itemData.link and self:GetItemIDFromLink(itemData.link))
+    local properLink
+    if itemID then
+        local ok, _, linkStr = pcall(C_Item.GetItemInfo, itemID)
+        if ok and linkStr then
+            properLink = linkStr
+        end
+    end
+    if not properLink and itemData.link then
+        local ok, _, linkStr = pcall(C_Item.GetItemInfo, itemData.link)
+        if ok and linkStr then
+            properLink = linkStr
+        end
+    end
+
+    local itemLink = properLink
+    if not itemLink and itemData.link and string.find(itemData.link, "|Hitem:") and string.find(itemData.link, "|h|r") then
+        itemLink = itemData.link
+    end
+    if not itemLink and itemID then
+        itemLink = string.format("item:%d", itemID)
+    end
+    if not itemLink then
+        itemLink = itemData.link or "Unknown Item"
+    end
+
     local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName) or winnerName or "Unknown"
     local voteDesc = voteType or "Award"
     local msg = string.format(L["Winner of %s is %s! (%s)"], itemLink, winnerDisplay, voteDesc)
@@ -381,10 +455,30 @@ function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, ori
     local winnerClass = R and R:GetUnitClass(winnerName) or "WARRIOR"
     local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
 
+    local itemID = itemData.itemID or (itemData.link and self:GetItemIDFromLink(itemData.link))
+    local properLink, fetchedTexture
+    if itemID then
+        local ok, _, linkStr, _, _, _, _, _, _, _, tex = pcall(C_Item.GetItemInfo, itemID)
+        if ok and linkStr then
+            properLink = linkStr
+            fetchedTexture = tex
+        end
+    end
+    if not properLink and itemData.link then
+        local ok, _, linkStr, _, _, _, _, _, _, _, tex = pcall(C_Item.GetItemInfo, itemData.link)
+        if ok and linkStr then
+            properLink = linkStr
+            fetchedTexture = tex
+        end
+    end
+
+    local finalLink = properLink or (itemData.link and string.find(itemData.link, "|h|r") and itemData.link) or (itemID and string.format("item:%d", itemID)) or itemData.link or "Unknown Item"
+    local finalTexture = itemData.texture or fetchedTexture or (itemID and C_Item.GetItemIconByID and C_Item.GetItemIconByID(itemID)) or "Interface\\Icons\\INV_Misc_QuestionMark"
+
     local entry = {
-        link          = itemData.link,
-        texture       = itemData.texture,
-        itemID        = itemData.itemID,
+        link          = finalLink,
+        texture       = finalTexture,
+        itemID        = itemID,
         winner        = winnerName,
         winnerClass   = winnerClass,
         voteType      = voteType,

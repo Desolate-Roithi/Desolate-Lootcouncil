@@ -524,7 +524,7 @@ function Session:BroadcastSessionStart(cleanList, itemCount, duration, endTime)
         if Comm then
             local myName = UnitName("player")
             if not Comm.playerEnchantingSkill then Comm.playerEnchantingSkill = {} end
-            Comm.playerEnchantingSkill[myName] = DesolateLootcouncil:GetEnchantingSkillLevel()
+            Comm.playerEnchantingSkill[myName] = (DesolateLootcouncil.GetEnchantingSkillLevel and DesolateLootcouncil:GetEnchantingSkillLevel()) or 0
         end
 
         self:SendCommMessage("DLC_Loot", serialized, channel, UnitName("player"))
@@ -1270,19 +1270,31 @@ function Session:OnCommReceived(prefix, message, _distribution, sender)
         local normalizedSender = DesolateLootcouncil:NormalizeName(sender)
         self:HandleVote(payload, normalizedSender)
     elseif payload.command == "SYNC_VOTES" then
-        self:HandleSyncVotes(payload)
+        if IsAuthorizedSessionSender(sender) then
+            self:HandleSyncVotes(payload)
+        end
     elseif payload.command == "REMOVE_ITEM" then
-        self:HandleRemoveItem(payload)
+        if IsAuthorizedSessionSender(sender) then
+            self:HandleRemoveItem(payload)
+        end
     elseif payload.command == "CLOSE_ITEM" then
-        self:HandleCloseItem(payload)
+        if IsAuthorizedSessionSender(sender) then
+            self:HandleCloseItem(payload)
+        end
     elseif payload.command == "REOPEN_ITEM" then
-        self:HandleReopenItem(payload)
+        if IsAuthorizedSessionSender(sender) then
+            self:HandleReopenItem(payload)
+        end
     elseif payload.command == "LOOT_SESSION_START" then
         self:HandleStartSession(payload, sender)
     elseif payload.command == "LOOT_SESSION_END" then
-        self:EndSession()
+        if IsAuthorizedSessionSender(sender) then
+            self:EndSession()
+        end
     elseif payload.command == "HISTORY_UPDATE" then
-        self:HandleHistoryUpdate(payload)
+        if IsAuthorizedSessionSender(sender) then
+            self:HandleHistoryUpdate(payload)
+        end
     elseif payload.command == "SYNC_LM" then
         self:HandleSyncLM(payload, sender)
     elseif payload.command == "AUTOPASS_ORDER" then

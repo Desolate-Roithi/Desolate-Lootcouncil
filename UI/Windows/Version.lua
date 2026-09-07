@@ -107,6 +107,7 @@ function UI_Version:ShowVersionWindow(isTest)
             else
                 DesolateLootcouncil.API:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive or false)
                 DesolateLootcouncil:Print(L["Autopass state synced to raid group."])
+                self:UpdateVersionList()
             end
         end)
 
@@ -327,8 +328,13 @@ function UI_Version:UpdateVersionList(isTest)
         end
 
         if not ver then
-            row.verText:SetText(L["Not Installed / Missing"])
-            row.verText:SetTextColor(0.5, 0.5, 0.5)
+            if apState ~= nil then
+                row.verText:SetText(L["Installed"] .. apSuffix)
+                row.verText:SetTextColor(0, 1, 0)
+            else
+                row.verText:SetText(L["Not Installed / Missing"])
+                row.verText:SetTextColor(0.5, 0.5, 0.5)
+            end
         else
             if not AT.CompareSemVer(highestVerStr, ver) then
                 row.verText:SetText(string.format(L["%s (Current)"], ver) .. apSuffix)

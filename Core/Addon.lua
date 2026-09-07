@@ -424,6 +424,9 @@ end
 --- Returns true if the simulation engine is actively running with mock players.
 ---@return boolean
 function DesolateLootcouncil:IsSimulationActive()
+    if IsInRaid and IsInRaid() and not (self.IsLFR and self:IsLFR()) then
+        return false
+    end
     local Sim = self:GetModule("Simulation", true)
     if Sim then
         if Sim.GetRoster and #Sim:GetRoster() > 0 then return true end
@@ -465,11 +468,11 @@ function DesolateLootcouncil:DetermineLootMaster()
         if decayConfig and decayConfig.sessionActive and decayConfig.currentSessionLM and decayConfig.currentSessionLM ~= "" then
             return decayConfig.currentSessionLM
         end
-        if self.db and self.db.global and self.db.global.activeRaidLM and self.db.global.activeRaidLM ~= "" then
+        if decayConfig and decayConfig.sessionActive and self.db and self.db.global and self.db.global.activeRaidLM and self.db.global.activeRaidLM ~= "" then
             return self.db.global.activeRaidLM
         end
         if self.activeLootMaster and self.activeLootMaster ~= "" then
-            return self.activeLootMaster
+            return (self:SmartCompare(self.activeLootMaster, "player") and myName) or self.activeLootMaster
         end
         local session = self.db and self.db.profile and self.db.profile.session
         if session and session.activeState and session.activeState.activeLM and session.activeState.activeLM ~= "" then
@@ -549,6 +552,7 @@ end
 function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
 
+    local myName = UnitName("player")
     local oldLM = self.activeLootMaster
     local oldLeader = self.lastLeader
 
@@ -595,6 +599,44 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     end
 
     self.amILM = (targetLM and self:SmartCompare(targetLM, "player")) or false
+
+    if not IsInGroup() then
+        self.officerScores = nil
+        if self.amILM then
+            self.activeLootMaster = myName
+        else
+            self.activeLootMaster = nil
+        end
+    end
+
+    if IsInRaid() and not self:IsLFR() then
+        local Sim = self:GetModule("Simulation", true)
+        if Sim then
+            if Sim.Clear then Sim:Clear() end
+            Sim.simRole = nil
+        end
+    end
+
+    if IsInRaid() and not self.amILM and not self:IsLFR() then
+        local myScore = self:GetScoreName(myName)
+        local isLMConfirmed = self.officerScores and myScore and (self.officerScores[myScore] == true)
+        if not isLMConfirmed then
+            local db = self.db and self.db.profile
+            if db and db.MainRoster then
+                local myMain = self.API and self.API:GetMain(myName) or myName
+                if db.MainRoster[myMain] and db.MainRoster[myMain].isOfficer then
+                    db.MainRoster[myMain].isOfficer = false
+                    self:DLC_Log(string.format("Cleared raider's local officer flag for %s in raid.", tostring(myMain)))
+                end
+                if db.MainRoster[myName] and db.MainRoster[myName].isOfficer then
+                    db.MainRoster[myName].isOfficer = false
+                    self:DLC_Log(string.format("Cleared raider's local officer flag for %s in raid.", tostring(myName)))
+                end
+            end
+            self.amIOfficer = false
+        end
+    end
+
     self.amIOfficer = self:AmIOfficerOrLM()
 
     if lmLeft and self.amIOfficer then
@@ -651,12 +693,22 @@ function DesolateLootcouncil:IsOfficer(name)
     local targetName = name or UnitName("player")
     if not targetName or targetName == "" then return false end
 
-    local Sim = self:GetModule("Simulation", true)
-    if Sim and Sim.simRole == "Raider" and self:SmartCompare(targetName, "player") then
-        return false
+    if not IsInRaid() and self:IsSimulationActive() then
+        local Sim = self:GetModule("Simulation", true)
+        if Sim and Sim.simRole == "Raider" and self:SmartCompare(targetName, "player") then
+            return false
+        end
     end
 
     if self:SmartCompare(targetName, "player") and self.amILM then return true end
+
+    -- In an active raid where we are not the LM:
+    -- If the LM has provided the authoritative officer list via heartbeat, strictly enforce it!
+    -- The LM already includes all officer mains and their alts in the heartbeat.
+    if IsInRaid() and not self.amILM and not self:IsLFR() and self.officerScores then
+        local targetScore = self:GetScoreName(targetName)
+        return (targetScore and self.officerScores[targetScore] == true) or false
+    end
 
     local db = self.db and self.db.profile
     if not db then return false end
@@ -731,14 +783,17 @@ function DesolateLootcouncil:CheckProfileAutoSwitch(incomingRosterHash)
 end
 
 function DesolateLootcouncil:AmIOfficerOrLM()
-    local Sim = self:GetModule("Simulation", true)
-    if Sim and Sim.simRole then
-        if Sim.simRole == "Raider" then return false end
-        if Sim.simRole == "Officer" or Sim.simRole == "LM" then return true end
+    -- Simulation mode: only overrides when a simulation is actively running and player is not in a raid
+    if not IsInRaid() and self:IsSimulationActive() then
+        local Sim = self:GetModule("Simulation", true)
+        if Sim and Sim.simRole then
+            if Sim.simRole == "Raider" then return false end
+            if Sim.simRole == "Officer" or Sim.simRole == "LM" then return true end
+        end
     end
 
-    -- Tier 1: Solo mode — player is always LM when not in any group.
-    if self.amILM or self.amIOfficer then return true end
+    -- Tier 1: Solo mode or active LM — player is always authorized when solo or when active LM.
+    if not IsInGroup() or self.amILM then return true end
 
     -- Tier 2: In a group — LM identity must be resolved and the LM must be present.
     -- If no LM is synced yet (e.g. joining raid before version check handshake),
@@ -747,7 +802,18 @@ function DesolateLootcouncil:AmIOfficerOrLM()
         return false -- LM not yet identified; deny access until handshake completes
     end
 
-    -- Tier 3: Roster flag lookup
+    -- Tier 3: In an active raid with an authoritative LM heartbeat, strictly enforce LM's officer cache.
+    -- A macro setting self.amIOfficer = true is completely ignored if not confirmed by LM!
+    if IsInRaid() and not self.amILM and not self:IsLFR() and self.officerScores then
+        local myName = UnitName("player")
+        local myScore = self:GetScoreName(myName)
+        return (myScore and self.officerScores[myScore] == true) or false
+    end
+
+    -- Tier 4: Explicit officer flag set / verified
+    if self.amIOfficer then return true end
+
+    -- Tier 5: Authoritative LM or Roster flag lookup
     local myName = UnitName("player")
     return self:IsOfficer(myName)
 end

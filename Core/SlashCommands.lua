@@ -179,10 +179,10 @@ function SlashCommands.Handle(input)
 
     elseif cmd == "add" then
         if DesolateLootcouncil:AmILootMaster() then
-            local arg = args[2]
-            if arg then
+            local payload = input:match("^%S+%s+(.+)$")
+            if payload and payload:trim() ~= "" then
                 if DesolateLootcouncil.API and DesolateLootcouncil.API.AddManualItem then
-                    DesolateLootcouncil.API:AddManualItem(arg)
+                    DesolateLootcouncil.API:AddManualItem(payload:trim())
                 end
             else
                 DesolateLootcouncil:Print("Usage: /dlc add [ItemLink]")

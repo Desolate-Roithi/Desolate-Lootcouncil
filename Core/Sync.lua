@@ -48,6 +48,19 @@ function Sync:SendSyncAutopass(isActive, isHeartbeat)
         Comm:SendComm("SYNC_AUTOPASS", payload)
     end
     
+    if Comm then
+        Comm.playerAutopassStates = Comm.playerAutopassStates or {}
+        local myName = UnitName("player")
+        if myName and myName ~= "" then
+            Comm.playerAutopassStates[myName] = isActive
+        end
+        if not isHeartbeat and Comm.playerVersions then
+            for pName, ignoredVer in pairs(Comm.playerVersions) do
+                Comm.playerAutopassStates[pName] = isActive
+            end
+        end
+    end
+
     if not isHeartbeat then
         local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
         DesolateLootcouncil:DLC_Log("You have " .. status .. " Autopass for this session.")
@@ -353,7 +366,21 @@ function SyncHandlers:SYNC_AUTOPASS(data, sender)
         isActive = data
     end
 
-    if DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil.activeLootMaster or DesolateLootcouncil:DetermineLootMaster()) then
+    local isAuthorized = false
+    local currentLM = DesolateLootcouncil.activeLootMaster or DesolateLootcouncil:DetermineLootMaster()
+    local currentRL = DesolateLootcouncil:GetGroupLeader()
+    if DesolateLootcouncil:SmartCompare(sender, currentLM)
+        or DesolateLootcouncil:SmartCompare(sender, currentRL)
+        or DesolateLootcouncil:IsOfficer(sender)
+        or (not IsInGroup() and DesolateLootcouncil:SmartCompare(sender, "player")) then
+        isAuthorized = true
+    end
+
+    if isAuthorized then
+        if Sync.pendingAutopass and Sync.pendingAutopass[sender] then
+            Sync.pendingAutopass[sender] = nil
+        end
+
         local changed = (DesolateLootcouncil.sessionAutopassActive ~= isActive)
         DesolateLootcouncil.sessionAutopassActive = isActive
 
@@ -364,7 +391,10 @@ function SyncHandlers:SYNC_AUTOPASS(data, sender)
         if not isHeartbeat or changed then
             local Comm = DesolateLootcouncil:GetModule("Comm", true)
             if Comm then
-                Comm:SendComm("SYNC_AUTOPASS_ACK", { isActive = isActive }, sender)
+                local jitter = math.random(5, 50) / 100
+                C_Timer.After(jitter, function()
+                    Comm:SendComm("SYNC_AUTOPASS_ACK", { isActive = isActive, version = DesolateLootcouncil.version }, sender)
+                end)
             end
 
             local status = isActive and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
@@ -477,7 +507,43 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
             end
         end
 
-        DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+        local myName = UnitName("player")
+        local myScore = DesolateLootcouncil:GetScoreName(myName)
+        local isLMConfirmedOfficer = (myScore and DesolateLootcouncil.officerScores[myScore] == true) or false
+
+        if not DesolateLootcouncil:AmILootMaster() then
+            local prevOfficer = DesolateLootcouncil.amIOfficer
+            local myMain = DesolateLootcouncil.API and DesolateLootcouncil.API:GetMain(myName) or myName
+            if isLMConfirmedOfficer then
+                DesolateLootcouncil.amIOfficer = true
+                if db.MainRoster and db.MainRoster[myMain] then
+                    db.MainRoster[myMain].isOfficer = true
+                end
+                if db.MainRoster and db.MainRoster[myName] then
+                    db.MainRoster[myName].isOfficer = true
+                end
+            else
+                DesolateLootcouncil.amIOfficer = false
+                -- Clear raider's local flag in raid if not recognized by LM
+                if db.MainRoster and db.MainRoster[myMain] and db.MainRoster[myMain].isOfficer then
+                    db.MainRoster[myMain].isOfficer = false
+                end
+                if db.MainRoster and db.MainRoster[myName] and db.MainRoster[myName].isOfficer then
+                    db.MainRoster[myName].isOfficer = false
+                end
+            end
+
+            if prevOfficer ~= DesolateLootcouncil.amIOfficer then
+                if DesolateLootcouncil.SendMessage then
+                    DesolateLootcouncil:SendMessage("DLC_OFFICER_FLAG_CHANGED")
+                end
+                if DesolateLootcouncil.RefreshOpenWindows then
+                    DesolateLootcouncil:RefreshOpenWindows()
+                end
+            end
+        else
+            DesolateLootcouncil.amIOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+        end
     end
 
     if data.lmAllConnected ~= nil then

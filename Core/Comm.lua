@@ -166,12 +166,14 @@ end
 
 function CommHandlers:SYNC_AUTOPASS_ACK(data, sender)
     local active
+    local ver
     if type(data) == "table" then
         active = data.isActive
+        ver = data.version
     else
         active = data
     end
-    self:UpdatePlayerInfo(sender, nil, nil, active)
+    self:UpdatePlayerInfo(sender, ver, nil, active)
 end
 
 function CommHandlers:LOOT_SESSION_START(data, sender)
@@ -257,6 +259,8 @@ function Comm:UpdatePlayerInfo(sender, version, skill, autopassActive)
     local score = DesolateLootcouncil:GetScoreName(sender)
     if score and score ~= "" and score ~= sender and score ~= shortName then
         if version ~= nil then self.playerVersions[score] = version end
+        if skill ~= nil then self.playerEnchantingSkill[score] = skill end
+        if autopassActive ~= nil then self.playerAutopassStates[score] = autopassActive end
     end
 
     -- Sync to Global for Debug module
