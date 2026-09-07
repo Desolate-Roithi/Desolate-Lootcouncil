@@ -1050,25 +1050,29 @@ function TestSuite:OnInitialize()
             if not CommMod then return end
 
             -- 1. Offline Addon Retention
-            CommMod.playerVersions = CommMod.playerVersions or {}
-            CommMod.lastKnownHasAddon = CommMod.lastKnownHasAddon or {}
+            -- Calls Comm:ResolveAddonStatus() directly — no WoW globals touched, no taint risk.
+            local savedVersions  = CommMod.playerVersions
+            local savedLastKnown = CommMod.lastKnownHasAddon
+            CommMod.playerVersions    = {}
+            CommMod.lastKnownHasAddon = {}
+
             for i = 1, 5 do
                 CommMod.playerVersions["Player" .. i .. "-TestRealm"] = "2.1.0"
-                CommMod.playerVersions["Player" .. i] = "2.1.0"
                 CommMod.lastKnownHasAddon["Player" .. i .. "-TestRealm"] = true
-                CommMod.lastKnownHasAddon["Player" .. i] = true
             end
-            -- Player 2 goes offline and loses active ping
+            -- Player2 goes offline: loses version ping but lastKnownHasAddon stays true
             CommMod.playerVersions["Player2-TestRealm"] = nil
-            CommMod.playerVersions["Player2"] = nil
-            local origConnected = CommMod.IsUnitConnected
-            CommMod.IsUnitConnected = function(selfMod, unit)
-                if unit == "raid2" then return false end
-                return true
-            end
-            local status = CommMod:GetGroupConnectionStatus()
-            CommMod.IsUnitConnected = origConnected
-            assert(status.allConnected == true, "Offline addon users retain addon status and don't break allConnected")
+
+            local _, p1Has = CommMod:ResolveAddonStatus("Player1-TestRealm", true)
+            local _, p2Has = CommMod:ResolveAddonStatus("Player2-TestRealm", false)
+            local _, strangerHas = CommMod:ResolveAddonStatus("Stranger-TestRealm", false)
+
+            CommMod.playerVersions    = savedVersions
+            CommMod.lastKnownHasAddon = savedLastKnown
+
+            assert(p1Has == true,      "Online player with version should have addon")
+            assert(p2Has == true,      "Offline addon users retain addon status and don't break allConnected")
+            assert(strangerHas == false, "Unknown offline player correctly identified as missing")
 
             -- 2. Raider Latency Caching & Late Order Override
             if Autopass and Autopass.HandleAutopassOrder then

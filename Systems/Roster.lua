@@ -77,9 +77,8 @@ StaticPopupDialogs["DLC_NEW_DATE_SESSION_PROMPT"] = {
 
 StaticPopupDialogs["DLC_DISBAND_CLOSE_SESSION"] = {
     text = L["The raid group has disbanded. Would you like to end and save the current raid session?"],
-    button1 = L["End & Save Session"],
-    button2 = L["Keep Active"],
-    button3 = L["Review & Apply Decay"],
+    button1 = L["Save & Close"],
+    button2 = L["Keep Session Open"],
     OnAccept = function()
         local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
         if RosterMod then RosterMod.disbandPopupPending = false end
@@ -97,18 +96,8 @@ StaticPopupDialogs["DLC_DISBAND_CLOSE_SESSION"] = {
         end
     end,
     OnCancel = function()
-        -- Bug 6: "Keep Active" — clear pending flag so disband event can be re-evaluated
-        -- if the player later leaves again.
         local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
         if RosterMod then RosterMod.disbandPopupPending = false end
-    end,
-    OnAlt = function()
-        local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
-        if RosterMod then RosterMod.disbandPopupPending = false end
-        local Attendance = DesolateLootcouncil:GetModule("UI_Attendance", true)
-        if Attendance and Attendance.ShowAttendanceWindow then
-            Attendance:ShowAttendanceWindow()
-        end
     end,
     timeout = 0,
     whileDead = true,
@@ -891,6 +880,11 @@ function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, g
         self:SnapshotRoster(true)
         self:Printf("Encounter '%s' Defeated. Attendance updated.", encounterName)
 
+        local diffBadge = self:GetDifficultyBadge(difficultyID) or "[Raid]"
+        local diffName = diffBadge:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        local detailStr = string.format("Defeated %s (%s, %d pulls)", encounterName, diffName, bossEntry.pulls or 1)
+        DesolateLootcouncil.API:LogAudit("BOSS_KILL", nil, nil, nil, detailStr, config.currentSessionID)
+
         DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
     end
 
@@ -1193,7 +1187,16 @@ function Roster:ApplyDecayForLastSession(skip)
     local absent = {}
     local roster = db.MainRoster or {}
     for name in pairs(roster) do
-        if not entry.attendees[name] then
+        local attended = false
+        if entry.attendees then
+            for attName in pairs(entry.attendees) do
+                if DesolateLootcouncil:SmartCompare(name, attName) then
+                    attended = true
+                    break
+                end
+            end
+        end
+        if not attended then
             absent[name] = true
         end
     end

@@ -192,6 +192,7 @@ function UI_TradeList:ShowTradeListWindow(refreshOnly)
         end
     end
 
+    -- Intentional inline pattern: height values are context-specific per window, do not consolidate.
     if pendingCount == 0 then
         if not self.emptyLabel then
             self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")

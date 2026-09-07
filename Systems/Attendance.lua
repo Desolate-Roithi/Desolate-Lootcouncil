@@ -185,7 +185,9 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
         if isOfficerOrLM then
             if not db.AttendanceHistory then db.AttendanceHistory = {} end
 
-            local decayVal = self.decayAppliedForSession or (not config.enabled and -1 or nil)
+            local RosterSys = DesolateLootcouncil:GetModule("Roster", true)
+            local appliedVal = self.decayAppliedForSession or (RosterSys and RosterSys.decayAppliedForSession)
+            local decayVal = appliedVal or (not config.enabled and -1 or nil)
             if isAutoCloseOfficer then
                 decayVal = nil
             end
@@ -200,8 +202,8 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
                 bossLogs        = {},
                 awarded         = {},
                 decayApplied    = decayVal,
-                decayPenalty    = self.decayPenaltyForSession or (config.defaultPenalty or 1),
-                decayAbsent     = not isAutoCloseOfficer and self.decayAbsentForSession and DesolateLootcouncil.Table.DeepCopy(self.decayAbsentForSession) or nil,
+                decayPenalty    = self.decayPenaltyForSession or (RosterSys and RosterSys.decayPenaltyForSession) or (config.defaultPenalty or 1),
+                decayAbsent     = not isAutoCloseOfficer and (self.decayAbsentForSession or (RosterSys and RosterSys.decayAbsentForSession)) and DesolateLootcouncil.Table.DeepCopy(self.decayAbsentForSession or RosterSys.decayAbsentForSession) or nil,
                 decayMissing    = (isAutoCloseOfficer == true) and true or nil,
                 autoClosed      = (isAutoCloseOfficer == true) and true or nil,
                 sessionLM       = config.currentSessionLM or nil,
@@ -209,6 +211,11 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
             self.decayAppliedForSession = nil
             self.decayPenaltyForSession = nil
             self.decayAbsentForSession = nil
+            if RosterSys then
+                RosterSys.decayAppliedForSession = nil
+                RosterSys.decayPenaltyForSession = nil
+                RosterSys.decayAbsentForSession = nil
+            end
 
             local session = db.session
             local API = DesolateLootcouncil.API
@@ -243,6 +250,8 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
                     table.insert(entry.bossLogs, {
                         encounterID = b.encounterID,
                         name = b.name,
+                        difficultyID = b.difficultyID,
+                        difficulty = b.difficulty,
                         pulls = b.pulls,
                         killed = b.killed,
                         killedTime = b.killedTime,
@@ -668,13 +677,31 @@ function Attendance:OnEncounterEnd(event, encounterID, encounterName, difficulty
         self:SnapshotRoster(true)
         if db and db.DecayConfig and db.DecayConfig.bossLogs then
             self.pullCounts = self.pullCounts or {}
-            table.insert(db.DecayConfig.bossLogs, {
-                encounterID = encounterID,
-                name = encounterName,
-                pulls = self.pullCounts[encounterID] or 1,
-                killed = true,
-                killedTime = time()
-            })
+            local existing = nil
+            for _, b in ipairs(db.DecayConfig.bossLogs) do
+                local sameEncounter = (b.encounterID == encounterID) or (b.name == encounterName)
+                local sameDifficulty = (not b.difficultyID or not difficultyID or b.difficultyID == difficultyID)
+                if sameEncounter and sameDifficulty then
+                    existing = b
+                    break
+                end
+            end
+            if existing then
+                existing.killed = true
+                existing.killedTime = existing.killedTime or time()
+                if difficultyID and not existing.difficultyID then
+                    existing.difficultyID = difficultyID
+                end
+            else
+                table.insert(db.DecayConfig.bossLogs, {
+                    encounterID = encounterID,
+                    name = encounterName,
+                    difficultyID = difficultyID,
+                    pulls = self.pullCounts[encounterID] or 1,
+                    killed = true,
+                    killedTime = time()
+                })
+            end
         end
     end
     self.currentEncounter = nil

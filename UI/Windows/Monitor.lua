@@ -75,6 +75,24 @@ function UI_Monitor:GetVoteInfo(guid)
     return countsText, pending
 end
 
+local function ScheduleMonitorRefresh(self)
+    if not self.monitorFrame or not self.monitorFrame:IsShown() then return end
+    if self.refreshTimer then self.refreshTimer:Cancel() end
+    self.refreshTimer = C_Timer.NewTimer(0.15, function()
+        self.refreshTimer = nil
+        self:ShowMonitorWindow(true)
+    end)
+end
+
+local function RequestItemAsyncLoad(self, itemID)
+    if not itemID then return end
+    local itemObj = Item:CreateFromItemID(itemID)
+    if not itemObj or itemObj:IsItemEmpty() then return end
+    itemObj:ContinueOnItemLoad(function()
+        ScheduleMonitorRefresh(self)
+    end)
+end
+
 function UI_Monitor:BuildItemRow(index, item, isLM)
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local link = item.link
@@ -118,8 +136,10 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
     row.btnAward:ClearAllPoints()
     row.btnAward:SetPoint("LEFT", 0, 0)
     row.btnAward:SetScript("OnClick", function()
-        local AwardUI = DesolateLootcouncil:GetModule("UI_Award", true)
-        if AwardUI then AwardUI:ShowAwardWindow(item) end
+        local awardUI = DesolateLootcouncil:GetModule("UI_Award")
+        if awardUI then
+            awardUI:ShowAwardWindow(item)
+        end
     end)
     row.btnAward:Show()
 
@@ -203,20 +223,7 @@ function UI_Monitor:BuildItemRow(index, item, isLM)
 
     local itemID = (item and tonumber(item.itemID)) or (link and tonumber(link:match("item:(%d+)")))
     if not properLink then
-        if itemID then
-            local itemObj = Item:CreateFromItemID(itemID)
-            if not itemObj:IsItemEmpty() then
-                itemObj:ContinueOnItemLoad(function()
-                    if self.monitorFrame and self.monitorFrame:IsShown() then
-                        if self.refreshTimer then self.refreshTimer:Cancel() end
-                        self.refreshTimer = C_Timer.NewTimer(0.15, function()
-                            self.refreshTimer = nil
-                            self:ShowMonitorWindow(true)
-                        end)
-                    end
-                end)
-            end
-        end
+        RequestItemAsyncLoad(self, itemID)
         row.itemLabel.text:SetText(link or (itemID and ("[item:" .. itemID .. "]")) or L["Loading..."])
     else
         row.itemLabel.text:SetText(properLink)

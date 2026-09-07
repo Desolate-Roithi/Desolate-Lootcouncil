@@ -507,6 +507,7 @@ function UI_Attendance:GetRaidHistoryOptions(config)
                 end
                 return list
             end,
+            -- code_smell_audit: suppress arrow-code (AceConfig inline dropdown sorting callback)
             sorting = function()
                 local history = DesolateLootcouncil.API:GetAttendanceHistory()
                 local order = {}
@@ -539,6 +540,7 @@ function UI_Attendance:GetRaidHistoryOptions(config)
 
                 return order
             end,
+            -- code_smell_audit: suppress arrow-code (AceConfig inline get/set callback)
             get = function()
                 if self.selectedHistoryIndex ~= nil then
                     if self.selectedHistoryIndex == "CURRENT" then

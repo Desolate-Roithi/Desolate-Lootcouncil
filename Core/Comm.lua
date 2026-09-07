@@ -363,6 +363,45 @@ function Comm:IsUnitConnected(unit)
     return true
 end
 
+--- Resolves whether a named remote player has the addon installed.
+-- Returns ver (string|nil), hasAddon (boolean).
+-- Safe to call from tests: reads only self.playerVersions and self.lastKnownHasAddon.
+function Comm:ResolveAddonStatus(name, isOnline)
+    self.playerVersions    = self.playerVersions    or {}
+    self.lastKnownHasAddon = self.lastKnownHasAddon or {}
+
+    local ver = self.playerVersions[name]
+    if not ver then
+        local short = name:match("^([^-]+)")
+        if short and self.playerVersions[short] then
+            ver = self.playerVersions[short]
+        else
+            for pName, pVer in pairs(self.playerVersions) do
+                if DesolateLootcouncil:SmartCompare(name, pName) then
+                    ver = pVer
+                    break
+                end
+            end
+        end
+    end
+
+    local hasAddon = false
+    if ver then
+        hasAddon = true
+        self.lastKnownHasAddon[name] = true
+        local short = name:match("^([^-]+)")
+        if short then self.lastKnownHasAddon[short] = true end
+    elseif not isOnline then
+        local short = name:match("^([^-]+)")
+        if self.lastKnownHasAddon[name] or (short and self.lastKnownHasAddon[short]) then
+            -- Player went offline with addon installed; retain so temp disconnect doesn't block raid
+            hasAddon = true
+        end
+    end
+
+    return ver, hasAddon
+end
+
 function Comm:GetGroupConnectionStatus()
     self.lastKnownHasAddon = self.lastKnownHasAddon or {}
 
@@ -393,37 +432,14 @@ function Comm:GetGroupConnectionStatus()
         local isOnline = self:IsUnitConnected(unit)
 
         local ver
-        local hasAddon = false
+        local hasAddon
 
         if isLocalPlayer then
             hasAddon = true
             ver = myVersion
             self.lastKnownHasAddon[name] = true
         else
-            ver = self.playerVersions and self.playerVersions[name]
-            if not ver and self.playerVersions then
-                local short = name:match("^([^-]+)")
-                if short and self.playerVersions[short] then
-                    ver = self.playerVersions[short]
-                else
-                    for pName, pVer in pairs(self.playerVersions) do
-                        if DesolateLootcouncil:SmartCompare(name, pName) then
-                            ver = pVer
-                            break
-                        end
-                    end
-                end
-            end
-
-            if ver then
-                hasAddon = true
-                self.lastKnownHasAddon[name] = true
-                local short = name:match("^([^-]+)")
-                if short then self.lastKnownHasAddon[short] = true end
-            elseif not isOnline and (self.lastKnownHasAddon[name] or (name:match("^([^-]+)") and self.lastKnownHasAddon[name:match("^([^-]+)")])) then
-                -- Player went offline with addon installed; retain status so temporary disconnect doesn't block raid
-                hasAddon = true
-            end
+            ver, hasAddon = self:ResolveAddonStatus(name, isOnline)
         end
 
         if hasAddon then

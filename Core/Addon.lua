@@ -563,6 +563,44 @@ function DesolateLootcouncil:DetermineLootMaster()
     return myName
 end
 
+local function HandleLeadershipHandover(addon, leader)
+    if not leader or addon:SmartCompare(leader, addon.lastLeader) then return end
+    local wasLeader = addon.lastLeader and addon:SmartCompare(addon.lastLeader, "player")
+    local isNowLeader = addon:SmartCompare(leader, "player")
+    if wasLeader and not isNowLeader then
+        local hasActiveSession = addon.API and addon.API:IsSessionActive()
+        if addon.amILM and hasActiveSession then
+            addon:DLC_Log(string.format("Leadership passed to %s. Initiating automatic Loot Master handover.", leader))
+            if addon.API and addon.API.SendLMHandoverOffer then
+                addon.API:SendLMHandoverOffer(leader)
+            end
+        end
+    end
+    addon.activeLootMaster = nil
+    addon.lastLeader = leader
+end
+
+local function VerifyRaidOfficerState(addon, myName)
+    if not IsInRaid() or addon.amILM or (addon.IsLFR and addon:IsLFR()) then return end
+    local myScore = addon:GetScoreName(myName)
+    local isLMConfirmed = addon.officerScores and myScore and (addon.officerScores[myScore] == true)
+    if not isLMConfirmed then
+        local db = addon.db and addon.db.profile
+        if db and db.MainRoster then
+            local myMain = addon.API and addon.API:GetMain(myName) or myName
+            if db.MainRoster[myMain] and db.MainRoster[myMain].isOfficer then
+                db.MainRoster[myMain].isOfficer = false
+                addon:DLC_Log(string.format("Cleared raider's local officer flag for %s in raid.", tostring(myMain)))
+            end
+            if db.MainRoster[myName] and db.MainRoster[myName].isOfficer then
+                db.MainRoster[myName].isOfficer = false
+                addon:DLC_Log(string.format("Cleared raider's local officer flag for %s in raid.", tostring(myName)))
+            end
+        end
+        addon.amIOfficer = false
+    end
+end
+
 function DesolateLootcouncil:UpdateLootMasterStatus()
     if not self.db then return end
 
@@ -571,22 +609,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
     local oldLeader = self.lastLeader
 
     local leader = self:GetGroupLeader()
-    if leader and not self:SmartCompare(leader, self.lastLeader) then
-        local wasLeader = self.lastLeader and self:SmartCompare(self.lastLeader, "player")
-        local isNowLeader = self:SmartCompare(leader, "player")
-        if wasLeader and not isNowLeader then
-            local hasActiveSession = self.API and self.API:IsSessionActive()
-            if self.amILM and hasActiveSession then
-                self:DLC_Log(string.format("Leadership passed to %s. Initiating automatic Loot Master handover.",
-                    leader))
-                if self.API and self.API.SendLMHandoverOffer then
-                    self.API:SendLMHandoverOffer(leader)
-                end
-            end
-        end
-        self.activeLootMaster = nil
-        self.lastLeader = leader
-    end
+    HandleLeadershipHandover(self, leader)
 
     -- Switch profile if a raid session is active globally and we are the leader/LM of the group
     if IsInGroup() and self.db.global and self.db.global.activeRaidProfile and self.db.global.activeRaidProfile ~= "" then
@@ -631,25 +654,7 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
         end
     end
 
-    if IsInRaid() and not self.amILM and not self:IsLFR() then
-        local myScore = self:GetScoreName(myName)
-        local isLMConfirmed = self.officerScores and myScore and (self.officerScores[myScore] == true)
-        if not isLMConfirmed then
-            local db = self.db and self.db.profile
-            if db and db.MainRoster then
-                local myMain = self.API and self.API:GetMain(myName) or myName
-                if db.MainRoster[myMain] and db.MainRoster[myMain].isOfficer then
-                    db.MainRoster[myMain].isOfficer = false
-                    self:DLC_Log(string.format("Cleared raider's local officer flag for %s in raid.", tostring(myMain)))
-                end
-                if db.MainRoster[myName] and db.MainRoster[myName].isOfficer then
-                    db.MainRoster[myName].isOfficer = false
-                    self:DLC_Log(string.format("Cleared raider's local officer flag for %s in raid.", tostring(myName)))
-                end
-            end
-            self.amIOfficer = false
-        end
-    end
+    VerifyRaidOfficerState(self, myName)
 
     self.amIOfficer = self:AmIOfficerOrLM()
 

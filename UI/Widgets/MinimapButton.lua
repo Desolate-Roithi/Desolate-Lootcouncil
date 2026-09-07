@@ -5,6 +5,63 @@ if AT.abortLoad then return end
 local MinimapButton = DesolateLootcouncil:NewModule("MinimapButton")
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
+-- ── LibDataBroker launcher object ─────────────────────────────────────────────
+-- Registering a launcher makes our button visible to ButtonBag, MinimapButtonBag,
+-- MinimapButtonFrame, and any other LDB-aware minimap manager.
+local LDB = LibStub("LibDataBroker-1.1", true)
+local ldbObject
+
+local function DispatchButtonClick(_, mouseButton)
+    if mouseButton == "RightButton" then
+        DesolateLootcouncil:OpenConfig()
+    elseif mouseButton == "LeftButton" then
+        local SlashCommands = DesolateLootcouncil.SlashCommands
+        if SlashCommands and SlashCommands.Handle then
+            SlashCommands.Handle("vote")
+            if DesolateLootcouncil:AmIOfficerOrLM() then
+                SlashCommands.Handle("monitor")
+            end
+        else
+            local UI = DesolateLootcouncil:GetModule("UI", true)
+            if UI then
+                if UI.ShowVotingWindow then
+                    local API = DesolateLootcouncil.API
+                    local items = API and API:GetBiddingList()
+                    if items and #items > 0 then
+                        UI:ShowVotingWindow(items)
+                    else
+                        UI:ShowVotingWindow()
+                    end
+                end
+                if DesolateLootcouncil:AmIOfficerOrLM() and UI.ShowMonitorWindow then
+                    UI:ShowMonitorWindow()
+                end
+            end
+        end
+    end
+end
+
+local function DispatchButtonTooltip(tooltip)
+    if not tooltip or not tooltip.AddLine then return end
+    tooltip:AddLine(L["Desolate Loot Council"], 0.6, 0.2, 1.0)
+    if DesolateLootcouncil:AmIOfficerOrLM() then
+        tooltip:AddLine(L["|cffffd700Left-Click:|r Open Voting & Monitor"], 1, 1, 1)
+    else
+        tooltip:AddLine(L["|cffffd700Left-Click:|r Open Voting Window"], 1, 1, 1)
+    end
+    tooltip:AddLine(L["|cffffd700Right-Click:|r Open Settings"], 1, 1, 1)
+end
+
+if LDB and LDB.NewDataObject then
+    ldbObject = LDB:NewDataObject("DesolateLootcouncil", {
+        type          = "launcher",
+        label         = "Desolate Loot Council",
+        icon          = "Interface\\AddOns\\" .. addonName .. "\\Media\\icon.png",
+        OnClick       = DispatchButtonClick,
+        OnTooltipShow = DispatchButtonTooltip,
+    })
+end
+
 local MinimapShapes = {
     ["ROUND"] = { true, true, true, true },
     ["SQUARE"] = { false, false, false, false },
@@ -63,6 +120,16 @@ function MinimapButton:SetHidden(hide)
     if db then
         db.hide = not not hide
     end
+    -- When LibDBIcon manages the button, delegate hide/show to it.
+    local LibDBIcon = LibStub and LibStub("LibDBIcon-1.0", true)
+    if LibDBIcon and LibDBIcon.Hide and ldbObject then
+        if hide then
+            LibDBIcon:Hide("DesolateLootcouncil")
+        else
+            LibDBIcon:Show("DesolateLootcouncil")
+        end
+        return
+    end
     self:UpdateVisibility()
 end
 
@@ -119,55 +186,19 @@ local function OnButtonClick(buttonFrame, mouseButton)
         buttonFrame.wasDragging = false
         return
     end
-
-    if mouseButton == "RightButton" then
-        DesolateLootcouncil:OpenConfig()
-    elseif mouseButton == "LeftButton" then
-        local SlashCommands = DesolateLootcouncil.SlashCommands
-        if SlashCommands and SlashCommands.Handle then
-            SlashCommands.Handle("vote")
-            if DesolateLootcouncil:AmIOfficerOrLM() then
-                SlashCommands.Handle("monitor")
-            end
-        else
-            local UI = DesolateLootcouncil:GetModule("UI", true)
-            if UI then
-                if UI.ShowVotingWindow then
-                    local API = DesolateLootcouncil.API
-                    local items = API and API:GetBiddingList()
-                    if items and #items > 0 then
-                        UI:ShowVotingWindow(items)
-                    else
-                        UI:ShowVotingWindow()
-                    end
-                end
-                if DesolateLootcouncil:AmIOfficerOrLM() and UI.ShowMonitorWindow then
-                    UI:ShowMonitorWindow()
-                end
-            end
-        end
-    end
+    DispatchButtonClick(buttonFrame, mouseButton)
 end
 
 local function OnButtonEnter(buttonFrame)
     if buttonFrame.isDragging then return end
-
     GameTooltip:SetOwner(buttonFrame, "ANCHOR_LEFT")
     GameTooltip:ClearLines()
-    GameTooltip:AddLine(L["Desolate Loot Council"], 0.6, 0.2, 1.0)
-
-    local isOfficerOrLM = DesolateLootcouncil:AmIOfficerOrLM()
-    if isOfficerOrLM then
-        GameTooltip:AddLine(L["|cffffd700Left-Click:|r Open Voting & Monitor"], 1, 1, 1)
-    else
-        GameTooltip:AddLine(L["|cffffd700Left-Click:|r Open Voting Window"], 1, 1, 1)
-    end
-    GameTooltip:AddLine(L["|cffffd700Right-Click:|r Open Settings"], 1, 1, 1)
+    DispatchButtonTooltip(GameTooltip)
     GameTooltip:AddLine(L["|cff888888Drag to move|r"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end
 
-local function OnButtonLeave(buttonFrame)
+local function OnButtonLeave()
     GameTooltip:Hide()
 end
 
@@ -205,6 +236,20 @@ local function OnButtonDragStop(buttonFrame)
 end
 
 function MinimapButton:Initialize()
+    local LibDBIcon = LibStub and LibStub("LibDBIcon-1.0", true)
+
+    -- If LibDBIcon is available, hand the button off to it completely.
+    -- It creates its own frame, handles position, drag, and visibility —
+    -- making the button fully adoptable by ButtonBag / MinimapButtonBag.
+    if LibDBIcon and LibDBIcon.Register and ldbObject then
+        local db = GetMinimapDB()
+        -- LibDBIcon reads `hide` and `minimapPos` from the passed table directly.
+        LibDBIcon:Register("DesolateLootcouncil", ldbObject, db)
+        self.usingLibDBIcon = true
+        return
+    end
+
+    -- ── Fallback: custom frame parented to Minimap ────────────────────────────
     if self.button then
         self:UpdatePosition()
         self:UpdateVisibility()
@@ -260,6 +305,8 @@ function MinimapButton:Initialize()
 end
 
 function MinimapButton:UpdateButtonTooltip()
+    -- When LibDBIcon manages the button, tooltips fire via OnTooltipShow automatically.
+    if self.usingLibDBIcon then return end
     if self.button and self.button:IsMouseOver() then
         OnButtonEnter(self.button)
     end

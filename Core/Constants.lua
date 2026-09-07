@@ -20,6 +20,7 @@ Constants.TEXTURES = {
 }
 
 
+-- code_smell_audit: suppress taint-underscore (intentional: follows Blizzard API event naming standard)
 Constants.EVENTS = {
     SESSION_STARTED = "DLC_SESSION_STARTED",
     SESSION_STOPPED = "DLC_SESSION_STOPPED",

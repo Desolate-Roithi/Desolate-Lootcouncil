@@ -170,6 +170,66 @@ function DLC_API:GetSimulationRoster()
     return {}
 end
 
+--- Iterates over all current group members (raid or party) and optionally simulation members.
+--- Invokes callback(name, unit, classFilename) for each unique member found.
+--- If callback returns true, iteration halts early.
+---@param callback fun(name: string, unit: string|nil, class: string|nil): boolean|nil
+---@param includeLocalPlayer boolean|nil Defaults to false
+---@param includeSims boolean|nil Defaults to true
+function DLC_API:IterateGroupMembers(callback, includeLocalPlayer, includeSims)
+    if type(callback) ~= "function" then return end
+    if includeSims == nil then includeSims = true end
+
+    local seen = {}
+
+    if includeLocalPlayer then
+        local myName = (GetUnitName and GetUnitName("player", true)) or (UnitName and UnitName("player"))
+        if myName then
+            seen[myName] = true
+            local _, myClass = UnitClass("player")
+            if callback(myName, "player", myClass) then return end
+        end
+    end
+
+    if IsInRaid and IsInRaid() then
+        local members = GetNumGroupMembers and GetNumGroupMembers() or 0
+        for i = 1, members do
+            local name, _, _, _, _, fileName = GetRaidRosterInfo(i)
+            if name and not seen[name] then
+                seen[name] = true
+                local unit = "raid" .. i
+                if callback(name, unit, fileName) then return end
+            end
+        end
+    elseif IsInGroup and IsInGroup() then
+        local members = GetNumGroupMembers and GetNumGroupMembers() or 0
+        for i = 1, members - 1 do
+            local unit = "party" .. i
+            if UnitExists and UnitExists(unit) then
+                local name = UnitName(unit)
+                if name and not seen[name] then
+                    seen[name] = true
+                    local _, class = UnitClass(unit)
+                    if callback(name, unit, class) then return end
+                end
+            end
+        end
+    end
+
+    if includeSims then
+        local sims = self:GetSimulationRoster()
+        if sims then
+            for _, name in ipairs(sims) do
+                if not seen[name] then
+                    seen[name] = true
+                    local class = self:GetUnitClass(name) or "WARRIOR"
+                    if callback(name, nil, class) then return end
+                end
+            end
+        end
+    end
+end
+
 --- Returns true if a named player is a test simulated entity.
 ---@param name string
 ---@return boolean
@@ -1367,6 +1427,18 @@ function DLC_API:Ambiguate(fullName)
     return tostring(fullName)
 end
 
+--- Safely ambiguates a character name for UI display.
+--- Strips local realm while preserving cross-realm suffix.
+---@param name string|nil
+---@return string
+function DLC_API:SafeAmbiguate(name)
+    if not name or name == "" then return "" end
+    if DesolateLootcouncil and DesolateLootcouncil.Ambiguate then
+        return DesolateLootcouncil:Ambiguate(name)
+    end
+    return self:Ambiguate(name)
+end
+
 --- Returns formatted roster summary text.
 ---@return string
 function DLC_API:GetRosterText()
@@ -1613,11 +1685,18 @@ end
 ---@param penalty number?
 ---@param absentMap table?
 function DLC_API:SetSessionDecayApplied(timestamp, penalty, absentMap)
+    local ts = timestamp or GetServerTime()
     local r = Roster()
     if r then
-        r.decayAppliedForSession = timestamp or GetServerTime()
+        r.decayAppliedForSession = ts
         r.decayPenaltyForSession = penalty
         r.decayAbsentForSession = absentMap
+    end
+    local a = Attendance()
+    if a then
+        a.decayAppliedForSession = ts
+        a.decayPenaltyForSession = penalty
+        a.decayAbsentForSession = absentMap
     end
 end
 

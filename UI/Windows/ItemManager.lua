@@ -279,6 +279,7 @@ function UI_ItemManager:UpdateScrollList()
     local list = (db.PriorityLists and self.viewListKey) and db.PriorityLists[self.viewListKey]
 
     local totalItems = self.sortedIDs and #self.sortedIDs or 0
+    -- Intentional inline pattern: height values are context-specific per window, do not consolidate.
     if totalItems == 0 then
         NativeGUI:ResetRowPool(self.rowPool)
         if not self.emptyLabel then

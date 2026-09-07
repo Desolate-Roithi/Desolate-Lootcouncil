@@ -230,6 +230,8 @@ L["The raid group has disbanded. Would you like to end and save the current raid
 L["End & Save Session"] = true
 L["Keep Active"] = true
 L["Review & Apply Decay"] = true
+L["Save & Close"] = true
+L["Keep Session Open"] = true
 L["APPLY DECAY"] = true
 L["Decay has already been applied for the last session."] = true
 L["No active raid session or pending attendance history to review."] = true
@@ -336,6 +338,7 @@ L["Disabled"] = true
 L["Autopass state synced to raid group."] = true
 L["Highest Found Version: %s  |  Autopass: %s"] = true
 L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."] = true
+L["[Attendance] %s advanced from position #%d to #%d in %s list (attendance advancement)."] = true
 L["Revote"] = true
 
 -- Priority Lists & Categories

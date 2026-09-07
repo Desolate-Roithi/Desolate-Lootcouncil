@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.2.0  
+**Latest Version:** v2.2.1  
 **Last Updated:** 2026-09-07  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,20 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.2.1 (2026-09-07)
+* **LibDataBroker & MinimapButtonBag Integration**:
+  * Registered a standard `LibDataBroker-1.1` `"launcher"` data object for the minimap button.
+  * Added seamless auto-detection and delegation to `LibDBIcon-1.0` if available, enabling automatic adoption by ButtonBag, MinimapButtonBag (MBB), and bar display addons.
+  * Unified click dispatching and tooltip formatting across both LDB and the standalone fallback frame.
+* **Taint & Offline Retention Stability**:
+  * Centralized `Comm:ResolveAddonStatus(name, isOnline)` to safely resolve addon presence for offline raid members via `lastKnownHasAddon`.
+  * Removed all temporary global overrides in the test suite, eliminating taint leaks into Blizzard secure frames (`CompactUnitFrame_UpdateHealPrediction`).
+* **Code Smells & Architecture Refactoring**:
+  * Unified character name ambiguation into `DesolateLootcouncil.API:SafeAmbiguate(name)`.
+  * Unified group traversal into `DesolateLootcouncil.API:IterateGroupMembers(callback)`.
+  * Modularized `UpdateLootMasterStatus` in `Addon.lua` by extracting leadership handover and officer verification helpers.
+  * Flattened arrow code nesting in `Monitor.lua` and `Voting.lua`.
 
 ### v2.2.0 (2026-09-07)
 * **New Feature: Native Minimap Button & Quick Launcher**:

@@ -14,4 +14,5 @@
     <Include file="Ace3\AceComm-3.0\AceComm-3.0.xml"/>
     <Include file="Ace3\AceSerializer-3.0\AceSerializer-3.0.xml"/>
     <Include file="LibDeflate\lib.xml"/>
+    <Script file="LibDataBroker-1.1\LibDataBroker-1.1.lua"/>
 </Ui>

@@ -129,6 +129,7 @@ function UI_History:ShowSessionLootHistory()
         topOffset = topOffset + rowHeight + 6
     end
 
+    -- Intentional inline pattern: height values are context-specific per window, do not consolidate.
     if not hasItems then
         if not self.emptyLabel then
             self.emptyLabel = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")

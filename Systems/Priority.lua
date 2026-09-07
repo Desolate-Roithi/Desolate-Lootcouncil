@@ -715,11 +715,24 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
 
     if penalty <= 0 or #players <= 1 then return end
 
+    local function isPlayerAbsent(pName)
+        if not pName then return false end
+        if absentMap[pName] then return true end
+        if DesolateLootcouncil.SmartCompare then
+            for absName in pairs(absentMap) do
+                if DesolateLootcouncil:SmartCompare(pName, absName) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
     -- Check if there is any attendance divergence (at least 1 absent and at least 1 present)
     local hasAbsent = false
     local hasPresent = false
     for _, name in ipairs(players) do
-        if absentMap[name] then
+        if isPlayerAbsent(name) then
             hasAbsent = true
         else
             hasPresent = true
@@ -749,11 +762,11 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
     -- Stable step-wise decay:
     -- Each absent player drops past up to `penalty` PRESENT players immediately behind them.
     -- Absent players never pass other absent players, preventing circular rollover.
-    for _ = 1, penalty do
+    for stepIndex = 1, penalty do
         for i = #newList - 1, 1, -1 do
             local currentName = newList[i]
             local nextName = newList[i + 1]
-            if absentMap[currentName] and not absentMap[nextName] then
+            if isPlayerAbsent(currentName) and not isPlayerAbsent(nextName) then
                 newList[i] = nextName
                 newList[i + 1] = currentName
             end
@@ -765,15 +778,28 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
         local oldPos = initialPos[name]
         if oldPos and oldPos ~= newPos then
             local displayName = DesolateLootcouncil:GetDisplayName(name)
-            local stateStr = absentMap[name] and "absence decay" or "attendance advancement"
-            local logMsg = string.format(
-                L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."],
-                displayName, oldPos, newPos, listName, penalty
-            )
+            local isAbsent = isPlayerAbsent(name)
+            local stateStr = isAbsent and "absence decay" or "attendance advancement"
+            local logMsg
+            local auditAction
+            if isAbsent then
+                logMsg = string.format(
+                    L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."],
+                    displayName, oldPos, newPos, listName, penalty
+                )
+                auditAction = "DECAY"
+            else
+                logMsg = string.format(
+                    L["[Attendance] %s advanced from position #%d to #%d in %s list (attendance advancement)."],
+                    displayName, oldPos, newPos, listName
+                )
+                auditAction = "ADVANCE"
+            end
+
             DesolateLootcouncil:DLC_Log(logMsg)
             self:LogPriorityChange(logMsg)
 
-            DesolateLootcouncil.API:LogAudit("DECAY", nil, name, listName, string.format("Moved %d -> %d (%s)", oldPos, newPos, stateStr))
+            DesolateLootcouncil.API:LogAudit(auditAction, nil, name, listName, string.format("Moved %d -> %d (%s)", oldPos, newPos, stateStr))
         end
     end
 
@@ -783,7 +809,7 @@ function Priority:CalculateListDecay(listObj, penalty, absentMap)
     end
     DesolateLootcouncil:DLC_Log(" --- Final Standings for [" .. listName .. "] ---")
     for k = 1, math.min(5, #newList) do
-        local stateStr = absentMap[newList[k]] and "(Absent)" or "(Present)"
+        local stateStr = isPlayerAbsent(newList[k]) and "(Absent)" or "(Present)"
         DesolateLootcouncil:DLC_Log("#" .. k .. ": " .. DesolateLootcouncil:GetDisplayName(newList[k]) .. " " .. stateStr)
     end
 

@@ -236,6 +236,8 @@ L["The raid group has disbanded. Would you like to end and save the current raid
 L["End & Save Session"] = "Beenden & Speichern"
 L["Keep Active"] = "Aktiv lassen"
 L["Review & Apply Decay"] = "Prüfen & Verfall anwenden"
+L["Save & Close"] = "Speichern & Schließen"
+L["Keep Session Open"] = "Sitzung offen halten"
 L["APPLY DECAY"] = "VERFALL ANWENDEN"
 L["Decay has already been applied for the last session."] = "Verfall wurde für die letzte Sitzung bereits angewendet."
 L["No active raid session or pending attendance history to review."] = "Keine aktive Raidsitzung oder ausstehende Anwesenheit zum Prüfen gefunden."
@@ -367,6 +369,7 @@ L["Disabled"] = "Deaktiviert"
 L["Autopass state synced to raid group."] = "Autopass-Status mit dem Schlachtzug synchronisiert."
 L["Highest Found Version: %s  |  Autopass: %s"] = "Höchste gefundene Version: %s  |  Autopass: %s"
 L["[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."] = "[Verfall] %s wurde von Position #%d auf #%d in Liste %s verschoben (+%d Verfall wegen Abwesenheit)."
+L["[Attendance] %s advanced from position #%d to #%d in %s list (attendance advancement)."] = "[Anwesenheit] %s rückte von Position #%d auf #%d in Liste %s vor (Anwesenheitsfortschritt)."
 L["Revote"] = "Erneut abstimmen"
 
 -- Priority Lists & Categories

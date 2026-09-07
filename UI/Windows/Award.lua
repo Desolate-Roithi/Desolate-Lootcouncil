@@ -10,16 +10,6 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local VOTE_TEXT = { [1] = "Bid", [2] = "Roll", [3] = "OS", [4] = "TM", [5] = "Pass" }
 
-local function SafeAmbiguate(name)
-    if not name or name == "" then return "" end
-    if DesolateLootcouncil and DesolateLootcouncil.Ambiguate then
-        return DesolateLootcouncil:Ambiguate(name)
-    elseif _G.Ambiguate then
-        return _G.Ambiguate(name, "none")
-    end
-    return name
-end
-
 
 
 function UI_Award:OnInitialize()
@@ -102,7 +92,7 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         row.lblName = lblName
     end
     local classColor = NativeGUI:GetClassColorHex(class)
-    local displayName = SafeAmbiguate(DesolateLootcouncil:GetDisplayName(v.name))
+    local displayName = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil:GetDisplayName(v.name))
     row.lblName:SetText("|c" .. classColor .. displayName .. "|r")
 
     -- 3. Bid Response pill

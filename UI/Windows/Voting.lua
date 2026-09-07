@@ -7,6 +7,7 @@ local UI_Voting  = DesolateLootcouncil:NewModule("UI_Voting", "AceEvent-3.0")
 -- File-scope constants: defined once, shared across all calls to ShowVotingWindow.
 local L          = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local VOTE_TEXT  = { [1] = L["Bid"], [2] = L["Roll"], [3] = L["Offspec"], [4] = L["T-Mog"], [5] = L["Pass"] }
+-- code_smell_audit: suppress taint-underscore (false-positive: __index is a metatable key, not a _G assignment)
 local VOTE_COLOR = setmetatable({}, {
     __index = function(tbl, key)
         local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
@@ -332,29 +333,33 @@ function UI_Voting:ResetVoting()
     end
 end
 
+local function GetTimerLabelText(API, guid, info, now)
+    if API:IsItemClosed(guid) then
+        return "|cffff0000" .. L["Closed"] .. "|r"
+    end
+    if not info.expiry or info.expiry <= 0 then
+        return ""
+    end
+    local remaining = info.expiry - now
+    if remaining <= 0 then
+        return "|cffff0000" .. L["Closed"] .. "|r"
+    end
+    return FormatTime(remaining)
+end
+
+local function UpdateTimerLabels(self, API)
+    local now = GetServerTime()
+    for guid, info in pairs(self.timerLabels) do
+        if info.fontString then
+            info.fontString:SetText(GetTimerLabelText(API, guid, info, now))
+        end
+    end
+end
+
 local function SetupVotingTicker(self, API)
     if self.votingTicker then self.votingTicker:Cancel() end
     self.votingTicker = C_Timer.NewTicker(0.5, function()
-        local now = GetServerTime()
-        for guid, info in pairs(self.timerLabels) do
-            if info.fontString then
-                local isClosed = API:IsItemClosed(guid)
-                local txt
-                if isClosed then
-                    txt = "|cffff0000" .. L["Closed"] .. "|r"
-                elseif info.expiry and info.expiry > 0 then
-                    local remaining = info.expiry - now
-                    if remaining <= 0 then
-                        txt = "|cffff0000" .. L["Closed"] .. "|r"
-                    else
-                        txt = FormatTime(remaining)
-                    end
-                else
-                    txt = ""
-                end
-                info.fontString:SetText(txt)
-            end
-        end
+        UpdateTimerLabels(self, API)
     end)
 end
 

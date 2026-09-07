@@ -14,16 +14,6 @@ local function SafeGetUnitClass(unit)
     return "WARRIOR"
 end
 
-local function SafeAmbiguate(name)
-    if not name or name == "" then return "" end
-    if DesolateLootcouncil and DesolateLootcouncil.Ambiguate then
-        return DesolateLootcouncil:Ambiguate(name)
-    elseif _G.Ambiguate then
-        return _G.Ambiguate(name, "none")
-    end
-    return name
-end
-
 -- Helper functions to keep nesting flat
 local function OnVersionTimerTick()
     if not UI_Version.versionFrame or not UI_Version.versionFrame:IsShown() then return end
@@ -193,38 +183,10 @@ function UI_Version:UpdateVersionList(isTest)
 
     AddEntry(UnitName("player"), SafeGetUnitClass("player"), DesolateLootcouncil.API:GetVersion())
 
-    if IsInRaid() then
-        local members = GetNumGroupMembers()
-        if members and members > 0 then
-            for i = 1, members do
-                local name, _, _, _, _, fileName = GetRaidRosterInfo(i)
-                if name then
-                    AddEntry(name, fileName, nil)
-                end
-            end
-        end
-    elseif IsInGroup() then
-        local members = GetNumGroupMembers()
-        if members > 0 then
-            for i = 1, members - 1 do
-                local unit = "party" .. i
-                if UnitExists(unit) then
-                    local name = UnitName(unit)
-                    local filename = SafeGetUnitClass(unit)
-                    AddEntry(name, filename, nil)
-                end
-            end
-        end
-    end
-
-    -- 3. Combined Simulation Roster (matches Attendance:SnapshotRoster)
-    local sims = DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationRoster and DesolateLootcouncil.API:GetSimulationRoster()
-    if sims then
-        for _, name in ipairs(sims) do
-            local class = (DesolateLootcouncil.API and DesolateLootcouncil.API.GetUnitClass and DesolateLootcouncil.API:GetUnitClass(name)) or "WARRIOR"
-            AddEntry(name, class, nil)
-        end
-    end
+    DesolateLootcouncil.API:IterateGroupMembers(function(name, unit, class)
+        local resolvedClass = class or (unit and SafeGetUnitClass(unit))
+        AddEntry(name, resolvedClass, nil)
+    end, false, true)
 
     local playerVersions = DesolateLootcouncil.API:GetPlayerVersions()
     local highestVerStr = "0.0.0"
@@ -285,8 +247,8 @@ function UI_Version:UpdateVersionList(isTest)
     end
 
     table.sort(roster, function(a, b)
-        local nameA = SafeAmbiguate(DesolateLootcouncil:GetDisplayName(a.name) or a.name)
-        local nameB = SafeAmbiguate(DesolateLootcouncil:GetDisplayName(b.name) or b.name)
+        local nameA = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil:GetDisplayName(a.name) or a.name)
+        local nameB = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil:GetDisplayName(b.name) or b.name)
         return nameA:lower() < nameB:lower()
     end)
 
@@ -310,7 +272,7 @@ function UI_Version:UpdateVersionList(isTest)
             row.nameText:SetPoint("LEFT", 8, 0)
         end
         local mainName = DesolateLootcouncil:GetDisplayName(entry.name) or entry.name
-        local displayName = SafeAmbiguate(mainName)
+        local displayName = DesolateLootcouncil.API:SafeAmbiguate(mainName)
         row.nameText:SetText(NativeGUI:FormatClassColor(entry.class, displayName))
         row.nameText:SetTextColor(1, 1, 1)
 

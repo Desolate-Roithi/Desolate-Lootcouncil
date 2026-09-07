@@ -84,39 +84,11 @@ local function OnTimerTick()
             rosterVersions[myName] = playerVersions[myName] or myVer
         end
 
-        if IsInRaid() then
-            local members = GetNumGroupMembers()
-            if members and members > 0 then
-                for i = 1, members do
-                    local name = GetRaidRosterInfo(i)
-                    if name and playerVersions[name] then
-                        rosterVersions[name] = playerVersions[name]
-                    end
-                end
+        DesolateLootcouncil.API:IterateGroupMembers(function(name)
+            if playerVersions[name] then
+                rosterVersions[name] = playerVersions[name]
             end
-        elseif IsInGroup() then
-            local members = GetNumGroupMembers()
-            if members > 0 then
-                for i = 1, members - 1 do
-                    local unit = "party" .. i
-                    if UnitExists(unit) then
-                        local name = UnitName(unit)
-                        if name and playerVersions[name] then
-                            rosterVersions[name] = playerVersions[name]
-                        end
-                    end
-                end
-            end
-        end
-
-        local sims = DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationRoster and DesolateLootcouncil.API:GetSimulationRoster()
-        if sims then
-            for _, name in ipairs(sims) do
-                if playerVersions[name] then
-                    rosterVersions[name] = playerVersions[name]
-                end
-            end
-        end
+        end, false, true)
 
         local highestVerStr = (status and status.highestVersion) or myVer
         for _, ver in pairs(rosterVersions) do
