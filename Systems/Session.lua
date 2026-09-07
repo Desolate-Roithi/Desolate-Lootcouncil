@@ -267,6 +267,9 @@ function Session:SendDLCHeartbeat()
         unassignedTimestamp = db.unassignedTimestamp or 0,
         rosterHash = rosterHash,
         lmAllConnected = lmAllConnected,
+        sessionActive = db.DecayConfig and (db.DecayConfig.sessionActive == true) or false,
+        currentSessionID = db.DecayConfig and db.DecayConfig.currentSessionID or nil,
+        currentSessionLM = db.DecayConfig and db.DecayConfig.currentSessionLM or nil,
     }
     local Comm = DesolateLootcouncil:GetModule("Comm")
     if Comm then
@@ -554,8 +557,9 @@ function Session:StartSession(lootTable)
     self.sessionPayloadCache = nil
     DesolateLootcouncil.keepAuditorOpen = nil
 
+    local isTestOrSim = (DesolateLootcouncil.IsTestMode and DesolateLootcouncil:IsTestMode()) or (DesolateLootcouncil.IsSimulationActive and DesolateLootcouncil:IsSimulationActive())
     local RosterSys = DesolateLootcouncil:GetModule("Roster")
-    if RosterSys and RosterSys.HasPendingDecay and RosterSys:HasPendingDecay() then
+    if not isTestOrSim and RosterSys and RosterSys.HasPendingDecay and RosterSys:HasPendingDecay() then
         local db = DesolateLootcouncil.db.profile
         local entry = db.AttendanceHistory[1]
         StaticPopup_Show("DLC_PENDING_DECAY", entry.date or "N/A", entry.zone or "Unknown")
@@ -731,9 +735,11 @@ function Session:RemoveSessionItem(guid)
     if session and session.bidding then
         for i = #session.bidding, 1, -1 do
             local item = session.bidding[i]
-            if (item.sourceGUID or item.link) == guid then
+            local itemKey = item.sourceGUID or item.link
+            if itemKey == guid then
                 removedItem = removedItem or item
                 table.remove(session.bidding, i)
+                break
             end
         end
     end
@@ -742,9 +748,11 @@ function Session:RemoveSessionItem(guid)
     if self.clientLootList then
         for i = #self.clientLootList, 1, -1 do
             local item = self.clientLootList[i]
-            if (item.sourceGUID or item.link) == guid then
+            local itemKey = item.sourceGUID or item.link
+            if itemKey == guid then
                 removedItem = removedItem or item
                 table.remove(self.clientLootList, i)
+                break
             end
         end
     end
@@ -991,8 +999,10 @@ function Session:HandleRemoveItem(payload)
     if guid and self.clientLootList then
         for i = #self.clientLootList, 1, -1 do
             local item = self.clientLootList[i]
-            if item.sourceGUID == guid or item.link == guid or (item.sourceGUID or item.link) == guid then
+            local itemKey = item.sourceGUID or item.link
+            if itemKey == guid then
                 table.remove(self.clientLootList, i)
+                break
             end
         end
 

@@ -118,9 +118,19 @@ function Attendance:StartRaidSession()
         return
     end
 
+    local isLM = DesolateLootcouncil:AmILootMaster()
+    local lmName = isLM and UnitName("player") or nil
+
     config.sessionActive = true
-    config.currentSessionID = time()
-    config.currentSessionLM = nil -- Assigned only upon loot distribution or handover
+    local newSessionID = time()
+    if db and db.AttendanceHistory and #db.AttendanceHistory > 0 then
+        local topID = tonumber(db.AttendanceHistory[1].sessionID)
+        if topID and topID >= newSessionID then
+            newSessionID = topID + 1
+        end
+    end
+    config.currentSessionID = newSessionID
+    config.currentSessionLM = lmName
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.bossLogs = {}
@@ -131,7 +141,7 @@ function Attendance:StartRaidSession()
         globalDb.activeRaidProfile = DesolateLootcouncil.db:GetCurrentProfile()
         globalDb.activeRaidSessionID = config.currentSessionID
         globalDb.activeRaidLastActivity = config.lastActivity
-        globalDb.activeRaidLM = ""
+        globalDb.activeRaidLM = lmName or ""
     end
 
     local session = DesolateLootcouncil.db.profile.session
@@ -141,7 +151,7 @@ function Attendance:StartRaidSession()
 
     self:Printf("Raid Session STARTED. ID: %d", config.currentSessionID)
 
-    if DesolateLootcouncil:AmILootMaster() then
+    if isLM then
         local Priority = DesolateLootcouncil:GetModule("Priority", true)
         if Priority and Priority.NotifyIfPlayersMissing then
             Priority:NotifyIfPlayersMissing()
@@ -149,12 +159,11 @@ function Attendance:StartRaidSession()
         if DesolateLootcouncil.PromptAutopass then
             DesolateLootcouncil:PromptAutopass()
         end
-    end
-
-    DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
-    local SessionMod = DesolateLootcouncil:GetModule("Session", true)
-    if SessionMod and SessionMod.SendDLCHeartbeat then
-        SessionMod:SendDLCHeartbeat()
+        DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
+        local SessionMod = DesolateLootcouncil:GetModule("Session", true)
+        if SessionMod and SessionMod.SendDLCHeartbeat then
+            SessionMod:SendDLCHeartbeat()
+        end
     end
 
     DesolateLootcouncil.API:LogAudit("SESSION_START", nil, nil, nil, string.format("Raid session started (ID: %s)", tostring(config.currentSessionID)), config.currentSessionID)
@@ -265,9 +274,12 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
                 table.insert(db.AttendanceHistory, 1, sEntry)
             end
             table.sort(db.AttendanceHistory, function(a, b)
-                local sA = tostring(a.date or a.sessionID or "")
-                local sB = tostring(b.date or b.sessionID or "")
-                return sA > sB
+                local sA = tostring(a.date or "")
+                local sB = tostring(b.date or "")
+                if sA ~= sB then return sA > sB end
+                local idA = tonumber(a.sessionID) or 0
+                local idB = tonumber(b.sessionID) or 0
+                return idA > idB
             end)
 
             local count = 0
@@ -283,8 +295,10 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
                 end
             end
             self:Printf("Session ENDED. Saved attendance for %d players.", count)
-            db.historyTimestamp = GetServerTime()
-            db.rosterTimestamp = GetServerTime()
+            if not isAutoCloseOfficer then
+                db.historyTimestamp = GetServerTime()
+                db.rosterTimestamp = GetServerTime()
+            end
 
             -- Ensure all awards recorded during this session have their AuditLog entries linked to currentSessionID
             if db.AuditLog and entry.awarded then
@@ -306,14 +320,14 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
             -- IsInGroup() can still return true for a brief window after the raid
             -- disbands, causing SYNC_HISTORY to be sent to an already-gone RAID
             -- channel and producing "not in group" errors sub-second after save.
-            if DesolateLootcouncil:AmILootMaster() and IsInRaid() then
+            if DesolateLootcouncil:AmILootMaster() and IsInRaid and IsInRaid() then
                 if API and API.SendComm then
                     local payload = {
                         AttendanceHistory = db.AttendanceHistory or {},
                         awarded = db.session and db.session.awarded or {},
                         historyTimestamp = db.historyTimestamp or 0
                     }
-                    API:SendComm("SYNC_HISTORY", payload)
+                    API:SendComm("SYNC_HISTORY", payload, "RAID")
                 end
             end
         else

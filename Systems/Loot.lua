@@ -485,6 +485,7 @@ function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, ori
         timestamp     = GetServerTime(),
         originalIndex = origIndex,
         fullItemData  = itemData,
+        sourceGUID    = itemGUID,
         votes         = Session and Session.sessionVotes and DesolateLootcouncil.Table.DeepCopy(Session.sessionVotes[itemGUID]) or {},
         traded        = isSelf,
     }
@@ -532,8 +533,10 @@ function Loot:CleanupAwardedItem(session, itemGUID, removeIndex)
     elseif session.bidding then
         for i = #session.bidding, 1, -1 do
             local item = session.bidding[i]
-            if item.sourceGUID == itemGUID or item.link == itemGUID or (item.sourceGUID and itemGUID and tostring(item.sourceGUID) == tostring(itemGUID)) or (item.itemID and itemGUID and tostring(item.itemID) == tostring(itemGUID)) then
+            local itemKey = item.sourceGUID or item.link
+            if itemKey == itemGUID then
                 table.remove(session.bidding, i)
+                break
             end
         end
     end
@@ -547,8 +550,10 @@ function Loot:CleanupAwardedItem(session, itemGUID, removeIndex)
         if Session.clientLootList then
             for i = #Session.clientLootList, 1, -1 do
                 local item = Session.clientLootList[i]
-                if item.sourceGUID == itemGUID or item.link == itemGUID or (item.sourceGUID and itemGUID and tostring(item.sourceGUID) == tostring(itemGUID)) or (item.itemID and itemGUID and tostring(item.itemID) == tostring(itemGUID)) then
+                local itemKey = item.sourceGUID or item.link
+                if itemKey == itemGUID then
                     table.remove(Session.clientLootList, i)
+                    break
                 end
             end
         end
@@ -602,6 +607,9 @@ function Loot:AwardItem(itemGUID, winnerName, voteType)
     end
 
     if not itemData then return end
+    if itemData.sourceGUID then
+        itemGUID = itemData.sourceGUID
+    end
 
     -- 1. Announce to raid / whisper winner
     self:BroadcastAward(itemData, winnerName, voteType)

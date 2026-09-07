@@ -296,7 +296,8 @@ end
 function UI_Voting:RemoveVotingItem(guid)
     if not self.cachedVotingItems or type(self.cachedVotingItems) ~= "table" then return end
     for i, item in ipairs(self.cachedVotingItems) do
-        if (item.sourceGUID or item.link) == guid then
+        local itemKey = item.sourceGUID or item.link
+        if itemKey == guid then
             table.remove(self.cachedVotingItems, i)
             -- Clear milestone state for this item so thresholds won't fire for it
             if self.announcedMilestones then
@@ -378,7 +379,8 @@ end
 ---@param awardedGUIDs table<string, boolean>  A map of already awarded item GUIDs
 ---@return boolean laidOut  True if the row was successfully processed and laid out
 function UI_Voting:LayoutVotingRow(index, data, guid, now, awardedGUIDs)
-    if awardedGUIDs[guid] or (data.link and awardedGUIDs[data.link]) or (data.sourceGUID and awardedGUIDs[data.sourceGUID]) then
+    local isAwarded = (guid and awardedGUIDs[guid]) or (data.sourceGUID and awardedGUIDs[data.sourceGUID]) or (not data.sourceGUID and data.link and awardedGUIDs[data.link])
+    if isAwarded then
         return false
     end
 
@@ -867,20 +869,6 @@ end
 
 function UI_Voting:OnItemClosed(eventName, guid)
     self:ShowVotingWindow(nil, true)
-end
-
-function UI_Voting:RemoveVotingItem(guid)
-    if self.cachedVotingItems then
-        for i = #self.cachedVotingItems, 1, -1 do
-            local item = self.cachedVotingItems[i]
-            if item.sourceGUID == guid or item.link == guid or (item.sourceGUID or item.link) == guid then
-                table.remove(self.cachedVotingItems, i)
-            end
-        end
-    end
-    if self.votingFrame and self.votingFrame:IsShown() then
-        self:ShowVotingWindow(self.cachedVotingItems, true)
-    end
 end
 
 function UI_Voting:OnItemRemoved(eventName, guid)

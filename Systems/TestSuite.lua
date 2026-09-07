@@ -219,17 +219,38 @@ function TestSuite:ResetToStateZero(force, silent)
         DesolateLootcouncil.db.profile.DecayConfig.bossLogs = {}
     end
     DesolateLootcouncil.amILM = true
+    DesolateLootcouncil.amIOfficer = true
+    DesolateLootcouncil.officerScores = nil
     DesolateLootcouncil.activeLootMaster = normPlayer
     if DesolateLootcouncil.db and DesolateLootcouncil.db.global then
         DesolateLootcouncil.db.global.activeRaidLM = normPlayer
         DesolateLootcouncil.db.global.activeRaidSessionID = nil
     end
-    if DesolateLootcouncil.UpdateLootMasterStatus then
+    local SessionMod = DesolateLootcouncil:GetModule("Session", true)
+    if SessionMod then
+        SessionMod.clientLootList = {}
+        SessionMod.sessionVotes = {}
+        SessionMod.closedItems = {}
+        SessionMod.sessionPayloadCache = nil
+    end
+    local VotingUI = DesolateLootcouncil:GetModule("VotingUI", true)
+    if VotingUI then
+        VotingUI.cachedVotingItems = {}
+        VotingUI.myVotes = {}
+    end
+    local Trade = DesolateLootcouncil:GetModule("Trade", true)
+    if Trade and Trade.ClearPending then
+        Trade:ClearPending()
+    end
+    if not DesolateLootcouncil.isTestRunning and DesolateLootcouncil.UpdateLootMasterStatus then
         DesolateLootcouncil:UpdateLootMasterStatus()
     end
 
     local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    if Sim and Sim.Clear then Sim:Clear() end
+    if Sim then
+        Sim.simRole = nil
+        if Sim.Clear then Sim:Clear() end
+    end
 
     self.isStateZeroClean = true
     if not DesolateLootcouncil.isTestRunning then
@@ -314,6 +335,12 @@ function TestSuite:VerifyPostTestIntegrity()
             if not event.sessionID then
                 table.insert(issues, string.format("AttendanceHistory entry #%d is missing sessionID", i))
             end
+            if not event.date or event.date == "" then
+                table.insert(issues, string.format("AttendanceHistory entry #%d is missing date", i))
+            end
+            if not event.attendees or type(event.attendees) ~= "table" then
+                table.insert(issues, string.format("AttendanceHistory entry #%d is missing attendees table", i))
+            end
         end
     end
 
@@ -337,6 +364,13 @@ end
 ---@param fn fun()
 function TestSuite:RunPart(partIndex, totalParts, partTitle, fn)
     self:Log(string.format("  -> [Part %d/%d]: %s", partIndex, totalParts, partTitle))
+    if self.stepMode == "PART" then
+        self.activePartInfo = {
+            index = partIndex,
+            total = totalParts,
+            title = partTitle
+        }
+    end
     fn()
     self:CaptureStepExport(string.format("Part_%d_%s", partIndex, partTitle:gsub("[^%w_]+", "_")))
     local ok, issues = self:VerifyPostTestIntegrity()
@@ -345,11 +379,6 @@ function TestSuite:RunPart(partIndex, totalParts, partTitle, fn)
     end
 
     if self.stepMode == "PART" then
-        self.activePartInfo = {
-            index = partIndex,
-            total = totalParts,
-            title = partTitle
-        }
         coroutine.yield("PART_DONE", partIndex, totalParts, partTitle)
     end
 end
@@ -634,6 +663,7 @@ function TestSuite:OnInitialize()
             DesolateLootcouncil.amILM = true
 
             Att:StartRaidSession()
+            local thisSessionID = db.DecayConfig and db.DecayConfig.currentSessionID
             Att:OnEncounterStart("ENCOUNTER_START", 201, "Boss 1", 16, 20)
             Att:OnEncounterEnd("ENCOUNTER_END", 201, "Boss 1", 16, 20, 1)
 
@@ -646,7 +676,15 @@ function TestSuite:OnInitialize()
             DesolateLootcouncil.amILM = prevLM
 
             local latest = db.AttendanceHistory[1]
-            assert(latest.attendees["SwapperMain-Realm"] == true, "Parent Main credited in attendance")
+            if thisSessionID and latest and latest.sessionID ~= thisSessionID then
+                for _, hEntry in ipairs(db.AttendanceHistory) do
+                    if hEntry.sessionID == thisSessionID then
+                        latest = hEntry
+                        break
+                    end
+                end
+            end
+            assert(latest and latest.attendees and latest.attendees["SwapperMain-Realm"] == true, "Parent Main credited in attendance")
             if latest.attendeeDetails and latest.attendeeDetails["SwapperMain-Realm"] then
                 local d = latest.attendeeDetails["SwapperMain-Realm"].attendedChars
                 assert(d["SwapperMain-Realm"] ~= nil and d["SwapperAlt-Realm"] ~= nil, "Main and Alt kills aggregated under parent")
@@ -948,6 +986,7 @@ function TestSuite:OnInitialize()
         -- Part 2: Raider Autopass / Roll Rule Evaluation
         self:RunPart(2, 4, "Autopass_Rule_Evaluation", function()
             if not Autopass then return end
+            local prevLM = DesolateLootcouncil.amILM
             DesolateLootcouncil.amILM = false
             local tierAction = Autopass:DetermineRollAction(1, "Tier")
             assert(tierAction == 0, "Raiders must Pass (0) on managed Tier loot")
@@ -957,6 +996,7 @@ function TestSuite:OnInitialize()
 
             local unmanagedAction = Autopass:DetermineRollAction(2, "Junk/Pass")
             assert(unmanagedAction == 0 or unmanagedAction == nil, "Unmanaged/Junk items skip auto-Need")
+            DesolateLootcouncil.amILM = prevLM
         end)
 
         -- Part 3: Session Autopass Prompt Lifecycle & Heartbeat Suppression
@@ -1124,6 +1164,12 @@ function TestSuite:OnInitialize()
     self:RegisterScenario("voting_monitor_workflow", "7. Voting Lifecycle, Retraction, Re-award & Monitor Removal", "Tests vote retraction, item removal from monitor, zero-timer re-awarding, and disenchanter discovery.", function()
         local API = DesolateLootcouncil.API
         local Session = DesolateLootcouncil:GetModule("Session", true)
+        local prevLM = DesolateLootcouncil.amILM
+        local prevActiveLM = DesolateLootcouncil.activeLootMaster
+        local playerName = (UnitName and UnitName("player")) or "Tester"
+        local normPlayer = DesolateLootcouncil.NormalizeName and DesolateLootcouncil:NormalizeName(playerName) or playerName
+        DesolateLootcouncil.amILM = true
+        DesolateLootcouncil.activeLootMaster = normPlayer
         -- Part 1: Start Session
         self:RunPart(1, 5, "Session_Start_Staging", function()
             local items = {
@@ -1197,6 +1243,8 @@ function TestSuite:OnInitialize()
             assert(#API:GetBiddingList() == 0, "Bidding list must be empty after stopping session")
         end)
 
+        DesolateLootcouncil.amILM = prevLM
+        DesolateLootcouncil.activeLootMaster = prevActiveLM
         self:Log("Scenario 7 [Voting Lifecycle, Retraction, Re-award & Monitor Removal] completed successfully.")
     end)
 
@@ -1377,7 +1425,8 @@ function TestSuite:OnInitialize()
             end
 
             DesolateLootcouncil.amILM = false
-            DesolateLootcouncil.isOfficer = true
+            DesolateLootcouncil.amIOfficer = true
+            DesolateLootcouncil.officerScores = nil
             DesolateLootcouncil.activeLootMaster = "MockLM-Realm"
 
             local awardPacket = {
@@ -1542,6 +1591,185 @@ function TestSuite:OnInitialize()
 
         self:Log("Scenario 9 [Officer Sync Parity, Trade State Machine & Cache Invariants] completed successfully.")
     end)
+
+    -- =======================================================================
+    -- 10. Session Authority, Late-Join Parity & Disband History
+    -- =======================================================================
+    self:RegisterScenario("session_authority_latejoin_disband", "10. Session Authority, Late-Join Parity & Disband History", "Validates non-LM zone-in auto-start suppression, heartbeat session adoption and roster catchup, raid disband provisional history auto-closure, and solo LM finalized history updates.", function()
+        local Sync = DesolateLootcouncil:GetModule("Sync", true)
+        local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
+        local db = DesolateLootcouncil.db.profile
+        local myName = (UnitName and UnitName("player")) or "Tester"
+        local normPlayer = DesolateLootcouncil.NormalizeName and DesolateLootcouncil:NormalizeName(myName) or myName
+        local origMainRoster = DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(db.MainRoster)
+
+        -- Part 1: Non-LM Zone-In Auto-Start Suppression
+        self:RunPart(1, 4, "Non_LM_Zone_In_Auto_Start_Suppression", function()
+            db.DecayConfig = db.DecayConfig or {}
+            db.DecayConfig.sessionActive = false
+            db.DecayConfig.currentSessionID = nil
+            db.DecayConfig.currentSessionLM = nil
+
+            local origAmILM = DesolateLootcouncil.amILM
+            local origAmIOfficer = DesolateLootcouncil.amIOfficer
+            local origActiveLM = DesolateLootcouncil.activeLootMaster
+
+            DesolateLootcouncil.amILM = false
+            DesolateLootcouncil.amIOfficer = true
+            DesolateLootcouncil.activeLootMaster = "ActualLM-Realm"
+
+            if RosterMod and RosterMod.ZONE_CHANGED_NEW_AREA then
+                RosterMod.testInstanceType = "raid"
+                RosterMod:ZONE_CHANGED_NEW_AREA()
+                RosterMod.testInstanceType = nil
+            end
+
+            assert(db.DecayConfig.sessionActive ~= true, "Officer must NOT auto-start a local raid session upon entering a raid instance")
+            assert(db.DecayConfig.currentSessionID == nil, "Officer must NOT generate a local currentSessionID upon entering raid")
+
+            DesolateLootcouncil.amILM = origAmILM
+            DesolateLootcouncil.amIOfficer = origAmIOfficer
+            DesolateLootcouncil.activeLootMaster = origActiveLM
+        end)
+
+        -- Part 2: Heartbeat Session Adoption and Sync
+        self:RunPart(2, 4, "Heartbeat_Session_Adoption_And_Sync", function()
+            db.DecayConfig = db.DecayConfig or {}
+            db.DecayConfig.sessionActive = false
+            db.DecayConfig.currentSessionID = nil
+            db.DecayConfig.currentSessionLM = nil
+
+            local origAmILM = DesolateLootcouncil.amILM
+            local origAmIOfficer = DesolateLootcouncil.amIOfficer
+            local origActiveLM = DesolateLootcouncil.activeLootMaster
+            local origIsUnitInRaid = DesolateLootcouncil.IsUnitInRaid
+            local origIsUnitOnline = DesolateLootcouncil.IsUnitOnline
+
+            DesolateLootcouncil.amILM = false
+            DesolateLootcouncil.amIOfficer = true
+            DesolateLootcouncil.activeLootMaster = "ActualLM-Realm"
+            DesolateLootcouncil.IsUnitInRaid = function(self, name)
+                if name == "ActualLM-Realm" then return true end
+                if origIsUnitInRaid then return origIsUnitInRaid(self, name) end
+                return false
+            end
+            DesolateLootcouncil.IsUnitOnline = function(self, name)
+                if name == "ActualLM-Realm" then return true end
+                if origIsUnitOnline then return origIsUnitOnline(self, name) end
+                return false
+            end
+
+            local heartbeatPayload = {
+                officers = { myName },
+                sessionActive = true,
+                currentSessionID = 1788715900,
+                currentSessionLM = "ActualLM-Realm",
+                configTimestamp = 1788715900,
+            }
+
+            if Sync and Sync.HandleMessage then
+                Sync:HandleMessage("DLC_HEARTBEAT", heartbeatPayload, "ActualLM-Realm")
+            end
+
+            assert(db.DecayConfig.sessionActive == true, "Officer must adopt sessionActive = true from LM heartbeat")
+            assert(db.DecayConfig.currentSessionID == 1788715900, "Officer must adopt LM's currentSessionID")
+            assert(db.DecayConfig.currentSessionLM == "ActualLM-Realm", "Officer must adopt LM's currentSessionLM")
+
+            DesolateLootcouncil.amILM = origAmILM
+            DesolateLootcouncil.amIOfficer = origAmIOfficer
+            DesolateLootcouncil.activeLootMaster = origActiveLM
+            DesolateLootcouncil.IsUnitInRaid = origIsUnitInRaid
+            DesolateLootcouncil.IsUnitOnline = origIsUnitOnline
+        end)
+
+        -- Part 3: Disband Auto-Close Provisional History
+        self:RunPart(3, 4, "Disband_Auto_Close_Provisional_History", function()
+            local origAmILM = DesolateLootcouncil.amILM
+            local origAmIOfficer = DesolateLootcouncil.amIOfficer
+            local origActiveLM = DesolateLootcouncil.activeLootMaster
+
+            DesolateLootcouncil.amILM = false
+            DesolateLootcouncil.amIOfficer = true
+            DesolateLootcouncil.activeLootMaster = "ActualLM-Realm"
+
+            db.DecayConfig = {
+                sessionActive = true,
+                currentSessionID = 1788715900,
+                currentSessionLM = "ActualLM-Realm",
+                currentAttendees = { ["RaiderOne-Realm"] = true, [myName] = true },
+                bossLogs = { { name = "Boss 1", killed = true } },
+            }
+            db.MainRoster = db.MainRoster or {}
+            db.MainRoster["RaiderOne-Realm"] = { sessionsAttended = {} }
+            db.MainRoster[normPlayer] = db.MainRoster[normPlayer] or { sessionsAttended = {} }
+            db.MainRoster[normPlayer].isOfficer = true
+            db.AttendanceHistory = {}
+
+            if RosterMod and RosterMod.HandleRaidDisband then
+                RosterMod.HandleRaidDisband(true)
+            end
+
+            assert(#db.AttendanceHistory == 1, "Officer client must record attendance history entry on raid disband")
+            assert(db.AttendanceHistory[1].sessionID == 1788715900, "Disband history entry must preserve sessionID")
+            assert(db.AttendanceHistory[1].decayMissing == true, "Disband history entry must have decayMissing = true")
+            assert(db.AttendanceHistory[1].date ~= nil and db.AttendanceHistory[1].date ~= "", "Disband history entry must have valid date")
+            assert(db.AttendanceHistory[1].attendees ~= nil and type(db.AttendanceHistory[1].attendees) == "table", "Disband history entry must have valid attendees table")
+
+            DesolateLootcouncil.amILM = origAmILM
+            DesolateLootcouncil.amIOfficer = origAmIOfficer
+            DesolateLootcouncil.activeLootMaster = origActiveLM
+        end)
+
+        -- Part 4: Solo Finalized History Update
+        self:RunPart(4, 4, "Solo_Finalized_History_Update", function()
+            db.MainRoster = db.MainRoster or {}
+            db.MainRoster["ActualLM-Realm"] = { isOfficer = true, sessionsAttended = {} }
+
+            local origActiveLM = DesolateLootcouncil.activeLootMaster
+            DesolateLootcouncil.activeLootMaster = "ActualLM-Realm"
+
+            local lmPayload = {
+                AttendanceHistory = {
+                    {
+                        sessionID = 1788715900,
+                        date = "2026-09-06",
+                        zone = "Test Raid",
+                        decayMissing = false,
+                        bossLogs = { { name = "Boss 1", killed = true } },
+                        attendees = { ["RaiderOne-Realm"] = true, [myName] = true },
+                    }
+                },
+                awarded = {},
+                historyTimestamp = 1788716500,
+            }
+
+            if Sync and Sync.HandleMessage then
+                Sync:HandleMessage("SYNC_HISTORY", lmPayload, "ActualLM-Realm")
+            end
+
+            assert(#db.AttendanceHistory == 1, "Officer must have received LM finalized history")
+            assert(db.AttendanceHistory[1].decayMissing == false, "Officer history must be updated to finalized without decay missing")
+            assert(db.AttendanceHistory[1].sessionID == 1788715900, "Officer history must preserve sessionID")
+            assert(db.AttendanceHistory[1].attendees ~= nil and type(db.AttendanceHistory[1].attendees) == "table", "Officer history must have valid attendees table")
+
+            DesolateLootcouncil.activeLootMaster = origActiveLM
+            db.AttendanceHistory = {}
+            if origMainRoster then
+                db.MainRoster = origMainRoster
+            else
+                db.MainRoster["ActualLM-Realm"] = nil
+                db.MainRoster["RaiderOne-Realm"] = nil
+            end
+            if RosterMod and RosterMod.SanitizeMainsAndAlts then
+                RosterMod:SanitizeMainsAndAlts()
+            end
+            if RosterMod and RosterMod.UpdateScoreMap then
+                RosterMod:UpdateScoreMap()
+            end
+        end)
+
+        self:Log("Scenario 10 [Session Authority, Late-Join Parity & Disband History] completed successfully.")
+    end)
 end
 
 --- Executes a single scenario by ID.
@@ -1668,6 +1896,19 @@ function TestSuite:CleanTestEnvironment()
     if UI and UI.CloseAllWindows then
         UI:CloseAllWindows()
     end
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    if Sim then
+        Sim.simRole = nil
+        if Sim.Clear then Sim:Clear() end
+    end
+    local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
+    if RosterMod and RosterMod.SanitizeMainsAndAlts then
+        RosterMod:SanitizeMainsAndAlts()
+    end
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if db and db.AttendanceHistory and db.AttendanceHistory[1] and db.AttendanceHistory[1].zone == "Test Raid" then
+        db.AttendanceHistory = {}
+    end
 end
 
 --- Finalizes a step-through scenario after all parts completed.
@@ -1723,6 +1964,7 @@ function TestSuite:StepNext(onStepDone)
         if not resumeOk then
             self:CaptureStepExport("Part_FailState")
             scenario.status = "FAIL"
+            scenario.activePart = nil
             scenario.errorMsg = tostring(actionOrErr)
             self:Log(string.format("Scenario [%s] FAILED at Part %d: %s", scenario.id, (self.activePartInfo and self.activePartInfo.index or 0), scenario.errorMsg))
             self.scenarioResults[scenario.id] = {
@@ -1862,6 +2104,25 @@ function TestSuite:StartStepThrough(onStepDone, onAllDone, delay)
             end
 
             if not self.isStepping then return end
+
+            if not ok then
+                self.isStepping = false
+                local passed = 0
+                local failed = 0
+                for scenIndex, id in ipairs(self.scenarioOrder) do
+                    local scen = self.scenarios[id]
+                    if scen and scen.status == "PASS" then
+                        passed = passed + 1
+                    else
+                        failed = failed + 1
+                    end
+                end
+                self:CleanTestEnvironment()
+                if onAllDone then
+                    onAllDone(passed, failed)
+                end
+                return
+            end
 
             if isScenarioDone and self.stepPointer >= #self.scenarioOrder then
                 self.isStepping = false

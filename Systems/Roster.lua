@@ -154,6 +154,36 @@ function Roster:SanitizeMainsAndAlts()
     local profile = DesolateLootcouncil.db.profile
     if not profile or not profile.MainRoster then return end
 
+    -- 1. Deduplicate MainRoster keys mapping to the same player score
+    local seenScores = {}
+    for mainKey, data in pairs(profile.MainRoster) do
+        local score = DesolateLootcouncil:GetScoreName(mainKey)
+        if score then
+            if seenScores[score] then
+                local existingKey = seenScores[score]
+                local existingHasDash = string.find(existingKey, "-") ~= nil
+                local currentHasDash = string.find(mainKey, "-") ~= nil
+                if currentHasDash and not existingHasDash then
+                    if type(profile.MainRoster[existingKey]) == "table" and profile.MainRoster[existingKey].isOfficer then
+                        if type(data) == "table" then data.isOfficer = true end
+                    end
+                    profile.MainRoster[existingKey] = nil
+                    seenScores[score] = mainKey
+                else
+                    if type(data) == "table" and data.isOfficer then
+                        if type(profile.MainRoster[existingKey]) == "table" then
+                            profile.MainRoster[existingKey].isOfficer = true
+                        end
+                    end
+                    profile.MainRoster[mainKey] = nil
+                end
+            else
+                seenScores[score] = mainKey
+            end
+        end
+    end
+
+    -- 2. Validate Alts
     if profile.playerRoster and profile.playerRoster.alts then
         for altName, mainName in pairs(profile.playerRoster.alts) do
             if DesolateLootcouncil:SmartCompare(altName, mainName) then
@@ -718,11 +748,14 @@ function Roster:ZONE_CHANGED_NEW_AREA()
 
     local Sim = DesolateLootcouncil:GetModule("Simulation", true)
     local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
+    local testRaid = (self.testInstanceType == "raid")
 
-    if instanceType == "raid" and (IsInRaid() or simActive) then
+    if (instanceType == "raid" or testRaid) and (IsInRaid() or simActive or testRaid) then
         if not config.sessionActive then
-            self:Printf("Entered Raid Instance (%s). Starting Session...", name)
-            self:StartRaidSession()
+            if DesolateLootcouncil:AmILootMaster() then
+                self:Printf("Entered Raid Instance (%s). Starting Session...", name or "Raid")
+                self:StartRaidSession()
+            end
         else
             -- We are transitioning between areas inside the same raid instance
             -- (e.g. wing changes, trash → boss, etc.).

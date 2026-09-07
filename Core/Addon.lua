@@ -424,7 +424,7 @@ end
 --- Returns true if the simulation engine is actively running with mock players.
 ---@return boolean
 function DesolateLootcouncil:IsSimulationActive()
-    if IsInRaid and IsInRaid() and not (self.IsLFR and self:IsLFR()) then
+    if not self.isTestRunning and IsInRaid and IsInRaid() and not (self.IsLFR and self:IsLFR()) then
         return false
     end
     local Sim = self:GetModule("Simulation", true)

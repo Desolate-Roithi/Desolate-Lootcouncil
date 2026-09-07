@@ -67,7 +67,7 @@ function UI_InteractiveTestBar:ShowBar(initialRole)
     if not self.barFrame then
         local frame = NativeGUI:CreateWindow("DLCInteractiveTestBarFrame", L["Interactive Test Controller"], "InteractiveTestBar")
         self.barFrame = frame
-        frame:SetSize(860, 85)
+        frame:SetSize(955, 85)
         frame:ClearAllPoints()
         frame:SetPoint("TOP", UIParent, "TOP", 0, -45)
 
@@ -139,9 +139,45 @@ function UI_InteractiveTestBar:ShowBar(initialRole)
         btnAddItems:SetScript("OnLeave", function() GameTooltip:Hide() end)
         self.btnAddItems = btnAddItems
 
-        -- Button 3: Simulate Raider Votes
+        -- Button 3: Add 3x Duplicate Tier Tokens
+        local btnAddTokens = NativeGUI:CreateButton(frame, L["3x Tokens"], 85, 24, "Action")
+        btnAddTokens:SetPoint("LEFT", btnAddItems, "RIGHT", 6, 0)
+        btnAddTokens:SetScript("OnClick", function()
+            if self.currentRole ~= "LM" then
+                if DesolateLootcouncil.API and DesolateLootcouncil.API.SetInteractiveSimRole then
+                    DesolateLootcouncil.API:SetInteractiveSimRole("LM")
+                end
+                self:UpdateRoleDisplay("LM")
+            end
+
+            local addedCount = 0
+            if DesolateLootcouncil.API and DesolateLootcouncil.API.AddDuplicateTokenTestItems then
+                addedCount = DesolateLootcouncil.API:AddDuplicateTokenTestItems()
+            end
+
+            local LootUI = DesolateLootcouncil:GetModule("UI_Loot", true)
+            if LootUI and LootUI.ShowLootWindow then
+                local session = DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session
+                LootUI:ShowLootWindow(session and session.loot)
+            end
+
+            DesolateLootcouncil:Print(string.format(L["Added %d duplicate tier tokens to the loot backlog."], addedCount))
+        end)
+        btnAddTokens:SetScript("OnEnter", function(btn)
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine(L["Add 3x Tier Tokens"], 1, 0.82, 0)
+            GameTooltip:AddLine(L["Stages 3 identical tier tokens into the backlog with distinct GUIDs to verify multi-token handling, independent voting, and pending trade distinction."], 1, 1, 1, true)
+            if self.currentRole ~= "LM" then
+                GameTooltip:AddLine(L["Switches active persona to Loot Master if needed."], 0.7, 0.7, 0.7, true)
+            end
+            GameTooltip:Show()
+        end)
+        btnAddTokens:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        self.btnAddTokens = btnAddTokens
+
+        -- Button 4: Simulate Raider Votes
         local btnVote = NativeGUI:CreateButton(frame, L["Simulate Votes"], 105, 24, "Bid")
-        btnVote:SetPoint("LEFT", btnAddItems, "RIGHT", 6, 0)
+        btnVote:SetPoint("LEFT", btnAddTokens, "RIGHT", 6, 0)
         btnVote:SetScript("OnClick", function()
             local count = DesolateLootcouncil.API:SimulateRaiderVotes()
             DesolateLootcouncil:Print(string.format(L["Injected %d simulated raider votes."], count))

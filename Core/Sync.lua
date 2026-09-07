@@ -479,7 +479,7 @@ local function CanSendPull(pullKey)
 end
 
 function SyncHandlers:DLC_HEARTBEAT(data, sender)
-    if not IsInGroup() then return end
+    if not IsInGroup() and not DesolateLootcouncil.isTestRunning then return end
     if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
     if not data then return end
     -- Bug 4: If the LM sender is no longer in the raid or is offline, do not send
@@ -557,6 +557,37 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
             local localTs = db.imTimestamps[listName] or 0
             if incomingTs > localTs and CanSendPull("IM_" .. listName) then
                 Comm:SendComm("IM_PULL_REQUEST", { listName = listName }, sender)
+            end
+        end
+    end
+
+    -- Synchronize active raid session state from authoritative Loot Master
+    if DesolateLootcouncil:AmIOfficerOrLM() and not DesolateLootcouncil:AmILootMaster() then
+        if data.sessionActive ~= nil then
+            db.DecayConfig = db.DecayConfig or {}
+            if data.sessionActive == true then
+                local currentLM = data.currentSessionLM or sender
+                local curSID = db.DecayConfig.currentSessionID
+                if not db.DecayConfig.sessionActive or curSID ~= data.currentSessionID or db.DecayConfig.currentSessionLM ~= currentLM then
+                    db.DecayConfig.sessionActive = true
+                    db.DecayConfig.currentSessionID = data.currentSessionID
+                    db.DecayConfig.currentSessionLM = currentLM
+                    local globalDb = DesolateLootcouncil.db.global
+                    if globalDb then
+                        globalDb.activeRaidSessionID = data.currentSessionID
+                        globalDb.activeRaidLM = currentLM
+                    end
+                    DesolateLootcouncil:DLC_Log(string.format("Synced active raid session (ID: %s, LM: %s) from %s.", tostring(data.currentSessionID), tostring(currentLM), DesolateLootcouncil:GetDisplayName(sender)))
+                end
+            elseif data.sessionActive == false and db.DecayConfig.sessionActive then
+                db.DecayConfig.sessionActive = false
+                db.DecayConfig.currentSessionID = nil
+                db.DecayConfig.currentSessionLM = nil
+                local globalDb = DesolateLootcouncil.db.global
+                if globalDb then
+                    globalDb.activeRaidSessionID = 0
+                    globalDb.activeRaidLM = ""
+                end
             end
         end
     end
@@ -645,7 +676,17 @@ function SyncHandlers:SYNC_CONFIG(data, sender)
     local incomingTs = data.configTimestamp or 0
     local localTs = db.configTimestamp or 0
     
-    if incomingTs > localTs then
+    local sessionMismatch = false
+    if data.DecayConfig and db.DecayConfig then
+        if (data.DecayConfig.sessionActive == true) ~= (db.DecayConfig.sessionActive == true)
+            or (data.DecayConfig.currentSessionID ~= db.DecayConfig.currentSessionID)
+            or (data.DecayConfig.currentSessionLM ~= db.DecayConfig.currentSessionLM) then
+            sessionMismatch = true
+        end
+    end
+
+    local isLM = DesolateLootcouncil:AmILootMaster()
+    if incomingTs > localTs or sessionMismatch or not isLM then
         db.configuredLM = data.configuredLM
         db.minLootQuality = data.minLootQuality
         db.enableAutoLoot = data.enableAutoLoot
@@ -671,11 +712,10 @@ function SyncHandlers:SYNC_CONFIG(data, sender)
 end
 
 function SyncHandlers:HISTORY_PULL_REQUEST(data, sender)
-    if not IsInGroup() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not DesolateLootcouncil:IsOfficer(sender) then return end
-    -- Bug 4: Do not respond to out-of-raid or offline senders.
-    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then return end
+    -- Bug 4: Do not respond to out-of-raid or offline senders while in group.
+    if IsInGroup() and (not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender)) then return end
 
     local db = DesolateLootcouncil.db.profile
     local payload = {
@@ -691,9 +731,12 @@ function SyncHandlers:HISTORY_PULL_REQUEST(data, sender)
 end
 
 function SyncHandlers:SYNC_HISTORY(data, sender)
-    if not IsInGroup() then return end
     if not DesolateLootcouncil:AmIOfficerOrLM() then return end
-    if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
+    local isAuthorizedLM = DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster())
+        or (DesolateLootcouncil.activeLootMaster and DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil.activeLootMaster))
+        or (DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.DecayConfig and DesolateLootcouncil.db.profile.DecayConfig.currentSessionLM and DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil.db.profile.DecayConfig.currentSessionLM))
+        or DesolateLootcouncil:IsOfficer(sender)
+    if not isAuthorizedLM then return end
     if not data or type(data) ~= "table" then return end
 
     local db = DesolateLootcouncil.db.profile
@@ -710,14 +753,14 @@ function SyncHandlers:SYNC_HISTORY(data, sender)
         end
     end
 
-    if incomingTs > localTs or (hasMissingDecay and incomingTs >= localTs) then
+    if incomingTs > localTs or (hasMissingDecay and incomingTs > 0) then
         db.AttendanceHistory = data.AttendanceHistory or {}
         db.session = db.session or {}
         db.session.awarded = data.awarded or {}
         db.historyTimestamp = incomingTs
         
         DesolateLootcouncil.API:NotifyHistoryUpdated()
-        DesolateLootcouncil:DLC_Log(string.format("Synced attendance history database with Loot Master %s.", DesolateLootcouncil:GetDisplayName(sender)))
+        DesolateLootcouncil:DLC_Log(string.format("Synced attendance history database with %s.", DesolateLootcouncil:GetDisplayName(sender)))
     end
 end
 
@@ -934,24 +977,35 @@ function SyncHandlers:OFFICER_AWARD_SYNC(data, sender)
     end
 
     -- Prune from officer client loot list and live bidding
+    local targetGUID = entry.sourceGUID or (entry.fullItemData and entry.fullItemData.sourceGUID)
     local Session = DesolateLootcouncil:GetModule("Session", true)
     if Session and Session.clientLootList then
         for i = #Session.clientLootList, 1, -1 do
             local it = Session.clientLootList[i]
-            if (entry.fullItemData and it.sourceGUID == entry.fullItemData.sourceGUID) or
-               it.link == entry.link or
-               (entry.itemID and it.itemID == entry.itemID) then
+            local itGUID = it.sourceGUID or (it.fullItemData and it.fullItemData.sourceGUID)
+            if targetGUID and itGUID then
+                if itGUID == targetGUID then
+                    table.remove(Session.clientLootList, i)
+                    break
+                end
+            elseif not targetGUID and not itGUID and (it.link == entry.link) then
                 table.remove(Session.clientLootList, i)
+                break
             end
         end
     end
     if db.session.bidding then
         for i = #db.session.bidding, 1, -1 do
             local it = db.session.bidding[i]
-            if (entry.fullItemData and it.sourceGUID == entry.fullItemData.sourceGUID) or
-               it.link == entry.link or
-               (entry.itemID and it.itemID == entry.itemID) then
+            local itGUID = it.sourceGUID or (it.fullItemData and it.fullItemData.sourceGUID)
+            if targetGUID and itGUID then
+                if itGUID == targetGUID then
+                    table.remove(db.session.bidding, i)
+                    break
+                end
+            elseif not targetGUID and not itGUID and (it.link == entry.link) then
                 table.remove(db.session.bidding, i)
+                break
             end
         end
     end
@@ -959,7 +1013,7 @@ function SyncHandlers:OFFICER_AWARD_SYNC(data, sender)
     if Session then
         Session.sessionPayloadCache = nil
         Session:SendMessage("DLC_HISTORY_UPDATED", entry)
-        Session:SendMessage("DLC_ITEM_REMOVED", entry.fullItemData and entry.fullItemData.sourceGUID or entry.link)
+        Session:SendMessage("DLC_ITEM_REMOVED", targetGUID or entry.link)
     end
 
     local Monitor = DesolateLootcouncil:GetModule("UI_Monitor", true)

@@ -145,7 +145,7 @@ end
 --- Returns the active simulated players roster list.
 ---@return table
 function DLC_API:GetSimulationRoster()
-    if IsInRaid and IsInRaid() and not self:IsLFR() then return {} end
+    if not DesolateLootcouncil.isTestRunning and IsInRaid and IsInRaid() and not self:IsLFR() then return {} end
     local sim = Simulation()
     if sim and sim.GetRoster then
         return sim:GetRoster()
@@ -572,6 +572,14 @@ end
 function DLC_API:AddSimulationBacklogItems(itemsList)
     local sim = Simulation()
     return (sim and sim.AddBacklogTestItems and sim:AddBacklogTestItems(itemsList)) or 0
+end
+
+--- Stages 3 identical tier tokens into the loot backlog to test duplicate token handling.
+---@param tokenID number?
+---@return number addedCount
+function DLC_API:AddDuplicateTokenTestItems(tokenID)
+    local sim = Simulation()
+    return (sim and sim.AddDuplicateTokenTestItems and sim:AddDuplicateTokenTestItems(tokenID)) or 0
 end
 
 
@@ -1016,13 +1024,11 @@ end
 function DLC_API:GetAwardedGUIDs()
     local result = {}
     for _, award in ipairs(self:GetAwardedList()) do
-        if award.link then result[award.link] = true end
-        if award.sourceGUID then result[award.sourceGUID] = true end
-        if award.fullItemData and award.fullItemData.sourceGUID then
-            result[award.fullItemData.sourceGUID] = true
-        end
-        if award.fullItemData and award.fullItemData.link then
-            result[award.fullItemData.link] = true
+        local guid = award.sourceGUID or (award.fullItemData and award.fullItemData.sourceGUID)
+        if guid then
+            result[guid] = true
+        elseif award.link then
+            result[award.link] = true
         end
     end
     return result

@@ -37,6 +37,7 @@ function Simulation:OnEnable()
 end
 
 local function IsRaidLocked()
+    if DesolateLootcouncil.isTestRunning then return false end
     return IsInRaid and IsInRaid() and not (DesolateLootcouncil.IsLFR and DesolateLootcouncil:IsLFR())
 end
 
@@ -379,6 +380,9 @@ function Simulation:StartInteractiveLootTest(mode)
         prof.session.bidding = {}
         prof.session.awarded = {}
         prof.session.activeState = {}
+        if prof.AttendanceHistory and prof.AttendanceHistory[1] and prof.AttendanceHistory[1].zone == "Test Raid" then
+            prof.AttendanceHistory = {}
+        end
         Session.clientLootList = {}
         Session.sessionVotes = {}
         Session.closedItems = {}
@@ -681,6 +685,19 @@ function Simulation:AddBacklogTestItems(itemsList)
     end
 
     return addedCount
+end
+
+--- Stages 3 identical tier tokens into the loot backlog to test duplicate token handling.
+---@param tokenID number?
+---@return number addedCount
+function Simulation:AddDuplicateTokenTestItems(tokenID)
+    local id = tokenID or 217192
+    local duplicateTokens = {
+        { id = id, cat = "Tier" },
+        { id = id, cat = "Tier" },
+        { id = id, cat = "Tier" },
+    }
+    return self:AddBacklogTestItems(duplicateTokens)
 end
 
 

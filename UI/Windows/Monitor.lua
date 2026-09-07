@@ -373,7 +373,7 @@ function UI_Monitor:ShowMonitorWindow(isRefresh)
         local rowIndex = 0
         for _, item in ipairs(items) do
             local guid = item.sourceGUID or item.link
-            local isAwarded = (guid and awarded[guid]) or (item.sourceGUID and awarded[item.sourceGUID]) or (item.link and awarded[item.link])
+            local isAwarded = (guid and awarded[guid]) or (item.sourceGUID and awarded[item.sourceGUID]) or (not item.sourceGUID and item.link and awarded[item.link])
             if not isAwarded then
                 rowIndex = rowIndex + 1
                 self:BuildItemRow(rowIndex, item, isLM)
