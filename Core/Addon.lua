@@ -98,6 +98,10 @@ local defaults = {
         auditTimestamp     = 0,
         positions          = {},        -- Window positions { [windowName] = { point, relativePoint, xOfs, yOfs } }
         activeTheme        = "Midnight", -- Default UI Theme (Midnight Void)
+        minimap            = {
+            hide = false,
+            minimapPos = 220,
+        },
         schemaVersion      = 200,        -- Canonical v200 schema
         dbCreatedAt        = 0,         -- Sentinel: prevents AceDB from pruning a profile to nil on PLAYER_LOGOUT
     }
@@ -239,6 +243,10 @@ function DesolateLootcouncil:OnProfileChanged(event, db, newProfile)
 
     self:UpdateLootMasterStatus()
 
+    if self.API and self.API.UpdateMinimap then
+        self.API:UpdateMinimap()
+    end
+
     if self.SendMessage then
         self:SendMessage("DLC_HISTORY_UPDATED")
     end
@@ -258,8 +266,14 @@ function DesolateLootcouncil:OnEnable()
     end)
     self:RegisterMessage("DLC_OFFICER_FLAG_CHANGED", function()
         self.amIOfficer = self:AmIOfficerOrLM()
+        if self.API and self.API.UpdateMinimapTooltip then
+            self.API:UpdateMinimapTooltip()
+        end
     end)
 
+    if self.API and self.API.InitializeMinimap then
+        self.API:InitializeMinimap()
+    end
 end
 
 function DesolateLootcouncil:RepairItemCache(session)

@@ -1839,6 +1839,56 @@ function DLC_API:SetEnableAutoTrade(val)
     end
 end
 
+--- Returns whether the minimap button is shown.
+---@return boolean
+function DLC_API:GetShowMinimap()
+    if DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.minimap then
+        return not DesolateLootcouncil.db.profile.minimap.hide
+    end
+    return true
+end
+
+--- Sets whether the minimap button is shown.
+---@param val boolean
+function DLC_API:SetShowMinimap(val)
+    if DesolateLootcouncil.db and DesolateLootcouncil.db.profile then
+        if not DesolateLootcouncil.db.profile.minimap then
+            DesolateLootcouncil.db.profile.minimap = { hide = false, minimapPos = 220 }
+        end
+        DesolateLootcouncil.db.profile.minimap.hide = not val
+        DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
+    end
+    local MinimapButton = DesolateLootcouncil:GetModule("MinimapButton", true)
+    if MinimapButton and MinimapButton.UpdateVisibility then
+        MinimapButton:UpdateVisibility()
+    end
+end
+
+--- Initializes the minimap button.
+function DLC_API:InitializeMinimap()
+    local MinimapButton = DesolateLootcouncil:GetModule("MinimapButton", true)
+    if MinimapButton and MinimapButton.Initialize then
+        MinimapButton:Initialize()
+    end
+end
+
+--- Updates the minimap button position and visibility based on profile settings.
+function DLC_API:UpdateMinimap()
+    local MinimapButton = DesolateLootcouncil:GetModule("MinimapButton", true)
+    if MinimapButton then
+        if MinimapButton.UpdatePosition then MinimapButton:UpdatePosition() end
+        if MinimapButton.UpdateVisibility then MinimapButton:UpdateVisibility() end
+    end
+end
+
+--- Updates the minimap button tooltip if currently hovered.
+function DLC_API:UpdateMinimapTooltip()
+    local MinimapButton = DesolateLootcouncil:GetModule("MinimapButton", true)
+    if MinimapButton and MinimapButton.UpdateButtonTooltip then
+        MinimapButton:UpdateButtonTooltip()
+    end
+end
+
 --- Returns whether raid attendance decay is enabled.
 ---@return boolean
 function DLC_API:GetDecayEnabled()

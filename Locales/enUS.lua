@@ -601,4 +601,14 @@ L["Stages sample drops into the Loot Master backlog and opens the distribution w
 L["Switches active persona to Loot Master if needed."] = true
 L["Simulation cannot be used while in a raid group."] = true
 
+-- Minimap Button
+L["Desolate Loot Council"] = true
+L["Show Minimap Button"] = true
+L["Display the Desolate Loot Council button on the minimap."] = true
+L["|cffffd700Left-Click:|r Open Voting & Monitor"] = true
+L["|cffffd700Left-Click:|r Open Voting Window"] = true
+L["|cffffd700Right-Click:|r Open Settings"] = true
+L["|cff888888Drag to move|r"] = true
+
+
 

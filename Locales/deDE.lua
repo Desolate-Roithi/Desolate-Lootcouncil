@@ -632,4 +632,14 @@ L["Stages sample drops into the Loot Master backlog and opens the distribution w
 L["Switches active persona to Loot Master if needed."] = "Wechselt bei Bedarf die aktive Persona zum Plündermeister."
 L["Simulation cannot be used while in a raid group."] = "Die Simulation kann nicht verwendet werden, während man in einer Schlachtzugsgruppe ist."
 
+-- Minimap Button
+L["Desolate Loot Council"] = "Desolate Loot Council"
+L["Show Minimap Button"] = "Minimap-Button anzeigen"
+L["Display the Desolate Loot Council button on the minimap."] = "Zeigt den Desolate Loot Council Button an der Minimap an."
+L["|cffffd700Left-Click:|r Open Voting & Monitor"] = "|cffffd700Links-Klick:|r Abstimmung & Monitor öffnen"
+L["|cffffd700Left-Click:|r Open Voting Window"] = "|cffffd700Links-Klick:|r Abstimmungsfenster öffnen"
+L["|cffffd700Right-Click:|r Open Settings"] = "|cffffd700Rechts-Klick:|r Einstellungen öffnen"
+L["|cff888888Drag to move|r"] = "|cff888888Ziehen zum Bewegen|r"
+
+
 

@@ -219,6 +219,15 @@ local function BuildLootSection(API)
                 API:SetActiveTheme(val)
             end,
         },
+        showMinimap = {
+            type = "toggle",
+            name = L["Show Minimap Button"],
+            desc = L["Display the Desolate Loot Council button on the minimap."],
+            order = 4.9,
+            width = "double",
+            get = function() return API:GetShowMinimap() end,
+            set = function(_, val) API:SetShowMinimap(val) end,
+        },
         resetLayout = {
             type = "execute",
             name = L["Reset Window Layout"],

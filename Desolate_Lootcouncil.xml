@@ -56,6 +56,7 @@
     <Script file="UI\NativeGUI.lua"/>
     <Script file="UI\Core.lua"/>
     <Script file="UI\Widgets\Sidebar.lua"/>
+    <Script file="UI\Widgets\MinimapButton.lua"/>
     <Script file="UI\Layouts.lua"/>
     <Script file="UI\Windows\Attendance.lua"/>
     <Script file="UI\Windows\PriorityLogHistory.lua"/>
