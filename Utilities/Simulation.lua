@@ -152,7 +152,7 @@ function Simulation:Clear()
     end
     self.activeSims = {}
     self.offlineSims = {}
-    DesolateLootcouncil:DLC_Log("All simulated players cleared.", true)
+    DesolateLootcouncil:DLC_Log("All simulated players cleared.")
 end
 
 function Simulation:GetCount()
