@@ -25,9 +25,38 @@ local function SafeGetUnitClass(unit)
 end
 
 function Attendance:CleanRaiderStaleSession()
-    local isKnownRaider = DesolateLootcouncil.API and DesolateLootcouncil.API.IsKnownRosterRaider and DesolateLootcouncil.API:IsKnownRosterRaider()
-    if isKnownRaider or not DesolateLootcouncil:AmIOfficerOrLM() then
-        local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    local myName = UnitName("player")
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    local API = DesolateLootcouncil.API
+
+    if DesolateLootcouncil.amILM then
+        return
+    end
+
+    local globalLM = DesolateLootcouncil.db and DesolateLootcouncil.db.global and DesolateLootcouncil.db.global.activeRaidLM
+    if myName and globalLM and globalLM ~= "" and DesolateLootcouncil:SmartCompare(myName, globalLM) then
+        return
+    end
+
+    local isKnownRaider = API and API.IsKnownRosterRaider and API:IsKnownRosterRaider(myName)
+    if isKnownRaider then
+        if db and db.DecayConfig and db.DecayConfig.sessionActive then
+            db.DecayConfig.sessionActive = false
+            db.DecayConfig.currentSessionID = nil
+            db.DecayConfig.currentSessionLM = nil
+            db.DecayConfig.currentAttendees = {}
+            db.DecayConfig.attendeeDetails = {}
+            db.DecayConfig.bossLogs = {}
+        end
+        return
+    end
+
+    local sessionLM = db and db.DecayConfig and db.DecayConfig.currentSessionLM
+    if myName and sessionLM and sessionLM ~= "" and DesolateLootcouncil:SmartCompare(myName, sessionLM) then
+        return
+    end
+
+    if not DesolateLootcouncil:AmIOfficerOrLM() then
         if db and db.DecayConfig and db.DecayConfig.sessionActive then
             db.DecayConfig.sessionActive = false
             db.DecayConfig.currentSessionID = nil
@@ -39,6 +68,62 @@ function Attendance:CleanRaiderStaleSession()
     end
 end
 
+--- Merges incoming boss logs into local DecayConfig.bossLogs, ensuring no kills are lost.
+---@param incomingLogs table
+function Attendance:MergeBossLogs(incomingLogs)
+    if not incomingLogs or type(incomingLogs) ~= "table" then return end
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if not db then return end
+    db.DecayConfig = db.DecayConfig or {}
+    db.DecayConfig.bossLogs = db.DecayConfig.bossLogs or {}
+    local localLogs = db.DecayConfig.bossLogs
+
+    local mergedCount = 0
+    for incomingIndex, incomingEntry in ipairs(incomingLogs) do
+        if incomingEntry and (incomingEntry.encounterID or incomingEntry.name) then
+            local existingEntry = nil
+            for localIndex, localEntry in ipairs(localLogs) do
+                local sameEncounter = (incomingEntry.encounterID and localEntry.encounterID and incomingEntry.encounterID == localEntry.encounterID)
+                    or (incomingEntry.name and localEntry.name and incomingEntry.name == localEntry.name)
+                local sameDifficulty = (not incomingEntry.difficultyID or not localEntry.difficultyID or incomingEntry.difficultyID == localEntry.difficultyID)
+                if sameEncounter and sameDifficulty then
+                    existingEntry = localEntry
+                    break
+                end
+            end
+
+            if existingEntry then
+                -- Merge pull counts and kill state
+                if incomingEntry.pulls and incomingEntry.pulls > (existingEntry.pulls or 0) then
+                    existingEntry.pulls = incomingEntry.pulls
+                end
+                if incomingEntry.killed == true then
+                    existingEntry.killed = true
+                    if incomingEntry.killedTime then
+                        existingEntry.killedTime = incomingEntry.killedTime
+                    end
+                end
+                if incomingEntry.difficultyID and not existingEntry.difficultyID then
+                    existingEntry.difficultyID = incomingEntry.difficultyID
+                end
+            else
+                local copy = {
+                    encounterID = incomingEntry.encounterID,
+                    name = incomingEntry.name,
+                    difficultyID = incomingEntry.difficultyID,
+                    pulls = incomingEntry.pulls or 1,
+                    killed = incomingEntry.killed == true,
+                    killedTime = incomingEntry.killedTime,
+                    startTime = incomingEntry.startTime,
+                }
+                table.insert(localLogs, copy)
+                mergedCount = mergedCount + 1
+            end
+        end
+    end
+    return mergedCount
+end
+
 function Attendance:OnInitialize()
     self.pullCounts = {}
     self.currentEncounter = nil
@@ -46,7 +131,6 @@ function Attendance:OnInitialize()
     self:RegisterEvent("ENCOUNTER_START", "OnEncounterStart")
     self:RegisterEvent("ENCOUNTER_END", "OnEncounterEnd")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "OnGroupRosterUpdate")
-    self:CleanRaiderStaleSession()
     DesolateLootcouncil:DLC_Log(L["Systems/Attendance Loaded"])
 end
 

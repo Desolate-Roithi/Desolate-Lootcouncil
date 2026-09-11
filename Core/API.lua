@@ -900,8 +900,6 @@ function DLC_API:StopSession()
     local s = Session()
     if s and s.SendStopSession then
         s:SendStopSession()
-    elseif DesolateLootcouncil.StopSession then
-        DesolateLootcouncil:StopSession()
     end
 end
 
@@ -923,20 +921,12 @@ function DLC_API:IsItemClosed(guid)
     return (s and s.closedItems and s.closedItems[guid] == true) or false
 end
 
-
 --- Closes an item for voting (LM action).
 ---@param guid string
 function DLC_API:CloseItem(guid)
     local s = Session()
-    if s then
-        if s.SendCloseItem then
-            s:SendCloseItem(guid)
-        elseif s.CloseItem then
-            s:CloseItem(guid)
-        else
-            s.closedItems = s.closedItems or {}
-            s.closedItems[guid] = true
-        end
+    if s and s.SendCloseItem then
+        s:SendCloseItem(guid)
     end
 end
 
@@ -1156,10 +1146,6 @@ function DLC_API:ClearLootBacklog()
     local l = Loot()
     if l and l.ClearLootBacklog then
         l:ClearLootBacklog()
-    elseif DesolateLootcouncil.ClearLootBacklog then
-        DesolateLootcouncil:ClearLootBacklog()
-    elseif DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session then
-        DesolateLootcouncil.db.profile.session.backlog = {}
     end
 end
 
@@ -1180,8 +1166,6 @@ function DLC_API:AddManualItem(rawLink)
     local l = Loot()
     if l and l.AddManualItem then
         l:AddManualItem(rawLink)
-    elseif DesolateLootcouncil.AddManualLootItem then
-        DesolateLootcouncil:AddManualLootItem(rawLink)
     end
 end
 
@@ -1191,8 +1175,6 @@ function DLC_API:MarkItemTraded(item)
     local t = Trade()
     if t and t.MarkItemTraded then
         t:MarkItemTraded(item)
-    elseif DesolateLootcouncil.MarkItemTraded then
-        DesolateLootcouncil:MarkItemTraded(item)
     end
 end
 
@@ -1202,8 +1184,6 @@ function DLC_API:ReawardItem(awardIdx)
     local l = Loot()
     if l and l.ReawardItem then
         l:ReawardItem(awardIdx)
-    elseif DesolateLootcouncil.ReawardItem then
-        DesolateLootcouncil:ReawardItem(awardIdx)
     end
 end
 
@@ -1443,78 +1423,21 @@ end
 ---@return string
 function DLC_API:GetRosterText()
     local r = Roster()
-    if r and r.GetRosterText then return r:GetRosterText() end
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    if not db or not db.MainRoster then return "No Roster Found." end
-
-    local text = ""
-    local sortedMains = {}
-    for name in pairs(db.MainRoster) do table.insert(sortedMains, name) end
-    table.sort(sortedMains)
-
-    for _, main in ipairs(sortedMains) do
-        local displayMain = self:Ambiguate(main)
-        local mainText = displayMain
-        local data = db.MainRoster[main]
-        if data and data.isOfficer then
-            mainText = mainText .. " (Officer)"
-        end
-        text = text .. mainText
-        local alts = {}
-        if db.playerRoster and db.playerRoster.alts then
-            for alt, parent in pairs(db.playerRoster.alts) do
-                if parent == main then
-                    local displayAlt = self:Ambiguate(alt)
-                    table.insert(alts, displayAlt)
-                end
-            end
-        end
-
-        if #alts > 0 then
-            table.sort(alts)
-            text = text .. " -> " .. table.concat(alts, ", ")
-        end
-        text = text .. "\n"
-    end
-
-    return text
+    return (r and r.GetRosterText and r:GetRosterText()) or "No Roster Found."
 end
 
 --- Returns a map of main character names for dropdown values.
 ---@return table<string, string>
 function DLC_API:GetMainRosterList()
     local r = Roster()
-    if r and r.GetMainRosterList then return r:GetMainRosterList() end
-    local list = {}
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    if db and db.MainRoster then
-        for name, data in pairs(db.MainRoster) do
-            local displayName = self:Ambiguate(name)
-            if data and data.isOfficer then
-                list[name] = displayName .. " (Officer)"
-            else
-                list[name] = displayName
-            end
-        end
-    end
-    return list
+    return (r and r.GetMainRosterList and r:GetMainRosterList()) or {}
 end
 
 --- Returns a map of all characters (mains and annotated alts).
 ---@return table<string, string>
 function DLC_API:GetAllPlayersList()
     local r = Roster()
-    if r and r.GetAllPlayersList then return r:GetAllPlayersList() end
-    local list = self:GetMainRosterList()
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    if db and db.playerRoster and db.playerRoster.alts then
-        for alt, main in pairs(db.playerRoster.alts) do
-            local displayAlt = self:Ambiguate(alt)
-            local displayMain = self:Ambiguate(main)
-            list[alt] = displayAlt .. " (Alt of " .. displayMain .. ")"
-        end
-    end
-    return list
+    return (r and r.GetAllPlayersList and r:GetAllPlayersList()) or {}
 end
 
 --- Returns the deterministic 8-digit hex roster hash.
@@ -1599,16 +1522,15 @@ function DLC_API:CleanRaiderStaleSession()
     local a = Attendance()
     if a and a.CleanRaiderStaleSession then
         a:CleanRaiderStaleSession()
-    elseif self:IsKnownRosterRaider() or not DesolateLootcouncil:AmIOfficerOrLM() then
-        local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-        if db and db.DecayConfig and db.DecayConfig.sessionActive then
-            db.DecayConfig.sessionActive = false
-            db.DecayConfig.currentSessionID = nil
-            db.DecayConfig.currentSessionLM = nil
-            db.DecayConfig.currentAttendees = {}
-            db.DecayConfig.attendeeDetails = {}
-            db.DecayConfig.bossLogs = {}
-        end
+    end
+end
+
+--- Merges incoming boss logs into local DecayConfig.bossLogs.
+---@param incomingLogs table
+function DLC_API:MergeBossLogs(incomingLogs)
+    local a = Attendance()
+    if a and a.MergeBossLogs then
+        a:MergeBossLogs(incomingLogs)
     end
 end
 
@@ -1733,9 +1655,6 @@ function DLC_API:SendSyncAutopass(active, isHeartbeat)
     local s = Sync()
     if s and s.SendSyncAutopass then
         s:SendSyncAutopass(active, isHeartbeat)
-    else
-        local c = Comm()
-        if c and c.SendSyncAutopass then c:SendSyncAutopass(active) end
     end
 end
 
@@ -1845,9 +1764,6 @@ function DLC_API:SendLMHandoverOffer(targetOfficer)
     local s = Sync()
     if s and s.SendLMHandoverOffer then
         s:SendLMHandoverOffer(targetOfficer)
-    else
-        local c = Comm()
-        if c and c.SendLMHandoverOffer then c:SendLMHandoverOffer(targetOfficer) end
     end
 end
 

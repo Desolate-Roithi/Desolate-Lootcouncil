@@ -475,6 +475,19 @@ function DesolateLootcouncil:DetermineLootMaster()
         return nil
     end
 
+    if not IsInRaid() and self:IsSimulationActive() then
+        local Sim = self:GetModule("Simulation", true)
+        if Sim and Sim.simRole then
+            if Sim.simRole == "LM" then
+                return myName
+            else
+                local rawRealm = GetRealmName and GetRealmName()
+                local realm = (rawRealm and rawRealm ~= "") and rawRealm or "Thrall"
+                return self.activeLootMaster or ("Klacku-" .. realm)
+            end
+        end
+    end
+
     if not IsInGroup() then
         -- Strict solo boundary: Focus exclusively on the last recorded raid session LM
         -- so players who left a raid session do not falsely promote themselves to LM.
@@ -646,6 +659,21 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
         end
     end
 
+    if not IsInRaid() and self:IsSimulationActive() then
+        local Sim = self:GetModule("Simulation", true)
+        if Sim and Sim.simRole then
+            if Sim.simRole == "LM" then
+                self.amILM = true
+                self.activeLootMaster = myName
+            else
+                self.amILM = false
+                local rawRealm = GetRealmName and GetRealmName()
+                local realm = (rawRealm and rawRealm ~= "") and rawRealm or "Thrall"
+                self.activeLootMaster = self.activeLootMaster or ("Klacku-" .. realm)
+            end
+        end
+    end
+
     if IsInRaid() and not self:IsLFR() then
         local Sim = self:GetModule("Simulation", true)
         if Sim then
@@ -705,7 +733,13 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
 end
 
 function DesolateLootcouncil:AmILootMaster()
-    return self.amILM
+    if not IsInRaid() and self:IsSimulationActive() then
+        local Sim = self:GetModule("Simulation", true)
+        if Sim and Sim.simRole then
+            return Sim.simRole == "LM"
+        end
+    end
+    return self.amILM or false
 end
 
 function DesolateLootcouncil:IsOfficer(name)

@@ -107,7 +107,7 @@ function UI_InteractiveTestBar:ShowBar(initialRole)
         btnAddItems:SetPoint("LEFT", btnRole, "RIGHT", 6, 0)
         btnAddItems:SetScript("OnClick", function()
             -- Ensure player has LM permissions to open and manage the Loot Window
-            if self.currentRole ~= "LM" then
+            if self.currentRole ~= "LM" or (DesolateLootcouncil.API and not DesolateLootcouncil.API:IsLootMaster()) then
                 if DesolateLootcouncil.API and DesolateLootcouncil.API.SetInteractiveSimRole then
                     DesolateLootcouncil.API:SetInteractiveSimRole("LM")
                 end
@@ -143,7 +143,7 @@ function UI_InteractiveTestBar:ShowBar(initialRole)
         local btnAddTokens = NativeGUI:CreateButton(frame, L["3x Tokens"], 85, 24, "Action")
         btnAddTokens:SetPoint("LEFT", btnAddItems, "RIGHT", 6, 0)
         btnAddTokens:SetScript("OnClick", function()
-            if self.currentRole ~= "LM" then
+            if self.currentRole ~= "LM" or (DesolateLootcouncil.API and not DesolateLootcouncil.API:IsLootMaster()) then
                 if DesolateLootcouncil.API and DesolateLootcouncil.API.SetInteractiveSimRole then
                     DesolateLootcouncil.API:SetInteractiveSimRole("LM")
                 end

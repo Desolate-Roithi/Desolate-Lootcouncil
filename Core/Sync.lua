@@ -106,6 +106,36 @@ function Sync:ShareDataWithOfficers(dataType, payload)
             altsCopy[alt] = main
         end
         finalPayload = { mains = mainsCopy, alts = altsCopy, timestamp = db.rosterTimestamp or 0 }
+    elseif dataType == "CONFIG" then
+        command = "SYNC_CONFIG"
+        local db = DesolateLootcouncil.db.profile
+        finalPayload = payload or {
+            configuredLM = db.configuredLM,
+            minLootQuality = db.minLootQuality,
+            enableAutoLoot = db.enableAutoLoot,
+            enableAutoTrade = db.enableAutoTrade,
+            verboseMode = db.verboseMode,
+            debugMode = db.debugMode,
+            activeTheme = db.activeTheme,
+            DecayConfig = {
+                enabled = db.DecayConfig and db.DecayConfig.enabled,
+                defaultPenalty = db.DecayConfig and db.DecayConfig.defaultPenalty,
+                sessionActive = db.DecayConfig and db.DecayConfig.sessionActive or false,
+                currentSessionID = db.DecayConfig and db.DecayConfig.currentSessionID,
+                currentSessionLM = db.DecayConfig and db.DecayConfig.currentSessionLM,
+                bossLogs = (db.DecayConfig and db.DecayConfig.bossLogs) or {}
+            },
+            configTimestamp = db.configTimestamp or time()
+        }
+    elseif dataType == "HISTORY" then
+        command = "SYNC_HISTORY"
+        local db = DesolateLootcouncil.db.profile
+        finalPayload = payload or {
+            AttendanceHistory = db.AttendanceHistory or {},
+            awarded = db.session and db.session.awarded or {},
+            historyTimestamp = db.historyTimestamp or time(),
+            bossLogs = (db.DecayConfig and db.DecayConfig.bossLogs) or {}
+        }
     elseif dataType == "HISTORY_BULK_SYNC" then
         command = "HISTORY_BULK_SYNC"
         finalPayload = payload
@@ -309,6 +339,11 @@ end
 function SyncHandlers:IM_SYNC(payload, sender)
     if not payload or type(payload) ~= "table" then return end
 
+    -- Guard against external IM updates during local simulation or test runner
+    if not IsInRaid() and (DesolateLootcouncil:IsSimulationActive() or DesolateLootcouncil.isTestRunning) then
+        return
+    end
+
     local data = payload.lists or payload
     local isManual = (payload.isManual == true) or (payload.lists == nil)
 
@@ -482,12 +517,9 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     if not IsInGroup() and not DesolateLootcouncil.isTestRunning then return end
     if not DesolateLootcouncil:SmartCompare(sender, DesolateLootcouncil:DetermineLootMaster()) then return end
     if not data then return end
-    -- Bug 4: If the LM sender is no longer in the raid or is offline, do not send
-    -- any PULL_REQUEST messages. This prevents DDoS-ing recently disconnected LMs
-    -- or players who have left the group.
-    if not DesolateLootcouncil:IsUnitInRaid(sender) or not DesolateLootcouncil:IsUnitOnline(sender) then
+    local isSenderConnected = DesolateLootcouncil:IsUnitInRaid(sender) and DesolateLootcouncil:IsUnitOnline(sender)
+    if not isSenderConnected then
         DesolateLootcouncil:DLC_Log(string.format("DLC_HEARTBEAT: sender '%s' not in raid or offline — skipping all pull requests.", tostring(sender)))
-        return
     end
 
     local db = DesolateLootcouncil.db.profile
@@ -509,7 +541,8 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
 
         local myName = UnitName("player")
         local myScore = DesolateLootcouncil:GetScoreName(myName)
-        local isLMConfirmedOfficer = (myScore and DesolateLootcouncil.officerScores[myScore] == true) or false
+        local isLMConfirmedOfficer = (myScore and DesolateLootcouncil.officerScores[myScore] == true)
+            or (DesolateLootcouncil.isTestRunning and DesolateLootcouncil.amIOfficer) or false
 
         if not DesolateLootcouncil:AmILootMaster() then
             local prevOfficer = DesolateLootcouncil.amIOfficer
@@ -551,7 +584,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     end
 
     -- All raiders pull Item Manager updates so autopass and bidding lists match LM
-    if data.imTimestamps and Comm then
+    if isSenderConnected and data.imTimestamps and Comm then
         db.imTimestamps = db.imTimestamps or {}
         for listName, incomingTs in pairs(data.imTimestamps) do
             local localTs = db.imTimestamps[listName] or 0
@@ -562,7 +595,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     end
 
     -- Synchronize active raid session state from authoritative Loot Master
-    if DesolateLootcouncil:AmIOfficerOrLM() and not DesolateLootcouncil:AmILootMaster() then
+    if (DesolateLootcouncil:AmIOfficerOrLM() or DesolateLootcouncil.isTestRunning) and not DesolateLootcouncil:AmILootMaster() then
         if data.sessionActive ~= nil then
             db.DecayConfig = db.DecayConfig or {}
             if data.sessionActive == true then
@@ -593,7 +626,7 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
     end
 
     -- Officers pull Roster, Priority, Config, History, and Unassigned players
-    if DesolateLootcouncil:AmIOfficerOrLM() and Comm then
+    if isSenderConnected and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
         if data.rosterTimestamp then
             local localRosterTs = db.rosterTimestamp or 0
             if data.rosterTimestamp > localRosterTs and CanSendPull("ROSTER") then
@@ -655,7 +688,8 @@ function SyncHandlers:CONFIG_PULL_REQUEST(data, sender)
             defaultPenalty = db.DecayConfig and db.DecayConfig.defaultPenalty,
             sessionActive = db.DecayConfig and db.DecayConfig.sessionActive or false,
             currentSessionID = db.DecayConfig and db.DecayConfig.currentSessionID,
-            currentSessionLM = db.DecayConfig and db.DecayConfig.currentSessionLM
+            currentSessionLM = db.DecayConfig and db.DecayConfig.currentSessionLM,
+            bossLogs = (db.DecayConfig and db.DecayConfig.bossLogs) or {}
         },
         configTimestamp = db.configTimestamp or 0
     }
@@ -702,6 +736,12 @@ function SyncHandlers:SYNC_CONFIG(data, sender)
             db.DecayConfig.sessionActive = data.DecayConfig.sessionActive == true
             db.DecayConfig.currentSessionID = data.DecayConfig.currentSessionID
             db.DecayConfig.currentSessionLM = data.DecayConfig.currentSessionLM
+            if data.DecayConfig.bossLogs then
+                local AttendanceMod = DesolateLootcouncil:GetModule("Attendance", true)
+                if AttendanceMod and AttendanceMod.MergeBossLogs then
+                    AttendanceMod:MergeBossLogs(data.DecayConfig.bossLogs)
+                end
+            end
         end
         
         db.configTimestamp = incomingTs
@@ -758,6 +798,13 @@ function SyncHandlers:SYNC_HISTORY(data, sender)
         db.session = db.session or {}
         db.session.awarded = data.awarded or {}
         db.historyTimestamp = incomingTs
+
+        if data.bossLogs then
+            local AttendanceMod = DesolateLootcouncil:GetModule("Attendance", true)
+            if AttendanceMod and AttendanceMod.MergeBossLogs then
+                AttendanceMod:MergeBossLogs(data.bossLogs)
+            end
+        end
         
         DesolateLootcouncil.API:NotifyHistoryUpdated()
         DesolateLootcouncil:DLC_Log(string.format("Synced attendance history database with %s.", DesolateLootcouncil:GetDisplayName(sender)))

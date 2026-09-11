@@ -132,9 +132,9 @@ function CommHandlers:VERSION_REQ(data, sender)
         end
     end
 
-    -- Handshake correction: if the local player is the Group Leader (the authority for nominating LM),
+    -- Handshake correction: if the local player is in a group and is the Group Leader (the authority for nominating LM),
     -- whisper the current active LM directly to the sender.
-    local isLeader = DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
+    local isLeader = IsInGroup() and DesolateLootcouncil:SmartCompare(DesolateLootcouncil:GetGroupLeader(), "player")
     if isLeader then
         local SessionMod = DesolateLootcouncil:GetModule("Session", true)
         if SessionMod then

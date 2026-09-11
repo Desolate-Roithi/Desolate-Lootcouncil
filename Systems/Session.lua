@@ -1211,6 +1211,11 @@ function Session:HandleSyncLM(payload, sender)
     local lm = payload.data and payload.data.lm
     if not lm or not sender then return end
 
+    -- Guard against external network tampering during local simulation or automated test suites
+    if not IsInRaid() and (DesolateLootcouncil:IsSimulationActive() or DesolateLootcouncil.isTestRunning) then
+        return
+    end
+
     -- Authority Check: Accept SYNC_LM from current Group Leader OR active LM / Officer
     local isAuthorized = false
     if IsInRaid() then
@@ -1232,8 +1237,8 @@ function Session:HandleSyncLM(payload, sender)
         -- In a party, check if the sender is the leader or officer
         isAuthorized = SafeIsGroupLeader(sender) or DesolateLootcouncil:IsOfficer(sender)
     else
-        -- Solo: accept self-syncs
-        isAuthorized = DesolateLootcouncil:SmartCompare(sender, "player") or true
+        -- Solo: accept self-syncs only
+        isAuthorized = DesolateLootcouncil:SmartCompare(sender, "player")
     end
 
     if isAuthorized then

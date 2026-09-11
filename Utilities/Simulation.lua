@@ -772,6 +772,11 @@ function Simulation:StopInteractiveLootTest()
     if TestBar and TestBar.HideBar then
         TestBar:HideBar()
     end
+    self:Clear()
+    self.simRole = nil
+    if DesolateLootcouncil.UpdateLootMasterStatus then
+        DesolateLootcouncil:UpdateLootMasterStatus()
+    end
     DesolateLootcouncil:Print(L["Interactive Test Session cancelled."])
 end
 

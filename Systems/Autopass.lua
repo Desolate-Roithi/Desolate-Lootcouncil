@@ -145,6 +145,36 @@ function Autopass:PruneStaleOrders(now)
     end
 end
 
+local function GetRollItemData(rollID)
+    if not rollID then return nil, nil, nil end
+    if Autopass.mockRollItemData and Autopass.mockRollItemData[rollID] then
+        local mockItem = Autopass.mockRollItemData[rollID]
+        return mockItem.itemID, mockItem.link, mockItem.category or "Junk/Pass"
+    end
+    local link = (GetLootRollItemLink and GetLootRollItemLink(rollID)) or nil
+    if not link then return nil, nil, nil end
+    local API = DesolateLootcouncil.API
+    local Loot = DesolateLootcouncil:GetModule("Loot", true)
+    local ItemCatalog = DesolateLootcouncil:GetModule("ItemCatalog", true)
+    local itemID = (API and API.GetItemIDFromLink and API:GetItemIDFromLink(link)) or (C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(link))
+    if not itemID then
+        local parsed = link:match("item:(%d+)")
+        itemID = parsed and tonumber(parsed) or nil
+    end
+    local dbCat = (ItemCatalog and ItemCatalog.GetItemCategory and ItemCatalog:GetItemCategory(itemID or link))
+        or (Loot and itemID and Loot.GetItemCategory and Loot:GetItemCategory(itemID))
+        or (API and API.GetItemCategory and API:GetItemCategory(itemID or link))
+        or "Junk/Pass"
+    return itemID, link, dbCat
+end
+
+local function IsMatchingOrderItem(frameItemID, frameLink, payload)
+    if not payload then return false end
+    if payload.itemID and frameItemID and payload.itemID == frameItemID then return true end
+    if payload.link and frameLink and payload.link == frameLink then return true end
+    return false
+end
+
 function Autopass:HandleAutopassOrder(payload, sender)
     if not payload or type(payload) ~= "table" then return end
     local lm = DesolateLootcouncil:DetermineLootMaster() or DesolateLootcouncil.activeLootMaster
@@ -171,22 +201,26 @@ function Autopass:HandleAutopassOrder(payload, sender)
 
     self.autoRolledItems = self.autoRolledItems or {}
 
-    -- Late Order Override: If the roll is currently open, execute immediately even if backup previously skipped/held
-    if payload.rollID and not self.autoRolledItems[payload.rollID] then
-        DebugLog(string.format("Executing incoming LM Autopass Order for rollID %d (late order override)", payload.rollID))
-        self:DoAutoRoll(payload.rollID, payload.action or 0)
-    elseif GroupLootContainer and GroupLootContainer.rollFrames then
+    -- Check if any open roll frame matches the order
+    local frameRolled = false
+    if GroupLootContainer and GroupLootContainer.rollFrames then
         for _, frame in pairs(GroupLootContainer.rollFrames) do
             if frame and frame:IsShown() and frame.rollID and not self.autoRolledItems[frame.rollID] then
-                local link = GetLootRollItemLink(frame.rollID)
-                local itemID = link and C_Item.GetItemInfoInstant(link)
-                if (payload.rollID and frame.rollID == payload.rollID) or
-                   (payload.itemID and itemID == payload.itemID) or
-                   (payload.link and link and link == payload.link) then
+                local frameItemID, frameLink, dbCat = GetRollItemData(frame.rollID)
+                if dbCat ~= "Junk/Pass" and IsMatchingOrderItem(frameItemID, frameLink, payload) then
                     DebugLog(string.format("Executing incoming LM Autopass Order for frame rollID %d (late order override)", frame.rollID))
                     self:DoAutoRoll(frame.rollID, payload.action or 0)
+                    frameRolled = true
                 end
             end
+        end
+    end
+
+    if not frameRolled and payload.rollID and not self.autoRolledItems[payload.rollID] then
+        local dbCat = select(3, GetRollItemData(payload.rollID))
+        if dbCat ~= "Junk/Pass" then
+            DebugLog(string.format("Executing incoming LM Autopass Order for rollID %d (late order override)", payload.rollID))
+            self:DoAutoRoll(payload.rollID, payload.action or 0)
         end
     end
 end
@@ -221,10 +255,16 @@ function Autopass:OnStartLootRoll(event, rollID)
     -- 1. Check if we already received an authoritative LM Autopass Order for this item (network latency caching)
     self.pendingAutopassOrders = self.pendingAutopassOrders or {}
     self:PruneStaleOrders()
-    local pending = (itemID and self.pendingAutopassOrders[itemID]) or (link and self.pendingAutopassOrders[link]) or self.pendingAutopassOrders[rollID]
+    local pendingByRoll = self.pendingAutopassOrders[rollID]
+    local rollMatch = pendingByRoll and (not itemID or not pendingByRoll.itemID or pendingByRoll.itemID == itemID)
+    local pending = (itemID and self.pendingAutopassOrders[itemID]) or (link and self.pendingAutopassOrders[link]) or (rollMatch and pendingByRoll)
     if pending and (GetTime() - (pending.time or 0) < 10) then
-        DebugLog(string.format("Executing cached LM Autopass Order for %s (rollID %d)", tostring(link), rollID))
-        self:DoAutoRoll(rollID, pending.action or 0)
+        if dbCat ~= "Junk/Pass" then
+            DebugLog(string.format("Executing cached LM Autopass Order for %s (rollID %d)", tostring(link), rollID))
+            self:DoAutoRoll(rollID, pending.action or 0)
+        else
+            DebugLog(string.format("Skipped cached LM Autopass Order for %s (rollID %d): Item is Junk/Pass.", tostring(link), rollID))
+        end
         return
     end
 
@@ -273,10 +313,14 @@ function Autopass:OnStartLootRoll(event, rollID)
         if self.autoRolledItems[rollID] then return end
 
         -- Check if order arrived during grace period
-        local order = (itemID and self.pendingAutopassOrders[itemID]) or (link and self.pendingAutopassOrders[link]) or self.pendingAutopassOrders[rollID]
+        local order = (itemID and self.pendingAutopassOrders[itemID]) or (link and self.pendingAutopassOrders[link])
         if order and (GetTime() - (order.time or 0) < 10) then
-            DebugLog(string.format("Executing newly arrived LM order for %s (rollID %d)", tostring(link), rollID))
-            self:DoAutoRoll(rollID, order.action or 0)
+            if dbCat ~= "Junk/Pass" then
+                DebugLog(string.format("Executing newly arrived LM order for %s (rollID %d)", tostring(link), rollID))
+                self:DoAutoRoll(rollID, order.action or 0)
+            else
+                DebugLog(string.format("Skipped newly arrived LM order for %s (rollID %d): Item is Junk/Pass.", tostring(link), rollID))
+            end
             return
         end
 
@@ -376,6 +420,14 @@ function Autopass:HideGroupLootFrameWithRollID(rollID)
 end
 
 function Autopass:DoAutoRoll(rollID, rollType)
+    if rollType == 0 then
+        local dbCat = select(3, GetRollItemData(rollID))
+        if dbCat == "Junk/Pass" then
+            DebugLog(string.format("Aborted autopass in DoAutoRoll for rollID %d: Item is Junk/Pass.", rollID))
+            return
+        end
+    end
+
     -- autoRolledItems is actively read in ProcessRoll to act as a double-roll
     -- prevention guard (e.g., if START_LOOT_ROLL fires twice for the same
     -- rollID). Do not remove without replacing with equivalent protection.

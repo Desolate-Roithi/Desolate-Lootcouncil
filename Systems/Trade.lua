@@ -173,15 +173,25 @@ end
 ---@param slot number
 ---@return boolean
 function Trade:IsItemWarbound(bag, slot)
-    local tooltipData = C_TooltipInfo.GetBagItem(bag, slot)
+    local tooltipData = C_TooltipInfo and C_TooltipInfo.GetBagItem and C_TooltipInfo.GetBagItem(bag, slot)
     if not tooltipData or not tooltipData.lines then return false end
-    for _, line in ipairs(tooltipData.lines) do
-        if line.leftText and (
-            line.leftText == ITEM_ACCOUNTBOUND or
-            line.leftText == ITEM_ACCOUNTBOUND_UNTIL_EQUIP or
-            line.leftText == ITEM_BNETACCOUNTBOUND
-        ) then
-            return true
+
+    if TooltipUtil and TooltipUtil.SurfaceArgs then
+        pcall(TooltipUtil.SurfaceArgs, tooltipData)
+    end
+
+    for lineIndex, line in ipairs(tooltipData.lines) do
+        if line.leftText then
+            local text = line.leftText
+            if (ITEM_ACCOUNTBOUND and text == ITEM_ACCOUNTBOUND) or
+               (ITEM_ACCOUNTBOUND_UNTIL_EQUIP and text == ITEM_ACCOUNTBOUND_UNTIL_EQUIP) or
+               (ITEM_BNETACCOUNTBOUND and text == ITEM_BNETACCOUNTBOUND) then
+                return true
+            end
+            local lowerText = string.lower(text)
+            if lowerText:find("warbound") or lowerText:find("account%-bound") or lowerText:find("bnetaccountbound") then
+                return true
+            end
         end
     end
     return false
@@ -190,19 +200,33 @@ end
 --- Returns true if a bound BoP item is actually tradeable (has active trade time remaining).
 ---@param bag number
 ---@param slot number
+---@param customTooltipData? table
 ---@return boolean
-function Trade:IsItemTradeableBoP(bag, slot)
-    local tooltipData = C_TooltipInfo.GetBagItem(bag, slot)
+function Trade:IsItemTradeableBoP(bag, slot, customTooltipData)
+    local tooltipData = customTooltipData or (C_TooltipInfo and C_TooltipInfo.GetBagItem and C_TooltipInfo.GetBagItem(bag, slot))
     if not tooltipData or not tooltipData.lines then return false end
 
-    local rawPattern = BIND_TRADE_TIME_REMAINING
-    if not rawPattern then return false end
-    -- Escape magic characters and convert %s to a wildcard match
-    local pattern = rawPattern:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%%s", ".*")
+    if not customTooltipData and TooltipUtil and TooltipUtil.SurfaceArgs then
+        pcall(TooltipUtil.SurfaceArgs, tooltipData)
+    end
 
-    for _, line in ipairs(tooltipData.lines) do
-        if line.leftText and string.find(line.leftText, pattern) then
+    local tradeTimeType = (Enum and Enum.TooltipDataLineType and Enum.TooltipDataLineType.TradeTimeRemaining) or 36
+
+    local rawPattern = BIND_TRADE_TIME_REMAINING
+    local pattern = rawPattern and rawPattern:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%%s", ".*")
+
+    for lineIndex, line in ipairs(tooltipData.lines) do
+        if line.type == tradeTimeType then
             return true
+        end
+        if line.leftText then
+            if pattern and string.find(line.leftText, pattern) then
+                return true
+            end
+            local lowerText = string.lower(line.leftText)
+            if string.find(lowerText, "tradeable") or string.find(lowerText, "handeln") or string.find(lowerText, "trade time") then
+                return true
+            end
         end
     end
     return false
@@ -224,73 +248,102 @@ function Trade:NormalizeItemLink(link)
     return table.concat(parts, ":")
 end
 
-local function IsSlotStageable(self, bag, slot, targetItemID, isBoP, normalizedAwardLink)
-    local info = C_Container.GetContainerItemInfo(bag, slot)
-    if not info or info.itemID ~= targetItemID or info.isLocked then
-        return false
-    end
-
-    -- 12.0.1 Fix: BoP raid loot is isBound=true but is still tradeable.
-    -- Only block bound items for BoE to prevent staging equipped gear.
-    local boundOk = (not info.isBound or isBoP)
-    if boundOk and isBoP and info.isBound then
-        boundOk = self:IsItemTradeableBoP(bag, slot)
-    end
-    if not boundOk then
-        return false
-    end
-
-    if self:IsItemWarbound(bag, slot) then
-        return false
-    end
-
-    local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
-    if itemLink then
-        local normalizedItemLink = self:NormalizeItemLink(itemLink)
-        return normalizedItemLink == normalizedAwardLink
-    else
-        -- Fallback if item link is not cached or in mock environment
-        return true
-    end
-end
-
 --- Scans bags 0-4 and returns the first unlocked, stageable slot for itemID that matches stats.
---- For BoP items (fresh raid loot) isBound is expected and allowed through if tradeable.
---- Warbound (account-bound) copies are always skipped.
+--- Also collects failure reason diagnostics for user-facing LM reporting.
 ---@param award        table
 ---@param targetItemID number
 ---@param isBoP        boolean
 ---@param usedSlots    table<string, boolean>
----@return number|nil bag, number|nil slot
+---@return number|nil bag, number|nil slot, string|nil failureReason
 function Trade:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
     local normalizedAwardLink = self:NormalizeItemLink(award.link)
+    local failureReason = "not_in_bags"
+    local candidates = {}
 
     for bag = 0, 4 do
         local numSlots = C_Container.GetContainerNumSlots(bag)
         for slot = 1, numSlots do
             local slotKey = string.format("%d-%d", bag, slot)
-            if not usedSlots[slotKey] and IsSlotStageable(self, bag, slot, targetItemID, isBoP, normalizedAwardLink) then
-                return bag, slot
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and info.itemID == targetItemID then
+                if usedSlots[slotKey] then
+                    if failureReason == "not_in_bags" then
+                        failureReason = "already_staged"
+                    end
+                elseif info.isLocked then
+                    failureReason = "locked"
+                elseif self:IsItemWarbound(bag, slot) then
+                    failureReason = "warbound"
+                elseif info.isBound and not self:IsItemTradeableBoP(bag, slot) then
+                    failureReason = "bound_untradeable"
+                else
+                    -- Valid tradeable candidate
+                    local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
+                    local isExactMatch = true
+                    if itemLink and normalizedAwardLink then
+                        local normalizedItemLink = self:NormalizeItemLink(itemLink)
+                        if normalizedItemLink ~= normalizedAwardLink then
+                            isExactMatch = false
+                        end
+                    end
+
+                    if isExactMatch then
+                        return bag, slot, nil
+                    else
+                        table.insert(candidates, { bag = bag, slot = slot })
+                        failureReason = "link_mismatch"
+                    end
+                end
             end
         end
     end
-    return nil, nil
+
+    -- If no exact match was found, but there's a unique eligible tradeable candidate of that itemID
+    if #candidates == 1 then
+        return candidates[1].bag, candidates[1].slot, nil
+    end
+
+    return nil, nil, failureReason
 end
 
 function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
     if not targetItemID then
-        DesolateLootcouncil:DLC_Log(string.format(L["Could not find %s in bags for %s."], award.link or "?",
-            DesolateLootcouncil:GetDisplayName(targetName)))
-        return false
+        local failMsg = string.format(L["Could not stage item for %s: missing itemID."],
+            DesolateLootcouncil:GetDisplayName(targetName))
+        DesolateLootcouncil:Print(failMsg)
+        DesolateLootcouncil:DLC_Log(failMsg, true)
+        return false, "missing_id"
     end
 
-    -- Resolve bind type once — identical for all copies of the same itemID.
-    local _, _, _, _, _, _, _, _, _, _, _, _, _, bindType = C_Item.GetItemInfo(targetItemID)
-    local isBoP = (bindType == 1)
+    -- Attempt to resolve bindType if cached; if uncached, GetStageableSlot safely verifies tradeability
+    local isBoP = true
+    local itemInfo = { C_Item.GetItemInfo(targetItemID) }
+    if itemInfo[14] then
+        isBoP = (itemInfo[14] == 1)
+    end
 
-    local bag, slot = self:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
+    local bag, slot, failureReason = self:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
     if not bag or not slot then
-        return false
+        local itemText = award.link or tostring(targetItemID)
+        local targetText = DesolateLootcouncil:GetDisplayName(targetName)
+        local reasonStr = L["Item not found in bags."]
+        if failureReason == "bound_untradeable" then
+            reasonStr = L["Item is soulbound and cannot be traded (trade timer expired or not tradeable)."]
+        elseif failureReason == "warbound" then
+            reasonStr = L["Item is Warbound (account-bound) and cannot be traded."]
+        elseif failureReason == "locked" then
+            reasonStr = L["Item bag slot is locked."]
+        elseif failureReason == "already_staged" then
+            reasonStr = L["All matching copies in bags are already staged."]
+        elseif failureReason == "link_mismatch" then
+            reasonStr = L["Multiple copies found with non-matching stats/tertiaries."]
+        end
+
+        local warningMsg = string.format(L["Trade warning: Could not stage %s for %s (%s)."],
+            itemText, targetText, reasonStr)
+        DesolateLootcouncil:Print(warningMsg)
+        DesolateLootcouncil:DLC_Log(warningMsg, true)
+        return false, failureReason
     end
 
     C_Container.UseContainerItem(bag, slot)
@@ -302,8 +355,9 @@ function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
         winner = award.winner,
         guid   = award.sourceGUID,
     })
-    DesolateLootcouncil:DLC_Log(string.format(L["Staged %s for %s."], award.link,
-        DesolateLootcouncil:GetDisplayName(targetName)))
+    local stagedMsg = string.format(L["Staged %s for %s."], award.link,
+        DesolateLootcouncil:GetDisplayName(targetName))
+    DesolateLootcouncil:DLC_Log(stagedMsg)
     return true
 end
 
@@ -313,9 +367,11 @@ function Trade:StageAllItems(pendingItems, targetName)
     local usedSlots = {}
 
     local stagedCount = 0
-    for _, award in ipairs(pendingItems) do
+    for awardIndex, award in ipairs(pendingItems) do
         if stagedCount >= 6 then
-            DesolateLootcouncil:DLC_Log(L["Trade window full. Remaining items will be staged in the next trade."], true)
+            local fullMsg = L["Trade window full. Remaining items will be staged in the next trade."]
+            DesolateLootcouncil:Print(fullMsg)
+            DesolateLootcouncil:DLC_Log(fullMsg, true)
             break
         end
 
@@ -324,9 +380,6 @@ function Trade:StageAllItems(pendingItems, targetName)
 
         if staged then
             stagedCount = stagedCount + 1
-        else
-            DesolateLootcouncil:DLC_Log(string.format(L["Could not find %s in bags for %s."], award.link,
-                DesolateLootcouncil:GetDisplayName(targetName)))
         end
     end
 end

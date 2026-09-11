@@ -2,8 +2,8 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.2.1  
-**Last Updated:** 2026-09-07  
+**Latest Version:** v2.2.3  
+**Last Updated:** 2026-09-12  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## Features
@@ -47,6 +47,24 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.2.3 (2026-09-12)
+* **Trade Management & Item Staging Reliability**:
+  * Added proactive item tradeability diagnostics and tooltip hydration routines (`Trade:IsItemTradeableBoP`).
+  * Implemented strict safeguards preventing the accidental staging of Warbound items, locked bag slots, or duplicate items with mismatched stats/tertiaries.
+  * Added localized feedback messages for failed or blocked item stagings.
+* **Offline Protection & Disband Safety**:
+  * Implemented raid-membership and online validation preventing unexpected `PULL_REQUEST` broadcasts and communication bursts from offline members.
+  * Hardened Loot Master disband gating and snapshot exclusivity boundaries.
+* **Interactive Testing & Session Controller Stability**:
+  * Fixed an issue where the interactive testing controller could inadvertently swap role state between Loot Master and Officer.
+  * Enforced strict Loot Master gating on loot window operations and eliminated spurious backlog token prompts.
+* **Core Architecture & Taint Isolation**:
+  * Deduplicated over 100 lines in `Core/API.lua` by routing directly to subsystem implementations (`Attendance`, `Roster`, `Session`, `Loot`).
+  * Enshrined zero-monkeypatching taint isolation in the test suite using pure module dependency injection (`Autopass.mockRollItemData`, `Trade.customTooltipData`).
+  * Enshrined Step 3a Declarative Configuration Governance for AceConfig schemas.
+* **Localization Cleanliness**:
+  * Pruned 117 dead/orphaned locale strings across `enUS` and `deDE` while safeguarding dynamic priority category translations. 100% localization parity achieved.
 
 ### v2.2.1 (2026-09-07)
 * **LibDataBroker & MinimapButtonBag Integration**:

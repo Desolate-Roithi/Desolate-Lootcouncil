@@ -996,6 +996,20 @@ function TestSuite:OnInitialize()
 
             local unmanagedAction = Autopass:DetermineRollAction(2, "Junk/Pass")
             assert(unmanagedAction == 0 or unmanagedAction == nil, "Unmanaged/Junk items skip auto-Need")
+
+            -- Safety Gate: DoAutoRoll must strictly abort if item category is Junk/Pass (e.g. unmanaged pets)
+            Autopass.mockRollItemData = {
+                [9999] = {
+                    itemID = 99999,
+                    link = "|cff0070dd|Hitem:99999:::::::::::|h[Cute Raid Pet]|h|r",
+                    category = "Junk/Pass"
+                }
+            }
+            Autopass.autoRolledItems = {}
+            Autopass:DoAutoRoll(9999, 0)
+            assert(Autopass.autoRolledItems[9999] == nil, "DoAutoRoll must never pass unmanaged items (e.g. pets)")
+            Autopass.mockRollItemData = nil
+
             DesolateLootcouncil.amILM = prevLM
         end)
 
@@ -1041,6 +1055,18 @@ function TestSuite:OnInitialize()
                 }
                 TradeMod:HandleTradeSuccess()
                 assert(db.session.awarded[1].traded == true, "Item marked traded after exchange")
+            end
+
+            -- BoP Tradeable Detection: verify TradeTimeRemaining enum recognition without global taint
+            if TradeMod and TradeMod.IsItemTradeableBoP then
+                local mockTooltipData = {
+                    lines = {
+                        { type = 20, leftText = "Binds when picked up" },
+                        { type = 36, leftText = nil }
+                    }
+                }
+                local tradeable = TradeMod:IsItemTradeableBoP(0, 1, mockTooltipData)
+                assert(tradeable == true, "IsItemTradeableBoP must recognize TradeTimeRemaining line type")
             end
         end)
 
@@ -1599,7 +1625,7 @@ function TestSuite:OnInitialize()
     -- =======================================================================
     -- 10. Session Authority, Late-Join Parity & Disband History
     -- =======================================================================
-    self:RegisterScenario("session_authority_latejoin_disband", "10. Session Authority, Late-Join Parity & Disband History", "Validates non-LM zone-in auto-start suppression, heartbeat session adoption and roster catchup, raid disband provisional history auto-closure, and solo LM finalized history updates.", function()
+    self:RegisterScenario("session_authority_latejoin_disband", "10. Session Authority, Late-Join Parity & Disband History", "Validates non-LM zone-in auto-start suppression, heartbeat session adoption and roster catchup, raid disband provisional history auto-closure, solo LM finalized history updates, and LM reconnect boss log additive merge.", function()
         local Sync = DesolateLootcouncil:GetModule("Sync", true)
         local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
         local db = DesolateLootcouncil.db.profile
@@ -1608,7 +1634,7 @@ function TestSuite:OnInitialize()
         local origMainRoster = DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(db.MainRoster)
 
         -- Part 1: Non-LM Zone-In Auto-Start Suppression
-        self:RunPart(1, 4, "Non_LM_Zone_In_Auto_Start_Suppression", function()
+        self:RunPart(1, 5, "Non_LM_Zone_In_Auto_Start_Suppression", function()
             db.DecayConfig = db.DecayConfig or {}
             db.DecayConfig.sessionActive = false
             db.DecayConfig.currentSessionID = nil
@@ -1637,7 +1663,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 2: Heartbeat Session Adoption and Sync
-        self:RunPart(2, 4, "Heartbeat_Session_Adoption_And_Sync", function()
+        self:RunPart(2, 5, "Heartbeat_Session_Adoption_And_Sync", function()
             db.DecayConfig = db.DecayConfig or {}
             db.DecayConfig.sessionActive = false
             db.DecayConfig.currentSessionID = nil
@@ -1646,25 +1672,27 @@ function TestSuite:OnInitialize()
             local origAmILM = DesolateLootcouncil.amILM
             local origAmIOfficer = DesolateLootcouncil.amIOfficer
             local origActiveLM = DesolateLootcouncil.activeLootMaster
+            local origDetermineLM = DesolateLootcouncil.DetermineLootMaster
             local origIsUnitInRaid = DesolateLootcouncil.IsUnitInRaid
             local origIsUnitOnline = DesolateLootcouncil.IsUnitOnline
 
             DesolateLootcouncil.amILM = false
             DesolateLootcouncil.amIOfficer = true
             DesolateLootcouncil.activeLootMaster = "ActualLM-Realm"
+            DesolateLootcouncil.DetermineLootMaster = function() return "ActualLM-Realm" end
             DesolateLootcouncil.IsUnitInRaid = function(self, name)
-                if name == "ActualLM-Realm" then return true end
+                if DesolateLootcouncil:SmartCompare(name, "ActualLM-Realm") then return true end
                 if origIsUnitInRaid then return origIsUnitInRaid(self, name) end
                 return false
             end
             DesolateLootcouncil.IsUnitOnline = function(self, name)
-                if name == "ActualLM-Realm" then return true end
+                if DesolateLootcouncil:SmartCompare(name, "ActualLM-Realm") then return true end
                 if origIsUnitOnline then return origIsUnitOnline(self, name) end
                 return false
             end
 
             local heartbeatPayload = {
-                officers = { myName },
+                officers = { myName, normPlayer },
                 sessionActive = true,
                 currentSessionID = 1788715900,
                 currentSessionLM = "ActualLM-Realm",
@@ -1682,12 +1710,13 @@ function TestSuite:OnInitialize()
             DesolateLootcouncil.amILM = origAmILM
             DesolateLootcouncil.amIOfficer = origAmIOfficer
             DesolateLootcouncil.activeLootMaster = origActiveLM
+            DesolateLootcouncil.DetermineLootMaster = origDetermineLM
             DesolateLootcouncil.IsUnitInRaid = origIsUnitInRaid
             DesolateLootcouncil.IsUnitOnline = origIsUnitOnline
         end)
 
         -- Part 3: Disband Auto-Close Provisional History
-        self:RunPart(3, 4, "Disband_Auto_Close_Provisional_History", function()
+        self:RunPart(3, 5, "Disband_Auto_Close_Provisional_History", function()
             local origAmILM = DesolateLootcouncil.amILM
             local origAmIOfficer = DesolateLootcouncil.amIOfficer
             local origActiveLM = DesolateLootcouncil.activeLootMaster
@@ -1725,7 +1754,7 @@ function TestSuite:OnInitialize()
         end)
 
         -- Part 4: Solo Finalized History Update
-        self:RunPart(4, 4, "Solo_Finalized_History_Update", function()
+        self:RunPart(4, 5, "Solo_Finalized_History_Update", function()
             db.MainRoster = db.MainRoster or {}
             db.MainRoster["ActualLM-Realm"] = { isOfficer = true, sessionsAttended = {} }
 
@@ -1770,6 +1799,70 @@ function TestSuite:OnInitialize()
             if RosterMod and RosterMod.UpdateScoreMap then
                 RosterMod:UpdateScoreMap()
             end
+        end)
+
+        -- Part 5: LM Reconnect Boss Logs Additive Merge & Sync Parity
+        self:RunPart(5, 5, "LM_Reconnect_BossLogs_Additive_Merge", function()
+            local Attendance = DesolateLootcouncil:GetModule("Attendance", true)
+            local origAmILM = DesolateLootcouncil.amILM
+            local origAmIOfficer = DesolateLootcouncil.amIOfficer
+            local origActiveLM = DesolateLootcouncil.activeLootMaster
+            local origGlobalLM = DesolateLootcouncil.db.global and DesolateLootcouncil.db.global.activeRaidLM
+            local origIsInRaid = DesolateLootcouncil.IsInRaidOrTest
+
+            -- Test 5a: Reconnect safety in CleanRaiderStaleSession
+            -- Simulate LM reloading where amILM is temporarily false before roster inspection,
+            -- but db.global.activeRaidLM is set to local player
+            DesolateLootcouncil.amILM = false
+            DesolateLootcouncil.amIOfficer = false
+            DesolateLootcouncil.activeLootMaster = nil
+            DesolateLootcouncil.IsInRaidOrTest = function() return false end
+            DesolateLootcouncil.db.global = DesolateLootcouncil.db.global or {}
+            DesolateLootcouncil.db.global.activeRaidLM = myName
+
+            db.DecayConfig = db.DecayConfig or {}
+            db.DecayConfig.sessionActive = true
+            db.DecayConfig.currentSessionID = 1788719999
+            db.DecayConfig.currentSessionLM = myName
+            db.DecayConfig.bossLogs = {
+                { name = "Boss 1 (Reconnection Test)", killed = true, timestamp = 1788720100 }
+            }
+
+            if Attendance and Attendance.CleanRaiderStaleSession then
+                Attendance:CleanRaiderStaleSession()
+            elseif DesolateLootcouncil.API and DesolateLootcouncil.API.CleanRaiderStaleSession then
+                DesolateLootcouncil.API:CleanRaiderStaleSession()
+            end
+
+            assert(db.DecayConfig.sessionActive == true, "CleanRaiderStaleSession must NOT wipe sessionActive if player is activeRaidLM")
+            assert(db.DecayConfig.currentSessionID == 1788719999, "CleanRaiderStaleSession must preserve currentSessionID on LM reconnect")
+            assert(#db.DecayConfig.bossLogs == 1, "CleanRaiderStaleSession must preserve bossLogs on LM reconnect")
+
+            -- Test 5b: Additive Merge of Boss Logs
+            if Attendance and Attendance.MergeBossLogs then
+                local incomingLogs = {
+                    { name = "Boss 1 (Reconnection Test)", killed = true, timestamp = 1788720100 },
+                    { name = "Boss 2 (Additive Union)", killed = true, timestamp = 1788720500 },
+                }
+                local mergedCount = Attendance:MergeBossLogs(incomingLogs)
+                assert(mergedCount == 1, "MergeBossLogs must return 1 for 1 new boss kill added")
+                assert(#db.DecayConfig.bossLogs == 2, "DecayConfig.bossLogs must contain exactly 2 entries after additive union")
+                assert(db.DecayConfig.bossLogs[2].name == "Boss 2 (Additive Union)", "Boss 2 must be merged into bossLogs")
+            end
+
+            -- Test 5c: Officer sync broadcast coverage for CONFIG and HISTORY
+            if Sync and Sync.ShareDataWithOfficers then
+                local okConfig, errConfig = pcall(function() Sync:ShareDataWithOfficers("CONFIG") end)
+                assert(okConfig, "ShareDataWithOfficers('CONFIG') must execute cleanly: " .. tostring(errConfig))
+                local okHistory, errHistory = pcall(function() Sync:ShareDataWithOfficers("HISTORY") end)
+                assert(okHistory, "ShareDataWithOfficers('HISTORY') must execute cleanly: " .. tostring(errHistory))
+            end
+
+            DesolateLootcouncil.amILM = origAmILM
+            DesolateLootcouncil.amIOfficer = origAmIOfficer
+            DesolateLootcouncil.activeLootMaster = origActiveLM
+            DesolateLootcouncil.db.global.activeRaidLM = origGlobalLM
+            DesolateLootcouncil.IsInRaidOrTest = origIsInRaid
         end)
 
         self:Log("Scenario 10 [Session Authority, Late-Join Parity & Disband History] completed successfully.")
