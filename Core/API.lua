@@ -308,6 +308,28 @@ function DLC_API:GetUnitClass(unitOrName)
     return loc or file or "WARRIOR", file or "WARRIOR"
 end
 
+--- Returns the class token for a player or alt by checking active roster data before falling back to UnitClass.
+---@param name string
+---@return string classFilename
+function DLC_API:GetPlayerRosterClass(name)
+    if not name or name == "" then return "WARRIOR" end
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if db then
+        local mainName = (db.playerRoster and db.playerRoster.alts and db.playerRoster.alts[name]) or name
+        local dispName = self:GetDisplayName(name)
+        local rData = db.MainRoster and (db.MainRoster[mainName] or db.MainRoster[name] or (dispName and db.MainRoster[dispName]))
+        if rData and rData.class then
+            return rData.class
+        end
+        if db.playerRoster and db.playerRoster.classMap then
+            local mapClass = db.playerRoster.classMap[name] or db.playerRoster.classMap[mainName]
+            if mapClass then return mapClass end
+        end
+    end
+    local _, classFile = self:GetUnitClass(name)
+    return classFile or "WARRIOR"
+end
+
 --- Returns a short display name without realm suffix.
 ---@param name string
 ---@return string
@@ -650,6 +672,15 @@ function DLC_API:MarkPriorityDirty(listName)
     local db = DesolateLootcouncil.db.profile
     if not db.priorityTimestamps then db.priorityTimestamps = {} end
     db.priorityTimestamps[listName] = GetServerTime()
+end
+
+--- Marks AttendanceHistory as modified by updating historyTimestamp and rosterTimestamp.
+function DLC_API:MarkHistoryDirty()
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if db then
+        db.historyTimestamp = GetServerTime()
+        db.rosterTimestamp = GetServerTime()
+    end
 end
 
 --- Calculates and applies decay penalties to absent players in a list.
@@ -1067,6 +1098,12 @@ end
 ---@return table awarded
 function DLC_API:GetAwardedList()
     return (DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session and DesolateLootcouncil.db.profile.session.awarded) or {}
+end
+
+--- Returns the public award log list from db.profile.
+---@return table
+function DLC_API:GetPublicAwardLog()
+    return (DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.session and DesolateLootcouncil.db.profile.session.publicAwardLog) or {}
 end
 
 --- Returns a set of GUIDs that have already been awarded.
@@ -2217,6 +2254,52 @@ function DLC_API:HandleDebugSlashCommand(cmd)
     elseif cmd == "dump" and d.DumpKeys then
         d:DumpKeys()
     end
+end
+
+--- Validates and repairs corrupted or truncated item hyperlinks.
+--- Ensures hyperlinks have matching brackets and closing tags |h|r.
+---@param rawLink string|nil
+---@param itemID number|string|nil
+---@return string|nil
+function DLC_API:SanitizeHyperlink(rawLink, itemID)
+    if not rawLink and not itemID then return nil end
+    local strLink = (type(rawLink) == "string") and rawLink or nil
+    local numID = tonumber(itemID)
+
+    -- 1. If link is already closed and well-formed (|h[...]...]...|h|r)
+    if strLink and string.find(strLink, "|h%[") and string.find(strLink, "%]|h|r") then
+        return strLink
+    end
+
+    -- 2. Extract item ID if not explicitly provided
+    if not numID and strLink then
+        local matchedID = string.match(strLink, "|Hitem:(%d+)") or string.match(strLink, "item:(%d+)")
+        if matchedID then
+            numID = tonumber(matchedID)
+        end
+    end
+
+    -- 3. Attempt to fetch clean canonical link from WoW client cache
+    if numID and C_Item and C_Item.GetItemInfo then
+        local ok, _, properLink = pcall(C_Item.GetItemInfo, numID)
+        if ok and properLink and string.find(properLink, "%]|h|r") then
+            return properLink
+        end
+    end
+
+    -- 4. If truncated unclosed link (e.g. "|cnIQ4:...|h[Soulcoiler"), safely close bracket and color escape
+    if strLink and string.find(strLink, "|h%[") and not string.find(strLink, "%]|h|r") then
+        local repaired = strLink:gsub("|h%[([^%]]*)$", "|h[%1]|h|r")
+        if not string.find(repaired, "%]|h|r") then
+            repaired = repaired .. "]|h|r"
+        end
+        return repaired
+    end
+
+    -- 5. Fallback
+    if strLink then return strLink end
+    if numID then return string.format("item:%d", numID) end
+    return nil
 end
 
 

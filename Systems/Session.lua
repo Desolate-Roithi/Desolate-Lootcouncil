@@ -24,12 +24,7 @@ local Session = DesolateLootcouncil:NewModule("Session", "AceEvent-3.0", "AceCom
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Session]]
 
 local function SafeIsGroupLeader(unit)
-    unit = unit or "player"
-    local ok, isLeader = pcall(UnitIsGroupLeader, unit)
-    if ok and isLeader ~= nil and not (type(issecretvalue) == "function" and issecretvalue(isLeader)) then
-        return not not isLeader
-    end
-    return false
+    return DesolateLootcouncil:SafeIsGroupLeader(unit)
 end
 
 ---@class DistributionPayload
@@ -705,10 +700,16 @@ end
 
 -- Bug 4: Broadcast an awarded history entry to all players (split public/officer)
 function Session:SendHistoryUpdate(entry)
+    local API = DesolateLootcouncil.API
+    local safeLink = entry and entry.link
+    if safeLink and API and API.SanitizeHyperlink then
+        safeLink = API:SanitizeHyperlink(safeLink, entry and entry.itemID)
+    end
+
     local publicEntry = {
-        link      = entry.link,
-        winner    = entry.winner,
-        timestamp = entry.timestamp,
+        link      = safeLink,
+        winner    = entry and entry.winner,
+        timestamp = entry and entry.timestamp,
     }
 
     -- Populate publicAwardLog locally for the LM

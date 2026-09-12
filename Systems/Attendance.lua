@@ -20,8 +20,7 @@ local Attendance = DesolateLootcouncil:NewModule("Attendance", "AceEvent-3.0", "
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Attendance]]
 
 local function SafeGetUnitClass(unit)
-    local ok, _, classFilename = pcall(UnitClass, unit)
-    return (ok and classFilename) or "WARRIOR"
+    return DesolateLootcouncil:SafeGetUnitClass(unit) or "WARRIOR"
 end
 
 function Attendance:CleanRaiderStaleSession()
@@ -189,7 +188,7 @@ function Attendance:StartRaidSession()
         return
     end
 
-    local _, instanceType = GetInstanceInfo()
+    local instName, instanceType = GetInstanceInfo()
     local simActive = DesolateLootcouncil.API and DesolateLootcouncil.API:IsSimulationActive()
 
     if instanceType ~= "raid" and not simActive and not db.debugMode then
@@ -219,6 +218,9 @@ function Attendance:StartRaidSession()
     config.attendeeDetails = {}
     config.bossLogs = {}
     config.lastActivity = time()
+
+    local raidZone = (instanceType == "raid" and instName and instName ~= "" and instName) or (GetRealZoneText and GetRealZoneText()) or "Unknown"
+    config.raidZone = raidZone
 
     local globalDb = DesolateLootcouncil.db.global
     if globalDb then
@@ -255,6 +257,98 @@ end
 
 --- Stops the current tracking session and optionally commits it to AttendanceHistory.
 ---@param saveHistory boolean|nil
+local function CreateAttendanceHistoryEntry(config, session, isAutoCloseOfficer, decayVal, penalty, decayAbsent)
+    local entryZone = config.raidZone
+    if not entryZone or entryZone == "" or entryZone == "Unknown" then
+        local instName, instanceType = GetInstanceInfo()
+        if instanceType == "raid" and instName and instName ~= "" then
+            entryZone = instName
+        else
+            entryZone = (GetRealZoneText and GetRealZoneText()) or "Unknown"
+        end
+    end
+
+    local fallbackSessionID = config.currentSessionID or time()
+    local entry = {
+        date            = date("%Y-%m-%d %H:%M:%S", fallbackSessionID),
+        zone            = entryZone,
+        sessionID       = fallbackSessionID,
+        attendees       = {},
+        attendeeDetails = {},
+        bossLogs        = {},
+        awarded         = {},
+        decayApplied    = decayVal,
+        decayPenalty    = penalty,
+        decayAbsent     = not isAutoCloseOfficer and decayAbsent and DesolateLootcouncil.Table.DeepCopy(decayAbsent) or nil,
+        decayMissing    = (isAutoCloseOfficer == true) and true or nil,
+        autoClosed      = (isAutoCloseOfficer == true) and true or nil,
+        sessionLM       = config.currentSessionLM or nil,
+    }
+
+    local API = DesolateLootcouncil.API
+    if session and session.awarded then
+        entry.awarded = DesolateLootcouncil.Table.DeepCopy(session.awarded)
+        table.sort(entry.awarded, function(a, b)
+            local tA = (API and API.ParseItemTimestamp and API:ParseItemTimestamp(a)) or (a.timestamp or 0)
+            local tB = (API and API.ParseItemTimestamp and API:ParseItemTimestamp(b)) or (b.timestamp or 0)
+            return tA < tB
+        end)
+    end
+
+    for name in pairs(config.currentAttendees or {}) do
+        entry.attendees[name] = true
+    end
+
+    if config.attendeeDetails then
+        for mainName, mainEntry in pairs(config.attendeeDetails) do
+            entry.attendeeDetails[mainName] = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(mainEntry)) or mainEntry
+        end
+    end
+
+    if config.bossLogs then
+        for origIdx, b in ipairs(config.bossLogs) do
+            local bRoster = nil
+            if b.roster then
+                bRoster = {}
+                for _, p in ipairs(b.roster) do
+                    table.insert(bRoster, { name = p.name, main = p.main, class = p.class })
+                end
+            end
+            table.insert(entry.bossLogs, {
+                encounterID = b.encounterID,
+                name = b.name,
+                difficultyID = b.difficultyID,
+                difficulty = b.difficulty,
+                pulls = b.pulls,
+                killed = b.killed,
+                killedTime = b.killedTime,
+                roster = bRoster,
+                origIdx = origIdx
+            })
+        end
+        table.sort(entry.bossLogs, function(a, b)
+            local kA = (a.killed and a.killedTime) or nil
+            local kB = (b.killed and b.killedTime) or nil
+            if kA and kB then
+                if kA ~= kB then return kA < kB end
+                return (a.origIdx or 0) < (b.origIdx or 0)
+            elseif kA and not kB then
+                return true
+            elseif not kA and kB then
+                return false
+            else
+                return (a.origIdx or 0) < (b.origIdx or 0)
+            end
+        end)
+        for _, bLog in ipairs(entry.bossLogs) do
+            bLog.origIdx = nil
+        end
+    end
+
+    return entry
+end
+
+---@param saveHistory boolean|nil
 ---@param isAutoCloseOfficer boolean|nil
 function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
@@ -264,170 +358,89 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
     end
     local config = db.DecayConfig
 
-    if saveHistory then
-        local isOfficerOrLM = DesolateLootcouncil:AmIOfficerOrLM()
-        if isOfficerOrLM then
-            if not db.AttendanceHistory then db.AttendanceHistory = {} end
-
-            local RosterSys = DesolateLootcouncil:GetModule("Roster", true)
-            local appliedVal = self.decayAppliedForSession or (RosterSys and RosterSys.decayAppliedForSession)
-            local decayVal = appliedVal or (not config.enabled and -1 or nil)
-            if isAutoCloseOfficer then
-                decayVal = nil
-            end
-
-            local fallbackSessionID = config.currentSessionID or time()
-            local entry = {
-                date            = date("%Y-%m-%d %H:%M:%S", fallbackSessionID),
-                zone            = GetRealZoneText() or "Unknown",
-                sessionID       = fallbackSessionID,
-                attendees       = {},
-                attendeeDetails = {},
-                bossLogs        = {},
-                awarded         = {},
-                decayApplied    = decayVal,
-                decayPenalty    = self.decayPenaltyForSession or (RosterSys and RosterSys.decayPenaltyForSession) or (config.defaultPenalty or 1),
-                decayAbsent     = not isAutoCloseOfficer and (self.decayAbsentForSession or (RosterSys and RosterSys.decayAbsentForSession)) and DesolateLootcouncil.Table.DeepCopy(self.decayAbsentForSession or RosterSys.decayAbsentForSession) or nil,
-                decayMissing    = (isAutoCloseOfficer == true) and true or nil,
-                autoClosed      = (isAutoCloseOfficer == true) and true or nil,
-                sessionLM       = config.currentSessionLM or nil,
-            }
-            self.decayAppliedForSession = nil
-            self.decayPenaltyForSession = nil
-            self.decayAbsentForSession = nil
-            if RosterSys then
-                RosterSys.decayAppliedForSession = nil
-                RosterSys.decayPenaltyForSession = nil
-                RosterSys.decayAbsentForSession = nil
-            end
-
-            local session = db.session
-            local API = DesolateLootcouncil.API
-            if session and session.awarded then
-                entry.awarded = DesolateLootcouncil.Table.DeepCopy(session.awarded)
-                table.sort(entry.awarded, function(a, b)
-                    local tA = (API and API.ParseItemTimestamp and API:ParseItemTimestamp(a)) or (a.timestamp or 0)
-                    local tB = (API and API.ParseItemTimestamp and API:ParseItemTimestamp(b)) or (b.timestamp or 0)
-                    return tA < tB
-                end)
-            end
-
-            for name, _ in pairs(config.currentAttendees or {}) do
-                entry.attendees[name] = true
-            end
-
-            if config.attendeeDetails then
-                for mainName, mainEntry in pairs(config.attendeeDetails) do
-                    entry.attendeeDetails[mainName] = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy(mainEntry)) or mainEntry
-                end
-            end
-
-            if config.bossLogs then
-                for origIdx, b in ipairs(config.bossLogs) do
-                    local bRoster = nil
-                    if b.roster then
-                        bRoster = {}
-                        for _, p in ipairs(b.roster) do
-                            table.insert(bRoster, { name = p.name, main = p.main, class = p.class })
-                        end
-                    end
-                    table.insert(entry.bossLogs, {
-                        encounterID = b.encounterID,
-                        name = b.name,
-                        difficultyID = b.difficultyID,
-                        difficulty = b.difficulty,
-                        pulls = b.pulls,
-                        killed = b.killed,
-                        killedTime = b.killedTime,
-                        roster = bRoster,
-                        origIdx = origIdx
-                    })
-                end
-                table.sort(entry.bossLogs, function(a, b)
-                    local kA = (a.killed and a.killedTime) or nil
-                    local kB = (b.killed and b.killedTime) or nil
-                    if kA and kB then
-                        if kA ~= kB then return kA < kB end
-                        return (a.origIdx or 0) < (b.origIdx or 0)
-                    elseif kA and not kB then
-                        return true
-                    elseif not kA and kB then
-                        return false
-                    else
-                        return (a.origIdx or 0) < (b.origIdx or 0)
-                    end
-                end)
-                for _, bLog in ipairs(entry.bossLogs) do
-                    bLog.origIdx = nil
-                end
-            end
-
-            local splitEntries = (API and API.SplitMultiDateAttendanceEntry and API:SplitMultiDateAttendanceEntry(entry)) or { entry }
-            for _, sEntry in ipairs(splitEntries) do
-                table.insert(db.AttendanceHistory, 1, sEntry)
-            end
-            table.sort(db.AttendanceHistory, function(a, b)
-                local sA = tostring(a.date or "")
-                local sB = tostring(b.date or "")
-                if sA ~= sB then return sA > sB end
-                local idA = tonumber(a.sessionID) or 0
-                local idB = tonumber(b.sessionID) or 0
-                return idA > idB
-            end)
-
-            local count = 0
-            for mainName, _ in pairs(config.currentAttendees or {}) do
-                local roster = db.MainRoster
-                if roster and roster[mainName] then
-                    roster[mainName].sessionsAttended = roster[mainName].sessionsAttended or {}
-                    table.insert(roster[mainName].sessionsAttended, {
-                        id = config.currentSessionID,
-                        timestamp = time()
-                    })
-                    count = count + 1
-                end
-            end
-            self:Printf("Session ENDED. Saved attendance for %d players.", count)
-            if not isAutoCloseOfficer then
-                db.historyTimestamp = GetServerTime()
-                db.rosterTimestamp = GetServerTime()
-            end
-
-            -- Ensure all awards recorded during this session have their AuditLog entries linked to currentSessionID
-            if db.AuditLog and entry.awarded then
-                local sidStr = tostring(config.currentSessionID)
-                for awardIndex, awItem in ipairs(entry.awarded) do
-                    for logIndex, logEntry in ipairs(db.AuditLog) do
-                        if (logEntry.act == "AWARD" or logEntry.act == "REAWARD") and not logEntry.sID then
-                            if logEntry.p == awItem.winner and logEntry.det and awItem.itemID and string.find(logEntry.det, tostring(awItem.itemID)) then
-                                logEntry.sID = sidStr
-                            end
-                        end
-                    end
-                end
-            end
-
-            DesolateLootcouncil.API:LogAudit("SESSION_STOP", nil, nil, nil, string.format("Raid session ended (Saved: %d attendees)", count), config.currentSessionID)
-
-            -- Bug 5: Use IsInRaid() rather than IsInGroup() here.
-            -- IsInGroup() can still return true for a brief window after the raid
-            -- disbands, causing SYNC_HISTORY to be sent to an already-gone RAID
-            -- channel and producing "not in group" errors sub-second after save.
-            if DesolateLootcouncil:AmILootMaster() and IsInRaid and IsInRaid() then
-                if API and API.SendComm then
-                    local payload = {
-                        AttendanceHistory = db.AttendanceHistory or {},
-                        awarded = db.session and db.session.awarded or {},
-                        historyTimestamp = db.historyTimestamp or 0
-                    }
-                    API:SendComm("SYNC_HISTORY", payload, "RAID")
-                end
-            end
-        else
-            self:Printf("Session ENDED. (Non-officer: history managed by LM).")
-        end
-    else
+    if not saveHistory then
         self:Printf("Session ABORTED. No history saved.")
+    elseif not DesolateLootcouncil:AmIOfficerOrLM() then
+        self:Printf("Session ENDED. (Non-officer: history managed by LM).")
+    else
+        db.AttendanceHistory = db.AttendanceHistory or {}
+        local RosterSys = DesolateLootcouncil:GetModule("Roster", true)
+        local appliedVal = self.decayAppliedForSession or (RosterSys and RosterSys.decayAppliedForSession)
+        local decayVal
+        if not isAutoCloseOfficer then
+            decayVal = appliedVal or (not config.enabled and -1 or nil)
+        end
+        local penalty = self.decayPenaltyForSession or (RosterSys and RosterSys.decayPenaltyForSession) or (config.defaultPenalty or 1)
+        local decayAbsent = self.decayAbsentForSession or (RosterSys and RosterSys.decayAbsentForSession)
+
+        self.decayAppliedForSession = nil
+        self.decayPenaltyForSession = nil
+        self.decayAbsentForSession = nil
+        if RosterSys then
+            RosterSys.decayAppliedForSession = nil
+            RosterSys.decayPenaltyForSession = nil
+            RosterSys.decayAbsentForSession = nil
+        end
+
+        local entry = CreateAttendanceHistoryEntry(config, db.session, isAutoCloseOfficer, decayVal, penalty, decayAbsent)
+        local API = DesolateLootcouncil.API
+        local splitEntries = (API and API.SplitMultiDateAttendanceEntry and API:SplitMultiDateAttendanceEntry(entry)) or { entry }
+        for _, sEntry in ipairs(splitEntries) do
+            table.insert(db.AttendanceHistory, 1, sEntry)
+        end
+        table.sort(db.AttendanceHistory, function(a, b)
+            local sA = tostring(a.date or "")
+            local sB = tostring(b.date or "")
+            if sA ~= sB then return sA > sB end
+            local idA = tonumber(a.sessionID) or 0
+            local idB = tonumber(b.sessionID) or 0
+            return idA > idB
+        end)
+
+        local count = 0
+        for mainName in pairs(config.currentAttendees or {}) do
+            local roster = db.MainRoster
+            if roster and roster[mainName] then
+                roster[mainName].sessionsAttended = roster[mainName].sessionsAttended or {}
+                table.insert(roster[mainName].sessionsAttended, {
+                    id = config.currentSessionID,
+                    timestamp = time()
+                })
+                count = count + 1
+            end
+        end
+        self:Printf("Session ENDED. Saved attendance for %d players.", count)
+        if not isAutoCloseOfficer then
+            db.historyTimestamp = GetServerTime()
+            db.rosterTimestamp = GetServerTime()
+        end
+
+        -- Ensure all awards recorded during this session have their AuditLog entries linked to currentSessionID
+        if db.AuditLog and entry.awarded then
+            local sidStr = tostring(config.currentSessionID)
+            for _, awItem in ipairs(entry.awarded) do
+                for _, logEntry in ipairs(db.AuditLog) do
+                    if (logEntry.act == "AWARD" or logEntry.act == "REAWARD") and not logEntry.sID then
+                        if logEntry.p == awItem.winner and logEntry.det and awItem.itemID and string.find(logEntry.det, tostring(awItem.itemID)) then
+                            logEntry.sID = sidStr
+                        end
+                    end
+                end
+            end
+        end
+
+        DesolateLootcouncil.API:LogAudit("SESSION_STOP", nil, nil, nil, string.format("Raid session ended (Saved: %d attendees)", count), config.currentSessionID)
+
+        if DesolateLootcouncil:AmILootMaster() and IsInRaid and IsInRaid() then
+            if API and API.SendComm then
+                local payload = {
+                    AttendanceHistory = db.AttendanceHistory or {},
+                    awarded = db.session and db.session.awarded or {},
+                    historyTimestamp = db.historyTimestamp or 0
+                }
+                API:SendComm("SYNC_HISTORY", payload, "RAID")
+            end
+        end
     end
 
     config.sessionActive = false
@@ -436,6 +449,7 @@ function Attendance:StopRaidSession(saveHistory, isAutoCloseOfficer)
     config.currentAttendees = {}
     config.attendeeDetails = {}
     config.bossLogs = {}
+    config.raidZone = nil
 
     local globalDb = DesolateLootcouncil.db.global
     if globalDb then
@@ -719,6 +733,14 @@ function Attendance:OnZoneChanged()
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     local isBypass = (db and db.debugMode) or DesolateLootcouncil.isTestRunning
     if not IsInRaid() and not isBypass then return end
+
+    local instName, instanceType = GetInstanceInfo()
+    if instanceType == "raid" and instName and instName ~= "" then
+        if db and db.DecayConfig then
+            db.DecayConfig.raidZone = instName
+        end
+    end
+
     if self:IsSessionActive() then
         self:SnapshotRoster(false)
     end
@@ -743,6 +765,14 @@ function Attendance:OnEncounterStart(event, encounterID, encounterName, difficul
     self.pullCounts = self.pullCounts or {}
     self.currentEncounter = encounterID
     self.pullCounts[encounterID] = (self.pullCounts[encounterID] or 0) + 1
+
+    local instName, instanceType = GetInstanceInfo()
+    if instName and instName ~= "" and (instanceType == "raid" or not instanceType) then
+        if db and db.DecayConfig then
+            db.DecayConfig.raidZone = instName
+        end
+    end
+
     self:SnapshotRoster(false)
     DesolateLootcouncil:DLC_Log(string.format("Encounter START: %s (ID: %d, Pull #%d)", tostring(encounterName), encounterID, self.pullCounts[encounterID]))
 end
@@ -758,6 +788,13 @@ function Attendance:OnEncounterEnd(event, encounterID, encounterName, difficulty
 
     local isKill = (success == 1)
     if isKill then
+        local instName, instanceType = GetInstanceInfo()
+        if instName and instName ~= "" and (instanceType == "raid" or not instanceType) then
+            if db and db.DecayConfig then
+                db.DecayConfig.raidZone = instName
+            end
+        end
+
         self:SnapshotRoster(true)
         if db and db.DecayConfig and db.DecayConfig.bossLogs then
             self.pullCounts = self.pullCounts or {}

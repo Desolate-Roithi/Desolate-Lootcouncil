@@ -4,12 +4,7 @@ if AT.abortLoad then return end
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local function SafeGetUnitClass(unit)
-    unit = unit or "player"
-    local ok, _, classFilename = pcall(UnitClass, unit)
-    if ok and classFilename and not (type(issecretvalue) == "function" and issecretvalue(classFilename)) then
-        return classFilename
-    end
-    return nil
+    return DesolateLootcouncil:SafeGetUnitClass(unit)
 end
 
 ---@class Roster : AceModule, AceEvent-3.0, AceConsole-3.0
@@ -800,6 +795,10 @@ function Roster:ENCOUNTER_START(event, encounterID, encounterName, difficultyID,
     end
 
     bossEntry.pulls = bossEntry.pulls + 1
+    local instName, instanceType = GetInstanceInfo()
+    if instName and instName ~= "" and (instanceType == "raid" or not instanceType) then
+        config.raidZone = instName
+    end
     config.lastActivity = time()
     if DesolateLootcouncil.db.global then
         DesolateLootcouncil.db.global.activeRaidLastActivity = config.lastActivity
@@ -845,6 +844,10 @@ function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, g
     if success == 1 then
         bossEntry.killed = true
         bossEntry.killedTime = time()
+        local instName, instanceType = GetInstanceInfo()
+        if instName and instName ~= "" and (instanceType == "raid" or not instanceType) then
+            config.raidZone = instName
+        end
 
         -- Capture group roster for the kill
         local killRoster = {}
@@ -1186,16 +1189,20 @@ function Roster:ApplyDecayForLastSession(skip)
 
     local absent = {}
     local roster = db.MainRoster or {}
-    for name in pairs(roster) do
-        local attended = false
-        if entry.attendees then
-            for attName in pairs(entry.attendees) do
-                if DesolateLootcouncil:SmartCompare(name, attName) then
-                    attended = true
-                    break
-                end
-            end
+    local attendedSet = {}
+    if entry.attendees then
+        for attName in pairs(entry.attendees) do
+            attendedSet[attName] = true
+            local s = DesolateLootcouncil:GetScoreName(attName)
+            if s then attendedSet[s] = true end
+            local short = DesolateLootcouncil:GetDisplayName(attName)
+            if short then attendedSet[string.lower(short)] = true end
         end
+    end
+    for name in pairs(roster) do
+        local s = DesolateLootcouncil:GetScoreName(name)
+        local short = DesolateLootcouncil:GetDisplayName(name)
+        local attended = attendedSet[name] or (s and attendedSet[s]) or (short and attendedSet[string.lower(short)])
         if not attended then
             absent[name] = true
         end

@@ -35,3 +35,6 @@ function Table.NumericSort(a, b)
 end
 
 DesolateLootcouncil.Table = Table
+AT.Utils = AT.Utils or {}
+AT.Utils.DeepCopy = Table.DeepCopy
+AT.Utils.Table = Table

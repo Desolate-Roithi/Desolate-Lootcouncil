@@ -2,7 +2,7 @@
 
 An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcouncil coordinates bidding, priority lists, and item distribution alongside the default Group Loot system.
 
-**Latest Version:** v2.2.3  
+**Latest Version:** v2.2.4  
 **Last Updated:** 2026-09-12  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -47,6 +47,17 @@ An automated Master Loot helper for World of Warcraft Retail. Desolate Lootcounc
 ---
 
 ## Recent Changes
+
+### v2.2.4 (2026-09-12)
+* **Architectural Quality & Code Review Refactoring**:
+  * **Serializer & Date Parsing**: Eliminated redundant method declaration in `Serializer:ParseItemTimestamp` to guarantee sandbox-safe timestamp parsing; centralized deep-copy fallbacks.
+  * **Loot Message Performance**: Optimized `Loot:OnLootMessage` with a fast-path byte check on `|Hitem:` and cached pre-compiled regex patterns to eliminate chat evaluation overhead.
+  * **UI Boundary & API Encapsulation**: Enforced strict UI encapsulation across all presentation windows (`RaidHistory`, `Attendance`, `PriorityLogHistory`, `EJLootImport`, `TestSuite`) by routing data queries through dedicated `DLC_API` accessors.
+  * **Roster Decay Scalability**: Optimized `Roster:ApplyDecayForLastSession` to use an $O(N + M)$ normalized attendee lookup set, preventing frame lag during raid session close on large rosters.
+  * **Trade System Cleanup**: Removed legacy `isBoP` parameter from `Trade:GetStageableSlot`, replaced table allocations with direct `pcall` returns, and flattened nested arrow code.
+  * **Attendance & Priority Modularization**: Extracted attendance history entry construction into a testable helper, and decomposed `Priority:OnEnable` catalog tier migration routines.
+  * **Lifecycle & Duplicate Method Guard**: Resolved duplicate `UI_Version:OnEnable` declaration; centralized `SafeGetUnitClass` and `SafeIsGroupLeader` in `AT.Utils`.
+  * **Automated Performance Testing**: Added integration scale tests (30 raiders, 50 sessions, 500 items) and automated duplicate method audits into the pre-push verification pipeline.
 
 ### v2.2.3 (2026-09-12)
 * **Trade Management & Item Staging Reliability**:

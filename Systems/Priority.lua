@@ -19,9 +19,68 @@ local Priority = DesolateLootcouncil:NewModule("Priority", "AceConsole-3.0", "Ac
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Priority]]
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
+local function MigrateCatalogTier(db, activeTier)
+    if not db.catalogTier then
+        db.catalogTier = activeTier
+        return
+    end
+    if db.catalogTier == activeTier then
+        return
+    end
+
+    local tierName = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.CATALOG_TIER_NAME) or activeTier
+    DesolateLootcouncil:DLC_Log("New raid tier detected (" .. tierName .. "). Updating Item Manager catalog items (players preserved)...")
+    local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
+    if db.PriorityLists then
+        for _, def in ipairs(defaultLists) do
+            local found = false
+            for _, existing in ipairs(db.PriorityLists) do
+                if existing.name == def.name then
+                    found = true
+                    existing.items = DesolateLootcouncil.Table.DeepCopy(def.items or {})
+                    break
+                end
+            end
+            if not found then
+                table.insert(db.PriorityLists, def)
+            end
+        end
+    else
+        db.PriorityLists = defaultLists
+    end
+    db.catalogTier = activeTier
+end
+
+local function HealCorruptedPriorityLists(db)
+    if not db.PriorityLists then return end
+    local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
+    for _, list in ipairs(db.PriorityLists) do
+        if list.items and next(list.items) then
+            local isCorruptedSequential = true
+            local count = 0
+            for id in pairs(list.items) do
+                local num = tonumber(id)
+                count = count + 1
+                if not num or num > 200 then
+                    isCorruptedSequential = false
+                    break
+                end
+            end
+            if isCorruptedSequential and count > 0 then
+                for _, def in ipairs(defaultLists) do
+                    if def.name == list.name and def.items then
+                        list.items = DesolateLootcouncil.Table.DeepCopy(def.items)
+                        DesolateLootcouncil:DLC_Log("Self-healed corrupted Item Manager items for list: " .. tostring(list.name))
+                        break
+                    end
+                end
+            end
+        end
+    end
+end
+
 function Priority:OnEnable()
     -- Ensure list structure exists in DB (Strict Persistence)
-    -- Check if DB is ready
     if not DesolateLootcouncil.db or not DesolateLootcouncil.db.profile then
         -- Retry logic: If Core hasn't loaded DB yet, wait a bit.
         self:ScheduleTimer("OnEnable", 0.1)
@@ -34,63 +93,10 @@ function Priority:OnEnable()
 
     -- Season / Raid Tier Catalog Migration Check
     local activeTier = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.CATALOG_TIER) or "midnight-s2"
-    if not db.catalogTier then
-        -- First time setting up catalog tier: preserve existing data for the current active tier
-        db.catalogTier = activeTier
-    elseif db.catalogTier ~= activeTier then
-        -- New raid tier/season detected: update default priority lists' items only, preserving players!
-        local tierName = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.CATALOG_TIER_NAME) or activeTier
-        DesolateLootcouncil:DLC_Log("New raid tier detected (" .. tierName .. "). Updating Item Manager catalog items (players preserved)...")
-        local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
-        if db.PriorityLists then
-            for _, def in ipairs(defaultLists) do
-                local found = false
-                for _, existing in ipairs(db.PriorityLists) do
-                    if existing.name == def.name then
-                        found = true
-                        existing.items = DesolateLootcouncil.Table.DeepCopy(def.items or {})
-                        break
-                    end
-                end
-                if not found then
-                    table.insert(db.PriorityLists, def)
-                end
-            end
-        else
-            db.PriorityLists = defaultLists
-        end
-        db.catalogTier = activeTier
-    end
+    MigrateCatalogTier(db, activeTier)
 
     -- Self-healing check: Repair lists corrupted with 1..N item IDs from legacy array-compaction export bug
-    if db.PriorityLists then
-        local defaultLists = (DesolateLootcouncil.Constants and DesolateLootcouncil.Constants.GetDefaultPriorityLists) and DesolateLootcouncil.Constants.GetDefaultPriorityLists() or {}
-        for _, list in ipairs(db.PriorityLists) do
-            if list.items and next(list.items) then
-                local isCorruptedSequential = true
-                local count = 0
-                for id, _ in pairs(list.items) do
-                    local num = tonumber(id)
-                    count = count + 1
-                    if not num or num > 200 then
-                        isCorruptedSequential = false
-                        break
-                    end
-                end
-                if isCorruptedSequential and count > 0 then
-                    for _, def in ipairs(defaultLists) do
-                        if def.name == list.name and def.items then
-                            list.items = DesolateLootcouncil.Table.DeepCopy(def.items)
-                            DesolateLootcouncil:DLC_Log("Self-healed corrupted Item Manager items for list: " .. tostring(list.name))
-                            break
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- Audit Log is managed by Systems/Audit.lua and DBMigrator
+    HealCorruptedPriorityLists(db)
 end
 
 -- --- Globally Attached Functions ---

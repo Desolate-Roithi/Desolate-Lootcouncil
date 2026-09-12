@@ -25,6 +25,9 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local canaccessvalue = canaccessvalue
 
 local function SafeIsGroupLeader(unit)
+    if DesolateLootcouncil.SafeIsGroupLeader then
+        return DesolateLootcouncil:SafeIsGroupLeader(unit)
+    end
     unit = unit or "player"
     local ok, isLeader = pcall(UnitIsGroupLeader, unit)
     if ok and isLeader ~= nil and not (type(issecretvalue) == "function" and issecretvalue(isLeader)) then
@@ -194,28 +197,45 @@ function Loot:OnStartLootRoll(event, rollID)
     end
 end
 
+local precompiledLootPatterns = nil
+local function GetPrecompiledLootPatterns()
+    if not precompiledLootPatterns or #precompiledLootPatterns == 0 then
+        local rawPatterns = {
+            _G["LOOT_ITEM_SELF"],
+            _G["LOOT_ITEM_PUSHED_SELF"],
+            _G["LOOT_ITEM_SELF_MULTIPLE"],
+            _G["LOOT_ITEM_CREATED_SELF"],
+        }
+        local compiled = {}
+        for _, p in ipairs(rawPatterns) do
+            if type(p) == "string" and p ~= "" then
+                local cleanPattern = p:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%%s", ".+"):gsub("%%%%d", "%%d+")
+                table.insert(compiled, cleanPattern)
+            end
+        end
+        if #compiled > 0 then
+            precompiledLootPatterns = compiled
+        end
+        return compiled
+    end
+    return precompiledLootPatterns
+end
+
 function Loot:OnLootMessage(event, msg)
     if not DesolateLootcouncil:IsInRaidOrTest() then return end
     if not DesolateLootcouncil:AmILootMaster() then return end
     if not canaccessvalue(msg) then return end
 
+    -- Fast pre-check before expensive parsing: message must contain an item hyperlink
+    if not string.find(msg, "|Hitem:") then return end
+
     -- Catch "You receive loot: [Item Link]" or local equivalents using Global strings
     local link = string.match(msg, "|c%x+|Hitem:.-|h%[.-%]|h|r")
-
     if not link then return end
 
-    -- Extract pure patterns without link/name for robust locale matching
-    local lootPatterns = {
-        _G["LOOT_ITEM_SELF"],
-        _G["LOOT_ITEM_PUSHED_SELF"],
-        _G["LOOT_ITEM_SELF_MULTIPLE"],
-        _G["LOOT_ITEM_CREATED_SELF"]
-    }
-
+    local patterns = GetPrecompiledLootPatterns()
     local matched = false
-    for _, p in ipairs(lootPatterns) do
-        -- Escape magic characters and convert %s to wildcard match and %d to digits match
-        local cleanPattern = p:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"):gsub("%%%%s", ".+"):gsub("%%%%d", "%%d+")
+    for _, cleanPattern in ipairs(patterns) do
         if string.find(msg, cleanPattern) then
             matched = true
             break
@@ -407,6 +427,10 @@ function Loot:BroadcastAward(itemData, winnerName, voteType)
     if not itemLink then
         itemLink = itemData.link or "Unknown Item"
     end
+    local API = DesolateLootcouncil.API
+    if API and API.SanitizeHyperlink then
+        itemLink = API:SanitizeHyperlink(itemLink, itemID) or itemLink
+    end
 
     local winnerDisplay = DesolateLootcouncil:GetDisplayName(winnerName) or winnerName or "Unknown"
     local voteDesc = voteType or "Award"
@@ -473,6 +497,10 @@ function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, ori
     end
 
     local finalLink = properLink or (itemData.link and string.find(itemData.link, "|h|r") and itemData.link) or (itemID and string.format("item:%d", itemID)) or itemData.link or "Unknown Item"
+    local API = DesolateLootcouncil.API
+    if API and API.SanitizeHyperlink then
+        finalLink = API:SanitizeHyperlink(finalLink, itemID) or finalLink
+    end
     local finalTexture = itemData.texture or fetchedTexture or (itemID and C_Item.GetItemIconByID and C_Item.GetItemIconByID(itemID)) or "Interface\\Icons\\INV_Misc_QuestionMark"
 
     local entry = {

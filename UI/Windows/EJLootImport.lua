@@ -8,8 +8,8 @@ local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 local function GetDefaultListIndex(itemID)
     local savedList = DesolateLootcouncil.API:GetItemCategory(itemID)
     if savedList then
-        local db = DesolateLootcouncil.db.profile
-        for idx, list in ipairs(db.PriorityLists or {}) do
+        local lists = DesolateLootcouncil.API:GetPriorityLists()
+        for idx, list in ipairs(lists or {}) do
             if list.name == savedList then
                 return idx
             end

@@ -43,13 +43,30 @@ DesolateLootcouncil = LibStub("AceAddon-3.0"):NewAddon("DesolateLootcouncil", "A
 _G.DesolateLootcouncil = DesolateLootcouncil
 DesolateLootcouncil.version = C_AddOns and C_AddOns.GetAddOnMetadata("Desolate_Lootcouncil", "Version") or "1.0.0"
 
-local function SafeIsGroupLeader(unit)
+function DesolateLootcouncil:SafeIsGroupLeader(unit)
     unit = unit or "player"
     local ok, isLeader = pcall(UnitIsGroupLeader, unit)
     if ok and isLeader ~= nil and not (type(issecretvalue) == "function" and issecretvalue(isLeader)) then
         return not not isLeader
     end
     return false
+end
+
+function DesolateLootcouncil:SafeGetUnitClass(unit)
+    unit = unit or "player"
+    local ok, _, classFilename = pcall(UnitClass, unit)
+    if ok and classFilename and not (type(issecretvalue) == "function" and issecretvalue(classFilename)) then
+        return classFilename
+    end
+    return nil
+end
+
+addonTable.Utils = addonTable.Utils or {}
+addonTable.Utils.SafeIsGroupLeader = function(unit) return DesolateLootcouncil:SafeIsGroupLeader(unit) end
+addonTable.Utils.SafeGetUnitClass = function(unit) return DesolateLootcouncil:SafeGetUnitClass(unit) end
+
+local function SafeIsGroupLeader(unit)
+    return DesolateLootcouncil:SafeIsGroupLeader(unit)
 end
 
 local defaults = {

@@ -8,6 +8,7 @@
     <Script file="Core\Constants.lua"/>
 
     <!-- 2. Utilities -->
+    <Script file="Utilities\Table.lua"/>
     <Script file="Utilities\Logger.lua"/>
     <Script file="Utilities\Serializer.lua"/>
     <Script file="Utilities\Persistence.lua"/>
@@ -15,7 +16,6 @@
     <Script file="Utilities\Simulation.lua"/>
     <Script file="Utilities\Base64.lua"/>
     <Script file="Utilities\Math.lua"/>
-    <Script file="Utilities\Table.lua"/>
 
     <!-- 3. Core Modules -->
     <Script file="Core\Comm.lua"/>

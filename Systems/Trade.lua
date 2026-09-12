@@ -252,10 +252,9 @@ end
 --- Also collects failure reason diagnostics for user-facing LM reporting.
 ---@param award        table
 ---@param targetItemID number
----@param isBoP        boolean
 ---@param usedSlots    table<string, boolean>
 ---@return number|nil bag, number|nil slot, string|nil failureReason
-function Trade:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
+function Trade:GetStageableSlot(award, targetItemID, usedSlots)
     local normalizedAwardLink = self:NormalizeItemLink(award.link)
     local failureReason = "not_in_bags"
     local candidates = {}
@@ -263,9 +262,9 @@ function Trade:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
     for bag = 0, 4 do
         local numSlots = C_Container.GetContainerNumSlots(bag)
         for slot = 1, numSlots do
-            local slotKey = string.format("%d-%d", bag, slot)
             local info = C_Container.GetContainerItemInfo(bag, slot)
             if info and info.itemID == targetItemID then
+                local slotKey = string.format("%d-%d", bag, slot)
                 if usedSlots[slotKey] then
                     if failureReason == "not_in_bags" then
                         failureReason = "already_staged"
@@ -279,20 +278,14 @@ function Trade:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
                 else
                     -- Valid tradeable candidate
                     local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
-                    local isExactMatch = true
-                    if itemLink and normalizedAwardLink then
-                        local normalizedItemLink = self:NormalizeItemLink(itemLink)
-                        if normalizedItemLink ~= normalizedAwardLink then
-                            isExactMatch = false
-                        end
-                    end
+                    local isExactMatch = not (itemLink and normalizedAwardLink and self:NormalizeItemLink(itemLink) ~= normalizedAwardLink)
 
                     if isExactMatch then
                         return bag, slot, nil
-                    else
-                        table.insert(candidates, { bag = bag, slot = slot })
-                        failureReason = "link_mismatch"
                     end
+
+                    table.insert(candidates, { bag = bag, slot = slot })
+                    failureReason = "link_mismatch"
                 end
             end
         end
@@ -315,14 +308,7 @@ function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
         return false, "missing_id"
     end
 
-    -- Attempt to resolve bindType if cached; if uncached, GetStageableSlot safely verifies tradeability
-    local isBoP = true
-    local itemInfo = { C_Item.GetItemInfo(targetItemID) }
-    if itemInfo[14] then
-        isBoP = (itemInfo[14] == 1)
-    end
-
-    local bag, slot, failureReason = self:GetStageableSlot(award, targetItemID, isBoP, usedSlots)
+    local bag, slot, failureReason = self:GetStageableSlot(award, targetItemID, usedSlots)
     if not bag or not slot then
         local itemText = award.link or tostring(targetItemID)
         local targetText = DesolateLootcouncil:GetDisplayName(targetName)

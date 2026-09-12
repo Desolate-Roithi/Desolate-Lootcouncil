@@ -143,16 +143,16 @@ local function IsAttendedInSession(attendeesMap, detailsMap, mainName)
 end
 
 function UI_Attendance:ShowAttendanceWindow(historyIndex)
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     local config = DesolateLootcouncil.API:GetAttendanceConfig()
+    local hist = DesolateLootcouncil.API:GetAttendanceHistory()
 
     local isHistoryReview = false
     local targetEntry = nil
 
     if historyIndex or not (config and config.sessionActive) then
         local targetIdx = historyIndex or 1
-        if db and db.AttendanceHistory and db.AttendanceHistory[targetIdx] then
-            targetEntry = db.AttendanceHistory[targetIdx]
+        if hist and hist[targetIdx] then
+            targetEntry = hist[targetIdx]
             if targetEntry.decayApplied ~= nil and not historyIndex then
                 DesolateLootcouncil:Print(L["Decay has already been applied for the last session."])
                 return
@@ -315,7 +315,7 @@ end
 ---@param attendedMap table  Map of { [playerName] = true } for attended players
 function UI_Attendance:CommitAttendanceToHistory(attendedMap)
     local DLC    = DesolateLootcouncil
-    local config = DLC.db.profile.DecayConfig
+    local config = (DLC.API and DLC.API:GetAttendanceConfig()) or {}
 
     -- Overwrite attendees with the LM-reviewed set for accurate history.
     config.currentAttendees = {}
@@ -352,9 +352,9 @@ function UI_Attendance:ApplyDecayAndEndSession()
     end
 
     if self.reviewedHistoryIndex then
-        local db = DesolateLootcouncil.db.profile
-        if db.AttendanceHistory and db.AttendanceHistory[self.reviewedHistoryIndex] then
-            local entry = db.AttendanceHistory[self.reviewedHistoryIndex]
+        local hist = DesolateLootcouncil.API:GetAttendanceHistory()
+        if hist and hist[self.reviewedHistoryIndex] then
+            local entry = hist[self.reviewedHistoryIndex]
             if entry.decayApplied ~= nil then
                 DesolateLootcouncil:Print(L["Decay has already been applied for the last session."])
                 self.reviewedHistoryIndex = nil
@@ -367,8 +367,9 @@ function UI_Attendance:ApplyDecayAndEndSession()
             entry.decayApplied = GetServerTime()
             entry.decayPenalty = currentDecayAmount
             entry.decayAbsent = DesolateLootcouncil.Table.DeepCopy(tempAbsent)
-            db.historyTimestamp = GetServerTime()
-            db.rosterTimestamp = GetServerTime()
+            if DesolateLootcouncil.API.MarkHistoryDirty then
+                DesolateLootcouncil.API:MarkHistoryDirty()
+            end
 
             DesolateLootcouncil.API:LogAudit("DECAY_APPLIED", nil, nil, nil, string.format("Applied +%d decay for session %s", currentDecayAmount, tostring(entry.date or entry.sessionID)), entry.sessionID)
             DesolateLootcouncil.API:BroadcastHistorySync()
@@ -386,8 +387,8 @@ end
 function UI_Attendance:DeleteHistoryEntry(index)
     if not index or index == "CURRENT" then return end
 
-    local db = DesolateLootcouncil.db.profile
-    if db.AttendanceHistory and db.AttendanceHistory[index] then
+    local hist = DesolateLootcouncil.API:GetAttendanceHistory()
+    if hist and hist[index] then
         DesolateLootcouncil.API:DeleteAttendanceHistoryEntry(index)
         DesolateLootcouncil:DLC_Log(L["Deleted attendance history entry."], true)
 

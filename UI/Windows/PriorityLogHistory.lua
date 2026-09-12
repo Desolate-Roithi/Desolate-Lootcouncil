@@ -149,9 +149,10 @@ local function GetSessionDropdownItems()
     local items = {
         ALL = L["All Sessions"]
     }
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    if db and db.AttendanceHistory then
-        for i, sess in ipairs(db.AttendanceHistory) do
+    local API = DesolateLootcouncil.API
+    local hist = API and API.GetAttendanceHistory and API:GetAttendanceHistory()
+    if hist then
+        for i, sess in ipairs(hist) do
             local sID = sess.sessionID and tostring(sess.sessionID)
             if sID then
                 local dateShort = sess.date and sess.date:sub(1, 10) or string.format("Session #%d", i)
@@ -160,8 +161,9 @@ local function GetSessionDropdownItems()
             end
         end
     end
-    if db and db.DecayConfig and db.DecayConfig.sessionActive and db.DecayConfig.currentSessionID then
-        local curID = tostring(db.DecayConfig.currentSessionID)
+    local config = API and API.GetAttendanceConfig and API:GetAttendanceConfig()
+    if config and config.sessionActive and config.currentSessionID then
+        local curID = tostring(config.currentSessionID)
         items[curID] = L["Current Session"]
     end
     return items

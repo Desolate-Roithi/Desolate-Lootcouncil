@@ -163,10 +163,12 @@ end
 
 
 
+local cachedAttendanceHistory = nil
+
 local function RaidHistorySort(a, b)
     if a == "CURRENT" then return true end
     if b == "CURRENT" then return false end
-    local hist = DesolateLootcouncil.API:GetAttendanceHistory()
+    local hist = cachedAttendanceHistory or DesolateLootcouncil.API:GetAttendanceHistory()
     local entryA = hist and hist[a]
     local entryB = hist and hist[b]
     if entryA and entryB then
@@ -252,6 +254,7 @@ function UI_RaidHistory:UpdateSessionDropdown(preselect)
     local API    = DesolateLootcouncil.API
     local config = API:GetAttendanceConfig()
     local hist   = API:GetAttendanceHistory()
+    cachedAttendanceHistory = hist
 
     local dropList = {}
     if config.sessionActive then
@@ -547,12 +550,12 @@ local function SetupAttendeeTooltip(tagWidget, displayName, attendedList, Native
     tagWidget:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-local function SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, db, API)
+local function SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, API)
     local displayName = DesolateLootcouncil:GetDisplayName(rawName)
     local details = sessionEntry.attendeeDetails and sessionEntry.attendeeDetails[rawName]
 
     if details then
-        local mainClass = details.mainClass or (db.MainRoster and db.MainRoster[rawName] and db.MainRoster[rawName].class) or "WARRIOR"
+        local mainClass = details.mainClass or API:GetPlayerRosterClass(rawName)
         local icon = NativeGUI:GetClassIconMarkup(mainClass, 13)
         local colName = NativeGUI:FormatClassColor(mainClass, displayName)
         nt.lbl:SetText("- " .. icon .. " " .. colName)
@@ -577,14 +580,7 @@ local function SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, db, API)
 
         SetupAttendeeTooltip(nt, displayName, attendedList, NativeGUI)
     else
-        local class = "WARRIOR"
-        local mainName = (db.playerRoster and db.playerRoster.alts and db.playerRoster.alts[rawName]) or rawName
-        local rData = db.MainRoster and (db.MainRoster[mainName] or db.MainRoster[rawName] or db.MainRoster[displayName])
-        if rData and rData.class then
-            class = rData.class
-        elseif db.playerRoster and db.playerRoster.classMap then
-            class = db.playerRoster.classMap[rawName] or db.playerRoster.classMap[mainName] or class
-        end
+        local class = API:GetPlayerRosterClass(rawName)
         local icon = NativeGUI:GetClassIconMarkup(class, 13)
         local colName = NativeGUI:FormatClassColor(class, displayName)
         nt.lbl:SetText("- " .. icon .. " " .. colName)
@@ -618,14 +614,12 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
         end
     else
         if isCurrent then
-            local db = DesolateLootcouncil.db.profile
-            awarded = db.session and db.session.publicAwardLog or {}
+            awarded = API:GetPublicAwardLog()
         else
             if sessionEntry.publicAwardLog or sessionEntry.publicLoot then
                 awarded = sessionEntry.publicAwardLog or sessionEntry.publicLoot
             else
-                local db = DesolateLootcouncil.db.profile
-                awarded = db.session and db.session.publicAwardLog or {}
+                awarded = API:GetPublicAwardLog()
                 checkTimestamp = true
             end
         end
@@ -763,7 +757,6 @@ function UI_RaidHistory:RenderAttendanceSection(sc, theme, NativeGUI, sessionEnt
     end
 
     local API = DesolateLootcouncil.API
-    local db  = DesolateLootcouncil.db.profile
     local attendees = {}
     if sessionEntry.attendees then
         for rawName in pairs(sessionEntry.attendees) do
@@ -793,7 +786,7 @@ function UI_RaidHistory:RenderAttendanceSection(sc, theme, NativeGUI, sessionEnt
                 local nt = NextNameTag()
                 nt:SetWidth(COL_W)
                 nt:SetPoint("TOPLEFT", sc, "TOPLEFT", 14 + (c - 1) * COL_W, -layoutState.yOffset)
-                SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, db, API)
+                SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, API)
             end
         end
         layoutState.yOffset = layoutState.yOffset + ROW_H + 2
@@ -855,7 +848,7 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
     layoutState.yOffset = layoutState.yOffset + 6
 end
 
-local function GetSessionDecaySummary(sessionEntry, db, config)
+local function GetSessionDecaySummary(sessionEntry, config)
     local isCurrent = (sessionEntry.sessionID == "CURRENT")
     local decayEnabled = config.enabled
     local defaultPenalty = config.defaultPenalty or 1
@@ -892,8 +885,7 @@ function UI_RaidHistory:RenderDecaySection(sc, NativeGUI, sessionEntry, isCurren
         return
     end
 
-    local db = DesolateLootcouncil.db.profile
-    local summary = GetSessionDecaySummary(sessionEntry, db, config)
+    local summary = GetSessionDecaySummary(sessionEntry, config)
 
     if summary.disabled then
         AddText(L["Decay disabled."], 14, { 0.5, 0.5, 0.5 })
@@ -1048,7 +1040,7 @@ function UI_RaidHistory:Refresh()
     if isCurrent then
         sessionEntry = {
             date      = date("%Y-%m-%d %H:%M:%S"),
-            zone      = GetRealZoneText() or "Unknown",
+            zone      = config.raidZone or GetRealZoneText() or "Unknown",
             attendees = config.currentAttendees or {},
             attendeeDetails = config.attendeeDetails or {},
             sessionID = config.currentSessionID,

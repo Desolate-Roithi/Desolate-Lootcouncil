@@ -950,8 +950,14 @@ function SyncHandlers:HISTORY_UPDATE_PUBLIC(data, sender)
     db.session = db.session or {}
     db.session.publicAwardLog = db.session.publicAwardLog or {}
 
+    local API = DesolateLootcouncil.API
+    local safeLink = data.link
+    if safeLink and API and API.SanitizeHyperlink then
+        safeLink = API:SanitizeHyperlink(safeLink, data.itemID)
+    end
+
     table.insert(db.session.publicAwardLog, {
-        link = data.link,
+        link = safeLink,
         winner = data.winner,
         timestamp = data.timestamp
     })

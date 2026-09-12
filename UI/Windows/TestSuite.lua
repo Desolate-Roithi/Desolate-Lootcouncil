@@ -449,7 +449,7 @@ function UI_TestSuite:RefreshWindow()
 
     -- Render Top Summary
     if self.summaryText then
-        local currentProf = (DesolateLootcouncil.db and DesolateLootcouncil.db.GetCurrentProfile and DesolateLootcouncil.db:GetCurrentProfile()) or "TestSuite_Sandbox"
+        local currentProf = (API and API.GetCurrentProfile and API:GetCurrentProfile()) or "TestSuite_Sandbox"
         self.summaryText:SetText(string.format(
             "|cff888888Profile:|r |cffffd700%s|r  |  |cff888888Total:|r %d  |  |cff00ff00Passed:|r %d  |  |cffff2020Failed:|r %d",
             currentProf, totalCount, passedCount, failedCount

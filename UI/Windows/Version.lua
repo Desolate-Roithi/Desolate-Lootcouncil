@@ -6,12 +6,7 @@ local UI_Version = DesolateLootcouncil:NewModule("UI_Version", "AceEvent-3.0", "
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local function SafeGetUnitClass(unit)
-    unit = unit or "player"
-    local ok, _, classFilename = pcall(UnitClass, unit)
-    if ok and classFilename and not (type(issecretvalue) == "function" and issecretvalue(classFilename)) then
-        return classFilename
-    end
-    return "WARRIOR"
+    return DesolateLootcouncil:SafeGetUnitClass(unit) or "WARRIOR"
 end
 
 -- Helper functions to keep nesting flat
@@ -117,6 +112,9 @@ function UI_Version:OnEnable()
         if self.versionFrame and self.versionFrame:IsShown() then
             self:UpdateVersionList()
         end
+    end)
+    self:RegisterMessage("DLC_SESSION_STOPPED", function()
+        if self.versionFrame then self.versionFrame:Hide() end
     end)
 end
 
@@ -317,11 +315,7 @@ function UI_Version:UpdateVersionList(isTest)
     self.scrollContent:SetHeight(topOffset + 10)
 end
 
-function UI_Version:OnEnable()
-    self:RegisterMessage("DLC_SESSION_STOPPED", function()
-        if self.versionFrame then self.versionFrame:Hide() end
-    end)
-end
+
 
 if _G.DLC_TEST_MODE then
     UI_Version.ParseSemVer = AT.ParseSemVer

@@ -32,6 +32,18 @@ local Serializer = {}
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil")
 DesolateLootcouncil.Serializer = Serializer
 
+local function SafeDeepCopy(t)
+    if DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy then
+        return DesolateLootcouncil.Table.DeepCopy(t)
+    end
+    if type(t) ~= "table" then return t end
+    local res = {}
+    for k, v in pairs(t) do
+        res[k] = type(v) == "table" and SafeDeepCopy(v) or v
+    end
+    return res
+end
+
 -- ---------------------------------------------------------------------------
 -- Timestamp & Data Formatting Helpers
 -- ---------------------------------------------------------------------------
@@ -94,26 +106,6 @@ function Serializer:CompactItemList(items)
     return list
 end
 
---- Parses an item timestamp into a unix epoch integer.
----@param item table
----@return number
-function Serializer:ParseItemTimestamp(item)
-    if type(item) ~= "table" then return 0 end
-    local ts = item.timestamp or item.time or item.awardedAt
-    if type(ts) == "number" then return ts end
-    if type(ts) == "string" then
-        local num = tonumber(ts)
-        if num then return num end
-    end
-    if type(item.date) == "string" and #item.date >= 10 then
-        local y, m, d, h, min, s = item.date:match("(%d+)-(%d+)-(%d+)%s*(%d*):*(%d*):*(%d*)")
-        if y and m and d then
-            return os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = tonumber(h) or 0, min = tonumber(min) or 0, sec = tonumber(s) or 0 })
-        end
-    end
-    return 0
-end
-
 --- Normalizes awarded item structure for history persistence.
 ---@param item table
 ---@param deepCopyFn function?
@@ -125,8 +117,13 @@ function Serializer:CleanAwardedItem(item, deepCopyFn)
     if type(ts) == "string" then
         ts = tonumber(ts) or ts
     end
+    local safeLink = item.link
+    local API = DesolateLootcouncil.API
+    if safeLink and API and API.SanitizeHyperlink then
+        safeLink = API:SanitizeHyperlink(safeLink, item.itemID)
+    end
     return {
-        link          = item.link,
+        link          = safeLink,
         texture       = item.texture,
         itemID        = item.itemID,
         winner        = item.winner,
@@ -178,6 +175,12 @@ function Serializer:CleanAttendanceEntry(entry, deepCopyFn)
     end
 
     if cleaned.publicAwardLog and type(cleaned.publicAwardLog) == "table" then
+        local API = DesolateLootcouncil.API
+        for _, logItem in ipairs(cleaned.publicAwardLog) do
+            if logItem.link and API and API.SanitizeHyperlink then
+                logItem.link = API:SanitizeHyperlink(logItem.link, logItem.itemID)
+            end
+        end
         table.sort(cleaned.publicAwardLog, function(a, b)
             return self:ParseItemTimestamp(a) < self:ParseItemTimestamp(b)
         end)
@@ -212,50 +215,50 @@ function Serializer:CleanAttendanceEntry(entry, deepCopyFn)
     return cleaned
 end
 
+local function GetItemDatePrefix(item)
+    if type(item) ~= "table" then return nil end
+    if type(item.date) == "string" and #item.date >= 10 then
+        return item.date:sub(1, 10)
+    end
+    local rawTs = item.timestamp or item.time or item.awardedAt
+    if type(rawTs) == "string" and #rawTs >= 10 and rawTs:match("^%d%d%d%d%-%d%d%-%d%d") then
+        return rawTs:sub(1, 10)
+    end
+    local numTs = tonumber(rawTs)
+    if numTs and numTs > 86400 then
+        return date("%Y-%m-%d", numTs)
+    end
+    return nil
+end
+
+local function MarkDate(dStr, datesFound, dateOrder)
+    if dStr and type(dStr) == "string" and #dStr == 10 and not datesFound[dStr] then
+        datesFound[dStr] = true
+        table.insert(dateOrder, dStr)
+    end
+end
+
 --- Splits an attendance history entry if awarded items or boss kills span multiple calendar dates.
 ---@param entry table
 ---@param deepCopyFn function?
 ---@return table[]
 function Serializer:SplitMultiDateAttendanceEntry(entry, deepCopyFn)
     if not entry or type(entry) ~= "table" then return { entry } end
-    deepCopyFn = deepCopyFn or (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t) return t end
-
-    local function getItemDatePrefix(item)
-        if type(item) ~= "table" then return nil end
-        if type(item.date) == "string" and #item.date >= 10 then
-            return item.date:sub(1, 10)
-        end
-        local rawTs = item.timestamp or item.time or item.awardedAt
-        if type(rawTs) == "string" and #rawTs >= 10 and rawTs:match("^%d%d%d%d%-%d%d%-%d%d") then
-            return rawTs:sub(1, 10)
-        end
-        local numTs = tonumber(rawTs)
-        if numTs and numTs > 86400 then
-            return date("%Y-%m-%d", numTs)
-        end
-        return nil
-    end
+    deepCopyFn = deepCopyFn or (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or SafeDeepCopy
 
     local baseDatePrefix = entry.date and entry.date:sub(1, 10)
     local datesFound = {}
     local dateOrder = {}
 
-    local function markDate(dStr)
-        if dStr and type(dStr) == "string" and #dStr == 10 and not datesFound[dStr] then
-            datesFound[dStr] = true
-            table.insert(dateOrder, dStr)
-        end
-    end
-
     if baseDatePrefix and #baseDatePrefix == 10 then
-        markDate(baseDatePrefix)
+        MarkDate(baseDatePrefix, datesFound, dateOrder)
     end
 
     local rawAwarded = entry.awarded or entry.loot
     if rawAwarded and type(rawAwarded) == "table" then
         for _, itm in pairs(rawAwarded) do
-            local dStr = getItemDatePrefix(itm)
-            if dStr then markDate(dStr) end
+            local dStr = GetItemDatePrefix(itm)
+            if dStr then MarkDate(dStr, datesFound, dateOrder) end
         end
     end
 
@@ -264,7 +267,7 @@ function Serializer:SplitMultiDateAttendanceEntry(entry, deepCopyFn)
         for _, b in pairs(rawBossLogs) do
             if b.killed and b.killedTime and b.killedTime > 86400 then
                 local dStr = date("%Y-%m-%d", b.killedTime)
-                if dStr then markDate(dStr) end
+                if dStr then MarkDate(dStr, datesFound, dateOrder) end
             end
         end
     end
@@ -294,7 +297,7 @@ function Serializer:SplitMultiDateAttendanceEntry(entry, deepCopyFn)
 
     if rawAwarded and type(rawAwarded) == "table" then
         for origIdx, itm in pairs(rawAwarded) do
-            local dStr = getItemDatePrefix(itm)
+            local dStr = GetItemDatePrefix(itm)
             local targetBucket = (dStr and buckets[dStr]) or fallbackBucket
             local itemCopy = deepCopyFn(itm)
             itemCopy.origIdx = tonumber(origIdx) or 999
@@ -335,12 +338,7 @@ function Serializer:CompactRaidHistory(arg1, arg2)
     local force = (arg1 == true) or (arg2 == true)
     if (p.historyCompacted == true) and not force then return 0 end
 
-    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
-        if type(t) ~= "table" then return t end
-        local res = {}
-        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
-        return res
-    end
+    local DeepCopy = SafeDeepCopy
 
     local prunedCount = 0
     if p.AttendanceHistory and type(p.AttendanceHistory) == "table" then
@@ -432,12 +430,7 @@ function Serializer:ExportSingleRaidHistoryEvent(indexOrSession)
     local p = DesolateLootcouncil.db.profile
     local entry = nil
 
-    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
-        if type(t) ~= "table" then return t end
-        local res = {}
-        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
-        return res
-    end
+    local DeepCopy = SafeDeepCopy
 
     if type(indexOrSession) == "table" then
         entry = DeepCopy(indexOrSession)
@@ -460,7 +453,7 @@ function Serializer:ExportSingleRaidHistoryEvent(indexOrSession)
         entry = {
             sessionID = config.currentSessionID or GetServerTime(),
             date = date("%Y-%m-%d"),
-            zone = (session and session.zone) or (GetRealZoneText and GetRealZoneText()) or "Current Raid",
+            zone = config.raidZone or (session and session.zone) or (GetRealZoneText and GetRealZoneText()) or "Current Raid",
             attendees = attendees,
             awarded = currentLoot,
             bossLogs = DeepCopy(config.bossLogs or {}),
@@ -495,12 +488,7 @@ function Serializer:ExportProfileData(selection)
     self:CompactRaidHistory()
     local p = DesolateLootcouncil.db.profile
     local data = {}
-    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
-        if type(t) ~= "table" then return t end
-        local res = {}
-        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
-        return res
-    end
+    local DeepCopy = SafeDeepCopy
 
     local exportAll = (not selection) or selection["All"]
     data.schemaVersion = p.schemaVersion or 200
@@ -660,12 +648,7 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
     end
 
     local p = DesolateLootcouncil.db.profile
-    local DeepCopy = (DesolateLootcouncil.Table and DesolateLootcouncil.Table.DeepCopy) or function(t)
-        if type(t) ~= "table" then return t end
-        local res = {}
-        for k, v in pairs(t) do res[k] = type(v) == "table" and DeepCopy(v) or v end
-        return res
-    end
+    local DeepCopy = SafeDeepCopy
 
     p.schemaVersion = data.schemaVersion or 200
 
@@ -787,6 +770,12 @@ function Serializer:ImportProfileData(importStringRaw, importName, importToCurre
                 end)
             end
             if p.session.publicAwardLog and type(p.session.publicAwardLog) == "table" then
+                local API = DesolateLootcouncil.API
+                for _, logItem in ipairs(p.session.publicAwardLog) do
+                    if logItem.link and API and API.SanitizeHyperlink then
+                        logItem.link = API:SanitizeHyperlink(logItem.link, logItem.itemID)
+                    end
+                end
                 table.sort(p.session.publicAwardLog, function(a, b)
                     return self:ParseItemTimestamp(a) < self:ParseItemTimestamp(b)
                 end)
