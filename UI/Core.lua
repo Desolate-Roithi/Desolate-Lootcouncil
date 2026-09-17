@@ -206,7 +206,6 @@ function UI:CloseAllWindows()
         "UI_Version",
         "UI_PriorityOverride",
         "UI_ItemManager",
-        "UI_Settings",
         "UI_EJLootImport",
         "UI_PriorityLogHistory",
         "UI_RaidHistory"
