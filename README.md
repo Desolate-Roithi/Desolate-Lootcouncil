@@ -2,7 +2,7 @@
 
 A Master Loot helper and priority list addon for World of Warcraft Retail. Desolate Lootcouncil lets raid teams run priority-based loot distribution alongside Blizzard's default Group Loot system, with automated roll passing, trade queues, and attendance tracking.
 
-**Latest Version:** v2.2.5  
+**Latest Version:** v2.3.0  
 **Last Updated:** 2026-09-17  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
@@ -67,6 +67,17 @@ All commands start with `/dlc`:
 ---
 
 ## Recent Changes
+
+### v2.3.0 (2026-09-17)
+* **Bug Fixes**:
+  * Fixed addon connection LED in the Loot window showing red during live loot simulation mode (`/dlc sim`, `/dlc test`).
+  * Fixed "Re-open Autopass Choice" button in Settings not working when user is not the Loot Master.
+  * Fixed settings window being dismissed when ending a raid session from the attendance panel.
+* **Code Quality & Architecture**:
+  * Pruned 550+ lines of dead code across 31 files — removed duplicate event handlers, orphaned helpers, and unreachable branches.
+  * Enforced strict UI → API encapsulation: all presentation windows route data reads and mutations through `DesolateLootcouncil.API`.
+  * Removed duplicate method declarations across `Roster.lua`, `Session.lua`, `Attendance.lua`, and `Comm.lua`.
+  * Synchronized documentation line-number parity for all 226 public API functions.
 
 ### v2.2.5 (2026-09-17)
 * **Autotrading & Trade List Fixes**:
