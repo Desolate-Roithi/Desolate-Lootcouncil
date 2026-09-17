@@ -19,20 +19,30 @@ StaticPopupDialogs["DLC_ENABLE_AUTOPASS"] = {
     button2 = L["No"],
     OnAccept = function()
         DesolateLootcouncil.sessionAutopassAnswered = true
-        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
-        DesolateLootcouncil.db.profile.enableAutoLoot = true
+        if DesolateLootcouncil.db and DesolateLootcouncil.db.profile then
+            if DesolateLootcouncil.db.profile.DecayConfig then
+                DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
+            end
+            DesolateLootcouncil.db.profile.enableAutoLoot = true
+        end
         local Sync = DesolateLootcouncil:GetModule("Sync")
         if Sync and Sync.SendSyncAutopass then Sync:SendSyncAutopass(true) end
     end,
     OnCancel = function()
         DesolateLootcouncil.sessionAutopassAnswered = true
-        DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
+        if DesolateLootcouncil.db and DesolateLootcouncil.db.profile then
+            if DesolateLootcouncil.db.profile.DecayConfig then
+                DesolateLootcouncil.db.profile.DecayConfig.sessionAutopassAnswered = true
+            end
+            DesolateLootcouncil.db.profile.enableAutoLoot = false
+        end
         local Sync = DesolateLootcouncil:GetModule("Sync")
         if Sync and Sync.SendSyncAutopass then Sync:SendSyncAutopass(false) end
     end,
     timeout = 0,
     whileDead = true,
     hideOnEscape = true,
+    preferredIndex = 3,
 }
 
 StaticPopupDialogs["DLC_ACTIVE_SESSION_PROMPT"] = {

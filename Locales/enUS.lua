@@ -520,6 +520,7 @@ L["Decay for last session skipped."] = true
 L["No active voting session to show."] = true
 L["No attendance history found."] = true
 L["Only the Loot Master can allow test items."] = true
+L["Only the Loot Master can configure Autopass."] = true
 L["Only the Loot Master can start a raid session."] = true
 L["Only the Loot Master can stop a raid session."] = true
 L["Only the Loot Master can view the Loot Window."] = true

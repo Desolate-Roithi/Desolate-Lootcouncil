@@ -545,6 +545,7 @@ L["Decay for last session skipped."] = "Verfall für die letzte Sitzung überspr
 L["No active voting session to show."] = "Keine aktive Abstimmungssitzung zum Anzeigen."
 L["No attendance history found."] = "Kein Anwesenheitsverlauf gefunden."
 L["Only the Loot Master can allow test items."] = "Nur der Plündermeister kann Testgegenstände erlauben."
+L["Only the Loot Master can configure Autopass."] = "Nur der Plündermeister kann Autopass konfigurieren."
 L["Only the Loot Master can start a raid session."] = "Nur der Plündermeister kann eine Schlachtzugssitzung starten."
 L["Only the Loot Master can stop a raid session."] = "Nur der Plündermeister kann eine Schlachtzugssitzung beenden."
 L["Only the Loot Master can view the Loot Window."] = "Nur der Plündermeister kann das Beutefenster anzeigen."

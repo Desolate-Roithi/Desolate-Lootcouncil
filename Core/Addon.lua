@@ -901,12 +901,21 @@ function DesolateLootcouncil:SendVersionCheck()
     end
 end
 
+--- Returns the count of active addon users in the group or active simulation.
+---@return number count
 function DesolateLootcouncil:GetActiveUserCount()
-    if not IsInGroup() then return 1 end
+    if self.API and self.API.GetGroupConnectionStatus then
+        local status = self.API:GetGroupConnectionStatus()
+        if status and status.active then
+            return status.active
+        end
+    end
+    local simCount = (self.API and self.API.GetSimulationCount and self.API:GetSimulationCount()) or 0
+    if not IsInGroup() then return 1 + simCount end
     local total = GetNumGroupMembers()
-    if total == 0 then return 1 end
+    if total == 0 then return 1 + simCount end
     local missing = (self.GetMissingAddonMembers and self:GetMissingAddonMembers()) or {}
-    return math.max(1, math.min(total, total - #missing))
+    return math.max(1, math.min(total + simCount, (total - #missing) + simCount))
 end
 
 function DesolateLootcouncil:OpenConfig(initialTab)
@@ -1236,7 +1245,24 @@ function DesolateLootcouncil:IsLMAddonUser()
     return false
 end
 
-function DesolateLootcouncil:PromptAutopass(isRetry)
+--- Prompts the Loot Master to choose whether to enable autopass for this raid session.
+---@param isRetry boolean? True if this is a delayed retry waiting for member responses.
+---@param isForced boolean? True if explicitly triggered by the user via settings or API.
+function DesolateLootcouncil:PromptAutopass(isRetry, isForced)
+    if isForced then
+        self.sessionAutopassAnswered = false
+        if self.db and self.db.profile and self.db.profile.DecayConfig then
+            self.db.profile.DecayConfig.sessionAutopassAnswered = false
+        end
+        if not self.isTestRunning and StaticPopup_Show then
+            if StaticPopup_Hide then
+                StaticPopup_Hide("DLC_ENABLE_AUTOPASS")
+            end
+            StaticPopup_Show("DLC_ENABLE_AUTOPASS")
+        end
+        return
+    end
+
     if not self:IsInRaidOrTest() then return end
     if not self:AmILootMaster() then return end
 

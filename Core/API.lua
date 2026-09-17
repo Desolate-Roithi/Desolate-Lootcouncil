@@ -121,12 +121,12 @@ function DLC_API:MakeMovableWithSave(frame, windowName)
     end
 end
 
---- Prompts autopass confirmation dialog.
----@param itemLink string
----@param callback function
-function DLC_API:PromptAutopass(itemLink, callback)
+--- Prompts the Loot Master to choose whether to enable autopass for this raid session.
+---@param isRetry boolean? True if this is a delayed retry waiting for member responses.
+---@param isForced boolean? True if explicitly triggered by the user via settings or API.
+function DLC_API:PromptAutopass(isRetry, isForced)
     if DesolateLootcouncil.PromptAutopass then
-        DesolateLootcouncil:PromptAutopass(itemLink, callback)
+        DesolateLootcouncil:PromptAutopass(isRetry, isForced)
     end
 end
 
@@ -1694,9 +1694,10 @@ function DLC_API:GetGroupConnectionStatus()
     if c and c.GetGroupConnectionStatus then
         return c:GetGroupConnectionStatus()
     end
+    local simCount = (self.GetSimulationCount and self:GetSimulationCount()) or 0
     return {
-        total = 1,
-        active = 1,
+        total = 1 + simCount,
+        active = 1 + simCount,
         allConnected = true,
         missing = {},
         outdated = {},
@@ -2040,8 +2041,14 @@ function DLC_API:SendDLCHeartbeat()
 end
 
 --- Reprompts the Loot Master to choose whether to enable autopass for this session.
-function DLC_API:RepromptAutopass()
-    DesolateLootcouncil:PromptAutopass()
+--- Bypasses raid gating and directly presents the choice popup.
+---@param isForced boolean? Defaults to true when nil.
+function DLC_API:RepromptAutopass(isForced)
+    if not self:IsLootMaster() then
+        DesolateLootcouncil:Print(L["Only the Loot Master can configure Autopass."])
+        return
+    end
+    DesolateLootcouncil:PromptAutopass(nil, isForced ~= false)
 end
 
 -- ===========================================================================

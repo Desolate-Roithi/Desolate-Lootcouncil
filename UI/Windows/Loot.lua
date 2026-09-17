@@ -18,20 +18,21 @@ end
 
 local function OnConnectionTooltipEnter(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-    local total = GetNumGroupMembers()
+    local status = DesolateLootcouncil.API and DesolateLootcouncil.API.GetGroupConnectionStatus and DesolateLootcouncil.API:GetGroupConnectionStatus()
+    local total = (status and status.total) or GetNumGroupMembers()
     if total == 0 then total = 1 end
 
     local simCount = DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationCount and DesolateLootcouncil.API:GetSimulationCount() or 0
-    if simCount > 0 then
+    if (not status or not status.total or status.total <= 1) and simCount > 0 then
         total = total + simCount
     end
 
-    local active = DesolateLootcouncil.API:GetActiveUserCount()
+    local active = (status and status.active) or DesolateLootcouncil.API:GetActiveUserCount()
     if active > total then active = total end
 
     GameTooltip:AddLine(string.format(L["Addon Connection: [%d] / [%d]"], active, total), 1, 1, 1)
 
-    local missing = DesolateLootcouncil.API:GetMissingAddonMembers()
+    local missing = (status and status.missing) or (DesolateLootcouncil.API and DesolateLootcouncil.API.GetMissingAddonMembers and DesolateLootcouncil.API:GetMissingAddonMembers()) or {}
     if #missing > 0 then
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(string.format("|cffff4444" .. L["Missing Addon (%d):"] .. "|r", #missing), 1, 0.5, 0.5)
@@ -105,12 +106,17 @@ local function OnTimerTick()
     end
 
     local activeC = DesolateLootcouncil.API:GetActiveUserCount()
-    local totalC = GetNumGroupMembers()
+    local totalC = (status and status.total) or GetNumGroupMembers()
     if totalC == 0 then totalC = 1 end
     local simCount = (DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationCount and DesolateLootcouncil.API:GetSimulationCount()) or 0
-    if simCount > 0 then totalC = totalC + simCount end
+    if (not status or not status.total or status.total <= 1) and simCount > 0 then
+        totalC = totalC + simCount
+    end
+    if status and status.active and status.active > activeC then
+        activeC = status.active
+    end
 
-    if activeC >= totalC then
+    if activeC >= totalC and (not status or not status.missing or #status.missing == 0) then
         if hasOutdated then
             ra, ga, ba = 1, 1, 0 -- Yellow: some are out of date
         else
