@@ -366,6 +366,20 @@ function DLC_API:GetScoreName(name)
     return lowName:gsub("%s+", "")
 end
 
+--- Extracts the base character name (stripping realm and whitespace, lowercased)
+--- for cross-realm comparison.
+---@param name string?
+---@return string
+function DLC_API:GetBaseCharacterName(name)
+    if not name or name == "" then return "" end
+    if DesolateLootcouncil.GetBaseCharacterName then
+        return DesolateLootcouncil:GetBaseCharacterName(name)
+    end
+    local base = string.match(tostring(name), "^([^-]+)") or tostring(name)
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    return safeLower(base:gsub("%s+", ""))
+end
+
 --- Returns whether debug logging mode is enabled.
 ---@return boolean
 function DLC_API:GetDebugMode()

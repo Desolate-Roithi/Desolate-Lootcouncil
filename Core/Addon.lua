@@ -1102,6 +1102,17 @@ addonTable.Ambiguate = function(fullName)
     return DesolateLootcouncil:Ambiguate(fullName)
 end
 
+--- Extracts the base character name (stripping realm and whitespace, lowercased)
+--- for cross-realm comparison.
+---@param name string|nil
+---@return string
+function DesolateLootcouncil:GetBaseCharacterName(name)
+    if not name or name == "" then return "" end
+    local base = string.match(tostring(name), "^([^-]+)") or tostring(name)
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    return safeLower(base:gsub("%s+", ""))
+end
+
 --- Efficiently compares two names for case-insensitive and realm-aware equivalence.
 ---@param n1 string|nil
 ---@param n2 string|nil
@@ -1125,6 +1136,10 @@ function DesolateLootcouncil:SmartCompare(n1, n2)
     local s1 = self:GetScoreName(n1)
     local s2 = self:GetScoreName(n2)
     if s1 and s2 and s1 == s2 then return true end
+
+    local base1 = self:GetBaseCharacterName(n1)
+    local base2 = self:GetBaseCharacterName(n2)
+    if base1 ~= "" and base1 == base2 then return true end
 
     -- Cross-realm fallback: If one or both lack a realm or belong to different connected realms, match by short character name
     local safeLower = (type(strlower) == "function" and strlower) or string.lower

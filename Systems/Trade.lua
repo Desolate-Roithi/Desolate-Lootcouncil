@@ -77,68 +77,94 @@ function Trade:OnUIInfo(event, msgID, msg)
 end
 
 function Trade:TRADE_ACCEPT_UPDATE(event, playerAccepted, targetAccepted)
-    if tonumber(playerAccepted) == 1 and tonumber(targetAccepted) == 1 then
+    local pAccepted = (tonumber(playerAccepted) == 1)
+    local tAccepted = (tonumber(targetAccepted) == 1)
+
+    if pAccepted and tAccepted then
         self.tradeAccepted = true
+        self.wasFullyAccepted = true
     else
         self.tradeAccepted = false
+        if not self.tradeClosing then
+            self.wasFullyAccepted = false
+        end
     end
 end
 
+local function GetBaseCharacterName(name)
+    return DesolateLootcouncil:GetBaseCharacterName(name)
+end
+
 local function GetTradePartnerName()
-    local name, realm = UnitName("NPC")
-    if name and realm and realm ~= "" then
-        return name .. "-" .. realm:gsub("%s+", "")
+    local fullName = DesolateLootcouncil:GetFullName("NPC")
+    if fullName and fullName ~= "" then
+        return fullName
     end
-    if name and name ~= "" then
-        return name
-    end
-    local unitName = GetUnitName("NPC", true)
+    local unitName = (GetUnitName and GetUnitName("NPC", true)) or UnitName("NPC")
     if unitName and unitName ~= "" then
-        return unitName:gsub("%s+", "")
+        return DesolateLootcouncil:NormalizeName(unitName)
     end
     return nil
 end
 
 local function IsTradeTargetMatch(awardWinner, tradePartnerName)
     if not awardWinner or not tradePartnerName then return false end
+    if awardWinner == tradePartnerName then return true end
+
+    -- 1. Canonical Name-Realm match via SmartCompare
     if DesolateLootcouncil:SmartCompare(awardWinner, tradePartnerName) then
         return true
     end
 
-    local safeLower = (type(strlower) == "function" and strlower) or string.lower
-    local shortWinner = safeLower(Ambiguate(awardWinner, "none"))
-    local shortPartner = safeLower(Ambiguate(tradePartnerName, "none"))
-    if shortWinner ~= "" and shortWinner == shortPartner then
-        return true
-    end
-
+    -- 2. Resolve Mains/Alts in canonical Name-Realm
     local API = DesolateLootcouncil.API
     local awardMain = (API and API.GetMain and API:GetMain(awardWinner)) or awardWinner
     local partnerMain = (API and API.GetMain and API:GetMain(tradePartnerName)) or tradePartnerName
     if awardMain and partnerMain then
-        if DesolateLootcouncil:SmartCompare(awardMain, partnerMain) then
-            return true
-        end
-        local shortAwardMain = safeLower(Ambiguate(awardMain, "none"))
-        local shortPartnerMain = safeLower(Ambiguate(partnerMain, "none"))
-        if shortAwardMain ~= "" and shortAwardMain == shortPartnerMain then
+        if awardMain == partnerMain or DesolateLootcouncil:SmartCompare(awardMain, partnerMain) then
             return true
         end
     end
+
+    -- 3. Resilient base character name fallback (if one record omitted realm)
+    local baseWinner = GetBaseCharacterName(awardWinner)
+    local basePartner = GetBaseCharacterName(tradePartnerName)
+    if baseWinner ~= "" and baseWinner == basePartner then
+        return true
+    end
+    if awardMain and partnerMain then
+        local baseAwardMain = GetBaseCharacterName(awardMain)
+        local basePartnerMain = GetBaseCharacterName(partnerMain)
+        if baseAwardMain ~= "" and baseAwardMain == basePartnerMain then
+            return true
+        end
+    end
+
     return false
 end
 
-function Trade:OnTradeShow()
+function Trade:OnTradeShow(retryCount)
     if self.clearTimer then
         self.clearTimer:Cancel()
         self.clearTimer = nil
     end
-    self:ClearPending()
+    if not retryCount or retryCount == 0 then
+        self:ClearPending()
+    end
 
     -- Get the name of the person we are trading with
     -- "NPC" unit token refers to the trade target while the trade window is open
     local tradeTargetName = GetTradePartnerName()
-    if not tradeTargetName then return end
+    if not tradeTargetName then
+        local currentRetry = retryCount or 0
+        if currentRetry < 2 and TradeFrame and TradeFrame:IsShown() then
+            self.retryTimer = C_Timer.NewTimer(0.2, function()
+                self.retryTimer = nil
+                self:OnTradeShow(currentRetry + 1)
+            end)
+        end
+        return
+    end
     self.tradeTargetName = tradeTargetName
 
     if not DesolateLootcouncil:AmILootMaster() then return end
@@ -232,7 +258,8 @@ function Trade:IsItemTradeableBoP(bag, slot, customTooltipData)
     return false
 end
 
---- Extracts and normalizes item strings by zeroing out transient fields (uniqueID, linkLevel)
+--- Extracts and normalizes item strings by zeroing out transient fields
+--- (uniqueID, linkLevel, specializationID, modifiersMask, itemContext)
 --- so that items with identical stats/tertiaries match.
 ---@param link string|nil
 ---@return string|nil
@@ -242,10 +269,56 @@ function Trade:NormalizeItemLink(link)
     if not itemString then return nil end
 
     local parts = { strsplit(":", itemString) }
-    if parts[8] then parts[8] = "0" end -- uniqueID
-    if parts[9] then parts[9] = "0" end -- linkLevel
+    if parts[8] then parts[8] = "0" end   -- uniqueID
+    if parts[9] then parts[9] = "0" end   -- linkLevel
+    if parts[10] then parts[10] = "0" end -- specializationID
+    if parts[11] then parts[11] = "0" end -- modifiersMask
+    if parts[12] then parts[12] = "0" end -- itemContext
 
     return table.concat(parts, ":")
+end
+
+local function EvaluateContainerSlot(self, bag, slot, targetItemID, normalizedAwardLink, usedSlots)
+    local info = C_Container.GetContainerItemInfo(bag, slot)
+    if not info or info.itemID ~= targetItemID then
+        return nil, "not_in_bags"
+    end
+
+    local slotKey = string.format("%d-%d", bag, slot)
+    if usedSlots[slotKey] then
+        return nil, "already_staged"
+    end
+    if info.isLocked then
+        return nil, "locked"
+    end
+    if self:IsItemWarbound(bag, slot) then
+        return nil, "warbound"
+    end
+    if info.isBound and not self:IsItemTradeableBoP(bag, slot) then
+        return nil, "bound_untradeable"
+    end
+
+    local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
+    local isExactMatch = not (itemLink and normalizedAwardLink and self:NormalizeItemLink(itemLink) ~= normalizedAwardLink)
+
+    return { bag = bag, slot = slot, isExact = isExactMatch }, nil
+end
+
+local function ScanBagForSlot(self, bag, targetItemID, normalizedAwardLink, usedSlots, candidates)
+    local numSlots = C_Container.GetContainerNumSlots(bag)
+    local failureReason = nil
+
+    for slot = 1, numSlots do
+        local candidate, reason = EvaluateContainerSlot(self, bag, slot, targetItemID, normalizedAwardLink, usedSlots)
+        if candidate and candidate.isExact then
+            return candidate.bag, candidate.slot, nil
+        elseif candidate then
+            table.insert(candidates, candidate)
+        elseif reason and reason ~= "not_in_bags" and not failureReason then
+            failureReason = reason
+        end
+    end
+    return nil, nil, failureReason
 end
 
 --- Scans bags 0-4 and returns the first unlocked, stageable slot for itemID that matches stats.
@@ -260,47 +333,31 @@ function Trade:GetStageableSlot(award, targetItemID, usedSlots)
     local candidates = {}
 
     for bag = 0, 4 do
-        local numSlots = C_Container.GetContainerNumSlots(bag)
-        for slot = 1, numSlots do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID == targetItemID then
-                local slotKey = string.format("%d-%d", bag, slot)
-                if usedSlots[slotKey] then
-                    if failureReason == "not_in_bags" then
-                        failureReason = "already_staged"
-                    end
-                elseif info.isLocked then
-                    failureReason = "locked"
-                elseif self:IsItemWarbound(bag, slot) then
-                    failureReason = "warbound"
-                elseif info.isBound and not self:IsItemTradeableBoP(bag, slot) then
-                    failureReason = "bound_untradeable"
-                else
-                    -- Valid tradeable candidate
-                    local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
-                    local isExactMatch = not (itemLink and normalizedAwardLink and self:NormalizeItemLink(itemLink) ~= normalizedAwardLink)
-
-                    if isExactMatch then
-                        return bag, slot, nil
-                    end
-
-                    table.insert(candidates, { bag = bag, slot = slot })
-                    failureReason = "link_mismatch"
-                end
-            end
+        local exactBag, exactSlot, reason = ScanBagForSlot(self, bag, targetItemID, normalizedAwardLink, usedSlots, candidates)
+        if exactBag then
+            return exactBag, exactSlot, nil
+        end
+        if reason and failureReason == "not_in_bags" then
+            failureReason = reason
         end
     end
 
-    -- If no exact match was found, but there's a unique eligible tradeable candidate of that itemID
-    if #candidates == 1 then
-        return candidates[1].bag, candidates[1].slot, nil
-    end
-
+    -- If no exact stat/tertiary match was found in bags, do not stage a non-matching item
     return nil, nil, failureReason
 end
 
 function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
-    if not targetItemID then
+    local resolvedItemID = targetItemID
+    if not resolvedItemID and award.link then
+        local Loot = DesolateLootcouncil:GetModule("Loot", true)
+        if Loot and Loot.GetItemIDFromLink then
+            resolvedItemID = Loot:GetItemIDFromLink(award.link)
+        else
+            resolvedItemID = select(1, C_Item.GetItemInfoInstant(award.link))
+        end
+    end
+
+    if not resolvedItemID then
         local failMsg = string.format(L["Could not stage item for %s: missing itemID."],
             DesolateLootcouncil:GetDisplayName(targetName))
         DesolateLootcouncil:Print(failMsg)
@@ -308,9 +365,9 @@ function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
         return false, "missing_id"
     end
 
-    local bag, slot, failureReason = self:GetStageableSlot(award, targetItemID, usedSlots)
+    local bag, slot, failureReason = self:GetStageableSlot(award, resolvedItemID, usedSlots)
     if not bag or not slot then
-        local itemText = award.link or tostring(targetItemID)
+        local itemText = award.link or tostring(resolvedItemID)
         local targetText = DesolateLootcouncil:GetDisplayName(targetName)
         local reasonStr = L["Item not found in bags."]
         if failureReason == "bound_untradeable" then
@@ -332,15 +389,27 @@ function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
         return false, failureReason
     end
 
+    if ClearCursor then ClearCursor() end
     C_Container.UseContainerItem(bag, slot)
     local slotKey = string.format("%d-%d", bag, slot)
     usedSlots[slotKey] = true
 
-    table.insert(self.currentTrade, {
-        link   = award.link,
-        winner = award.winner,
-        guid   = award.sourceGUID,
-    })
+    self.currentTrade = self.currentTrade or {}
+    self.tradeManifest = self.tradeManifest or {}
+
+    local tradeRecord = {
+        link         = award.link,
+        winner       = award.winner,
+        guid         = award.sourceGUID,
+        itemID       = resolvedItemID,
+        bag          = bag,
+        slot         = slot,
+        award        = award,
+        targetItemID = resolvedItemID,
+    }
+    table.insert(self.currentTrade, tradeRecord)
+    table.insert(self.tradeManifest, tradeRecord)
+
     local stagedMsg = string.format(L["Staged %s for %s."], award.link,
         DesolateLootcouncil:GetDisplayName(targetName))
     DesolateLootcouncil:DLC_Log(stagedMsg)
@@ -350,10 +419,11 @@ end
 -- Stage ALL pending items for a player in one trade window open
 function Trade:StageAllItems(pendingItems, targetName)
     self.currentTrade = {}
+    self.tradeManifest = {}
     local usedSlots = {}
 
     local stagedCount = 0
-    for awardIndex, award in ipairs(pendingItems) do
+    for _, award in ipairs(pendingItems) do
         if stagedCount >= 6 then
             local fullMsg = L["Trade window full. Remaining items will be staged in the next trade."]
             DesolateLootcouncil:Print(fullMsg)
@@ -374,18 +444,32 @@ function Trade:ScanTradeSlots()
     if not TradeFrame or not TradeFrame:IsShown() then return end
 
     self.itemsInTrade = {}
+    self.tradeManifest = self.tradeManifest or {}
     local partnerName = self.tradeTargetName or GetTradePartnerName()
+
     for slot = 1, 6 do
         local numItems = select(3, GetTradePlayerItemInfo(slot))
         local itemID = select(8, GetTradePlayerItemInfo(slot))
         local link = GetTradePlayerItemLink(slot)
         if itemID and link then
-            table.insert(self.itemsInTrade, {
-                itemID = itemID,
-                link = link,
+            local entry = {
+                itemID   = itemID,
+                link     = link,
                 quantity = numItems or 1,
-                winner = partnerName,
-            })
+                winner   = partnerName,
+            }
+            table.insert(self.itemsInTrade, entry)
+
+            local alreadyInManifest = false
+            for _, manifestItem in ipairs(self.tradeManifest) do
+                if manifestItem.link == link or (manifestItem.itemID and manifestItem.itemID == itemID) then
+                    alreadyInManifest = true
+                    break
+                end
+            end
+            if not alreadyInManifest then
+                table.insert(self.tradeManifest, entry)
+            end
         end
     end
 end
@@ -395,14 +479,66 @@ function Trade:OnTradeUpdate()
 end
 
 function Trade:CHAT_MSG_SYSTEM(event, message)
-    if not self.itemsInTrade and not self.currentTrade then return end
+    if not self.itemsInTrade and not self.currentTrade and not self.tradeManifest then return end
     if IsTradeCompleteMessage(message) then
         self:HandleTradeSuccess()
     end
 end
 
+local function GetEffectiveTradedItems(self)
+    if self.tradeManifest and #self.tradeManifest > 0 then
+        return self.tradeManifest
+    end
+    if self.itemsInTrade and #self.itemsInTrade > 0 then
+        return self.itemsInTrade
+    end
+    if self.currentTrade and #self.currentTrade > 0 then
+        return self.currentTrade
+    end
+    return nil
+end
+
+local function MatchAndMarkAward(self, pending, targetWinner, sessionAwards)
+    local normalizedPendingLink = self:NormalizeItemLink(pending.link)
+    local pendingID = pending.itemID or (pending.link and select(1, C_Item.GetItemInfoInstant(pending.link)))
+
+    for _, award in ipairs(sessionAwards) do
+        if not award.traded and IsTradeTargetMatch(award.winner, targetWinner) then
+            local normalizedAwardLink = self:NormalizeItemLink(award.link)
+            local awardID = award.itemID or (award.link and select(1, C_Item.GetItemInfoInstant(award.link)))
+            local linkMatch = (normalizedAwardLink and normalizedPendingLink and normalizedAwardLink == normalizedPendingLink)
+            local idMatch = (awardID and pendingID and awardID == pendingID)
+
+            if linkMatch or idMatch then
+                award.traded = true
+                DesolateLootcouncil.API:LogAudit("TRADE", nil, award.winner, award.fullItemData and award.fullItemData.category,
+                    string.format("Traded %s to %s", tostring(award.link or award.itemID), tostring(award.winner)))
+                DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
+                    award.link or tostring(pendingID), DesolateLootcouncil:GetDisplayName(award.winner)))
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function NotifyTradeCompletion(self)
+    local db = DesolateLootcouncil.db.profile
+    db.historyTimestamp = GetServerTime()
+
+    local API = DesolateLootcouncil.API
+    if API and API.ShowTradeListWindow and DesolateLootcouncil:AmILootMaster() then
+        API:ShowTradeListWindow()
+    end
+    self:SendMessage("DLC_HISTORY_UPDATED")
+
+    if API and API.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+        API:SendDLCHeartbeat()
+    end
+end
+
 function Trade:HandleTradeSuccess()
-    local tradedItems = self.itemsInTrade or self.currentTrade
+    local tradedItems = GetEffectiveTradedItems(self)
     if not tradedItems then
         self:ClearPending()
         return
@@ -418,53 +554,30 @@ function Trade:HandleTradeSuccess()
     local changed = false
 
     for _, pending in ipairs(tradedItems) do
-        local normalizedPendingLink = self:NormalizeItemLink(pending.link)
-        local pendingID = pending.itemID or (pending.link and select(1, C_Item.GetItemInfoInstant(pending.link)))
         local targetWinner = pending.winner or partnerName
-
-        for _, award in ipairs(session.awarded) do
-            if not award.traded and IsTradeTargetMatch(award.winner, targetWinner) then
-                local normalizedAwardLink = self:NormalizeItemLink(award.link)
-                local awardID = award.itemID or (award.link and select(1, C_Item.GetItemInfoInstant(award.link)))
-                local linkMatch = (normalizedAwardLink and normalizedPendingLink and normalizedAwardLink == normalizedPendingLink)
-                local idMatch = (awardID and pendingID and awardID == pendingID)
-
-                if linkMatch or idMatch then
-                    award.traded = true
-                    changed = true
-                    DesolateLootcouncil.API:LogAudit("TRADE", nil, award.winner, award.fullItemData and award.fullItemData.category, string.format("Traded %s to %s", tostring(award.link or award.itemID), tostring(award.winner)))
-                    DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
-                        award.link, DesolateLootcouncil:GetDisplayName(award.winner)))
-                    break
-                end
-            end
+        if MatchAndMarkAward(self, pending, targetWinner, session.awarded) then
+            changed = true
         end
     end
 
     if changed then
-        local db = DesolateLootcouncil.db.profile
-        db.historyTimestamp = GetServerTime()
-
-        -- refresh the actual trade list window
-        local API = DesolateLootcouncil.API
-        if API and API.ShowTradeListWindow and DesolateLootcouncil:AmILootMaster() then
-            API:ShowTradeListWindow()
-        end
-        self:SendMessage("DLC_HISTORY_UPDATED")
-
-        if API and API.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
-            API:SendDLCHeartbeat()
-        end
+        NotifyTradeCompletion(self)
     end
+    self:ClearPending()
 end
 
 function Trade:TRADE_CLOSED(...)
+    self.tradeClosing = true
     if self.tradeTimer then
         self.tradeTimer:Cancel()
         self.tradeTimer = nil
     end
+    if self.stagingQueueTimer then
+        self.stagingQueueTimer:Cancel()
+        self.stagingQueueTimer = nil
+    end
 
-    if self.tradeAccepted then
+    if self.tradeAccepted or self.wasFullyAccepted then
         self:HandleTradeSuccess()
     end
 
@@ -475,10 +588,21 @@ function Trade:TRADE_CLOSED(...)
 end
 
 function Trade:ClearPending()
+    if self.stagingQueueTimer then
+        self.stagingQueueTimer:Cancel()
+        self.stagingQueueTimer = nil
+    end
+    if self.retryTimer then
+        self.retryTimer:Cancel()
+        self.retryTimer = nil
+    end
     self.currentTrade = nil
     self.itemsInTrade = nil
+    self.tradeManifest = nil
     self.tradeTargetName = nil
     self.tradeAccepted = false
+    self.wasFullyAccepted = false
+    self.tradeClosing = false
 end
 
 --- Manually marks an item as delivered in the session trade list.
@@ -496,14 +620,22 @@ function Trade:MarkItemTraded(item)
         local awardGUID = award.sourceGUID or award.link
         local awardID = award.itemID or (award.link and select(1, C_Item.GetItemInfoInstant(award.link)))
         local guidMatch = (targetGUID and awardGUID and targetGUID == awardGUID)
-        local idMatch = (targetID and awardID and targetID == awardID and (not targetWinner or award.winner == targetWinner))
+        local winnerMatch = not targetWinner or IsTradeTargetMatch(award.winner, targetWinner)
+        local idMatch = (targetID and awardID and targetID == awardID and winnerMatch)
 
         if (guidMatch or idMatch) and not award.traded then
             award.traded = true
             local db = DesolateLootcouncil.db.profile
             db.historyTimestamp = GetServerTime()
-            DesolateLootcouncil.API:LogAudit("TRADE", nil, award.winner, award.fullItemData and award.fullItemData.category, string.format("Traded %s to %s", tostring(award.link or award.itemID), tostring(award.winner)))
+            DesolateLootcouncil.API:LogAudit("TRADE", nil, award.winner, award.fullItemData and award.fullItemData.category,
+                string.format("Traded %s to %s", tostring(award.link or award.itemID), tostring(award.winner)))
             self:SendMessage("DLC_HISTORY_UPDATED")
+
+            local API = DesolateLootcouncil.API
+            if API and API.SendDLCHeartbeat and DesolateLootcouncil:AmILootMaster() then
+                API:SendDLCHeartbeat()
+            end
+
             DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
                 award.link or ("item:" .. tostring(targetID)), DesolateLootcouncil:GetDisplayName(award.winner or "Unknown")), true)
             break

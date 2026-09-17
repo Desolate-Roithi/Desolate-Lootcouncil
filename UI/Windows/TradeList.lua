@@ -6,53 +6,63 @@ local UI_TradeList = DesolateLootcouncil:NewModule("UI_TradeList", "AceEvent-3.0
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local function GetUnitIDForName(playerName)
-    local targetScore = DesolateLootcouncil:GetScoreName(playerName)
-    if not targetScore then return nil end
+    if not playerName or playerName == "" then return nil end
 
+    local targetScore = DesolateLootcouncil.API:GetScoreName(playerName)
     local targetMain = DesolateLootcouncil.API:GetMain(playerName)
-    local mainScore = DesolateLootcouncil:GetScoreName(targetMain)
-    local safeLower = (type(strlower) == "function" and strlower) or string.lower
-    local shortTarget = safeLower(Ambiguate(playerName, "none"))
-    local shortMain = targetMain and safeLower(Ambiguate(targetMain, "none"))
+    local mainScore = targetMain and DesolateLootcouncil.API:GetScoreName(targetMain)
+    local baseTarget = DesolateLootcouncil.API:GetBaseCharacterName(playerName)
+    local baseMain = targetMain and DesolateLootcouncil.API:GetBaseCharacterName(targetMain)
+
+    local function CheckUnit(unit)
+        local unitScore = DesolateLootcouncil:GetUnitScore(unit)
+        local unitName = UnitName(unit)
+        local baseUnit = unitName and DesolateLootcouncil.API:GetBaseCharacterName(unitName)
+
+        if (unitScore and (unitScore == targetScore or unitScore == mainScore)) or
+           (baseUnit and baseUnit ~= "" and (baseUnit == baseTarget or (baseMain and baseUnit == baseMain))) then
+            return unit
+        end
+        return nil
+    end
 
     for i = 1, 40 do
-        local unit = "raid" .. i
-        local unitScore = DesolateLootcouncil:GetUnitScore(unit)
-        local unitName = UnitName(unit)
-        local shortUnit = unitName and safeLower(Ambiguate(unitName, "none"))
-        if (unitScore and (unitScore == targetScore or unitScore == mainScore)) or
-           (shortUnit and (shortUnit == shortTarget or shortUnit == shortMain)) then
-            return unit
-        end
+        local unit = CheckUnit("raid" .. i)
+        if unit then return unit end
     end
     for i = 1, 4 do
-        local unit = "party" .. i
-        local unitScore = DesolateLootcouncil:GetUnitScore(unit)
-        local unitName = UnitName(unit)
-        local shortUnit = unitName and safeLower(Ambiguate(unitName, "none"))
-        if (unitScore and (unitScore == targetScore or unitScore == mainScore)) or
-           (shortUnit and (shortUnit == shortTarget or shortUnit == shortMain)) then
-            return unit
-        end
+        local unit = CheckUnit("party" .. i)
+        if unit then return unit end
     end
     return nil
 end
 
-function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
-    local function ShowTip()
-        GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
-        if item.link and string.find(item.link, "|Hitem:") then
-            GameTooltip:SetHyperlink(item.link)
-        elseif item.itemID and GameTooltip.SetItemByID then
-            GameTooltip:SetItemByID(item.itemID)
-        end
-        GameTooltip:Show()
+local function AttemptInitiateTrade(item)
+    local unitID = GetUnitIDForName(item.winner)
+    if unitID then
+        InitiateTrade(unitID)
+        return
     end
+    local winnerScore = DesolateLootcouncil.API:GetScoreName(item.winner)
+    local winnerMain = DesolateLootcouncil.API:GetMain(item.winner)
+    local mainScore = winnerMain and DesolateLootcouncil.API:GetScoreName(winnerMain)
+    local targetScore = DesolateLootcouncil:GetUnitScore("target")
+    local baseWinner = DesolateLootcouncil.API:GetBaseCharacterName(item.winner)
+    local baseMain = winnerMain and DesolateLootcouncil.API:GetBaseCharacterName(winnerMain)
+    local targetName = UnitName("target")
+    local baseTarget = targetName and DesolateLootcouncil.API:GetBaseCharacterName(targetName)
+    if (targetScore and (targetScore == winnerScore or targetScore == mainScore)) or
+       (baseTarget and baseTarget ~= "" and (baseTarget == baseWinner or (baseMain and baseTarget == baseMain))) then
+        InitiateTrade("target")
+        return
+    end
+    DesolateLootcouncil:DLC_Log(string.format(L["Could not auto-target %s. Please target them manually and click Trade again."],
+        DesolateLootcouncil:GetDisplayName(item.winner)), true)
+end
 
-    -- Remove Button ("X") (created early for anchoring)
+local function SetupActionButtons(self, item, row, NativeGUI)
     if not row.btnRemove then
-        local btn = NativeGUI:CreateButton(row, "X", 26, 24, "Stop")
-        row.btnRemove = btn
+        row.btnRemove = NativeGUI:CreateButton(row, "X", 26, 24, "Stop")
     end
     row.btnRemove:ClearAllPoints()
     row.btnRemove:SetPoint("RIGHT", -8, 0)
@@ -62,33 +72,18 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
         self:ShowTradeListWindow()
     end)
 
-    -- Trade Button
     if not row.btnTrade then
-        local btn = NativeGUI:CreateButton(row, L["Trade"], 60, 24, "Bid")
-        row.btnTrade = btn
+        row.btnTrade = NativeGUI:CreateButton(row, L["Trade"], 60, 24, "Bid")
     end
     row.btnTrade:ClearAllPoints()
     row.btnTrade:SetPoint("RIGHT", row.btnRemove, "LEFT", -6, 0)
     row.btnTrade:Show()
     row.btnTrade:SetScript("OnClick", function()
-        local unitID = GetUnitIDForName(item.winner)
-        if unitID then
-            InitiateTrade(unitID)
-            return
-        end
-        local winnerScore = DesolateLootcouncil:GetScoreName(item.winner)
-        local winnerMain = DesolateLootcouncil.API:GetMain(item.winner)
-        local mainScore = DesolateLootcouncil:GetScoreName(winnerMain)
-        local targetScore = DesolateLootcouncil:GetUnitScore("target")
-        if targetScore and (targetScore == winnerScore or targetScore == mainScore) then
-            InitiateTrade("target")
-            return
-        end
-        DesolateLootcouncil:DLC_Log(string.format(L["Could not auto-target %s. Please target them manually and click Trade again."],
-            DesolateLootcouncil:GetDisplayName(item.winner)), true)
+        AttemptInitiateTrade(item)
     end)
+end
 
-    -- Icon
+local function SetupItemDetails(item, row, NativeGUI, showTipFunc)
     if not row.iconBtn then
         row.iconBtn = NativeGUI:CreateIcon(row, 24, 8)
     end
@@ -98,11 +93,10 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     end
     row.iconBtn.texture:SetTexture(iconTex or "Interface\\Icons\\INV_Misc_QuestionMark")
     row.iconBtn:Show()
-    row.iconBtn:SetScript("OnClick", ShowTip)
-    row.iconBtn:SetScript("OnEnter", ShowTip)
+    row.iconBtn:SetScript("OnClick", showTipFunc)
+    row.iconBtn:SetScript("OnEnter", showTipFunc)
     row.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Winner Label (class colored, right aligned next to Trade button)
     if not row.winnerLabel then
         local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         lbl:SetSize(100, 20)
@@ -117,7 +111,6 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner)
     row.winnerLabel:SetText(NativeGUI:FormatClassColor(class, winnerDisp))
 
-    -- Link Label (sandwiched dynamically)
     if not row.linkLabel then
         row.linkLabel = NativeGUI:CreateLinkLabel(row)
     end
@@ -134,9 +127,24 @@ function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
     end
     row.linkLabel.text:SetText(displayLink or item.link or "Unknown Item")
     row.linkLabel:Show()
-    row.linkLabel:SetScript("OnClick", ShowTip)
-    row.linkLabel:SetScript("OnEnter", ShowTip)
+    row.linkLabel:SetScript("OnClick", showTipFunc)
+    row.linkLabel:SetScript("OnEnter", showTipFunc)
     row.linkLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+function UI_TradeList:RenderTradeRow(item, row, NativeGUI)
+    local function ShowTip()
+        GameTooltip:SetOwner(row.iconBtn, "ANCHOR_CURSOR")
+        if item.link and string.find(item.link, "|Hitem:") then
+            GameTooltip:SetHyperlink(item.link)
+        elseif item.itemID and GameTooltip.SetItemByID then
+            GameTooltip:SetItemByID(item.itemID)
+        end
+        GameTooltip:Show()
+    end
+
+    SetupActionButtons(self, item, row, NativeGUI)
+    SetupItemDetails(item, row, NativeGUI, ShowTip)
 end
 
 function UI_TradeList:ShowTradeListWindow(refreshOnly)
