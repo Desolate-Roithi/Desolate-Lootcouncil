@@ -1144,16 +1144,6 @@ function SyncHandlers:OFFICER_REOPEN_SYNC(data, sender)
     end
 end
 
-function SyncHandlers:LURA_TEST_START(data, sender)
-    local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
-    if Lura and Lura.ActivateGlobalTestMode then Lura:ActivateGlobalTestMode() end
-end
-
-function SyncHandlers:LURA_TEST_END(data, sender)
-    local Lura = DesolateLootcouncil:GetModule("UI_LuraWidget", true)
-    if Lura and Lura.DeactivateGlobalTestMode then Lura:DeactivateGlobalTestMode() end
-end
-
 function SyncHandlers:LM_HANDOVER_OFFER(state, sender)
     if not IsInGroup() then return end
     

@@ -92,7 +92,7 @@ function UI_Award:CreateVoteRow(index, scroll, v, isLM, itemData)
         row.lblName = lblName
     end
     local classColor = NativeGUI:GetClassColorHex(class)
-    local displayName = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil:GetDisplayName(v.name))
+    local displayName = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil.API:GetDisplayName(v.name))
     row.lblName:SetText("|c" .. classColor .. displayName .. "|r")
 
     -- 3. Bid Response pill
@@ -226,7 +226,7 @@ function UI_Award:CreateDisenchanterRow(index, scroll, de, isLM, itemData, numDi
         row.lblName = lblName
     end
     local classColor = NativeGUI:GetClassColorHex(class)
-    row.lblName:SetText("|c" .. classColor .. DesolateLootcouncil:GetDisplayName(de.name) .. "|r")
+    row.lblName:SetText("|c" .. classColor .. DesolateLootcouncil.API:GetDisplayName(de.name) .. "|r")
 
     -- 3. Skill Level
     if not row.lblSkill then

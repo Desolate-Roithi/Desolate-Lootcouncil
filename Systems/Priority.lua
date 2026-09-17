@@ -857,6 +857,10 @@ Priority.MovePlayerInPriorityList = Priority.MovePlayerInList
 --- Returns a list of matchers and tags for decay log messages across all registered and active locales.
 ---@return table
 function Priority:GetDecayPatterns()
+    if self.cachedDecayPatterns then
+        return self.cachedDecayPatterns
+    end
+
     local rawKey = "[Decay] %s moved from position #%d to #%d in %s list (+%d decay for absence)."
     local templates = {}
 
@@ -904,6 +908,7 @@ function Priority:GetDecayPatterns()
         })
     end
 
+    self.cachedDecayPatterns = list
     return list
 end
 

@@ -186,7 +186,7 @@ end
 -- ============================================================
 
 function UI_RaidHistory:ShowRaidHistoryWindow(preselect)
-    if not DesolateLootcouncil:AmIOfficerOrLM() then
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then
         if self.frame then self.frame:Hide() end
         return
     end
@@ -294,7 +294,7 @@ function UI_RaidHistory:UpdateSessionDropdown(preselect)
     end
 
     self.sessionDrop:SetValue(self.selectedIndex)
-    local isLM = DesolateLootcouncil:AmILootMaster()
+    local isLM = DesolateLootcouncil.API:AmILootMaster()
     if isLM then
         self.btnDelete:Show()
         self.btnDelete:SetEnabled(self.selectedIndex ~= nil and self.selectedIndex ~= "CURRENT")
@@ -349,13 +349,6 @@ function UI_RaidHistory:ShowPositionChangesCopyWindow(posChanges)
 
     self.posCopyFrame:Show()
     self.posCopyFrame:SetCopyText(table.concat(posChanges or {}, "\n"))
-end
-
-function UI_RaidHistory:ShowTextCopyWindow(title, text)
-    local LogUI = DesolateLootcouncil:GetModule("UI_PriorityLogHistory", true)
-    if LogUI and LogUI.ShowCopyWindow then
-        LogUI:ShowCopyWindow(text)
-    end
 end
 
 -- ============================================================
@@ -414,7 +407,7 @@ local function SetupLootRow(row, item, awardIdx, historyModule, NativeGUI, theme
     row.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Info (item + winner)
-    local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
+    local winnerDisp = DesolateLootcouncil.API:GetDisplayName(item.winner or "Unknown")
     local colWinner  = NativeGUI and NativeGUI.FormatClassColor and NativeGUI:FormatClassColor(item.winnerClass, winnerDisp) or winnerDisp
 
     local ts = ParseItemTimestamp(item)
@@ -551,7 +544,7 @@ local function SetupAttendeeTooltip(tagWidget, displayName, attendedList, Native
 end
 
 local function SetupAttendeeTag(nt, rawName, sessionEntry, NativeGUI, API)
-    local displayName = DesolateLootcouncil:GetDisplayName(rawName)
+    local displayName = API:GetDisplayName(rawName)
     local details = sessionEntry.attendeeDetails and sessionEntry.attendeeDetails[rawName]
 
     if details then
@@ -600,7 +593,7 @@ function UI_RaidHistory:RenderLootSection(sc, theme, NativeGUI, sessionEntry, is
     local API = DesolateLootcouncil.API
     local awarded
     local checkTimestamp = false
-    local isOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+    local isOfficer = API:AmIOfficerOrLM()
     if isOfficer then
         if isCurrent then
             awarded = API:GetAwardedList()
@@ -810,7 +803,7 @@ function UI_RaidHistory:RenderPositionChangesSection(sc, NativeGUI, sessionEntry
     local auditEntries = DesolateLootcouncil.API:GetAuditLog(posKey)
     if auditEntries and #auditEntries > 0 then
         for _, e in ipairs(auditEntries) do
-            local playerTag = e.p and string.format(" | %s", DesolateLootcouncil:GetDisplayName(e.p)) or ""
+            local playerTag = e.p and string.format(" | %s", DesolateLootcouncil.API:GetDisplayName(e.p)) or ""
             local listTag   = e.l and string.format(" (%s)", e.l) or ""
             local detTag    = e.det and string.format(" - %s", e.det) or ""
             table.insert(posChanges, string.format("[%s] %s%s%s%s", e.d or tostring(e.t or ""), e.act or "EVENT", playerTag, listTag, detTag))
@@ -895,7 +888,7 @@ function UI_RaidHistory:RenderDecaySection(sc, NativeGUI, sessionEntry, isCurren
         local formattedNames = {}
         for _, name in ipairs(summary.absent) do
             local class = DesolateLootcouncil.API:GetUnitClass(name)
-            local disp = DesolateLootcouncil:GetDisplayName(name)
+            local disp = DesolateLootcouncil.API:GetDisplayName(name)
             table.insert(formattedNames, NativeGUI:FormatClassColor(class, disp))
         end
         local namesStr = table.concat(formattedNames, ", ")
@@ -1072,7 +1065,7 @@ function UI_RaidHistory:Refresh()
     -- ================================================================
     -- SECTION 3 — PRIORITY POSITION CHANGES
     -- ================================================================
-    if DesolateLootcouncil:AmIOfficerOrLM() then
+    if DesolateLootcouncil.API:AmIOfficerOrLM() then
         self:RenderPositionChangesSection(sc, NativeGUI, sessionEntry, isCurrent, layoutState, AddText, AddHeader, NextButtonRow)
     end
 

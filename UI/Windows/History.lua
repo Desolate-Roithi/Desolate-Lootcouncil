@@ -19,7 +19,7 @@ local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeig
     end
     row.btnReaward:ClearAllPoints()
     row.btnReaward:SetPoint("RIGHT", -8, 0)
-    if DesolateLootcouncil:AmILootMaster() then
+    if DesolateLootcouncil.API:AmILootMaster() then
         row.btnReaward:Show()
     else
         row.btnReaward:Hide()
@@ -46,15 +46,6 @@ local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeig
     row.iconBtn:SetScript("OnEnter",  ShowTip)
     row.iconBtn:SetScript("OnLeave",  function() GameTooltip:Hide() end)
 
-    -- Vote-type label (hidden — now inlined in itemLabel text below)
-    if not row.typeLabel then
-        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        lbl:SetWidth(50)
-        lbl:SetJustifyH("RIGHT")
-        row.typeLabel = lbl
-    end
-    row.typeLabel:Hide()
-
     -- Item link + winner label (fills space between icon and Re-award)
     if not row.itemLabel then
         row.itemLabel = NativeGUI:CreateLinkLabel(row)
@@ -65,7 +56,7 @@ local function RenderHistoryRow(self, count, item, itemIndex, topOffset, rowHeig
     row.itemLabel:SetPoint("RIGHT", row.btnReaward, "LEFT", -8, 0)
 
     local class      = item.winnerClass or DesolateLootcouncil.API:GetUnitClass(item.winner)
-    local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner or "Unknown")
+    local winnerDisp = DesolateLootcouncil.API:GetDisplayName(item.winner or "Unknown")
     local colWinner  = NativeGUI:FormatClassColor(class, winnerDisp)
     local vtColor    = "ff888888"
     if item.voteType then
@@ -85,7 +76,7 @@ end
 --- Opens a lightweight loot history window scoped to the CURRENT raid session.
 --- Allows the Loot Master to quickly re-award items from this session.
 function UI_History:ShowSessionLootHistory()
-    if not DesolateLootcouncil:AmIOfficerOrLM() then
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then
         if self.sessionFrame then self.sessionFrame:Hide() end
         return
     end

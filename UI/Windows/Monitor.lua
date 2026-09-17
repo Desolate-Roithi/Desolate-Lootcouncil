@@ -260,7 +260,7 @@ local function CloseRelatedWindows(self)
 end
 
 function UI_Monitor:ShowMonitorWindow(isRefresh)
-    if not DesolateLootcouncil:AmIOfficerOrLM() then
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then
         if self.monitorFrame then self.monitorFrame:Hide() end
         return
     end
@@ -508,7 +508,7 @@ function UI_Monitor:OnItemRemoved(eventName, guid)
 end
 
 function UI_Monitor:OnItemReopened(eventName, guid)
-    if DesolateLootcouncil:AmIOfficerOrLM() then
+    if DesolateLootcouncil.API:AmIOfficerOrLM() then
         self:ShowMonitorWindow(true)
     end
 end

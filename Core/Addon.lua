@@ -902,9 +902,6 @@ function DesolateLootcouncil:SendVersionCheck()
 end
 
 function DesolateLootcouncil:GetActiveUserCount()
-    if self.API and self.API.GetActiveUserCount then
-        return self.API:GetActiveUserCount()
-    end
     if not IsInGroup() then return 1 end
     local total = GetNumGroupMembers()
     if total == 0 then return 1 end

@@ -73,7 +73,7 @@ function UI_EJLootImport:CreateEJButton()
     btn:SetText(L["DLC"])
     btn:SetPoint("TOPRIGHT", LootContainer, "TOPRIGHT", 52, 60)
     btn:SetScript("OnClick", function()
-        if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+        if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
         self:OpenStagingWindow()
     end)
     btn:SetFrameLevel(LootContainer:GetFrameLevel() + 10)
@@ -91,7 +91,7 @@ function UI_EJLootImport:UpdateEJButtons()
 
     local show = EncounterJournal and EncounterJournal.encounter and EncounterJournal.encounter.info and
         EncounterJournal.encounter.info.LootContainer:IsShown()
-    local isOfficer = DesolateLootcouncil:AmIOfficerOrLM()
+    local isOfficer = DesolateLootcouncil.API:AmIOfficerOrLM()
     if show and isOfficer then
         self.ejButton:Show()
     else
@@ -102,7 +102,7 @@ end
 function UI_EJLootImport:OpenStagingWindow()
     local numLoot = EJ_GetNumLoot()
     if not numLoot or numLoot == 0 then
-        DesolateLootcouncil:Print(L["No loot found for this boss."])
+        DesolateLootcouncil.API:Print(L["No loot found for this boss."])
         return
     end
 
@@ -127,7 +127,7 @@ function UI_EJLootImport:OpenStagingWindow()
 end
 
 function UI_EJLootImport:ShowStagingWindow(items)
-    if not DesolateLootcouncil:AmIOfficerOrLM() then return end
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
 
     self.itemsStaged = items
     for _, item in ipairs(self.itemsStaged) do
@@ -141,7 +141,7 @@ function UI_EJLootImport:ShowStagingWindow(items)
         frame:SetSize(520, 400)
         self.frame = frame
 
-        DesolateLootcouncil:MakeMovableWithSave(frame, "EJLootImport")
+        DesolateLootcouncil.API:MakeMovableWithSave(frame, "EJLootImport")
 
         local scrollFrame, scrollContent = NativeGUI:CreateScrollFrame(frame, -50, -46)
         self.scrollFrame = scrollFrame
@@ -292,7 +292,7 @@ function UI_EJLootImport:CommitImport()
 
     if #importBatch > 0 then
         DesolateLootcouncil.API:AddManagedItemBatch(importBatch)
-        DesolateLootcouncil:Print(string.format("Successfully imported %d items to Item Manager.", #importBatch))
+        DesolateLootcouncil.API:Print(string.format("Successfully imported %d items to Item Manager.", #importBatch))
     end
 
     self.frame:Hide()

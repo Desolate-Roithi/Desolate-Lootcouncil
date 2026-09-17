@@ -106,8 +106,8 @@ end
 local function SmartNameCompare(a, b)
     if not a or not b then return false end
     if a == b then return true end
-    if DesolateLootcouncil and DesolateLootcouncil.SmartCompare then
-        return DesolateLootcouncil:SmartCompare(a, b)
+    if DesolateLootcouncil.API and DesolateLootcouncil.API.SmartCompare then
+        return DesolateLootcouncil.API:SmartCompare(a, b)
     end
     local shortA = string.lower((Ambiguate and Ambiguate(a, "none")) or tostring(a):match("^([^-]+)") or tostring(a))
     local shortB = string.lower((Ambiguate and Ambiguate(b, "none")) or tostring(b):match("^([^-]+)") or tostring(b))
@@ -119,7 +119,7 @@ local function IsAttendedInSession(attendeesMap, detailsMap, mainName)
     if attendeesMap[mainName] then return true end
 
     local API = DesolateLootcouncil.API
-    local shortMain = DesolateLootcouncil:GetDisplayName(mainName)
+    local shortMain = API:GetDisplayName(mainName)
 
     if attendeesMap[shortMain] then return true end
 
@@ -154,13 +154,13 @@ function UI_Attendance:ShowAttendanceWindow(historyIndex)
         if hist and hist[targetIdx] then
             targetEntry = hist[targetIdx]
             if targetEntry.decayApplied ~= nil and not historyIndex then
-                DesolateLootcouncil:Print(L["Decay has already been applied for the last session."])
+                DesolateLootcouncil.API:Print(L["Decay has already been applied for the last session."])
                 return
             end
             isHistoryReview = true
             self.reviewedHistoryIndex = targetIdx
         else
-            DesolateLootcouncil:Print(L["No active raid session or pending attendance history to review."])
+            DesolateLootcouncil.API:Print(L["No active raid session or pending attendance history to review."])
             return
         end
     else
@@ -205,7 +205,7 @@ function UI_Attendance:ShowAttendanceWindow(historyIndex)
     local frame = NativeGUI:CreateWindow("DLCAttendanceFrame", titleText, "Attendance")
     self.attendanceFrame = frame
 
-    DesolateLootcouncil:MakeMovableWithSave(frame, "Attendance")
+    DesolateLootcouncil.API:MakeMovableWithSave(frame, "Attendance")
 
     -- 3. Top Label
     local topDesc = isHistoryReview and L["Review attendees and absences for this saved raid session. Click names to move between lists, then click Apply Decay."]
@@ -250,7 +250,7 @@ function UI_Attendance:UpdateAttendanceLists()
 
         local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fs:SetPoint("LEFT", 8, 0)
-        fs:SetText(DesolateLootcouncil:GetDisplayName(name))
+        fs:SetText(DesolateLootcouncil.API:GetDisplayName(name))
         fs:SetTextColor(0.2, 1.0, 0.2)
         btn:SetFontString(fs)
 
@@ -287,7 +287,7 @@ function UI_Attendance:UpdateAttendanceLists()
 
         local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fs:SetPoint("LEFT", 8, 0)
-        fs:SetText(DesolateLootcouncil:GetDisplayName(name))
+        fs:SetText(DesolateLootcouncil.API:GetDisplayName(name))
         fs:SetTextColor(1.0, 0.4, 0.4)
         btn:SetFontString(fs)
 
@@ -356,7 +356,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
         if hist and hist[self.reviewedHistoryIndex] then
             local entry = hist[self.reviewedHistoryIndex]
             if entry.decayApplied ~= nil then
-                DesolateLootcouncil:Print(L["Decay has already been applied for the last session."])
+                DesolateLootcouncil.API:Print(L["Decay has already been applied for the last session."])
                 self.reviewedHistoryIndex = nil
                 return
             end
@@ -373,7 +373,7 @@ function UI_Attendance:ApplyDecayAndEndSession()
 
             DesolateLootcouncil.API:LogAudit("DECAY_APPLIED", nil, nil, nil, string.format("Applied +%d decay for session %s", currentDecayAmount, tostring(entry.date or entry.sessionID)), entry.sessionID)
             DesolateLootcouncil.API:BroadcastHistorySync()
-            DesolateLootcouncil:Print(string.format(L["Applied +%d Position Decay to all lists for absent players."], currentDecayAmount))
+            DesolateLootcouncil.API:Print(string.format(L["Applied +%d Position Decay to all lists for absent players."], currentDecayAmount))
             RefreshSettingsUI()
         end
         self.reviewedHistoryIndex = nil
@@ -390,7 +390,7 @@ function UI_Attendance:DeleteHistoryEntry(index)
     local hist = DesolateLootcouncil.API:GetAttendanceHistory()
     if hist and hist[index] then
         DesolateLootcouncil.API:DeleteAttendanceHistoryEntry(index)
-        DesolateLootcouncil:DLC_Log(L["Deleted attendance history entry."], true)
+        DesolateLootcouncil.API:DLC_Log(L["Deleted attendance history entry."], true)
 
         -- Reset Selection
         self.selectedHistoryIndex = nil

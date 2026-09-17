@@ -129,7 +129,6 @@ function Attendance:OnInitialize()
     self:RegisterEvent("ZONE_CHANGED_NEW_AREA", "OnZoneChanged")
     self:RegisterEvent("ENCOUNTER_START", "OnEncounterStart")
     self:RegisterEvent("ENCOUNTER_END", "OnEncounterEnd")
-    self:RegisterEvent("GROUP_ROSTER_UPDATE", "OnGroupRosterUpdate")
     DesolateLootcouncil:DLC_Log(L["Systems/Attendance Loaded"])
 end
 
@@ -488,6 +487,10 @@ end
 ---@param unitName string
 ---@return string classFilename
 function Attendance:GetUnitClass(unitName)
+    local Roster = DesolateLootcouncil:GetModule("Roster", true)
+    if Roster and Roster.GetUnitClass and Roster.GetUnitClass ~= Roster.DefaultGetUnitClass then
+        return Roster:GetUnitClass(unitName)
+    end
     if DesolateLootcouncil:SmartCompare(unitName, "player") then
         return SafeGetUnitClass("player")
     end
@@ -507,7 +510,7 @@ function Attendance:GetUnitClass(unitName)
         end
     end
 
-    local main = DesolateLootcouncil.API:GetMain(unitName) or unitName
+    local main = (Roster and Roster.GetMain and Roster:GetMain(unitName)) or unitName
     local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
     if db and db.MainRoster then
         for mName, rData in pairs(db.MainRoster) do
@@ -728,29 +731,44 @@ end
 -- ---------------------------------------------------------------------------
 
 function Attendance:OnZoneChanged()
-    if DesolateLootcouncil:IsLFR() then return end
+    if DesolateLootcouncil.API:IsLFR() then return end
     if not DesolateLootcouncil.API:AmIOfficerOrLM() then return end
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    local isBypass = (db and db.debugMode) or DesolateLootcouncil.isTestRunning
-    if not IsInRaid() and not isBypass then return end
 
-    local instName, instanceType = GetInstanceInfo()
-    if instanceType == "raid" and instName and instName ~= "" then
-        if db and db.DecayConfig then
-            db.DecayConfig.raidZone = instName
+    local name, instanceType = GetInstanceInfo()
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    local config = db and db.DecayConfig
+
+    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+    local simActive = (Sim and Sim.GetRoster and #Sim:GetRoster() > 0) or (DesolateLootcouncil.API and DesolateLootcouncil.API:IsSimulationActive())
+    local Roster = DesolateLootcouncil:GetModule("Roster", true)
+    local testRaid = (Roster and Roster.testInstanceType == "raid")
+    local isBypass = (db and db.debugMode) or DesolateLootcouncil.isTestRunning
+
+    if (instanceType == "raid" or testRaid) and (IsInRaid() or simActive or testRaid or isBypass) then
+        if name and name ~= "" and config then
+            config.raidZone = name
         end
+
+        if config and not config.sessionActive then
+            if DesolateLootcouncil.API:AmILootMaster() then
+                self:Printf("Entered Raid Instance (%s). Starting Session...", name or "Raid")
+                DesolateLootcouncil.API:StartRaidSession()
+            end
+        else
+            if IsInRaid() and DesolateLootcouncil.API:AmILootMaster() and not DesolateLootcouncil.sessionAutopassAnswered then
+                DesolateLootcouncil.API:PromptAutopass()
+            end
+        end
+        if DesolateLootcouncil.API and DesolateLootcouncil.API.SendVersionCheck then
+            DesolateLootcouncil.API:SendVersionCheck()
+        end
+    elseif instanceType ~= "raid" and config and config.sessionActive then
+        DesolateLootcouncil.API:DLC_Log(string.format("DEBUG: Left Raid (%s). Session is still ACTIVE.", name or "unknown"))
     end
 
     if self:IsSessionActive() then
         self:SnapshotRoster(false)
     end
-end
-
-function Attendance:OnGroupRosterUpdate()
-    -- Bug 2: GROUP_ROSTER_UPDATE must NOT trigger a roster snapshot.
-    -- Snapshots are only valid after boss kills (ENCOUNTER_END success=1).
-    -- Recording attendance on group-join/leave causes incorrect attendee lists
-    -- and chat spam. This handler is intentionally left as a no-op.
 end
 
 function Attendance:OnEncounterStart(event, encounterID, encounterName, difficultyID, groupSize)
@@ -762,19 +780,43 @@ function Attendance:OnEncounterStart(event, encounterID, encounterName, difficul
     if not IsInRaid() and not isBypass then return end
     if not self:IsSessionActive() then return end
 
-    self.pullCounts = self.pullCounts or {}
-    self.currentEncounter = encounterID
-    self.pullCounts[encounterID] = (self.pullCounts[encounterID] or 0) + 1
+    local config = db and db.DecayConfig
+    if config then
+        config.bossLogs = config.bossLogs or {}
+        local bossEntry = nil
+        for _, b in ipairs(config.bossLogs) do
+            local sameEncounter = (b.encounterID == encounterID) or (b.name == encounterName)
+            local sameDifficulty = (not b.difficultyID or not difficultyID or b.difficultyID == difficultyID)
+            if sameEncounter and sameDifficulty then
+                bossEntry = b
+                break
+            end
+        end
+
+        if not bossEntry then
+            bossEntry = {
+                encounterID = encounterID,
+                name = encounterName,
+                difficultyID = difficultyID,
+                pulls = 0,
+                killed = false,
+            }
+            table.insert(config.bossLogs, bossEntry)
+        end
+
+        bossEntry.pulls = (bossEntry.pulls or 0) + 1
+        config.lastActivity = time()
+    end
 
     local instName, instanceType = GetInstanceInfo()
     if instName and instName ~= "" and (instanceType == "raid" or not instanceType) then
-        if db and db.DecayConfig then
-            db.DecayConfig.raidZone = instName
+        if config then
+            config.raidZone = instName
         end
     end
 
     self:SnapshotRoster(false)
-    DesolateLootcouncil:DLC_Log(string.format("Encounter START: %s (ID: %d, Pull #%d)", tostring(encounterName), encounterID, self.pullCounts[encounterID]))
+    DesolateLootcouncil:DLC_Log(string.format("Encounter START: %s (ID: %d, Diff: %s)", tostring(encounterName), encounterID, tostring(difficultyID)))
 end
 
 function Attendance:OnEncounterEnd(event, encounterID, encounterName, difficultyID, groupSize, success)
@@ -786,44 +828,91 @@ function Attendance:OnEncounterEnd(event, encounterID, encounterName, difficulty
     if not IsInRaid() and not isBypass then return end
     if not self:IsSessionActive() then return end
 
+    local config = db and db.DecayConfig
+    local existing = nil
+    if config and config.bossLogs then
+        for _, b in ipairs(config.bossLogs) do
+            local sameEncounter = (b.encounterID == encounterID) or (b.name == encounterName)
+            local sameDifficulty = (not b.difficultyID or not difficultyID or b.difficultyID == difficultyID)
+            if sameEncounter and sameDifficulty then
+                existing = b
+                break
+            end
+        end
+    end
+
+    local pulls = (existing and existing.pulls) or 1
     local isKill = (success == 1)
+
+    if existing then
+        if isKill then
+            existing.killed = true
+            existing.killedTime = existing.killedTime or time()
+        end
+        if difficultyID and not existing.difficultyID then
+            existing.difficultyID = difficultyID
+        end
+    elseif config and config.bossLogs then
+        existing = {
+            encounterID = encounterID,
+            name = encounterName,
+            difficultyID = difficultyID,
+            pulls = pulls,
+            killed = isKill,
+            killedTime = isKill and time() or nil,
+        }
+        table.insert(config.bossLogs, existing)
+    end
+
     if isKill then
+        local killRoster = {}
+        local RosterMod = DesolateLootcouncil:GetModule("Roster", true)
+        if IsInGroup() then
+            local members = GetNumGroupMembers()
+            if members and members > 0 then
+                for i = 1, members do
+                    local name = GetRaidRosterInfo(i)
+                    if name then
+                        local cleanName = (Ambiguate and Ambiguate(name, "none")) or (DesolateLootcouncil.Ambiguate and DesolateLootcouncil:Ambiguate(name)) or name
+                        local mainName = (RosterMod and RosterMod.GetMain and RosterMod:GetMain(cleanName)) or cleanName
+                        local class = self:GetUnitClass(cleanName) or "WARRIOR"
+                        table.insert(killRoster, { name = cleanName, main = mainName, class = class })
+                    end
+                end
+            end
+        end
+
+        local Sim = DesolateLootcouncil:GetModule("Simulation", true)
+        if Sim and Sim.GetRoster then
+            local sims = Sim:GetRoster()
+            for _, name in ipairs(sims) do
+                local cleanName = (Ambiguate and Ambiguate(name, "none")) or (DesolateLootcouncil.Ambiguate and DesolateLootcouncil:Ambiguate(name)) or name
+                local mainName = (RosterMod and RosterMod.GetMain and RosterMod:GetMain(cleanName)) or cleanName
+                local class = self:GetUnitClass(cleanName) or "WARRIOR"
+                table.insert(killRoster, { name = cleanName, main = mainName, class = class })
+            end
+        end
+
+        table.sort(killRoster, function(a, b)
+            return a.name < b.name
+        end)
+
+        existing.roster = killRoster
+
         local instName, instanceType = GetInstanceInfo()
         if instName and instName ~= "" and (instanceType == "raid" or not instanceType) then
-            if db and db.DecayConfig then
-                db.DecayConfig.raidZone = instName
+            if config then
+                config.raidZone = instName
             end
         end
 
         self:SnapshotRoster(true)
-        if db and db.DecayConfig and db.DecayConfig.bossLogs then
-            self.pullCounts = self.pullCounts or {}
-            local existing = nil
-            for _, b in ipairs(db.DecayConfig.bossLogs) do
-                local sameEncounter = (b.encounterID == encounterID) or (b.name == encounterName)
-                local sameDifficulty = (not b.difficultyID or not difficultyID or b.difficultyID == difficultyID)
-                if sameEncounter and sameDifficulty then
-                    existing = b
-                    break
-                end
-            end
-            if existing then
-                existing.killed = true
-                existing.killedTime = existing.killedTime or time()
-                if difficultyID and not existing.difficultyID then
-                    existing.difficultyID = difficultyID
-                end
-            else
-                table.insert(db.DecayConfig.bossLogs, {
-                    encounterID = encounterID,
-                    name = encounterName,
-                    difficultyID = difficultyID,
-                    pulls = self.pullCounts[encounterID] or 1,
-                    killed = true,
-                    killedTime = time()
-                })
-            end
-        end
+
+        local diffBadge = DesolateLootcouncil.API:GetDifficultyBadge(difficultyID) or "[Raid]"
+        local diffName = diffBadge:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        local detailStr = string.format("Defeated %s (%s, %d pulls)", encounterName, diffName, pulls)
+        DesolateLootcouncil.API:LogAudit("BOSS_KILL", nil, nil, nil, detailStr, db and db.DecayConfig and db.DecayConfig.currentSessionID)
+        self:SendMessage("DLC_HISTORY_UPDATED")
     end
     self.currentEncounter = nil
     DesolateLootcouncil:DLC_Log(string.format("Encounter END: %s (Success: %s)", tostring(encounterName), tostring(isKill)))

@@ -19,16 +19,6 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 ---@type Debug
 local Debug = DesolateLootcouncil:NewModule("Debug", "AceConsole-3.0") --[[@as Debug]]
 
--- Helper for Config workaround if needed, or just utility
-function Debug.OpenConfig()
-    -- Double-call workaround for AceConfig bug
-    local registry = LibStub("AceConfigDialog-3.0", true)
-    if registry then
-        registry:Open("DesolateLootcouncil")
-        registry:Open("DesolateLootcouncil")
-    end
-end
-
 function Debug:OnEnable()
     -- Passive module: No longer registers chat commands directly (handled by SlashCommands.lua).
     DesolateLootcouncil:DLC_Log("Utilities/Debug Loaded")
@@ -36,14 +26,9 @@ end
 
 function Debug:ShowStatus()
     local userCount = 0
-    if DesolateLootcouncil.activeAddonUsers then
-        for _ in pairs(DesolateLootcouncil.activeAddonUsers) do
-            userCount = userCount + 1
-        end
-        local myName = UnitName("player")
-        if myName and not DesolateLootcouncil.activeAddonUsers[myName] then
-            userCount = userCount + 1
-        end
+    local Comm = DesolateLootcouncil:GetModule("Comm", true)
+    if Comm and Comm.GetActiveUserCount then
+        userCount = Comm:GetActiveUserCount()
     end
 
     local activeLM = DesolateLootcouncil:DetermineLootMaster()
@@ -57,52 +42,6 @@ function Debug:ShowStatus()
     DesolateLootcouncil:DLC_Log("Addon Users Found: " .. userCount, true)
     DesolateLootcouncil:DLC_Log("Current Zone: " .. (GetRealZoneText() or "Unknown"), true)
     DesolateLootcouncil:DLC_Log("---------------------", true)
-end
-
-function Debug:SimulateComm(arg)
-    if arg == "vote" then
-        self:SimulateVoting()
-    else
-        DesolateLootcouncil.activeAddonUsers[arg] = true
-        DesolateLootcouncil:DLC_Log("Simulated PONG from " .. arg, true)
-    end
-end
-
-function Debug:SimulateVoting()
-    ---@type Session
-    local Session = DesolateLootcouncil:GetModule("Session") --[[@as Session]]
-    if not Session then return end
-
-    local session = DesolateLootcouncil.db.profile.session
-    local bidding = session and session.bidding
-
-    if not bidding or #bidding == 0 then
-        DesolateLootcouncil:DLC_Log("No active session items found.", true)
-        return
-    end
-
-    local myName = UnitName("player")
-    local votedCount = 0
-    -- Iterate all known addon users
-    if DesolateLootcouncil.activeAddonUsers then
-        local SimModule = DesolateLootcouncil:GetModule("Simulation")
-        for name in pairs(DesolateLootcouncil.activeAddonUsers) do
-            -- Skip myself (I vote manually)
-            if name ~= myName then
-                for _, item in ipairs(bidding) do
-                    local payload = SimModule:CreateSimulatedVotePayload(item)
-
-
-                    -- Session module handles OnCommReceived with "DLC_Loot" prefix?
-                    -- Systems/Session.lua registers "DLC_Loot".
-                    local serialized = Session:Serialize(payload)
-                    Session:OnCommReceived("DLC_Loot", serialized, "WHISPER", name)
-                end
-                votedCount = votedCount + 1
-            end
-        end
-    end
-    DesolateLootcouncil:DLC_Log("Simulated random votes for " .. votedCount .. " users.", true)
 end
 
 function Debug:DumpKeys()

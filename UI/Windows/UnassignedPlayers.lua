@@ -19,7 +19,7 @@ function UI_UnassignedPlayers:OnEnable()
 end
 
 function UI_UnassignedPlayers:ShowUnassignedWindow()
-    if not DesolateLootcouncil:AmIOfficerOrLM() then
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then
         if self.frame then self.frame:Hide() end
         return
     end
@@ -44,7 +44,7 @@ function UI_UnassignedPlayers:ShowUnassignedWindow()
         local btnAddAll = NativeGUI:CreateButton(frame, L["Add All as Mains"], 135, 24, "Bid")
         btnAddAll:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 12)
         btnAddAll:SetScript("OnClick", function()
-            if not DesolateLootcouncil:AmILootMaster() then return end
+            if not DesolateLootcouncil.API:AmILootMaster() then return end
             local unassigned = DesolateLootcouncil.API:GetUnassignedPlayers()
             for _, u in ipairs(unassigned) do
                 DesolateLootcouncil.API:AssignUnassignedAsMain(u.name)
@@ -56,7 +56,7 @@ function UI_UnassignedPlayers:ShowUnassignedWindow()
         local btnDismissAll = NativeGUI:CreateButton(frame, L["Dismiss All"], 95, 24, "Stop")
         btnDismissAll:SetPoint("LEFT", btnAddAll, "RIGHT", 8, 0)
         btnDismissAll:SetScript("OnClick", function()
-            if not DesolateLootcouncil:AmILootMaster() then return end
+            if not DesolateLootcouncil.API:AmILootMaster() then return end
             local unassigned = DesolateLootcouncil.API:GetUnassignedPlayers()
             for _, u in ipairs(unassigned) do
                 DesolateLootcouncil.API:DismissUnassignedPlayer(u.name)
@@ -68,7 +68,7 @@ function UI_UnassignedPlayers:ShowUnassignedWindow()
         local btnSyncLists = NativeGUI:CreateButton(frame, L["Sync to Lists"], 120, 24, "Pass")
         btnSyncLists:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 12)
         btnSyncLists:SetScript("OnClick", function()
-            if not DesolateLootcouncil:AmILootMaster() then return end
+            if not DesolateLootcouncil.API:AmILootMaster() then return end
             DesolateLootcouncil.API:SyncMissingPlayers()
             self:RefreshWindow()
         end)
@@ -95,7 +95,7 @@ function UI_UnassignedPlayers:RenderRow(index, uData, mainNames, NativeGUI)
     local row = self.rowPool[index]
     row:Show()
 
-    local isLM = DesolateLootcouncil:AmILootMaster()
+    local isLM = DesolateLootcouncil.API:AmILootMaster()
     local rowHeight = 34
     row:SetHeight(rowHeight)
     local topOffset = (index - 1) * (rowHeight + 6)
@@ -133,7 +133,7 @@ function UI_UnassignedPlayers:RenderRow(index, uData, mainNames, NativeGUI)
                 self.selectedMains[uData.name] = nil
                 self:RefreshWindow()
             else
-                DesolateLootcouncil:Print(L["Please select a Main character first."])
+                DesolateLootcouncil.API:Print(L["Please select a Main character first."])
             end
         end)
 
@@ -215,7 +215,7 @@ function UI_UnassignedPlayers:RenderRow(index, uData, mainNames, NativeGUI)
     else
         row.lblName:SetPoint("RIGHT", row, "RIGHT", -12, 0)
     end
-    local displayName = DesolateLootcouncil:GetDisplayName(uData.name)
+    local displayName = DesolateLootcouncil.API:GetDisplayName(uData.name)
     local sourceTag = string.format("|cff808080(%s)|r", uData.source or "Raid")
     row.lblName:SetText(NativeGUI:FormatClassColor(class, displayName) .. " " .. sourceTag)
     row.lblName:Show()
@@ -226,7 +226,7 @@ end
 function UI_UnassignedPlayers:RefreshWindow()
     if not self.frame or not self.content then return end
 
-    local isLM = DesolateLootcouncil:AmILootMaster()
+    local isLM = DesolateLootcouncil.API:AmILootMaster()
     local NativeGUI = DesolateLootcouncil:GetModule("UI_NativeGUI")
     local unassigned = DesolateLootcouncil.API:GetUnassignedPlayers()
     local mainListMap = DesolateLootcouncil.API:GetMainRosterList()

@@ -553,6 +553,8 @@ L["Only the Loot Master or Officers can modify priority lists."] = "Nur der Plü
 L["Only the Loot Master or Officers can view the Monitor."] = "Nur der Plündermeister oder Offiziere können den Monitor anzeigen."
 L["Only the Loot Master or Officers can view Priority Lists."] = "Nur der Plündermeister oder Offiziere können Prioritätslisten anzeigen."
 L["Only the Loot Master or Officers can view the Roster."] = "Nur der Plündermeister oder Offiziere können den Kader anzeigen."
+L["Only the Loot Master or Officers can review unassigned players."] = "Nur der Plündermeister oder Offiziere können nicht zugewiesene Spieler überprüfen."
+L["Only the Loot Master or Officers can view the Attendance Window."] = "Nur der Plündermeister oder Offiziere können das Anwesenheitsfenster einsehen."
 
 -- Interactive Simulation Controller Roles & Verification
 L["Simulation Role Persona"] = "Simulations-Rollenpersona"

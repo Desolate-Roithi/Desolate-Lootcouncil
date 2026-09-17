@@ -164,10 +164,10 @@ function Session:OnEnable()
             if API and API.ApplyDecayForLastSession then
                 API:ApplyDecayForLastSession(false)
             end
-            local RosterSys = DesolateLootcouncil:GetModule("Roster")
-            if RosterSys and RosterSys.pendingStartRaidSession then
-                RosterSys.pendingStartRaidSession = nil
-                RosterSys:StartRaidSession()
+            local Att = DesolateLootcouncil:GetModule("Attendance", true)
+            if Att and Att.pendingStartRaidSession then
+                Att.pendingStartRaidSession = nil
+                DesolateLootcouncil.API:StartRaidSession()
             end
         end,
         OnCancel = function(_, _, reason)
@@ -176,10 +176,10 @@ function Session:OnEnable()
                 if API and API.ApplyDecayForLastSession then
                     API:ApplyDecayForLastSession(true)
                 end
-                local RosterSys = DesolateLootcouncil:GetModule("Roster")
-                if RosterSys and RosterSys.pendingStartRaidSession then
-                    RosterSys.pendingStartRaidSession = nil
-                    RosterSys:StartRaidSession()
+                local Att = DesolateLootcouncil:GetModule("Attendance", true)
+                if Att and Att.pendingStartRaidSession then
+                    Att.pendingStartRaidSession = nil
+                    DesolateLootcouncil.API:StartRaidSession()
                 end
             end
         end,
@@ -1394,14 +1394,6 @@ function Session:EndSession()
     self:SendMessage("DLC_SESSION_STOPPED")
 
     DesolateLootcouncil:DLC_Log("The Loot Session was ended.", true)
-end
-
-function Session:ClearVotes()
-    self.sessionVotes = {}
-    self.myLocalVotes = {}
-    self.closedItems = {}
-    wipe(DesolateLootcouncil.db.profile.session.activeState)
-    DesolateLootcouncil:DLC_Log("Session data cleared.")
 end
 
 function Session:ClaimLMRole()

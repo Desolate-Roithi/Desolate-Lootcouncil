@@ -89,7 +89,7 @@ function SlashCommands.Handle(input)
             local UI = DesolateLootcouncil:GetModule("UI_UnassignedPlayers", true)
             if UI and UI.ShowUnassignedWindow then UI:ShowUnassignedWindow() end
         else
-            DesolateLootcouncil:Print(L["Only the Loot Master or Officers can view the Loot History."])
+            DesolateLootcouncil:Print(L["Only the Loot Master or Officers can review unassigned players."])
         end
 
     elseif cmd == "history" or cmd == "raids" then
@@ -118,7 +118,7 @@ function SlashCommands.Handle(input)
                 Attendance:ShowAttendanceWindow()
             end
         else
-            DesolateLootcouncil:Print(L["Only the Loot Master or Officers can view the Loot History."])
+            DesolateLootcouncil:Print(L["Only the Loot Master or Officers can view the Attendance Window."])
         end
 
     -- 3. Session & Decay Actions
@@ -230,13 +230,12 @@ function SlashCommands.Handle(input)
         end
 
     elseif cmd == "testunassigned" or cmd == "mockunassigned" then
-        local profile = DesolateLootcouncil.db.profile
-        if profile then
-            profile.unassignedPlayers = profile.unassignedPlayers or {}
-            profile.unassignedPlayers["Dustknight"] = { firstSeen = time(), source = "Raid", class = "WARRIOR" }
-            profile.unassignedPlayers["Frostmage"] = { firstSeen = time() + 1, source = "Bid", class = "MAGE" }
-            profile.unassignedPlayers["Holyheals"] = { firstSeen = time() + 2, source = "Version", class = "PRIEST" }
-            profile.unassignedPlayers["Shadowstep"] = { firstSeen = time() + 3, source = "Raid", class = "ROGUE" }
+        local API = DesolateLootcouncil.API
+        if API and API.RecordUnassignedPlayer then
+            API:RecordUnassignedPlayer("Dustknight", "Raid", "WARRIOR")
+            API:RecordUnassignedPlayer("Frostmage", "Bid", "MAGE")
+            API:RecordUnassignedPlayer("Holyheals", "Version", "PRIEST")
+            API:RecordUnassignedPlayer("Shadowstep", "Raid", "ROGUE")
             DesolateLootcouncil:Print("Injected 4 mock unassigned players (Dustknight, Frostmage, Holyheals, Shadowstep).")
             local UI = DesolateLootcouncil:GetModule("UI_UnassignedPlayers", true)
             if UI and UI.ShowUnassignedWindow then UI:ShowUnassignedWindow() end

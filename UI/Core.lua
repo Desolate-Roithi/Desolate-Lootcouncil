@@ -8,11 +8,9 @@ if AT.abortLoad then return end
 ---@field ShowMonitorWindow fun(self: UI)
 ---@field ShowAwardWindow fun(self: UI, itemData: table|nil)
 ---@field CloseMasterLootWindow fun(self: UI)
----@field ShowMasterLootWindow fun(self: UI)
 ---@field ShowHistoryWindow fun(self: UI)
 ---@field ShowAttendanceWindow fun(self: UI)
 ---@field ShowTradeListWindow fun(self: UI)
----@field RefreshTradeWindow fun(self: UI)
 ---@field ShowPriorityOverrideWindow fun(self: UI, listIndex: number)
 ---@field ShowVersionWindow fun(self: UI, isTest: boolean?)
 ---@field ResetVoting fun(self: UI)
@@ -98,10 +96,6 @@ function UI:ShowMonitorWindow()
     if M then M:ShowMonitorWindow() end
 end
 
-function UI:ShowMasterLootWindow()
-    self:ShowMonitorWindow()
-end
-
 function UI:CloseMasterLootWindow()
     local M = DesolateLootcouncil:GetModule("UI_Monitor")
     if M then M:CloseMasterLootWindow() end
@@ -117,11 +111,6 @@ function UI:ShowHistoryWindow()
     if M then M:ShowHistoryWindow() end
 end
 
-function UI:ShowAuditLogWindow(sessionID)
-    local M = DesolateLootcouncil:GetModule("UI_PriorityLogHistory", true)
-    if M and M.ShowLogWindow then M:ShowLogWindow(sessionID) end
-end
-
 function UI:ShowAttendanceWindow()
     local M = DesolateLootcouncil:GetModule("UI_Attendance")
     if M then M:ShowAttendanceWindow() end
@@ -130,11 +119,6 @@ end
 function UI:ShowTradeListWindow()
     local M = DesolateLootcouncil:GetModule("UI_TradeList")
     if M then M:ShowTradeListWindow() end
-end
-
-function UI:RefreshTradeWindow()
-    -- Forward to Show (which refreshes)
-    self:ShowTradeListWindow()
 end
 
 function UI:ShowPriorityOverrideWindow(listIndex)

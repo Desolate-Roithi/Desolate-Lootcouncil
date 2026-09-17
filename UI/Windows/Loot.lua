@@ -26,17 +26,17 @@ local function OnConnectionTooltipEnter(self)
         total = total + simCount
     end
 
-    local active = DesolateLootcouncil:GetActiveUserCount()
+    local active = DesolateLootcouncil.API:GetActiveUserCount()
     if active > total then active = total end
 
     GameTooltip:AddLine(string.format(L["Addon Connection: [%d] / [%d]"], active, total), 1, 1, 1)
 
-    local missing = (DesolateLootcouncil.GetMissingAddonMembers and DesolateLootcouncil:GetMissingAddonMembers()) or {}
+    local missing = DesolateLootcouncil.API:GetMissingAddonMembers()
     if #missing > 0 then
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(string.format("|cffff4444" .. L["Missing Addon (%d):"] .. "|r", #missing), 1, 0.5, 0.5)
         for _, name in ipairs(missing) do
-            local disp = DesolateLootcouncil:GetDisplayName(name) or name
+            local disp = DesolateLootcouncil.API:GetDisplayName(name) or name
             GameTooltip:AddLine("  • " .. disp, 0.9, 0.7, 0.7)
         end
     elseif active >= total then
@@ -52,7 +52,7 @@ end
 local function OnRefreshConnectionsClicked()
     local success = DesolateLootcouncil.API:SendVersionCheck()
     if success then
-        DesolateLootcouncil:DLC_Log("Triggering manual connection refresh...")
+        DesolateLootcouncil.API:DLC_Log("Triggering manual connection refresh...")
         UI_Loot.refreshBtn:SetEnabled(false)
         UI_Loot.refreshBtn:SetText(L["Pinging..."])
     end
@@ -104,7 +104,7 @@ local function OnTimerTick()
         end
     end
 
-    local activeC = DesolateLootcouncil.GetActiveUserCount and DesolateLootcouncil:GetActiveUserCount() or (status and status.active or 1)
+    local activeC = DesolateLootcouncil.API:GetActiveUserCount()
     local totalC = GetNumGroupMembers()
     if totalC == 0 then totalC = 1 end
     local simCount = (DesolateLootcouncil.API and DesolateLootcouncil.API.GetSimulationCount and DesolateLootcouncil.API:GetSimulationCount()) or 0
@@ -135,7 +135,7 @@ local function OnRemoveLootClicked(lootTable, guid, link)
             break
         end
     end
-    DesolateLootcouncil:DLC_Log("Removed " .. (link or "item") .. " from session.")
+    DesolateLootcouncil.API:DLC_Log("Removed " .. (link or "item") .. " from session.")
     UI_Loot:ShowLootWindow(lootTable)
 end
 
@@ -149,7 +149,7 @@ local function OnCategoryCallback(data, listIndexMap, value)
     local idx = listIndexMap[value]
     if idx then
         DesolateLootcouncil.API:SetItemCategory(data.itemID, idx)
-        DesolateLootcouncil:DLC_Log("Category updated to: " .. value)
+        DesolateLootcouncil.API:DLC_Log("Category updated to: " .. value)
     elseif value == "Junk/Pass" then
         DesolateLootcouncil.API:UnassignItem(data.itemID)
     end
@@ -169,7 +169,7 @@ function UI_Loot:ShowLootWindow(lootTable)
 
     if not DesolateLootcouncil.API:IsLootMaster() then
         if self.lootFrame then self.lootFrame:Hide() end
-        DesolateLootcouncil:Print("Error: Only the Loot Master can open the Loot Window.")
+        DesolateLootcouncil.API:Print("Error: Only the Loot Master can open the Loot Window.")
         return
     end
 
@@ -348,7 +348,7 @@ function UI_Loot:ShowLootWindow(lootTable)
     end
 
     self.scrollContent:SetHeight(topOffset + 10)
-    DesolateLootcouncil:DLC_Log(string.format("Loot Window Populated with %d items", count))
+    DesolateLootcouncil.API:DLC_Log(string.format("Loot Window Populated with %d items", count))
 end
 
 function UI_Loot:OnEnable()

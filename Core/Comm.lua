@@ -335,27 +335,6 @@ function Comm:SeedSelf()
     DesolateLootcouncil:DLC_Log("[Conn] Self-seeded " .. myName .. " as version " .. myVersion)
 end
 
-function Comm:IsPlayerActive(name)
-    if not name then return false end
-    if self.playerVersions and self.playerVersions[name] then return true end
-
-    local shortName = tostring(name):match("^([^-]+)")
-    if shortName and self.playerVersions and self.playerVersions[shortName] then return true end
-
-    if self.lastKnownHasAddon and (self.lastKnownHasAddon[name] or (shortName and self.lastKnownHasAddon[shortName])) then
-        return true
-    end
-
-    if self.playerVersions then
-        for verName in pairs(self.playerVersions) do
-            if DesolateLootcouncil:SmartCompare(name, verName) then
-                return true
-            end
-        end
-    end
-    return false
-end
-
 function Comm:IsUnitConnected(unit)
     if UnitIsConnected then
         return UnitIsConnected(unit) ~= false
@@ -406,7 +385,7 @@ function Comm:GetGroupConnectionStatus()
     self.lastKnownHasAddon = self.lastKnownHasAddon or {}
 
     local myName = (GetUnitName and GetUnitName("player", true)) or (UnitName and UnitName("player")) or "Unknown"
-    local myVersion = DesolateLootcouncil.version or "2.1.0"
+    local myVersion = DesolateLootcouncil.version or "1.0.0"
     if myName and myName ~= "Unknown" then
         self.lastKnownHasAddon[myName] = true
     end

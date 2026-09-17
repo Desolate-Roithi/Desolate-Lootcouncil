@@ -6,7 +6,7 @@ local UI_Version = DesolateLootcouncil:NewModule("UI_Version", "AceEvent-3.0", "
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 local function SafeGetUnitClass(unit)
-    return DesolateLootcouncil:SafeGetUnitClass(unit) or "WARRIOR"
+    return DesolateLootcouncil.API:SafeGetUnitClass(unit) or "WARRIOR"
 end
 
 -- Helper functions to keep nesting flat
@@ -88,10 +88,10 @@ function UI_Version:ShowVersionWindow(isTest)
         btnRefresh:SetScript("OnClick", function() OnVersionRefreshClicked() end)
         btnSync:SetScript("OnClick", function()
             if not DesolateLootcouncil.sessionAutopassAnswered then
-                DesolateLootcouncil:PromptAutopass()
+                DesolateLootcouncil.API:PromptAutopass()
             else
                 DesolateLootcouncil.API:SendSyncAutopass(DesolateLootcouncil.sessionAutopassActive or false)
-                DesolateLootcouncil:Print(L["Autopass state synced to raid group."])
+                DesolateLootcouncil.API:Print(L["Autopass state synced to raid group."])
                 self:UpdateVersionList()
             end
         end)
@@ -210,7 +210,7 @@ function UI_Version:UpdateVersionList(isTest)
     end
 
     -- Synthetic test dummies ONLY when explicitly in automated test suite and NOT in live simulation
-    if testActive and not (DesolateLootcouncil.IsSimulationActive and DesolateLootcouncil:IsSimulationActive()) then
+    if testActive and not DesolateLootcouncil.API:IsSimulationActive() then
         AddEntry("OutdatedPlayer", "WARRIOR", "0.0.1")
         AddEntry("MissingPlayer", "MAGE", nil)
         AddEntry("FuturePlayer", "ROGUE", "9.9.9")
@@ -240,13 +240,13 @@ function UI_Version:UpdateVersionList(isTest)
     self.headerLabel:Show()
 
     if self.btnSync then
-        local isLM = DesolateLootcouncil:AmILootMaster()
+        local isLM = DesolateLootcouncil.API:AmILootMaster()
         self.btnSync:SetEnabled(isLM)
     end
 
     table.sort(roster, function(a, b)
-        local nameA = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil:GetDisplayName(a.name) or a.name)
-        local nameB = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil:GetDisplayName(b.name) or b.name)
+        local nameA = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil.API:GetDisplayName(a.name) or a.name)
+        local nameB = DesolateLootcouncil.API:SafeAmbiguate(DesolateLootcouncil.API:GetDisplayName(b.name) or b.name)
         return nameA:lower() < nameB:lower()
     end)
 
@@ -269,7 +269,7 @@ function UI_Version:UpdateVersionList(isTest)
             row.nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.nameText:SetPoint("LEFT", 8, 0)
         end
-        local mainName = DesolateLootcouncil:GetDisplayName(entry.name) or entry.name
+        local mainName = DesolateLootcouncil.API:GetDisplayName(entry.name) or entry.name
         local displayName = DesolateLootcouncil.API:SafeAmbiguate(mainName)
         row.nameText:SetText(NativeGUI:FormatClassColor(entry.class, displayName))
         row.nameText:SetTextColor(1, 1, 1)

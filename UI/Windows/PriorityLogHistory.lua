@@ -120,7 +120,7 @@ local function RenderAuditRow(self, e, row, topOffset, rowHeight, NativeGUI)
             GameTooltip:AddLine(L["Audit & Priority Ledger"], 1, 0.8, 0)
             GameTooltip:AddLine(string.format("Cryptographic State Hash:\n|cff00ff00%s|r", e.h), 1, 1, 1, true)
             if e.by then
-                GameTooltip:AddLine(string.format("Author: |cffffffff%s|r", DesolateLootcouncil:GetDisplayName(e.by)), 0.8, 0.8, 0.8)
+                GameTooltip:AddLine(string.format("Author: |cffffffff%s|r", DesolateLootcouncil.API:GetDisplayName(e.by)), 0.8, 0.8, 0.8)
             end
             GameTooltip:Show()
         end
@@ -136,10 +136,10 @@ local function RenderAuditRow(self, e, row, topOffset, rowHeight, NativeGUI)
         row.descLabel:SetWordWrap(false)
     end
 
-    local playerTag = e.p and string.format("|cffffffff%s|r", DesolateLootcouncil:GetDisplayName(e.p)) or ""
+    local playerTag = e.p and string.format("|cffffffff%s|r", DesolateLootcouncil.API:GetDisplayName(e.p)) or ""
     local listTag   = e.l and string.format(" |cff888888(%s)|r", e.l) or ""
     local detTag    = e.det and string.format(" - %s", e.det) or ""
-    local actorTag  = e.by and string.format(" |cff555555[by %s]|r", DesolateLootcouncil:GetDisplayName(e.by)) or ""
+    local actorTag  = e.by and string.format(" |cff555555[by %s]|r", DesolateLootcouncil.API:GetDisplayName(e.by)) or ""
 
     row.descLabel:SetText(string.format("%s%s%s%s", playerTag, listTag, detTag, actorTag))
     row.descLabel:Show()
@@ -284,7 +284,7 @@ end
 ---@param sessionID number|string|nil Optional session ID to filter events for a specific raid night
 ---@param isTestInspection boolean|nil Optional flag to bypass officer role requirement for interactive simulation review
 function UI_PriorityLogHistory:ShowLogWindow(sessionID, isTestInspection)
-    if not (DesolateLootcouncil:AmIOfficerOrLM() or isTestInspection or DesolateLootcouncil.isTestRunning) then
+    if not (DesolateLootcouncil.API:AmIOfficerOrLM() or isTestInspection or DesolateLootcouncil.isTestRunning) then
         if self.logFrame then self.logFrame:Hide() end
         return
     end

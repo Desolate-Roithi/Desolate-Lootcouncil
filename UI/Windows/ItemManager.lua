@@ -31,7 +31,7 @@ end
 
 local OnSyncRaidClicked = function()
     DesolateLootcouncil.API:SyncItemManagerToRaid()
-    DesolateLootcouncil:Print(L["Item Manager lists synced to raid."])
+    DesolateLootcouncil.API:Print(L["Item Manager lists synced to raid."])
 end
 
 local OnViewListChanged = function(value)
@@ -218,7 +218,7 @@ function UI_ItemManager:RefreshWindow()
     end
 
     -- 4. Sync Raid Button (LM/Officer Only)
-    if DesolateLootcouncil:AmIOfficerOrLM() then
+    if DesolateLootcouncil.API:AmIOfficerOrLM() then
         if not self.btnSync then
             local btn = NativeGUI:CreateButton(self.frame, L["Sync Raid"], 90, 24, "Bid")
             btn:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -16, -58)

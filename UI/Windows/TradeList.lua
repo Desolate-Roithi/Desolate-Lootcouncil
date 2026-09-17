@@ -15,7 +15,7 @@ local function GetUnitIDForName(playerName)
     local baseMain = targetMain and DesolateLootcouncil.API:GetBaseCharacterName(targetMain)
 
     local function CheckUnit(unit)
-        local unitScore = DesolateLootcouncil:GetUnitScore(unit)
+        local unitScore = DesolateLootcouncil.API:GetUnitScore(unit)
         local unitName = UnitName(unit)
         local baseUnit = unitName and DesolateLootcouncil.API:GetBaseCharacterName(unitName)
 
@@ -46,7 +46,7 @@ local function AttemptInitiateTrade(item)
     local winnerScore = DesolateLootcouncil.API:GetScoreName(item.winner)
     local winnerMain = DesolateLootcouncil.API:GetMain(item.winner)
     local mainScore = winnerMain and DesolateLootcouncil.API:GetScoreName(winnerMain)
-    local targetScore = DesolateLootcouncil:GetUnitScore("target")
+    local targetScore = DesolateLootcouncil.API:GetUnitScore("target")
     local baseWinner = DesolateLootcouncil.API:GetBaseCharacterName(item.winner)
     local baseMain = winnerMain and DesolateLootcouncil.API:GetBaseCharacterName(winnerMain)
     local targetName = UnitName("target")
@@ -56,8 +56,8 @@ local function AttemptInitiateTrade(item)
         InitiateTrade("target")
         return
     end
-    DesolateLootcouncil:DLC_Log(string.format(L["Could not auto-target %s. Please target them manually and click Trade again."],
-        DesolateLootcouncil:GetDisplayName(item.winner)), true)
+    DesolateLootcouncil.API:DLC_Log(string.format(L["Could not auto-target %s. Please target them manually and click Trade again."],
+        DesolateLootcouncil.API:GetDisplayName(item.winner)), true)
 end
 
 local function SetupActionButtons(self, item, row, NativeGUI)
@@ -108,7 +108,7 @@ local function SetupItemDetails(item, row, NativeGUI, showTipFunc)
     row.winnerLabel:Show()
 
     local class = item.winnerClass or DesolateLootcouncil.API:GetUnitClass(item.winner)
-    local winnerDisp = DesolateLootcouncil:GetDisplayName(item.winner)
+    local winnerDisp = DesolateLootcouncil.API:GetDisplayName(item.winner)
     row.winnerLabel:SetText(NativeGUI:FormatClassColor(class, winnerDisp))
 
     if not row.linkLabel then

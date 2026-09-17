@@ -181,7 +181,7 @@ function UI_TestSuite:ShowTestSuiteWindow()
         local btnRestoreProfile = NativeGUI:CreateButton(f, "Restore Profile", 115, 24, "Pass")
         btnRestoreProfile:SetPoint("LEFT", btnReset0, "RIGHT", 6, 0)
         btnRestoreProfile:SetScript("OnClick", function()
-            local restored = TestSuite:RestoreOriginalProfile()
+            local restored = DesolateLootcouncil.API and DesolateLootcouncil.API:RestoreTestProfile()
             if restored then
                 if DesolateLootcouncil.DLC_Log then
                     DesolateLootcouncil:DLC_Log(string.format("Restored profile back to '%s'.", restored))

@@ -56,10 +56,10 @@ StaticPopupDialogs["DLC_NEW_DATE_SESSION_PROMPT"] = {
     button1 = L["Save & Start New"],
     button2 = L["Keep Previous"],
     OnAccept = function()
-        local RosterMod = DesolateLootcouncil:GetModule("Roster")
-        if RosterMod then
-            RosterMod:StopRaidSession(true)
-            RosterMod:StartRaidSession()
+        local API = DesolateLootcouncil.API
+        if API then
+            API:StopRaidSession(true)
+            API:StartRaidSession()
         end
     end,
     OnCancel = function()
@@ -85,9 +85,9 @@ StaticPopupDialogs["DLC_DISBAND_CLOSE_SESSION"] = {
                 return
             end
         end
-        local Roster2 = DesolateLootcouncil:GetModule("Roster")
-        if Roster2 then
-            Roster2:StopRaidSession(true)
+        local API = DesolateLootcouncil.API
+        if API and API.StopRaidSession then
+            API:StopRaidSession(true)
         end
     end,
     OnCancel = function()
@@ -111,9 +111,6 @@ StaticPopupDialogs["DLC_DISBAND_CLOSE_SESSION"] = {
 local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcouncil") --[[@as DLC_Ref_Roster]]
 
 function Roster:OnEnable()
-    self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-    self:RegisterEvent("ENCOUNTER_START")
-    self:RegisterEvent("ENCOUNTER_END")
     self:RegisterEvent("PLAYER_LOGIN")
     self:RegisterEvent("GROUP_ROSTER_UPDATE")
     self:RegisterMessage("DLC_VERSION_UPDATE")
@@ -125,9 +122,6 @@ function Roster:OnEnable()
 end
 
 function Roster:OnDisable()
-    self:UnregisterEvent("ZONE_CHANGED_NEW_AREA")
-    self:UnregisterEvent("ENCOUNTER_START")
-    self:UnregisterEvent("ENCOUNTER_END")
     self:UnregisterEvent("PLAYER_LOGIN")
     self:UnregisterEvent("GROUP_ROSTER_UPDATE")
     self:UnregisterMessage("DLC_VERSION_UPDATE")
@@ -228,19 +222,21 @@ function Roster:HandleSlashCommand(input)
     local cmd = args[1]
 
     if cmd == "start" then
-        self:StartRaidSession()
+        DesolateLootcouncil.API:StartRaidSession()
     elseif cmd == "stop" then
         ---@type UI
         local UI = DesolateLootcouncil:GetModule("UI") --[[@as UI]]
         if UI and UI.ShowAttendanceWindow then
             UI:ShowAttendanceWindow()
         else
-            self:StopRaidSession(true)
+            DesolateLootcouncil.API:StopRaidSession(true)
         end
     elseif cmd == "kill" then
-        self:SnapshotRoster()
+        local Att = DesolateLootcouncil:GetModule("Attendance", true)
+        if Att and Att.SnapshotRoster then Att:SnapshotRoster(true) end
     elseif cmd == "attend" then
-        self:PrintCurrentAttendees()
+        local Att = DesolateLootcouncil:GetModule("Attendance", true)
+        if Att and Att.PrintCurrentAttendees then Att:PrintCurrentAttendees() end
     else
         DesolateLootcouncil:DLC_Log("Roster Commands: start, stop, kill, attend", true)
     end
@@ -248,41 +244,6 @@ end
 
 function Roster:Printf(msg, ...)
     DesolateLootcouncil:DLC_Log(string.format(msg, ...), true)
-end
-
--- ==============================================================================
--- RAID SESSIONS & ATTENDANCE (Delegated to Systems/Attendance.lua)
--- ==============================================================================
-
-function Roster:StartRaidSession()
-    local Att = DesolateLootcouncil:GetModule("Attendance", true)
-    if Att and Att.StartRaidSession then Att:StartRaidSession() end
-end
-
-function Roster:StopRaidSession(saveHistory)
-    local Att = DesolateLootcouncil:GetModule("Attendance", true)
-    if Att and Att.StopRaidSession then Att:StopRaidSession(saveHistory) end
-end
-
-function Roster:GetUnitClass(unitName)
-    local Att = DesolateLootcouncil:GetModule("Attendance", true)
-    if Att and Att.GetUnitClass then return Att:GetUnitClass(unitName) end
-    return "WARRIOR"
-end
-
-function Roster:RegisterAttendance(unitName, isEncounterKill)
-    local Att = DesolateLootcouncil:GetModule("Attendance", true)
-    if Att and Att.RegisterAttendance then Att:RegisterAttendance(unitName, isEncounterKill) end
-end
-
-function Roster:SnapshotRoster(isEncounterKill)
-    local Att = DesolateLootcouncil:GetModule("Attendance", true)
-    if Att and Att.SnapshotRoster then Att:SnapshotRoster(isEncounterKill) end
-end
-
-function Roster:PrintCurrentAttendees()
-    local Att = DesolateLootcouncil:GetModule("Attendance", true)
-    if Att and Att.PrintCurrentAttendees then Att:PrintCurrentAttendees() end
 end
 
 ---------------------------------------------------------------------------
@@ -575,7 +536,7 @@ end
 -- UNASSIGNED PLAYERS REVIEW QUEUE
 ---------------------------------------------------------------------------
 
-function Roster:RecordUnassignedPlayer(name, source)
+function Roster:RecordUnassignedPlayer(name, source, class)
     if not DesolateLootcouncil.db or not name or name == "" then return end
     local profile = DesolateLootcouncil.db.profile
     if not profile then return end
@@ -609,7 +570,7 @@ function Roster:RecordUnassignedPlayer(name, source)
         profile.unassignedPlayers[normalizedName] = {
             firstSeen = GetServerTime(),
             source = source or "Raid",
-            class = SafeGetUnitClass(name) or "WARRIOR"
+            class = class or SafeGetUnitClass(name) or "WARRIOR"
         }
         profile.unassignedTimestamp = GetServerTime()
         DesolateLootcouncil:DLC_Log(string.format("Recorded unassigned player: |cFFFFFF00%s|r (%s). Requires Loot Master assignment.", normalizedName, source or "Raid"))
@@ -725,175 +686,73 @@ end
 ---------------------------------------------------------------------------
 
 function Roster:ZONE_CHANGED_NEW_AREA()
-    if DesolateLootcouncil:IsLFR() then return end
-
-    local name, instanceType = GetInstanceInfo()
-    local config = DesolateLootcouncil.db.profile.DecayConfig
-
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
-    local testRaid = (self.testInstanceType == "raid")
-
-    if (instanceType == "raid" or testRaid) and (IsInRaid() or simActive or testRaid) then
-        if not config.sessionActive then
-            if DesolateLootcouncil:AmILootMaster() then
-                self:Printf("Entered Raid Instance (%s). Starting Session...", name or "Raid")
-                self:StartRaidSession()
-            end
-        else
-            -- We are transitioning between areas inside the same raid instance
-            -- (e.g. wing changes, trash → boss, etc.).
-            -- DO NOT wipe sessionAutopassActive here — the LM answered the popup
-            -- on session start and the value must survive internal zone changes.
-            -- If the LM somehow never got the popup (e.g. session was persisted
-            -- across a /reload without an autopass answer), re-show it.
-            if IsInRaid() and DesolateLootcouncil:AmILootMaster() and not DesolateLootcouncil.sessionAutopassAnswered then
-                DesolateLootcouncil:PromptAutopass()
-            end
-        end
-        -- Auto-ping the LM to sync Autopass and IM configs if joining late
-        DesolateLootcouncil:SendVersionCheck()
-    elseif instanceType ~= "raid" and config.sessionActive then
-        DesolateLootcouncil:DLC_Log(string.format("DEBUG: Left Raid (%s). Session is still ACTIVE.", name))
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.OnZoneChanged then
+        Att:OnZoneChanged()
     end
 end
 
-function Roster:ENCOUNTER_START(event, encounterID, encounterName, difficultyID, groupSize)
-    if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
-    local config = DesolateLootcouncil.db.profile.DecayConfig
-    if not config.sessionActive then return end
-
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
-    if not IsInRaid() and not simActive then return end
-
-    config.bossLogs = config.bossLogs or {}
-
-    local bossEntry = nil
-    for _, b in ipairs(config.bossLogs) do
-        local sameEncounter = (b.encounterID == encounterID) or (b.name == encounterName)
-        local sameDifficulty = (not b.difficultyID or not difficultyID or b.difficultyID == difficultyID)
-        if sameEncounter and sameDifficulty then
-            bossEntry = b
-            break
-        end
-    end
-
-    if not bossEntry then
-        bossEntry = {
-            encounterID = encounterID,
-            name = encounterName,
-            difficultyID = difficultyID,
-            pulls = 0,
-            killed = false,
-        }
-        table.insert(config.bossLogs, bossEntry)
-    else
-        if difficultyID and not bossEntry.difficultyID then
-            bossEntry.difficultyID = difficultyID
-        end
-    end
-
-    bossEntry.pulls = bossEntry.pulls + 1
-    local instName, instanceType = GetInstanceInfo()
-    if instName and instName ~= "" and (instanceType == "raid" or not instanceType) then
-        config.raidZone = instName
-    end
-    config.lastActivity = time()
-    if DesolateLootcouncil.db.global then
-        DesolateLootcouncil.db.global.activeRaidLastActivity = config.lastActivity
+function Roster:StartRaidSession(forced)
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.StartRaidSession then
+        return Att:StartRaidSession(forced)
     end
 end
 
-function Roster:ENCOUNTER_END(event, encounterID, encounterName, difficultyID, groupSize, success)
-    if difficultyID == 7 or difficultyID == 17 or DesolateLootcouncil:IsLFR() then return end
-    local config = DesolateLootcouncil.db.profile.DecayConfig
-    if not config.sessionActive then return end
-
-    local Sim = DesolateLootcouncil:GetModule("Simulation", true)
-    local simActive = Sim and Sim.GetRoster and #Sim:GetRoster() > 0
-    if not IsInRaid() and not simActive then return end
-
-    config.bossLogs = config.bossLogs or {}
-
-    local bossEntry = nil
-    for _, b in ipairs(config.bossLogs) do
-        local sameEncounter = (b.encounterID == encounterID) or (b.name == encounterName)
-        local sameDifficulty = (not b.difficultyID or not difficultyID or b.difficultyID == difficultyID)
-        if sameEncounter and sameDifficulty then
-            bossEntry = b
-            break
-        end
+function Roster:StopRaidSession(applyDecay)
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.StopRaidSession then
+        return Att:StopRaidSession(applyDecay)
     end
+end
 
-    if not bossEntry then
-        bossEntry = {
-            encounterID = encounterID,
-            name = encounterName,
-            difficultyID = difficultyID,
-            pulls = 1,
-            killed = false,
-        }
-        table.insert(config.bossLogs, bossEntry)
-    else
-        if difficultyID and not bossEntry.difficultyID then
-            bossEntry.difficultyID = difficultyID
-        end
+function Roster:SnapshotRoster(isManual)
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.SnapshotRoster then
+        return Att:SnapshotRoster(isManual)
     end
+end
 
-    if success == 1 then
-        bossEntry.killed = true
-        bossEntry.killedTime = time()
-        local instName, instanceType = GetInstanceInfo()
-        if instName and instName ~= "" and (instanceType == "raid" or not instanceType) then
-            config.raidZone = instName
-        end
-
-        -- Capture group roster for the kill
-        local killRoster = {}
-        if IsInGroup() then
-            local members = GetNumGroupMembers()
-            if members > 0 then
-                for i = 1, members do
-                    local name = GetRaidRosterInfo(i)
-                    if name then
-                        local mainName = self:GetMain(name) or name
-                        local class = self:GetUnitClass(name) or "WARRIOR"
-                        table.insert(killRoster, { name = name, main = mainName, class = class })
-                    end
-                end
-            end
-        end
-
-        if Sim then
-            local sims = Sim:GetRoster()
-            for _, name in ipairs(sims) do
-                local mainName = self:GetMain(name) or name
-                local class = self:GetUnitClass(name) or "WARRIOR"
-                table.insert(killRoster, { name = name, main = mainName, class = class })
-            end
-        end
-
-        table.sort(killRoster, function(a, b)
-            return a.name < b.name
-        end)
-
-        bossEntry.roster = killRoster
-
-        self:SnapshotRoster(true)
-        self:Printf("Encounter '%s' Defeated. Attendance updated.", encounterName)
-
-        local diffBadge = self:GetDifficultyBadge(difficultyID) or "[Raid]"
-        local diffName = diffBadge:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-        local detailStr = string.format("Defeated %s (%s, %d pulls)", encounterName, diffName, bossEntry.pulls or 1)
-        DesolateLootcouncil.API:LogAudit("BOSS_KILL", nil, nil, nil, detailStr, config.currentSessionID)
-
-        DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
+function Roster:GetUnitClass(unit)
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.GetUnitClass then
+        return Att:GetUnitClass(unit)
     end
+    return DesolateLootcouncil:SafeGetUnitClass(unit)
+end
+Roster.DefaultGetUnitClass = Roster.GetUnitClass
 
-    config.lastActivity = time()
-    if DesolateLootcouncil.db.global then
-        DesolateLootcouncil.db.global.activeRaidLastActivity = config.lastActivity
+function Roster:RegisterAttendance(unit, isRaidGroup)
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.RegisterAttendance then
+        return Att:RegisterAttendance(unit, isRaidGroup)
+    end
+end
+
+function Roster:DeleteAttendanceHistoryEntry(index)
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.DeleteAttendanceHistoryEntry then
+        return Att:DeleteAttendanceHistoryEntry(index)
+    end
+    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
+    if not db or not db.AttendanceHistory or not db.AttendanceHistory[index] then return end
+    table.remove(db.AttendanceHistory, index)
+    if DesolateLootcouncil.API and DesolateLootcouncil.API.MarkHistoryDirty then
+        DesolateLootcouncil.API:MarkHistoryDirty()
+    end
+end
+
+function Roster:ENCOUNTER_START(...)
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.OnEncounterStart then
+        return Att:OnEncounterStart(...)
+    end
+end
+
+function Roster:ENCOUNTER_END(...)
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
+    if Att and Att.OnEncounterEnd then
+        return Att:OnEncounterEnd(...)
     end
 end
 
@@ -1222,16 +1081,6 @@ function Roster:ApplyDecayForLastSession(skip)
     entry.decayApplied = GetServerTime()
 end
 
---- Deletes an attendance history entry by index.
----@param index number|string
-function Roster:DeleteAttendanceEntry(index)
-    local db = DesolateLootcouncil.db.profile
-    if db.AttendanceHistory and db.AttendanceHistory[index] then
-        table.remove(db.AttendanceHistory, index)
-        db.historyTimestamp = GetServerTime()
-    end
-end
-
 --- Returns a colored difficulty badge string (e.g. |cff1eff00[NHC]|r, |cff0070dd[HC]|r, |cffff8000[M]|r, |cff00ccff[LFR]|r)
 ---@param difficultyID number|string|nil
 ---@param bossName string|nil
@@ -1360,28 +1209,6 @@ function Roster:GetAllPlayersList()
     return list
 end
 
-function Roster:DeleteAttendanceHistoryEntry(index)
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    if not db then return end
-    if type(index) == "number" and db.AttendanceHistory and db.AttendanceHistory[index] then
-        table.remove(db.AttendanceHistory, index)
-        DesolateLootcouncil:DLC_Log(string.format("Deleted attendance history entry #%d.", index))
-    elseif index == "CURRENT" then
-        local config = db.DecayConfig
-        if config then
-            config.sessionActive = false
-            config.currentSessionID = nil
-        end
-        if db.session then
-            db.session.awarded = {}
-            db.session.bidding = {}
-            db.session.backlog = {}
-            db.session.publicAwardLog = {}
-        end
-        DesolateLootcouncil:DLC_Log("Cleared active session attendance and loot.")
-    end
-end
-
 function Roster:RenamePlayer(oldName, newName)
     if not oldName or oldName == "" or not newName or newName == "" then return false end
     if oldName == newName then return false end
@@ -1390,6 +1217,8 @@ function Roster:RenamePlayer(oldName, newName)
 
     oldName = DesolateLootcouncil:NormalizeName(oldName)
     newName = DesolateLootcouncil:NormalizeName(newName)
+
+    local Att = DesolateLootcouncil:GetModule("Attendance", true)
 
     -- Case 1: oldName is a Main
     if db.MainRoster and db.MainRoster[oldName] then
@@ -1419,7 +1248,7 @@ function Roster:RenamePlayer(oldName, newName)
 
         DesolateLootcouncil:DLC_Log(string.format("Renamed Main player '%s' to '%s'.", oldName, newName))
         DesolateLootcouncil.API:LogAudit("ROSTER_RENAME", nil, newName, nil, string.format("Renamed Main from %s to %s", oldName, newName))
-        self:SnapshotRoster()
+        if Att and Att.SnapshotRoster then Att:SnapshotRoster() end
         return true
     end
 
@@ -1431,7 +1260,7 @@ function Roster:RenamePlayer(oldName, newName)
 
         DesolateLootcouncil:DLC_Log(string.format("Renamed Alt player '%s' to '%s' (Main: %s).", oldName, newName, main))
         DesolateLootcouncil.API:LogAudit("ROSTER_RENAME", nil, newName, nil, string.format("Renamed Alt from %s to %s (Main: %s)", oldName, newName, main))
-        self:SnapshotRoster()
+        if Att and Att.SnapshotRoster then Att:SnapshotRoster() end
         return true
     end
 

@@ -39,16 +39,19 @@ local function Persistence() return DesolateLootcouncil.Persistence end
 -- 1. CORE / DATABASE / ACCESS CONTROL API
 -- ===========================================================================
 
---- Returns the active profile database table.
----@return table
-function DLC_API:GetDB()
-    return DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-end
-
 --- Prints a formatted message to the chat frame.
 ---@param msg string
 function DLC_API:Print(msg)
     DesolateLootcouncil:Print(msg)
+end
+
+--- Logs a message to the internal logger.
+---@param msg string
+---@param force boolean?
+function DLC_API:DLC_Log(msg, force)
+    if DesolateLootcouncil.DLC_Log then
+        DesolateLootcouncil:DLC_Log(msg, force)
+    end
 end
 
 --- Returns true if the local player has officer or Loot Master permissions.
@@ -76,6 +79,67 @@ function DLC_API:IsLootMaster()
     return (DesolateLootcouncil.AmILootMaster and DesolateLootcouncil:AmILootMaster()) or DesolateLootcouncil.amILM or false
 end
 
+--- Returns true if the local player is currently the active Loot Master.
+---@return boolean
+function DLC_API:AmILootMaster()
+    return self:IsLootMaster()
+end
+
+--- Specialized fast path for normalizing unit tokens (raid1, target, etc).
+---@param unit string|nil
+---@return string|nil
+function DLC_API:GetUnitScore(unit)
+    if not unit then return nil end
+    if DesolateLootcouncil.GetUnitScore then
+        return DesolateLootcouncil:GetUnitScore(unit)
+    end
+    if unit == "player" then
+        return self.GetScoreName and self:GetScoreName("player") or "player"
+    end
+    local name, realm = UnitName(unit)
+    if not name then return nil end
+    realm = (realm and realm ~= "") and realm or (GetRealmName and GetRealmName()) or ""
+    return (name .. "-" .. realm):lower():gsub("%s+", "")
+end
+
+--- Safely returns class information for a unit.
+---@param unit string
+---@return string?, string?
+function DLC_API:SafeGetUnitClass(unit)
+    if DesolateLootcouncil.SafeGetUnitClass then
+        return DesolateLootcouncil:SafeGetUnitClass(unit)
+    end
+    return nil, nil
+end
+
+--- Enables frame dragging and saves its position to profile.
+---@param frame table
+---@param windowName string
+function DLC_API:MakeMovableWithSave(frame, windowName)
+    if DesolateLootcouncil.MakeMovableWithSave then
+        DesolateLootcouncil:MakeMovableWithSave(frame, windowName)
+    end
+end
+
+--- Prompts autopass confirmation dialog.
+---@param itemLink string
+---@param callback function
+function DLC_API:PromptAutopass(itemLink, callback)
+    if DesolateLootcouncil.PromptAutopass then
+        DesolateLootcouncil:PromptAutopass(itemLink, callback)
+    end
+end
+
+--- Returns a list of raid members missing the addon.
+---@return table
+function DLC_API:GetMissingAddonMembers()
+    if DesolateLootcouncil.GetMissingAddonMembers then
+        return DesolateLootcouncil:GetMissingAddonMembers()
+    end
+    local c = Comm()
+    return (c and c.GetMissingAddonMembers and c:GetMissingAddonMembers()) or {}
+end
+
 --- Returns true if the player is currently in an LFR or matchmade group.
 ---@return boolean
 function DLC_API:IsLFR()
@@ -95,24 +159,6 @@ function DLC_API:IsSimulationActive()
 end
 
 
---- Returns the configured name of the Loot Master.
----@return string
-function DLC_API:GetLootMasterName()
-    return (DesolateLootcouncil.db and DesolateLootcouncil.db.profile and DesolateLootcouncil.db.profile.configuredLM) or DesolateLootcouncil.activeLootMaster or ""
-end
-
---- Returns the name of the active Loot Master discovered from group comms.
----@return string?
-function DLC_API:GetActiveLootMaster()
-    return DesolateLootcouncil.activeLootMaster
-end
-
---- Returns the active Master Looter unit name.
----@return string?
-function DLC_API:GetMasterLooter()
-    return (DesolateLootcouncil.GetMasterLooter and DesolateLootcouncil:GetMasterLooter()) or DesolateLootcouncil.activeLootMaster or ""
-end
-
 --- Returns whether test simulation mode is active.
 ---@return boolean
 function DLC_API:IsTestMode()
@@ -126,12 +172,6 @@ end
 ---@return string
 function DLC_API:GetVersion()
     return DesolateLootcouncil.version or "0.0.0"
-end
-
---- Returns the map of active addon users detected in the group.
----@return table<string, boolean>
-function DLC_API:GetActiveAddonUsers()
-    return DesolateLootcouncil.activeAddonUsers or {}
 end
 
 --- Returns the number of simulated player instances currently active.
@@ -230,15 +270,6 @@ function DLC_API:IterateGroupMembers(callback, includeLocalPlayer, includeSims)
     end
 end
 
---- Returns true if a named player is a test simulated entity.
----@param name string
----@return boolean
-function DLC_API:IsSimulatedPlayer(name)
-    if IsInRaid and IsInRaid() and not self:IsLFR() then return false end
-    local sim = Simulation()
-    return (sim and sim.IsSimulatedPlayer and sim:IsSimulatedPlayer(name)) or false
-end
-
 --- Returns an array of simulated voters pending a response for an item.
 ---@param guid string
 ---@param votedPlayers table
@@ -330,11 +361,14 @@ function DLC_API:GetPlayerRosterClass(name)
     return classFile or "WARRIOR"
 end
 
---- Returns a short display name without realm suffix.
----@param name string
----@return string
+--- Returns the configured or formatted display name for a player.
+---@param name string|nil
+---@return string|nil
 function DLC_API:GetDisplayName(name)
     if not name or name == "" then return "" end
+    if DesolateLootcouncil and DesolateLootcouncil.GetDisplayName then
+        return DesolateLootcouncil:GetDisplayName(name)
+    end
     return name:match("^([^%-]+)") or name
 end
 
@@ -499,32 +533,6 @@ function DLC_API:GetPriorityHighest(listName, candidates)
     return nil, nil
 end
 
---- Returns the candidate with the highest priority for an item ID.
----@param itemID number
----@param candidateNames string[]
----@return string? winner
-function DLC_API:GetPriorityWinner(itemID, candidateNames)
-    local p = Priority()
-    return p and p.GetWinner and p:GetWinner(itemID, candidateNames)
-end
-
---- Returns the priority list assigned to a given item ID.
----@param itemID number
----@return table?
-function DLC_API:GetPriorityListForItem(itemID)
-    local p = Priority()
-    return p and p.GetListForItem and p:GetListForItem(itemID)
-end
-
---- Moves a player up or down in a priority list.
----@param listName string
----@param player string
----@param direction string "UP"|"DOWN"
-function DLC_API:MovePlayerInPriority(listName, player, direction)
-    local p = Priority()
-    if p and p.MovePlayerInPriority then p:MovePlayerInPriority(listName, player, direction) end
-end
-
 --- Moves a player from one index to another in a priority list.
 ---@param listNameOrIdx string|number
 ---@param fromIdx number
@@ -538,14 +546,6 @@ function DLC_API:MovePlayerInPriorityList(listNameOrIdx, fromIdx, toIdx)
             p:MovePlayerInList(listNameOrIdx, fromIdx, toIdx)
         end
     end
-end
-
---- Moves a player to the top of a priority list.
----@param listName string
----@param player string
-function DLC_API:MovePlayerToTop(listName, player)
-    local p = Priority()
-    if p and p.MovePlayerToTop then p:MovePlayerToTop(listName, player) end
 end
 
 --- Moves a player to the bottom of a priority list.
@@ -774,13 +774,6 @@ end
 -- 3. ITEM MANAGER MODULE SURFACE
 -- ===========================================================================
 
---- Returns the table containing all Item Manager lists.
----@return table
-function DLC_API:GetIMLists()
-    local db = DesolateLootcouncil.db and DesolateLootcouncil.db.profile
-    return (db and (db.PriorityLists or db.ItemManager)) or {}
-end
-
 --- Returns the database profile table used by Item Manager.
 ---@return table
 function DLC_API:GetItemManagerDB()
@@ -847,7 +840,7 @@ function DLC_API:SetItemCategory(itemID, listIndex)
     if im and im.SetItemCategory then
         im:SetItemCategory(itemID, listIndex)
     elseif im and im.AddItemToIMList then
-        local lists = self:GetIMLists()
+        local lists = self:GetPriorityLists()
         local target = type(listIndex) == "number" and lists[listIndex] or self:GetIMList(listIndex)
         if target and target.name then im:AddItemToIMList(target.name, itemID) end
     end
@@ -865,7 +858,7 @@ function DLC_API:UnassignItem(itemID)
     if im and im.UnassignItem then
         im:UnassignItem(itemID)
     elseif im and im.RemoveItemFromIMList then
-        local lists = self:GetIMLists()
+        local lists = self:GetPriorityLists()
         if type(lists) == "table" then
             for _, list in ipairs(lists) do
                 if list.name then im:RemoveItemFromIMList(list.name, itemID) end
@@ -1001,14 +994,6 @@ function DLC_API:CanHandover()
         end
     end
     return true
-end
-
---- Refreshes themes across all loot and voting windows.
-function DLC_API:RefreshLootAndVotingThemes()
-    local s = Session()
-    if s and s.RefreshLootAndVotingThemes then
-        s:RefreshLootAndVotingThemes()
-    end
 end
 
 --- Returns true if a voting session is actively running.
@@ -1241,6 +1226,11 @@ end
 --- Deletes an attendance history entry by index.
 ---@param index number|string
 function DLC_API:DeleteAttendanceHistoryEntry(index)
+    local a = Attendance()
+    if a and a.DeleteAttendanceHistoryEntry then
+        a:DeleteAttendanceHistoryEntry(index)
+        return
+    end
     local r = Roster()
     if r and r.DeleteAttendanceHistoryEntry then
         r:DeleteAttendanceHistoryEntry(index)
@@ -1314,27 +1304,12 @@ function DLC_API:GetMainRoster()
     return (r and r.GetMainRoster and r:GetMainRoster()) or (DesolateLootcouncil.db and DesolateLootcouncil.db.profile.MainRoster) or {}
 end
 
---- Returns the map of alt characters.
----@return table<string, string>
-function DLC_API:GetAltRoster()
-    local r = Roster()
-    return (r and r.GetAltRoster and r:GetAltRoster()) or (DesolateLootcouncil.db and DesolateLootcouncil.db.profile.playerRoster and DesolateLootcouncil.db.profile.playerRoster.alts) or {}
-end
-
 --- Resolves an alt character name to its registered main.
 ---@param altName string
 ---@return string?
 function DLC_API:GetMain(altName)
     local r = Roster()
     return r and r.GetMain and r:GetMain(altName)
-end
-
---- Returns all alts linked to a main character.
----@param mainName string
----@return string[]
-function DLC_API:GetAlts(mainName)
-    local r = Roster()
-    return (r and r.GetAlts and r:GetAlts(mainName)) or {}
 end
 
 --- Returns true if the character is registered as a main.
@@ -1351,14 +1326,6 @@ end
 function DLC_API:IsAlt(name)
     local r = Roster()
     return (r and r.IsAlt and r:IsAlt(name)) or false
-end
-
---- Returns true if the named player is in the current raid group.
----@param playerName string
----@return boolean
-function DLC_API:IsPlayerInRaid(playerName)
-    local r = Roster()
-    return (r and r.IsInRaid and r:IsInRaid(playerName)) or false
 end
 
 --- Adds a main character to the roster.
@@ -1431,9 +1398,10 @@ end
 --- Records an unassigned player into the staging review queue.
 ---@param name string
 ---@param source string?
-function DLC_API:RecordUnassignedPlayer(name, source)
+---@param class string?
+function DLC_API:RecordUnassignedPlayer(name, source, class)
     local r = Roster()
-    if r and r.RecordUnassignedPlayer then r:RecordUnassignedPlayer(name, source) end
+    if r and r.RecordUnassignedPlayer then r:RecordUnassignedPlayer(name, source, class) end
 end
 
 
@@ -1677,14 +1645,6 @@ end
 -- 7. COMM & SYNC SURFACE
 -- ===========================================================================
 
---- Broadcasts a sync message across addon comms.
----@param dataType string
----@param payload table
-function DLC_API:BroadcastSync(dataType, payload)
-    local c = Comm()
-    if c and c.BroadcastSync then c:BroadcastSync(dataType, payload) end
-end
-
 --- Broadcasts a version check request.
 ---@return boolean success
 function DLC_API:SendVersionCheck()
@@ -1720,6 +1680,9 @@ end
 --- Returns the count of active addon users in the group.
 ---@return number count
 function DLC_API:GetActiveUserCount()
+    if DesolateLootcouncil.GetActiveUserCount then
+        return DesolateLootcouncil:GetActiveUserCount()
+    end
     local c = Comm()
     return (c and c.GetActiveUserCount and c:GetActiveUserCount()) or 0
 end
@@ -1740,13 +1703,6 @@ function DLC_API:GetGroupConnectionStatus()
         highestVersion = DesolateLootcouncil.version or "2.1.0",
         members = {}
     }
-end
-
---- Returns connection status info for all known addon users.
----@return table
-function DLC_API:GetConnectionStatuses()
-    local c = Comm()
-    return (c and c.GetStatuses and c:GetStatuses()) or {}
 end
 
 --- Returns the map of discovered player versions from comms.
@@ -1787,14 +1743,6 @@ end
 function DLC_API:ShareDataWithOfficers(dataType, payload)
     local s = Sync()
     if s and s.ShareDataWithOfficers then s:ShareDataWithOfficers(dataType, payload) end
-end
-
---- Syncs data (priorities/roster) with officers via the Sync module.
-function DLC_API:SyncDataWithOfficers()
-    local syncMod = Sync()
-    if syncMod and syncMod.SyncDataWithOfficers then
-        syncMod:SyncDataWithOfficers()
-    end
 end
 
 --- Returns true if the active Loot Master appears absent/disconnected.
@@ -1905,8 +1853,12 @@ function DLC_API:SetShowMinimap(val)
         DesolateLootcouncil.db.profile.configTimestamp = GetServerTime()
     end
     local MinimapButton = DesolateLootcouncil:GetModule("MinimapButton", true)
-    if MinimapButton and MinimapButton.UpdateVisibility then
-        MinimapButton:UpdateVisibility()
+    if MinimapButton then
+        if MinimapButton.SetHidden then
+            MinimapButton:SetHidden(not val)
+        elseif MinimapButton.UpdateVisibility then
+            MinimapButton:UpdateVisibility()
+        end
     end
 end
 
@@ -2169,21 +2121,11 @@ function DLC_API:EnsureSandboxProfile()
 end
 
 --- Restores the user's previous live profile after testing.
+---@return string? restoredProfileName
 function DLC_API:RestoreTestProfile()
     local ts = TestSuite()
     if ts and ts.RestoreOriginalProfile then
-        ts:RestoreOriginalProfile()
-    end
-end
-
---- Runs an individual step of a test suite scenario.
----@param scenarioId string
----@param stepIndex number
----@param callback fun(ok: boolean, err: string?, isDone: boolean)?
-function DLC_API:RunTestStep(scenarioId, stepIndex, callback)
-    local ts = TestSuite()
-    if ts and ts.RunStep then
-        ts:RunStep(scenarioId, stepIndex, callback)
+        return ts:RestoreOriginalProfile()
     end
 end
 
@@ -2212,33 +2154,6 @@ function DLC_API:HandleRosterSlashCommand(argStr)
     end
 end
 
---- Toggles interactive raid simulation mode.
----@param count number?
-function DLC_API:ToggleSimulation(count)
-    local sim = Simulation()
-    if sim and sim.ToggleSimulation then
-        sim:ToggleSimulation(count)
-    end
-end
-
---- Simulates a loot drop from the Loot subsystem.
----@param target string?
-function DLC_API:SimulateItemDrop(target)
-    local l = Loot()
-    if l and l.SimulateItemDrop then
-        l:SimulateItemDrop(target)
-    end
-end
-
---- Simulates a chat loot message from the Loot subsystem.
----@param msg string
-function DLC_API:SimulateChatLoot(msg)
-    local l = Loot()
-    if l and l.OnChatLootSim then
-        l:OnChatLootSim(msg)
-    end
-end
-
 --- Adds canned test items to the loot queue.
 function DLC_API:AddTestItems()
     local l = Loot()
@@ -2256,15 +2171,13 @@ function DLC_API:HandleSimulationSlashCommand(argStr)
     end
 end
 
---- Dispatches CLI debug commands (status, verbose, dump).
+--- Dispatches CLI debug commands (status, dump).
 ---@param cmd string
 function DLC_API:HandleDebugSlashCommand(cmd)
     local d = Debug()
     if not d then return end
     if cmd == "status" and d.ShowStatus then
         d:ShowStatus()
-    elseif cmd == "verbose" and d.ToggleVerbose then
-        d:ToggleVerbose()
     elseif cmd == "dump" and d.DumpKeys then
         d:DumpKeys()
     end

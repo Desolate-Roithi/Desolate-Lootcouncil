@@ -11,7 +11,7 @@ local DesolateLootcouncil = LibStub("AceAddon-3.0"):GetAddon("DesolateLootcounci
 local L = LibStub("AceLocale-3.0"):GetLocale("DesolateLootcouncil")
 
 function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
-    if not DesolateLootcouncil:AmIOfficerOrLM() then
+    if not DesolateLootcouncil.API:AmIOfficerOrLM() then
         if self.priorityOverrideFrame then self.priorityOverrideFrame:Hide() end
         return
     end
@@ -102,7 +102,7 @@ function UI_PriorityOverride:ShowPriorityOverrideWindow(listKey)
             nameLabel:SetJustifyH("LEFT")
             
             local class = DesolateLootcouncil.API:GetUnitClass(name)
-            nameLabel:SetText(NativeGUI:FormatClassColor(class, DesolateLootcouncil:GetDisplayName(name)))
+            nameLabel:SetText(NativeGUI:FormatClassColor(class, DesolateLootcouncil.API:GetDisplayName(name)))
 
             -- Drag grip icon (subtle == indicator on the right)
             local grip = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")

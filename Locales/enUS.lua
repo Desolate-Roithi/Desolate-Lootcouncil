@@ -528,6 +528,8 @@ L["Only the Loot Master or Officers can modify priority lists."] = true
 L["Only the Loot Master or Officers can view the Monitor."] = true
 L["Only the Loot Master or Officers can view Priority Lists."] = true
 L["Only the Loot Master or Officers can view the Roster."] = true
+L["Only the Loot Master or Officers can review unassigned players."] = true
+L["Only the Loot Master or Officers can view the Attendance Window."] = true
 
 -- Interactive Simulation Controller Roles & Verification
 L["Simulation Role Persona"] = true
