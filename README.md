@@ -75,7 +75,7 @@ All commands start with `/dlc`:
   * Fixed autotrade failing with `"item not found in bags"` error by adding fallback candidate staging when award links lack bonus IDs.
   * Fixed chat loot message parsing to support modern WoW named color tags (`|cnITEM_EPIC:...`) and localized German client phrases.
 * **Roster & Alt Management**:
-  * Fixed cross-realm and same-base-name alt linking: Characters sharing a base name on different realms (e.g. `Dusthunt` and `Dusthunt-Blackhand`, `Hopfy` and `Hopfy-Garrosh`) are now fully linkable as Alts and visible in the Main dropdown.
+  * Fixed cross-realm and same-base-name alt linking: Characters sharing a base name on different realms are now fully linkable as Alts and visible in the Main dropdown.
   * Fixed `SanitizeMainsAndAlts` falsely purging cross-realm alts as self-referencing and restoring them as duplicate Mains.
 * **Testing & Proof-of-Concept**:
   * Added in-game live trade proof-of-concept (TestSuite Scenario 11: `live_trade_bag_staging_poc`) with 4 sequential verification steps.
