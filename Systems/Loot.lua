@@ -230,7 +230,7 @@ function Loot:OnLootMessage(event, msg)
     if not string.find(msg, "|Hitem:") then return end
 
     -- Catch "You receive loot: [Item Link]" or local equivalents using Global strings
-    local link = string.match(msg, "|c%x+|Hitem:.-|h%[.-%]|h|r")
+    local link = string.match(msg, "(|c.-|Hitem:.-|h%[.-%]|h|r)") or string.match(msg, "(|Hitem:.-|h%[.-%]|h|r)")
     if not link then return end
 
     local patterns = GetPrecompiledLootPatterns()
@@ -239,6 +239,13 @@ function Loot:OnLootMessage(event, msg)
         if string.find(msg, cleanPattern) then
             matched = true
             break
+        end
+    end
+
+    if not matched then
+        local lowerMsg = string.lower(msg)
+        if lowerMsg:find("you receive") or lowerMsg:find("ihr erhaltet") then
+            matched = true
         end
     end
 
@@ -404,29 +411,24 @@ function Loot:BroadcastAward(itemData, winnerName, voteType)
     if not itemData then return end
     local itemID = itemData.itemID or (itemData.link and self:GetItemIDFromLink(itemData.link))
     local properLink
-    if itemID then
-        local ok, _, linkStr = pcall(C_Item.GetItemInfo, itemID)
-        if ok and linkStr then
-            properLink = linkStr
-        end
-    end
-    if not properLink and itemData.link then
+    if itemData.link then
         local ok, _, linkStr = pcall(C_Item.GetItemInfo, itemData.link)
         if ok and linkStr then
             properLink = linkStr
         end
     end
+    if not properLink and itemID then
+        local ok, _, linkStr = pcall(C_Item.GetItemInfo, itemID)
+        if ok and linkStr then
+            properLink = linkStr
+        end
+    end
 
-    local itemLink = properLink
-    if not itemLink and itemData.link and string.find(itemData.link, "|Hitem:") and string.find(itemData.link, "|h|r") then
-        itemLink = itemData.link
-    end
-    if not itemLink and itemID then
-        itemLink = string.format("item:%d", itemID)
-    end
-    if not itemLink then
-        itemLink = itemData.link or "Unknown Item"
-    end
+    local itemLink = (itemData.link and string.find(itemData.link, "|Hitem:") and string.find(itemData.link, "|h|r") and itemData.link)
+        or properLink
+        or (itemID and string.format("item:%d", itemID))
+        or itemData.link
+        or "Unknown Item"
     local API = DesolateLootcouncil.API
     if API and API.SanitizeHyperlink then
         itemLink = API:SanitizeHyperlink(itemLink, itemID) or itemLink
@@ -480,22 +482,26 @@ function Loot:RecordAward(session, itemData, itemGUID, winnerName, voteType, ori
 
     local itemID = itemData.itemID or (itemData.link and self:GetItemIDFromLink(itemData.link))
     local properLink, fetchedTexture
-    if itemID then
-        local ok, _, linkStr, _, _, _, _, _, _, _, tex = pcall(C_Item.GetItemInfo, itemID)
-        if ok and linkStr then
-            properLink = linkStr
-            fetchedTexture = tex
-        end
-    end
-    if not properLink and itemData.link then
+    if itemData.link then
         local ok, _, linkStr, _, _, _, _, _, _, _, tex = pcall(C_Item.GetItemInfo, itemData.link)
         if ok and linkStr then
             properLink = linkStr
             fetchedTexture = tex
         end
     end
+    if not properLink and itemID then
+        local ok, _, linkStr, _, _, _, _, _, _, _, tex = pcall(C_Item.GetItemInfo, itemID)
+        if ok and linkStr then
+            properLink = linkStr
+            fetchedTexture = tex
+        end
+    end
 
-    local finalLink = properLink or (itemData.link and string.find(itemData.link, "|h|r") and itemData.link) or (itemID and string.format("item:%d", itemID)) or itemData.link or "Unknown Item"
+    local finalLink = (itemData.link and string.find(itemData.link, "|Hitem:") and string.find(itemData.link, "|h|r") and itemData.link)
+        or properLink
+        or (itemID and string.format("item:%d", itemID))
+        or itemData.link
+        or "Unknown Item"
     local API = DesolateLootcouncil.API
     if API and API.SanitizeHyperlink then
         finalLink = API:SanitizeHyperlink(finalLink, itemID) or finalLink

@@ -2214,6 +2214,12 @@ function DLC_API:SanitizeHyperlink(rawLink, itemID)
     end
 
     -- 3. Attempt to fetch clean canonical link from WoW client cache
+    if strLink and C_Item and C_Item.GetItemInfo then
+        local ok, _, properLink = pcall(C_Item.GetItemInfo, strLink)
+        if ok and properLink and string.find(properLink, "%]|h|r") then
+            return properLink
+        end
+    end
     if numID and C_Item and C_Item.GetItemInfo then
         local ok, _, properLink = pcall(C_Item.GetItemInfo, numID)
         if ok and properLink and string.find(properLink, "%]|h|r") then
@@ -2235,6 +2241,197 @@ function DLC_API:SanitizeHyperlink(rawLink, itemID)
     if numID then return string.format("item:%d", numID) end
     return nil
 end
+
+--- Injects an item directly into the pending trade queue for live in-game testing.
+--- Preserves full item hyperlink with bonus IDs, correct item level, and texture.
+---@param itemLinkOrID string|number
+---@param winnerName? string
+---@return boolean success, string? message
+function DLC_API:AddTradeTestItem(itemLinkOrID, winnerName)
+    if not itemLinkOrID then
+        return false, "Missing item link or ID."
+    end
+
+    local rawStr = tostring(itemLinkOrID):trim()
+    local itemID = tonumber(rawStr) or tonumber(string.match(rawStr, "item:(%d+)"))
+    if not itemID and C_Item and C_Item.GetItemInfoInstant then
+        itemID = select(1, C_Item.GetItemInfoInstant(rawStr))
+    end
+
+    if not itemID then
+        return false, "Invalid item hyperlink or ID."
+    end
+
+    local targetWinner = winnerName
+    if not targetWinner or targetWinner == "" then
+        local targetUnitName = UnitName("target")
+        if targetUnitName and targetUnitName ~= "" then
+            targetWinner = DesolateLootcouncil:NormalizeName(targetUnitName)
+        else
+            targetWinner = DesolateLootcouncil:GetPlayerCanonical() or UnitName("player")
+        end
+    end
+
+    local finalLink = rawStr
+    local finalTexture = 134400
+
+    if string.find(rawStr, "|Hitem:") and string.find(rawStr, "|h|r") then
+        finalLink = rawStr
+    elseif C_Item and C_Item.GetItemInfo then
+        local ok, _, fetchedLink, _, _, _, _, _, _, _, tex = pcall(C_Item.GetItemInfo, rawStr)
+        if ok and fetchedLink then
+            finalLink = fetchedLink
+            if tex then finalTexture = tex end
+        end
+    end
+
+    if (not finalTexture or finalTexture == 134400) and C_Item and C_Item.GetItemIconByID then
+        local icon = C_Item.GetItemIconByID(itemID)
+        if icon then finalTexture = icon end
+    end
+
+    local session = DesolateLootcouncil.db.profile.session
+    if not session then
+        session = {}
+        DesolateLootcouncil.db.profile.session = session
+    end
+    if not session.awarded then
+        session.awarded = {}
+    end
+
+    local testGUID = string.format("TestTrade-%d-%d", itemID, math.random(1000, 9999))
+    local winnerClass = self:GetUnitClass(targetWinner) or "WARRIOR"
+
+    local awardEntry = {
+        link = finalLink,
+        texture = finalTexture,
+        itemID = itemID,
+        winner = targetWinner,
+        winnerClass = winnerClass,
+        voteType = "TradeTest",
+        timestamp = GetServerTime(),
+        sourceGUID = testGUID,
+        traded = false,
+        fullItemData = {
+            link = finalLink,
+            itemID = itemID,
+            category = "TradeTest"
+        }
+    }
+
+    table.insert(session.awarded, awardEntry)
+
+    self:DLC_Log(string.format("Injected trade test item %s for %s.", finalLink, targetWinner), true)
+    if DesolateLootcouncil and DesolateLootcouncil.SendMessage then
+        DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
+    end
+
+    if self.ShowTradeListWindow then
+        self:ShowTradeListWindow()
+    end
+
+    return true, string.format("Added %s for %s to Pending Trades.", finalLink, targetWinner)
+end
+
+--- Performs a granular bag scan for a target item and outputs detailed diagnostic reasons.
+---@param itemLinkOrID string|number
+---@return table diagnostics
+function DLC_API:ScanTradeBagSlot(itemLinkOrID)
+    local results = {
+        slots = {},
+        stageableBag = nil,
+        stageableSlot = nil,
+        failureReason = nil
+    }
+
+    if not itemLinkOrID then
+        results.failureReason = "missing_input"
+        return results
+    end
+
+    local rawStr = tostring(itemLinkOrID):trim()
+    local itemID = tonumber(rawStr) or tonumber(string.match(rawStr, "item:(%d+)"))
+    if not itemID and C_Item and C_Item.GetItemInfoInstant then
+        itemID = select(1, C_Item.GetItemInfoInstant(rawStr))
+    end
+
+    if not itemID then
+        results.failureReason = "invalid_item"
+        return results
+    end
+
+    local Trade = DesolateLootcouncil:GetModule("Trade", true)
+    if not Trade then
+        results.failureReason = "trade_module_unavailable"
+        return results
+    end
+
+    local mockAward = {
+        link = rawStr,
+        itemID = itemID
+    }
+
+    local normalizedAward = Trade.NormalizeItemLink and Trade:NormalizeItemLink(rawStr)
+
+    for bag = 0, 4 do
+        local numSlots = (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerNumSlots(bag)) or 0
+        for slot = 1, numSlots do
+            local info = C_Container and C_Container.GetContainerItemInfo and C_Container.GetContainerItemInfo(bag, slot)
+            if info and info.itemID == itemID then
+                local link = C_Container and C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bag, slot)
+                local normLink = link and Trade.NormalizeItemLink and Trade:NormalizeItemLink(link)
+                local isWarbound = Trade.IsItemWarbound and Trade:IsItemWarbound(bag, slot)
+                local isTradeableBoP = info.isBound and Trade.IsItemTradeableBoP and Trade:IsItemTradeableBoP(bag, slot)
+                local isExact = not (link and normalizedAward and normLink ~= normalizedAward)
+
+                local detail = {
+                    bag = bag,
+                    slot = slot,
+                    link = link,
+                    isLocked = info.isLocked,
+                    isBound = info.isBound,
+                    isWarbound = isWarbound,
+                    isTradeableBoP = isTradeableBoP,
+                    isExact = isExact
+                }
+                table.insert(results.slots, detail)
+            end
+        end
+    end
+
+    if Trade.GetStageableSlot then
+        local bag, slot, failureReason = Trade:GetStageableSlot(mockAward, itemID, {})
+        results.stageableBag = bag
+        results.stageableSlot = slot
+        results.failureReason = failureReason
+    end
+
+    return results
+end
+
+--- Clears test trade items from session awarded list.
+function DLC_API:ClearTradeTestItems()
+    local session = DesolateLootcouncil.db.profile.session
+    if not session or not session.awarded then return 0 end
+
+    local count = 0
+    for i = #session.awarded, 1, -1 do
+        local entry = session.awarded[i]
+        if entry.voteType == "TradeTest" or (entry.sourceGUID and string.find(entry.sourceGUID, "^TestTrade%-")) then
+            table.remove(session.awarded, i)
+            count = count + 1
+        end
+    end
+
+    if DesolateLootcouncil and DesolateLootcouncil.SendMessage then
+        DesolateLootcouncil:SendMessage("DLC_HISTORY_UPDATED")
+    end
+    if self.ShowTradeListWindow then
+        self:ShowTradeListWindow()
+    end
+    return count
+end
+
 
 
 

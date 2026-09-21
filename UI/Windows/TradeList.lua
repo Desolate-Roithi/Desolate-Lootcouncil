@@ -119,7 +119,7 @@ local function SetupItemDetails(item, row, NativeGUI, showTipFunc)
     row.linkLabel:SetPoint("RIGHT", row.winnerLabel, "LEFT", -10, 0)
 
     local displayLink = item.link
-    if item.itemID then
+    if (not displayLink or not string.find(displayLink, "|h|r")) and item.itemID then
         local ok, _, properLink = pcall(C_Item.GetItemInfo, item.itemID)
         if ok and properLink then
             displayLink = properLink

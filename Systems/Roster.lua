@@ -173,15 +173,18 @@ function Roster:SanitizeMainsAndAlts()
 
     -- 2. Validate Alts
     if profile.playerRoster and profile.playerRoster.alts then
+        local safeLower = (type(strlower) == "function" and strlower) or string.lower
         for altName, mainName in pairs(profile.playerRoster.alts) do
-            if DesolateLootcouncil:SmartCompare(altName, mainName) then
+            local altScore = DesolateLootcouncil:GetScoreName(altName)
+            local mainScore = DesolateLootcouncil:GetScoreName(mainName)
+            local isSelf = (safeLower(altName) == safeLower(mainName)) or (altScore and mainScore and altScore == mainScore)
+            if isSelf then
                 profile.playerRoster.alts[altName] = nil
                 if not profile.MainRoster[altName] then
                     profile.MainRoster[altName] = { isOfficer = false, addedAt = GetServerTime() }
                 end
                 DesolateLootcouncil:DLC_Log(string.format("Sanitized roster: Removed self-referencing alt '%s' and restored as Main.", altName))
             else
-                local altScore = DesolateLootcouncil:GetScoreName(altName)
                 if altScore then
                     for mainKey in pairs(profile.MainRoster) do
                         if DesolateLootcouncil:GetScoreName(mainKey) == altScore then
@@ -419,7 +422,11 @@ function Roster:AddAlt(altName, mainName)
     local normalizedAlt = altName
     local normalizedMain = mainName
 
-    if DesolateLootcouncil:SmartCompare(normalizedAlt, normalizedMain) then
+    -- Use exact key comparison (case-insensitive) — SmartCompare is intentionally
+    -- NOT used here because it folds realm-less names onto the local realm, which
+    -- would incorrectly block linking e.g. "Hopfy" (no realm) to "Hopfy-Silvermoon".
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    if safeLower(normalizedAlt) == safeLower(normalizedMain) then
         DesolateLootcouncil:DLC_Log("Error: Cannot add a player as an alt to themselves.")
         return false
     end
@@ -433,8 +440,10 @@ function Roster:AddAlt(altName, mainName)
 
     -- 1. Check if the 'new alt' was previously a Main with their own alts
     -- We need to re-parent those alts to the NEW main.
+    local altScore = DesolateLootcouncil:GetScoreName(normalizedAlt)
     for existingAlt, existingMain in pairs(roster.alts) do
-        if DesolateLootcouncil:SmartCompare(existingMain, normalizedAlt) then
+        local existingMainScore = DesolateLootcouncil:GetScoreName(existingMain)
+        if safeLower(existingMain) == safeLower(normalizedAlt) or (altScore and existingMainScore and altScore == existingMainScore) then
             roster.alts[existingAlt] = normalizedMain
             DesolateLootcouncil:DLC_Log("Re-linked inherited alt: " .. 
                 DesolateLootcouncil:GetDisplayName(existingAlt) .. " -> " .. 
@@ -443,10 +452,11 @@ function Roster:AddAlt(altName, mainName)
     end
     -- 2. Perform the standard assignment
     roster.alts[normalizedAlt] = normalizedMain
-    -- 3. Remove from Mains list if present (Smart Aware)
+    -- 3. Remove from Mains list if present (exact or score-aware match)
     if profile.MainRoster then
         for mainKey in pairs(profile.MainRoster) do
-            if DesolateLootcouncil:SmartCompare(mainKey, normalizedAlt) then
+            local mainKeyScore = DesolateLootcouncil:GetScoreName(mainKey)
+            if safeLower(mainKey) == safeLower(normalizedAlt) or (altScore and mainKeyScore and altScore == mainKeyScore) then
                 profile.MainRoster[mainKey] = nil
                 DesolateLootcouncil:DLC_Log("Converted Main to Alt: " .. DesolateLootcouncil:GetDisplayName(mainKey))
                 break
@@ -485,8 +495,11 @@ function Roster:RemovePlayer(name)
         profile.rosterTimestamp = GetServerTime()
         -- Unlink alts
         if profile.playerRoster and profile.playerRoster.alts then
+            local normScore = DesolateLootcouncil:GetScoreName(normalizedName)
+            local safeLower = (type(strlower) == "function" and strlower) or string.lower
             for alt, main in pairs(profile.playerRoster.alts) do
-                if DesolateLootcouncil:SmartCompare(main, normalizedName) then
+                local mainScore = DesolateLootcouncil:GetScoreName(main)
+                if safeLower(main) == safeLower(normalizedName) or (normScore and mainScore and mainScore == normScore) then
                     profile.playerRoster.alts[alt] = nil
                     DesolateLootcouncil:DLC_Log("Unlinked Alt: " .. DesolateLootcouncil:GetDisplayName(alt))
                 end
@@ -523,7 +536,15 @@ function Roster:GetMain(name)
 
     -- 2. Fallback Path: This handles the initialization phase before the cache is warm
     local profile = DesolateLootcouncil.db.profile
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    local nameScore = score or DesolateLootcouncil:GetScoreName(name)
     if profile.playerRoster and profile.playerRoster.alts then
+        for altName, mainName in pairs(profile.playerRoster.alts) do
+            local altScore = DesolateLootcouncil:GetScoreName(altName)
+            if safeLower(altName) == safeLower(name) or (nameScore and altScore and nameScore == altScore) then
+                return mainName
+            end
+        end
         for altName, mainName in pairs(profile.playerRoster.alts) do
             if DesolateLootcouncil:SmartCompare(altName, name) then
                 return mainName
@@ -532,6 +553,12 @@ function Roster:GetMain(name)
     end
 
     if profile.MainRoster then
+        for mainName, _ in pairs(profile.MainRoster) do
+            local mScore = DesolateLootcouncil:GetScoreName(mainName)
+            if safeLower(mainName) == safeLower(name) or (nameScore and mScore and nameScore == mScore) then
+                return mainName
+            end
+        end
         for mainName, _ in pairs(profile.MainRoster) do
             if DesolateLootcouncil:SmartCompare(mainName, name) then
                 return mainName

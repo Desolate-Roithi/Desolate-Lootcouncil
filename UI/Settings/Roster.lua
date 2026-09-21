@@ -33,19 +33,45 @@ local TargetMainHidden = function()
     return not RosterSettings.tempIsAlt
 end
 
-local TargetMainValues = function()
+local GetAddAltMainValues = function()
     local allMains = DesolateLootcouncil.API:GetMainRosterList()
-    local target = GetManageSelect()
-    if not target then return allMains end
+    local target = RosterSettings.tempName
+    if not target or target == "" then return allMains end
+
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    local targetScore = DesolateLootcouncil:GetScoreName(target)
 
     local filtered = {}
     for k, v in pairs(allMains) do
-        if not DesolateLootcouncil:SmartCompare(k, target) and not DesolateLootcouncil:SmartCompare(v, target) then
+        local kScore = DesolateLootcouncil:GetScoreName(k)
+        local isSelf = (safeLower(k) == safeLower(target)) or (targetScore and kScore and targetScore == kScore)
+        if not isSelf then
             filtered[k] = v
         end
     end
     return filtered
 end
+
+local GetManageLinkMainValues = function()
+    local allMains = DesolateLootcouncil.API:GetMainRosterList()
+    local target = GetManageSelect()
+    if not target then return allMains end
+
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
+    local targetScore = DesolateLootcouncil:GetScoreName(target)
+
+    local filtered = {}
+    for k, v in pairs(allMains) do
+        local kScore = DesolateLootcouncil:GetScoreName(k)
+        local isSelf = (safeLower(k) == safeLower(target)) or (targetScore and kScore and targetScore == kScore)
+        if not isSelf then
+            filtered[k] = v
+        end
+    end
+    return filtered
+end
+
+local TargetMainValues = GetManageLinkMainValues
 
 local GetTempMain = function()
     return RosterSettings.tempMain
@@ -72,7 +98,10 @@ local SavePlayer = function()
             DesolateLootcouncil:Print(L["Please select a Main character."])
             return
         end
-        if DesolateLootcouncil:SmartCompare(name, RosterSettings.tempMain) then
+        local safeLowerSP = (type(strlower) == "function" and strlower) or string.lower
+        local nameScore = DesolateLootcouncil:GetScoreName(name)
+        local mainScore = DesolateLootcouncil:GetScoreName(RosterSettings.tempMain)
+        if safeLowerSP(name) == safeLowerSP(RosterSettings.tempMain) or (nameScore and mainScore and nameScore == mainScore) then
             DesolateLootcouncil:Print(L["A character cannot be linked as an alt of itself."])
             return
         end
@@ -172,7 +201,10 @@ local LinkSelectedAsAltAction = function()
         DesolateLootcouncil:Print(L["Please select both a player and a target Main character."])
         return
     end
-    if DesolateLootcouncil:SmartCompare(target, main) then
+    local safeLowerLL = (type(strlower) == "function" and strlower) or string.lower
+    local targetScore = DesolateLootcouncil:GetScoreName(target)
+    local mainScore = DesolateLootcouncil:GetScoreName(main)
+    if safeLowerLL(target) == safeLowerLL(main) or (targetScore and mainScore and targetScore == mainScore) then
         DesolateLootcouncil:Print(L["A character cannot be linked as an alt of itself."])
         return
     end
@@ -232,10 +264,14 @@ local GetRosterFormattedText = function()
     end
     table.sort(sortedMains, function(a, b) return a:lower() < b:lower() end)
 
+    local safeLower = (type(strlower) == "function" and strlower) or string.lower
     local mainToAlts = {}
     if db.playerRoster and db.playerRoster.alts then
         for alt, parent in pairs(db.playerRoster.alts) do
-            if not DesolateLootcouncil:SmartCompare(alt, parent) then
+            local altScore = DesolateLootcouncil:GetScoreName(alt)
+            local parentScore = DesolateLootcouncil:GetScoreName(parent)
+            local isSelf = (safeLower(alt) == safeLower(parent)) or (altScore and parentScore and altScore == parentScore)
+            if not isSelf then
                 totalAlts = totalAlts + 1
                 if not mainToAlts[parent] then mainToAlts[parent] = {} end
                 table.insert(mainToAlts[parent], alt)
@@ -264,7 +300,10 @@ local GetRosterFormattedText = function()
         if alts and #alts > 0 then
             table.sort(alts, function(a, b) return a:lower() < b:lower() end)
             for _, alt in ipairs(alts) do
-                if not DesolateLootcouncil:SmartCompare(alt, main) then
+                local altScore = DesolateLootcouncil:GetScoreName(alt)
+                local mainScore = DesolateLootcouncil:GetScoreName(main)
+                local isSelf = (safeLower(alt) == safeLower(main)) or (altScore and mainScore and altScore == mainScore)
+                if not isSelf then
                     local displayAlt = DesolateLootcouncil:Ambiguate(alt)
                     table.insert(lines, string.format("    |cff888888-> %s (Alt)|r", displayAlt))
                 end
@@ -353,14 +392,14 @@ function RosterSettings:GetManageGroupOptions()
                 order = 3,
                 width = "normal",
                 hidden = TargetMainHidden,
-                values = TargetMainValues,
+                values = GetAddAltMainValues,
                 get = GetTempMain,
                 set = SetTempMain,
             },
             isOfficer = {
                 type = "toggle",
-                name = L["Is Officer?"],
-                desc = L["Grant council officer permissions to this player."],
+                name = L["Officer?"],
+                desc = L["Check if this player is a loot council officer."],
                 order = 4,
                 width = "half",
                 hidden = function() return RosterSettings.tempIsAlt end,
@@ -369,8 +408,8 @@ function RosterSettings:GetManageGroupOptions()
             },
             saveBtn = {
                 type = "execute",
-                name = L["Add / Save"],
-                desc = L["Save this character to the raid roster."],
+                name = L["Add Player"],
+                desc = L["Add this player to the roster."],
                 order = 5,
                 width = "normal",
                 func = SavePlayer,
@@ -431,7 +470,7 @@ function RosterSettings:GetPlayerControlGroupOptions()
                 order = 3,
                 width = "normal",
                 hidden = function() return not isPlayerSelected() end,
-                values = TargetMainValues,
+                values = GetManageLinkMainValues,
                 get = GetManageLinkMain,
                 set = SetManageLinkMain,
             },

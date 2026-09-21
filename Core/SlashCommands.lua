@@ -241,6 +241,70 @@ function SlashCommands.Handle(input)
             if UI and UI.ShowUnassignedWindow then UI:ShowUnassignedWindow() end
         end
 
+    elseif cmd == "testtrade" or cmd == "tradetest" then
+        local sub = args[2] and string.lower(args[2])
+        local API = DesolateLootcouncil.API
+        if not API then return end
+
+        if sub == "add" then
+            local rawItem, winner
+            local linkMatch = string.match(input, "(|c.-|Hitem:.-|h%[.-%]|h|r)")
+            if linkMatch then
+                rawItem = linkMatch
+                local afterLink = string.match(input, "|h|r%s*(.*)$")
+                if afterLink and afterLink ~= "" then
+                    winner = string.match(afterLink, "(%S+)")
+                end
+            else
+                rawItem = args[3]
+                winner = args[4]
+            end
+            if not rawItem or rawItem == "" then
+                DesolateLootcouncil:Print("Usage: /dlc testtrade add [itemLink|itemID] [optional: winnerName]")
+                return
+            end
+            local msg = select(2, API:AddTradeTestItem(rawItem, winner))
+            if msg then DesolateLootcouncil:Print(msg) end
+
+        elseif sub == "scan" then
+            local rawItem
+            local linkMatch = string.match(input, "(|c.-|Hitem:.-|h%[.-%]|h|r)")
+            if linkMatch then
+                rawItem = linkMatch
+            else
+                rawItem = args[3]
+            end
+            if not rawItem or rawItem == "" then
+                DesolateLootcouncil:Print("Usage: /dlc testtrade scan [itemLink|itemID]")
+                return
+            end
+            local diag = API:ScanTradeBagSlot(rawItem)
+            DesolateLootcouncil:Print(string.format("=== Bag Diagnostic for %s ===", rawItem))
+            if #diag.slots == 0 then
+                DesolateLootcouncil:Print("No matching copies found in bags (0-4).")
+            else
+                for _, s in ipairs(diag.slots) do
+                    DesolateLootcouncil:Print(string.format("Bag %d Slot %d: %s [Bound=%s, Warbound=%s, TradeableBoP=%s, Locked=%s, Exact=%s]",
+                        s.bag, s.slot, s.link or "Unknown", tostring(s.isBound), tostring(s.isWarbound), tostring(s.isTradeableBoP), tostring(s.isLocked), tostring(s.isExact)))
+                end
+            end
+            if diag.stageableBag then
+                DesolateLootcouncil:Print(string.format("|cff00ff00[SUCCESS]|r Stageable Slot: Bag %d Slot %d", diag.stageableBag, diag.stageableSlot))
+            else
+                DesolateLootcouncil:Print(string.format("|cffff2020[FAILURE]|r Could not stage item (Reason: %s)", diag.failureReason or "unknown"))
+            end
+
+        elseif sub == "clear" then
+            local count = API:ClearTradeTestItems()
+            DesolateLootcouncil:Print(string.format("Cleared %d trade test item(s).", count))
+
+        else
+            DesolateLootcouncil:Print("Usage: /dlc testtrade [add|scan|clear]")
+            DesolateLootcouncil:Print("  /dlc testtrade add [itemLink|itemID] [winner]  - Injects item into Pending Trades for testing.")
+            DesolateLootcouncil:Print("  /dlc testtrade scan [itemLink|itemID]          - Runs live bag slot diagnostic.")
+            DesolateLootcouncil:Print("  /dlc testtrade clear                           - Clears injected test items.")
+        end
+
     elseif cmd == "status" or cmd == "verbose" or cmd == "dump" then
         if DesolateLootcouncil.API and DesolateLootcouncil.API.HandleDebugSlashCommand then
             DesolateLootcouncil.API:HandleDebugSlashCommand(cmd)

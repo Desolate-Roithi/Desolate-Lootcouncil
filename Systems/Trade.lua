@@ -258,6 +258,7 @@ function Trade:IsItemTradeableBoP(bag, slot, customTooltipData)
     return false
 end
 
+
 --- Extracts and normalizes item strings by zeroing out transient fields
 --- (uniqueID, linkLevel, specializationID, modifiersMask, itemContext)
 --- so that items with identical stats/tertiaries match.
@@ -342,7 +343,16 @@ function Trade:GetStageableSlot(award, targetItemID, usedSlots)
         end
     end
 
-    -- If no exact stat/tertiary match was found in bags, do not stage a non-matching item
+    -- If no normalized award link was available (e.g. itemID only), stage first valid candidate
+    if not normalizedAwardLink and #candidates > 0 then
+        return candidates[1].bag, candidates[1].slot, nil
+    end
+
+    -- If candidates exist in bags but none matched exact stats/tertiaries, report link_mismatch
+    if #candidates > 0 then
+        return nil, nil, "link_mismatch"
+    end
+
     return nil, nil, failureReason
 end
 

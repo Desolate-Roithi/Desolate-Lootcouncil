@@ -2,8 +2,8 @@
 
 A Master Loot helper and priority list addon for World of Warcraft Retail. Desolate Lootcouncil lets raid teams run priority-based loot distribution alongside Blizzard's default Group Loot system, with automated roll passing, trade queues, and attendance tracking.
 
-**Latest Version:** v2.3.0  
-**Last Updated:** 2026-09-17  
+**Latest Version:** v2.3.1  
+**Last Updated:** 2026-09-21  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## What It Does
@@ -56,6 +56,7 @@ All commands start with `/dlc`:
 | :--- | :--- |
 | `/dlc test [lm\|officer\|raider]` | Start an interactive test session with mock drops and role switching. |
 | `/dlc testsuite` | Open the in-game automated test suite window. |
+| `/dlc testtrade [add\|scan\|clear]` | Live in-game trade staging diagnostics and bag slot scanning. |
 | `/dlc status` | Print current connection, session, and autopass status to chat. |
 | `/dlc sim` | Access developer simulation tools. |
 
@@ -67,6 +68,19 @@ All commands start with `/dlc`:
 ---
 
 ## Recent Changes
+
+### v2.3.1 (2026-09-21)
+* **Item Scaling & Trade Fixes**:
+  * Fixed item level regression where awarded items and trade entries collapsed to unscaled base ilvl 219 by strictly preserving full item links, bonus IDs, and upgrade tracks.
+  * Fixed autotrade failing with `"item not found in bags"` error by adding fallback candidate staging when award links lack bonus IDs.
+  * Fixed chat loot message parsing to support modern WoW named color tags (`|cnITEM_EPIC:...`) and localized German client phrases.
+* **Roster & Alt Management**:
+  * Fixed cross-realm and same-base-name alt linking: Characters sharing a base name on different realms (e.g. `Dusthunt` and `Dusthunt-Blackhand`, `Hopfy` and `Hopfy-Garrosh`) are now fully linkable as Alts and visible in the Main dropdown.
+  * Fixed `SanitizeMainsAndAlts` falsely purging cross-realm alts as self-referencing and restoring them as duplicate Mains.
+* **Testing & Proof-of-Concept**:
+  * Added in-game live trade proof-of-concept (TestSuite Scenario 11: `live_trade_bag_staging_poc`) with 4 sequential verification steps.
+  * Added diagnostic slash commands: `/dlc testtrade add`, `/dlc testtrade scan`, and `/dlc testtrade clear`.
+  * Added cross-realm alt linking verification directly into TestSuite Scenario 1 Part 2.
 
 ### v2.3.0 (2026-09-17)
 * **Bug Fixes**:

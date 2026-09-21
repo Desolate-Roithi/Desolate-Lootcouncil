@@ -48,6 +48,10 @@ local SCENARIO_WINDOWS = {
             end
         end
     end,
+    live_trade_bag_staging_poc       = function()
+        local T = DesolateLootcouncil:GetModule("UI_TradeList", true)
+        if T then T:ShowTradeListWindow() end
+    end,
 }
 
 function UI_TestSuite:OnInitialize()

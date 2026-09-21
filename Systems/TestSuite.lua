@@ -424,6 +424,19 @@ function TestSuite:OnInitialize()
             local altAdded = API:AddAlt("PaladinAlt-Realm", "PaladinMain-Realm")
             assert(altAdded == true, "AddAlt must return true")
             assert(API:GetMain("PaladinAlt-Realm") == "PaladinMain-Realm" or API:GetMain("PaladinAlt-Realm") == "PaladinMain", "Alt must resolve to PaladinMain")
+
+            -- Cross-realm alt sharing base name (e.g. PaladinMain-RemoteRealm -> PaladinMain-Realm)
+            local crossRealmAltAdded = API:AddAlt("PaladinMain-RemoteRealm", "PaladinMain-Realm")
+            assert(crossRealmAltAdded == true, "AddAlt must allow cross-realm character with same base name")
+            assert(API:GetMain("PaladinMain-RemoteRealm") == "PaladinMain-Realm" or API:GetMain("PaladinMain-RemoteRealm") == "PaladinMain", "Cross-realm alt must resolve to PaladinMain")
+            local RosterSys = DesolateLootcouncil:GetModule("Roster", true)
+            if RosterSys and RosterSys.SanitizeMainsAndAlts then
+                RosterSys:SanitizeMainsAndAlts()
+                assert(API:GetMain("PaladinMain-RemoteRealm") == "PaladinMain-Realm" or API:GetMain("PaladinMain-RemoteRealm") == "PaladinMain", "Sanitizer must not purge valid cross-realm alt")
+            end
+            local mainsList = API:GetMainRosterList()
+            assert(mainsList["PaladinMain-Realm"] ~= nil, "Main must remain in MainRoster when cross-realm alt is linked")
+            assert(mainsList["PaladinMain-RemoteRealm"] == nil, "Converted cross-realm alt must not remain in MainRoster")
         end)
 
         -- Part 3: Roster Rename Cascading
@@ -1866,6 +1879,108 @@ function TestSuite:OnInitialize()
         end)
 
         self:Log("Scenario 10 [Session Authority, Late-Join Parity & Disband History] completed successfully.")
+    end)
+
+    -- =======================================================================
+    -- 11. Live In-Game Trade & Bag Staging POC
+    -- =======================================================================
+    self:RegisterScenario("live_trade_bag_staging_poc", "11. Live In-Game Trade & Bag Staging POC", "Validates live item injection into pending trades queue, bag slot scan & candidate evaluation, trade staging state machine, and trade completion audit trail.", function()
+        local TradeMod = DesolateLootcouncil:GetModule("Trade", true)
+        local API = DesolateLootcouncil.API
+        local db = DesolateLootcouncil.db.profile
+
+        -- Part 1: Ingest Trade Test Item
+        self:RunPart(1, 4, "Ingest_Trade_Test_Item", function()
+            db.session = db.session or {}
+            db.session.awarded = db.session.awarded or {}
+
+            local testLink = "|cffa335ee|Hitem:19019:0:0:0:0:0:0:0:80:0:0:0:0|h[Thunderfury, Blessed Blade]|h|r"
+            local success, msg = API:AddTradeTestItem(testLink, "WarriorMain-Realm")
+
+            assert(success == true, "AddTradeTestItem must succeed: " .. tostring(msg))
+            assert(#db.session.awarded >= 1, "db.session.awarded must contain the injected test item")
+
+            local lastAward = db.session.awarded[#db.session.awarded]
+            assert(lastAward.itemID == 19019, "Injected item ID must be 19019")
+            assert(lastAward.winner == "WarriorMain-Realm", "Injected item winner must be WarriorMain-Realm")
+            assert(lastAward.traded == false, "Injected item must start untraded")
+            assert(lastAward.voteType == "TradeTest", "Injected item voteType must be TradeTest")
+        end)
+
+        -- Part 2: Bag Scan & Candidate Diagnostic
+        self:RunPart(2, 4, "Bag_Scan_And_Candidate_Diagnostic", function()
+            local diag = API:ScanTradeBagSlot(19019)
+            assert(diag ~= nil, "ScanTradeBagSlot must return diagnostic table")
+            assert(type(diag.slots) == "table", "Diagnostic slots must be a table")
+        end)
+
+        -- Part 3: Autotrade Staging Execution
+        self:RunPart(3, 4, "Autotrade_Staging_Execution", function()
+            if not TradeMod then return end
+            local lastAward = db.session.awarded[#db.session.awarded]
+
+            local origGetContainerInfo = C_Container.GetContainerItemInfo
+            local origGetContainerLink = C_Container.GetContainerItemLink
+            local origNumSlots = C_Container.GetContainerNumSlots
+            local origUse = C_Container.UseContainerItem
+
+            C_Container.GetContainerNumSlots = function(bag)
+                if bag == 0 then return 4 end
+                return 0
+            end
+
+            C_Container.GetContainerItemInfo = function(bag, slot)
+                if bag == 0 and slot == 1 then
+                    return { itemID = 19019, isLocked = false, isBound = false }
+                end
+                return nil
+            end
+
+            C_Container.GetContainerItemLink = function(bag, slot)
+                if bag == 0 and slot == 1 then
+                    return lastAward.link
+                end
+                return nil
+            end
+
+            local stagedBag, stagedSlot
+            C_Container.UseContainerItem = function(bag, slot)
+                stagedBag = bag
+                stagedSlot = slot
+            end
+
+            TradeMod.currentTrade = {}
+            local staged = TradeMod:FindAndStageItem(19019, lastAward, "WarriorMain-Realm", {})
+
+            C_Container.GetContainerItemInfo = origGetContainerInfo
+            C_Container.GetContainerItemLink = origGetContainerLink
+            C_Container.GetContainerNumSlots = origNumSlots
+            C_Container.UseContainerItem = origUse
+
+            assert(staged == true, "FindAndStageItem must stage matching item")
+            assert(stagedBag == 0 and stagedSlot == 1, "Item in bag 0 slot 1 must be used")
+            assert(#TradeMod.currentTrade == 1, "TradeMod.currentTrade must record staged item")
+        end)
+
+        -- Part 4: Trade Completion & Ledger Verification
+        self:RunPart(4, 4, "Trade_Completion_And_Ledger", function()
+            if not TradeMod then return end
+            local lastAward = db.session.awarded[#db.session.awarded]
+
+            TradeMod.tradeTargetName = "WarriorMain-Realm"
+            TradeMod.itemsInTrade = {
+                { itemID = 19019, link = lastAward.link, winner = "WarriorMain-Realm" }
+            }
+            TradeMod:HandleTradeSuccess()
+
+            assert(lastAward.traded == true, "Award entry must be marked traded = true after HandleTradeSuccess")
+
+            -- Clean up injected test items
+            local clearedCount = API:ClearTradeTestItems()
+            assert(clearedCount >= 1, "ClearTradeTestItems must clean up injected test item")
+        end)
+
+        self:Log("Scenario 11 [Live In-Game Trade & Bag Staging POC] completed successfully.")
     end)
 end
 
