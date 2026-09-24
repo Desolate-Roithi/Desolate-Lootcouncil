@@ -49,30 +49,52 @@ function Trade:OnStaticPopup(name)
     end
 end
 
-local function IsTradeCompleteMessage(msg)
-    if not msg then return false end
-    if type(issecretvalue) == "function" and issecretvalue(msg) then
-        return false
-    end
-    if type(canaccessvalue) == "function" and not canaccessvalue(msg) then
-        return false
-    end
+local function IsTradeCompleteMessage(msg, altMsg)
+    local function CheckOne(m)
+        if not m then return false end
+        if type(issecretvalue) == "function" and issecretvalue(m) then return false end
+        if type(canaccessvalue) == "function" and not canaccessvalue(m) then return false end
 
-    local ok, isMatch = pcall(function()
-        if msg == ERR_TRADE_COMPLETE then return true end
-        local lower = string.lower(tostring(msg))
-        if lower:find("trade complete") or lower:find("handel abgeschlossen") then
-            return true
-        end
-        return false
-    end)
-    return ok and isMatch == true
+        local ok, isMatch = pcall(function()
+            if m == ERR_TRADE_COMPLETE then return true end
+            local lower = string.lower(tostring(m))
+            if lower:find("trade complete") or lower:find("handel abgeschlossen") then
+                return true
+            end
+            return false
+        end)
+        return ok and isMatch == true
+    end
+    return CheckOne(msg) or CheckOne(altMsg)
+end
+
+local function IsTradeCancelMessage(msg, altMsg)
+    local function CheckOne(m)
+        if not m then return false end
+        if type(issecretvalue) == "function" and issecretvalue(m) then return false end
+        if type(canaccessvalue) == "function" and not canaccessvalue(m) then return false end
+
+        local ok, isMatch = pcall(function()
+            if m == ERR_TRADE_CANCELLED then return true end
+            local lower = string.lower(tostring(m))
+            if lower:find("trade cancel") or lower:find("handel abgebrochen") then
+                return true
+            end
+            return false
+        end)
+        return ok and isMatch == true
+    end
+    return CheckOne(msg) or CheckOne(altMsg)
 end
 
 function Trade:OnUIInfo(event, msgID, msg)
-    if not self.itemsInTrade and not self.currentTrade then return end
-    if IsTradeCompleteMessage(msg) then
+    if not self.itemsInTrade and not self.currentTrade and not self.tradeManifest then return end
+    if IsTradeCompleteMessage(msg, msgID) then
         self:HandleTradeSuccess()
+    elseif IsTradeCancelMessage(msg, msgID) then
+        self.tradeCancelled = true
+        self.tradeAccepted = false
+        self.wasFullyAccepted = false
     end
 end
 
@@ -85,7 +107,8 @@ function Trade:TRADE_ACCEPT_UPDATE(event, playerAccepted, targetAccepted)
         self.wasFullyAccepted = true
     else
         self.tradeAccepted = false
-        if not self.tradeClosing then
+        -- If one player actively un-accepted (1,0 or 0,1), clear wasFullyAccepted
+        if (pAccepted and not tAccepted) or (tAccepted and not pAccepted) then
             self.wasFullyAccepted = false
         end
     end
@@ -356,7 +379,7 @@ function Trade:GetStageableSlot(award, targetItemID, usedSlots)
     return nil, nil, failureReason
 end
 
-function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
+function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots, stagedSlot)
     local resolvedItemID = targetItemID
     if not resolvedItemID and award.link then
         local Loot = DesolateLootcouncil:GetModule("Loot", true)
@@ -407,15 +430,25 @@ function Trade:FindAndStageItem(targetItemID, award, targetName, usedSlots)
     self.currentTrade = self.currentTrade or {}
     self.tradeManifest = self.tradeManifest or {}
 
+    local verified = false
+    if C_Container and C_Container.GetContainerItemID then
+        local currentInSlot = C_Container.GetContainerItemID(bag, slot)
+        if currentInSlot == resolvedItemID then
+            verified = true
+        end
+    end
+
     local tradeRecord = {
-        link         = award.link,
-        winner       = award.winner,
-        guid         = award.sourceGUID,
-        itemID       = resolvedItemID,
-        bag          = bag,
-        slot         = slot,
-        award        = award,
-        targetItemID = resolvedItemID,
+        tradeSlot        = stagedSlot,
+        link             = award.link,
+        winner           = award.winner or targetName,
+        guid             = award.sourceGUID,
+        itemID           = resolvedItemID,
+        bag              = bag,
+        slot             = slot,
+        award            = award,
+        targetItemID     = resolvedItemID,
+        verifiedInSlot   = verified,
     }
     table.insert(self.currentTrade, tradeRecord)
     table.insert(self.tradeManifest, tradeRecord)
@@ -442,7 +475,7 @@ function Trade:StageAllItems(pendingItems, targetName)
         end
 
         local targetItemID = award.itemID
-        local staged = self:FindAndStageItem(targetItemID, award, targetName, usedSlots)
+        local staged = self:FindAndStageItem(targetItemID, award, targetName, usedSlots, stagedCount + 1)
 
         if staged then
             stagedCount = stagedCount + 1
@@ -456,6 +489,9 @@ function Trade:ScanTradeSlots()
     self.itemsInTrade = {}
     self.tradeManifest = self.tradeManifest or {}
     local partnerName = self.tradeTargetName or GetTradePartnerName()
+    if partnerName and not self.tradeTargetName then
+        self.tradeTargetName = partnerName
+    end
 
     for slot = 1, 6 do
         local numItems = select(3, GetTradePlayerItemInfo(slot))
@@ -463,6 +499,7 @@ function Trade:ScanTradeSlots()
         local link = GetTradePlayerItemLink(slot)
         if itemID and link then
             local entry = {
+                tradeSlot = slot,
                 itemID   = itemID,
                 link     = link,
                 quantity = numItems or 1,
@@ -470,14 +507,15 @@ function Trade:ScanTradeSlots()
             }
             table.insert(self.itemsInTrade, entry)
 
-            local alreadyInManifest = false
-            for _, manifestItem in ipairs(self.tradeManifest) do
-                if manifestItem.link == link or (manifestItem.itemID and manifestItem.itemID == itemID) then
-                    alreadyInManifest = true
+            local slotFound = false
+            for idx, manifestItem in ipairs(self.tradeManifest) do
+                if manifestItem.tradeSlot == slot then
+                    self.tradeManifest[idx] = entry
+                    slotFound = true
                     break
                 end
             end
-            if not alreadyInManifest then
+            if not slotFound then
                 table.insert(self.tradeManifest, entry)
             end
         end
@@ -492,6 +530,10 @@ function Trade:CHAT_MSG_SYSTEM(event, message)
     if not self.itemsInTrade and not self.currentTrade and not self.tradeManifest then return end
     if IsTradeCompleteMessage(message) then
         self:HandleTradeSuccess()
+    elseif IsTradeCancelMessage(message) then
+        self.tradeCancelled = true
+        self.tradeAccepted = false
+        self.wasFullyAccepted = false
     end
 end
 
@@ -509,6 +551,21 @@ local function GetEffectiveTradedItems(self)
 end
 
 local function MatchAndMarkAward(self, pending, targetWinner, sessionAwards)
+    -- 1. Direct award reference match (from StageAllItems / FindAndStageItem)
+    if pending.award and not pending.award.traded then
+        for _, sessionAward in ipairs(sessionAwards) do
+            if sessionAward == pending.award and not sessionAward.traded then
+                sessionAward.traded = true
+                DesolateLootcouncil.API:LogAudit("TRADE", nil, sessionAward.winner, sessionAward.fullItemData and sessionAward.fullItemData.category,
+                    string.format("Traded %s to %s", tostring(sessionAward.link or sessionAward.itemID), tostring(sessionAward.winner)))
+                DesolateLootcouncil:DLC_Log(string.format(L["Trade complete. %s marked as delivered to %s."],
+                    sessionAward.link or tostring(sessionAward.itemID), DesolateLootcouncil:GetDisplayName(sessionAward.winner)))
+                return true
+            end
+        end
+    end
+
+    -- 2. Link or itemID + winner match
     local normalizedPendingLink = self:NormalizeItemLink(pending.link)
     local pendingID = pending.itemID or (pending.link and select(1, C_Item.GetItemInfoInstant(pending.link)))
 
@@ -576,6 +633,21 @@ function Trade:HandleTradeSuccess()
     self:ClearPending()
 end
 
+local function HasPhysicalBagDelta(currentTrade)
+    if not (C_Container and C_Container.GetContainerItemID and currentTrade and #currentTrade > 0) then
+        return false
+    end
+    for _, rec in ipairs(currentTrade) do
+        if rec.verifiedInSlot and rec.bag and rec.slot and rec.targetItemID then
+            local currentItemInSlot = C_Container.GetContainerItemID(rec.bag, rec.slot)
+            if currentItemInSlot ~= rec.targetItemID then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 function Trade:TRADE_CLOSED(...)
     self.tradeClosing = true
     if self.tradeTimer then
@@ -587,7 +659,15 @@ function Trade:TRADE_CLOSED(...)
         self.stagingQueueTimer = nil
     end
 
-    if self.tradeAccepted or self.wasFullyAccepted then
+    local isSuccess = (self.tradeAccepted or self.wasFullyAccepted) and not self.tradeCancelled
+
+    -- Failsafe: If acceptance event was dropped by client, verify whether staged items physically left player's bags
+    if not isSuccess and not self.tradeCancelled and HasPhysicalBagDelta(self.currentTrade) then
+        isSuccess = true
+        DesolateLootcouncil:DLC_Log(L["Trade completion confirmed via physical bag delta verification."])
+    end
+
+    if isSuccess then
         self:HandleTradeSuccess()
     end
 
@@ -613,6 +693,7 @@ function Trade:ClearPending()
     self.tradeAccepted = false
     self.wasFullyAccepted = false
     self.tradeClosing = false
+    self.tradeCancelled = false
 end
 
 --- Manually marks an item as delivered in the session trade list.

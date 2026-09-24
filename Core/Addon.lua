@@ -713,16 +713,22 @@ function DesolateLootcouncil:UpdateLootMasterStatus()
         end
     end
 
-    -- If we just BECAME the LM, reset the prompt flag so we can decide for ourselves
+    -- If we just BECAME the LM, handle autopass state (re-broadcast if active, prompt if inactive)
     if self.amILM and not wasLM then
-        self.sessionAutopassAnswered = false
-        if self.db.profile.DecayConfig then
-            self.db.profile.DecayConfig.sessionAutopassAnswered = false
-        end
         local Session = self:GetModule("Session", true)
         local pendingChoice = Session and Session.pendingHandoverChoice
         if not pendingChoice and IsInRaid() and self.db.profile.DecayConfig and self.db.profile.DecayConfig.sessionActive then
-            self:PromptAutopass()
+            if self.sessionAutopassActive then
+                if self.API and self.API.SendSyncAutopass then
+                    self.API:SendSyncAutopass(true)
+                end
+            else
+                self.sessionAutopassAnswered = false
+                if self.db.profile.DecayConfig then
+                    self.db.profile.DecayConfig.sessionAutopassAnswered = false
+                end
+                self:PromptAutopass()
+            end
         end
     end
 

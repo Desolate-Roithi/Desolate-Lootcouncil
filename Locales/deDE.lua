@@ -182,6 +182,7 @@ L["Item bag slot is locked."] = "Taschenplatz des Gegenstands ist gesperrt."
 L["All matching copies in bags are already staged."] = "Alle passenden Exemplare in den Taschen sind bereits bereitgestellt."
 L["Multiple copies found with non-matching stats/tertiaries."] = "Mehrere Exemplare mit abweichenden Werten/Tertiärwerten gefunden."
 L["Trade warning: Could not stage %s for %s (%s)."] = "Handelswarnung: Konnte %s für %s nicht bereitstellen (%s)."
+L["Trade completion confirmed via physical bag delta verification."] = "Handelsabschluss durch physische Tascheninventar-Differenzprüfung bestätigt."
 
 -- Popups
 L["Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)"] =

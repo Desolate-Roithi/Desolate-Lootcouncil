@@ -625,6 +625,21 @@ function SyncHandlers:DLC_HEARTBEAT(data, sender)
         end
     end
 
+    -- Synchronize autopass state from authoritative LM for all raid members
+    if data.autopassActive ~= nil and (not DesolateLootcouncil:AmILootMaster() or DesolateLootcouncil.isTestRunning) then
+        local changed = (DesolateLootcouncil.sessionAutopassActive ~= data.autopassActive)
+        DesolateLootcouncil.sessionAutopassActive = data.autopassActive
+        if data.autopassActive then
+            db.enableAutoLoot = true
+        end
+        if changed then
+            local Autopass = DesolateLootcouncil:GetModule("Autopass", true)
+            if Autopass and Autopass.ScanAndAutopassActiveLootRolls then
+                Autopass:ScanAndAutopassActiveLootRolls()
+            end
+        end
+    end
+
     -- Officers pull Roster, Priority, Config, History, and Unassigned players
     if isSenderConnected and DesolateLootcouncil:AmIOfficerOrLM() and Comm then
         if data.rosterTimestamp then

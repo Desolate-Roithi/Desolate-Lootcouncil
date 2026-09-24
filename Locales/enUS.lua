@@ -182,6 +182,7 @@ L["Item bag slot is locked."] = true
 L["All matching copies in bags are already staged."] = true
 L["Multiple copies found with non-matching stats/tertiaries."] = true
 L["Trade warning: Could not stage %s for %s (%s)."] = true
+L["Trade completion confirmed via physical bag delta verification."] = true
 
 -- Popups
 L["Do you want to enable Autopass for this raid session?\n(Raid members will automatically pass on managed loot)"] = true

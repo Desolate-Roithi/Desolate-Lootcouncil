@@ -51,6 +51,14 @@ StaticPopupDialogs["DLC_ACTIVE_SESSION_PROMPT"] = {
     button2 = L["End Session"],
     OnAccept = function()
         DesolateLootcouncil:Print(L["Resuming active raid session."])
+        if DesolateLootcouncil.sessionAutopassActive then
+            local Sync = DesolateLootcouncil:GetModule("Sync")
+            if Sync and Sync.SendSyncAutopass then
+                Sync:SendSyncAutopass(true)
+            end
+        else
+            DesolateLootcouncil:PromptAutopass(nil, true)
+        end
     end,
     OnCancel = function()
         local Roster = DesolateLootcouncil:GetModule("Roster")

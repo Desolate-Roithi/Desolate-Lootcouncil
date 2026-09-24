@@ -2,8 +2,8 @@
 
 A Master Loot helper and priority list addon for World of Warcraft Retail. Desolate Lootcouncil lets raid teams run priority-based loot distribution alongside Blizzard's default Group Loot system, with automated roll passing, trade queues, and attendance tracking.
 
-**Latest Version:** v2.3.1  
-**Last Updated:** 2026-09-21  
+**Latest Version:** v2.3.2  
+**Last Updated:** 2026-09-24  
 **Compatibility:** WoW 12.1.0 (Midnight)  
 
 ## What It Does
@@ -68,6 +68,19 @@ All commands start with `/dlc`:
 ---
 
 ## Recent Changes
+
+### v2.3.2 (2026-09-24)
+* **Autopass Reliability & Reconnection**:
+  * Fixed autopass state failing to persist or reprompt when the Loot Master relogs or disconnects mid-raid.
+  * Active autopass is now automatically preserved and re-broadcast upon session resumption (`DLC_ACTIVE_SESSION_PROMPT`), and unprompted sessions reprompt immediately.
+  * Added periodic autopass state synchronization via LM heartbeat (`DLC_HEARTBEAT`) to ensure all raid members remain in sync.
+* **Trade List & Pending Trades Clearance**:
+  * Fixed items lingering on the Pending Trades list by implementing slot-indexed trade manifests for duplicate tokens.
+  * Protected trade acceptance latch against premature resets right before trade window closure.
+  * Added physical bag delta verification failsafe to confirm delivery if client-side trade completion events are dropped.
+* **Code Quality & Maintenance**:
+  * Flattened nested arrow code in trade completion handlers into dedicated verification helpers.
+  * Maintained 100% localization parity (enUS and deDE) and verified documentation line number parity across 227 functions.
 
 ### v2.3.1 (2026-09-21)
 * **Item Scaling & Trade Fixes**:
